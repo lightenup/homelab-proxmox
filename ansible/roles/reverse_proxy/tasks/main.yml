@@ -1,0 +1,4 @@
+---
+- name: Placeholder for reverse_proxy role
+  ansible.builtin.debug:
+    msg: "Install and configure reverse_proxy here"

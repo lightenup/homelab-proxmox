@@ -1,0 +1,10 @@
+---
+- name: Configure service LXCs
+  hosts: services
+  become: true
+  roles:
+    - lxc_base
+    - immich
+    - adguard
+    - homeassistant
+    - reverse_proxy

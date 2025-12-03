@@ -1,0 +1,22 @@
+---
+- name: Ensure base packages on Proxmox host
+  ansible.builtin.apt:
+    name:
+      - vim
+      - htop
+      - curl
+      - unattended-upgrades
+    state: present
+    update_cache: true
+
+- name: Enable unattended upgrades (basic)
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: '0644'
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+- name: TODO - configure Proxmox-specific repos and upgrade policies
+  ansible.builtin.debug:
+    msg: "Configure Proxmox repos and update strategy here"

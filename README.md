@@ -1,0 +1,48 @@
+# homelab-proxmox
+
+Infrastructure-as-code for my Proxmox-based homelab.
+
+- **Terraform** manages Proxmox resources (VMs, LXCs, networks, disks).
+- **Ansible** configures the Proxmox host and services inside LXCs.
+- **GitHub Actions** runs on a self-hosted runner (Raspberry Pi) to apply changes.
+- Services are split into **one LXC per service** (Immich, AdGuard, Home Assistant, reverse proxy).
+
+See:
+
+- `docs/architecture.md` – overall design.
+- `docs/network-layout.md` – planned network segmentation.
+- `.github/copilot-instructions.md` – how AI assistants should work with this repo.
+
+## Prerequisites
+
+- **Terraform** >= 1.5.7
+- **Ansible** >= 2.10
+- **Proxmox VE** 8.x
+- A `prod.tfvars` file (see `terraform/terraform.tfvars.example`) with your Proxmox credentials.
+
+## Usage
+
+### 1. Provision Infrastructure (Terraform)
+
+```bash
+cd terraform
+terraform init
+terraform validate
+terraform plan -var-file=prod.tfvars
+# terraform apply -var-file=prod.tfvars
+```
+
+### 2. Configure Services (Ansible)
+
+First, generate the inventory from Terraform state:
+
+```bash
+./scripts/update_ansible_inventory.sh
+```
+
+Then run the playbooks:
+
+```bash
+cd ansible
+ansible-playbook playbooks/site.yml
+```

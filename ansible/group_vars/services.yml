@@ -1,0 +1,6 @@
+# Shared vars for service LXCs
+service_base_packages:
+  - curl
+  - git
+  - htop
+  - vim

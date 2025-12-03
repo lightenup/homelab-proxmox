@@ -1,0 +1,18 @@
+---
+- name: Monthly updates - Proxmox host
+  hosts: proxmox_hosts
+  become: true
+  tasks:
+    - name: Run apt upgrade
+      apt:
+        upgrade: dist
+        update_cache: yes
+
+- name: Monthly updates - services
+  hosts: services
+  become: true
+  tasks:
+    - name: Run apt upgrade
+      apt:
+        upgrade: dist
+        update_cache: yes

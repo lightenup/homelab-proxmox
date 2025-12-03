@@ -1,0 +1,22 @@
+# llms.txt for homelab-proxmox
+
+## Primary docs
+- README.md
+- docs/architecture.md
+- docs/network-layout.md
+
+## Terraform
+- terraform/providers.tf
+- terraform/main.tf
+- terraform/modules/lxc_service/
+
+## Ansible entrypoints
+- ansible/playbooks/site.yml
+- ansible/playbooks/host_proxmox.yml
+- ansible/playbooks/services.yml
+- ansible/playbooks/update_monthly.yml
+
+## CI/CD
+- .github/workflows/ci.yml
+- .github/workflows/deploy.yml
+- .github/copilot-instructions.md

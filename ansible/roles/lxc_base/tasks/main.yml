@@ -1,0 +1,10 @@
+---
+- name: Ensure base packages in LXCs
+  ansible.builtin.apt:
+    name: "{{ service_base_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure timezone is set
+  community.general.timezone:
+    name: Europe/Oslo

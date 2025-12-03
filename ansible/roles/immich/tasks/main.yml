@@ -1,0 +1,14 @@
+---
+- name: Placeholder for immich role
+  ansible.builtin.debug:
+    msg: "Install and configure Immich stack here (Docker/Compose, NFS mounts, etc.)"
+
+- name: TODO - Intel Quick Sync / iGPU setup for Immich
+  ansible.builtin.debug:
+    msg: |
+      TODO:
+        - Ensure Intel iGPU (Quick Sync) is enabled in BIOS.
+        - On the Proxmox host, load iGPU modules and verify /dev/dri exists.
+        - In the Immich LXC, install VAAPI / intel-media drivers as needed.
+        - When running Immich via Docker/Compose, pass through /dev/dri to the container.
+        - Enable hardware acceleration in Immich's configuration (using VAAPI/Quick Sync).
