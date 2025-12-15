@@ -23,10 +23,22 @@
 
 - name: Check if LXC template exists
   ansible.builtin.stat:
-    path: /var/lib/vz/template/cache/debian-12-standard_12.7-1_amd64.tar.zst
+    path: /var/lib/vz/template/cache/debian-12-standard_12.12-1_amd64.tar.zst
   register: lxc_template_stat
 
 - name: Download Debian 12 LXC template
   ansible.builtin.command:
-    cmd: pveam download local debian-12-standard_12.7-1_amd64.tar.zst
+    cmd: pveam download local debian-12-standard_12.12-1_amd64.tar.zst
   when: not lxc_template_stat.stat.exists
+
+- name: Add bind mount for Immich LXC
+  ansible.builtin.lineinfile:
+    path: /etc/pve/lxc/213.conf
+    regexp: '^mp0:'
+    line: 'mp0: /mnt/nas/homelab_immich,mp=/mnt/immich'
+    state: present
+  register: immich_mount
+
+- name: Restart Immich LXC to apply mount
+  ansible.builtin.command: pct reboot 213
+  when: immich_mount.changed

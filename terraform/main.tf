@@ -11,9 +11,10 @@ module "immich_lxc" {
   memory  = 4096
   disk_gb = 64
 
-  bridge  = var.services_bridge
-  ip      = "192.168.20.13/24"
-  gateway = "192.168.20.1"
+  bridge          = var.services_bridge
+  ip              = "192.168.20.13/24"
+  gateway         = var.network_gateway
+  ssh_public_keys = join("\n", var.ssh_public_keys)
 }
 
 module "adguard_lxc" {
@@ -29,9 +30,10 @@ module "adguard_lxc" {
   memory  = 2048
   disk_gb = 16
 
-  bridge  = var.services_bridge
-  ip      = "192.168.20.10/24"
-  gateway = "192.168.20.1"
+  bridge          = var.services_bridge
+  ip              = "192.168.20.10/24"
+  gateway         = var.network_gateway
+  ssh_public_keys = join("\n", var.ssh_public_keys)
 }
 
 module "homeassistant_lxc" {
@@ -47,9 +49,10 @@ module "homeassistant_lxc" {
   memory  = 2048
   disk_gb = 32
 
-  bridge  = var.services_bridge
-  ip      = "192.168.20.12/24"
-  gateway = "192.168.20.1"
+  bridge          = var.services_bridge
+  ip              = "192.168.20.12/24"
+  gateway         = var.network_gateway
+  ssh_public_keys = join("\n", var.ssh_public_keys)
 }
 
 module "reverse_proxy_lxc" {
@@ -65,7 +68,8 @@ module "reverse_proxy_lxc" {
   memory  = 1024
   disk_gb = 16
 
-  bridge  = var.services_bridge
-  ip      = "192.168.20.11/24"
-  gateway = "192.168.20.1"
+  bridge          = var.services_bridge
+  ip              = "192.168.20.11/24"
+  gateway         = var.network_gateway
+  ssh_public_keys = join("\n", var.ssh_public_keys)
 }

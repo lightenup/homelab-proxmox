@@ -1,0 +1,23 @@
+---
+- name: Install nfs-common
+  apt:
+    name: nfs-common
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure mount point exists
+  file:
+    path: /mnt/nas/homelab_immich
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Mount Synology NFS share
+  ansible.posix.mount:
+    path: /mnt/nas/homelab_immich
+    src: 192.168.1.109:/volume1/homelab_immich
+    fstype: nfs
+    opts: rw,nofail
+    state: mounted

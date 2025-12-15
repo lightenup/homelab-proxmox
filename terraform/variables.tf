@@ -35,3 +35,14 @@ variable "services_bridge" {
   description = "Bridge name for services network"
   default     = "vmbr0"
 }
+
+variable "ssh_public_keys" {
+  type        = list(string)
+  description = "SSH public keys to inject into the LXC"
+}
+
+variable "network_gateway" {
+  type        = string
+  description = "Default gateway for the LXC network"
+  default     = "192.168.20.1"
+}

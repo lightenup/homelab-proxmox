@@ -37,7 +37,7 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 
 ### Storage
 - Immich user data lives on Synology NAS.
-- Initial approach: NFS mounts inside the Immich LXC (Ansible-managed).
+- Initial approach: NFS mounts on Proxmox host, bind-mounted into unprivileged LXCs (Ansible + Terraform managed).
 - No Ceph and no unnecessary storage complexity for v1.
 
 ### Services Model
