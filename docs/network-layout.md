@@ -1,5 +1,19 @@
 # Future Network Architecture
 
+## 0. Current State (Interim)
+
+As of **Iteration 1 (Bootstrap)**, the network is flat to simplify initial adoption.
+
+- **Network**: `192.168.1.0/24` (Default LAN)
+- **Gateway**: `192.168.1.1`
+- **Service IPs**:
+  - AdGuard: `192.168.1.210`
+  - Reverse Proxy: `192.168.1.211`
+  - Home Assistant: `192.168.1.212`
+  - Immich: `192.168.1.213`
+
+*The sections below describe the target architecture to be implemented in future iterations.*
+
 ## 1. Goals
 
 This document describes the **target state** for the home network that supports the Proxmox homelab:

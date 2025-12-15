@@ -1,0 +1,32 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, pi]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform apply
+        working-directory: terraform
+        env:
+          TF_VAR_proxmox_api_url: ${{ secrets.PROXMOX_API_URL }}
+          TF_VAR_proxmox_api_token: ${{ secrets.PROXMOX_API_TOKEN }}
+        run: terraform apply -auto-approve
+
+      - name: Update Ansible inventory from Terraform outputs
+        run: scripts/update_ansible_inventory.sh
+
+      - name: Run Ansible (site)
+        working-directory: ansible
+        run: ansible-playbook playbooks/site.yml
