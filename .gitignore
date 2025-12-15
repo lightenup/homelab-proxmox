@@ -1,0 +1,30 @@
+  # Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!example.tfvars
+.terraform.lock.hcl
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ansible
+*.retry
+ansible/inventories/generated/hosts.yml
+
+# Python / tools
+__pycache__/
+*.pyc
+.venv/
+venv/
+ENV/
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
