@@ -1,0 +1,44 @@
+---
+- name: Bootstrap Ansible User
+  hosts: services
+  gather_facts: false
+  remote_user: root
+  # We must connect as root initially. 
+  # Since inventory defines ansible_user=ansible, we override it here or via CLI.
+  # But 'remote_user: root' in playbook takes precedence over inventory var? 
+  # Yes, usually. But let's be safe and assume we run with -u root.
+
+  vars:
+    ansible_user_name: ansible
+
+  tasks:
+    - name: Install Python 3 and sudo (Raw)
+      raw: apt-get update && apt-get install -y python3 python3-apt sudo
+      changed_when: false
+      # We use raw because python might not be installed yet.
+
+    - name: Create ansible user
+      user:
+        name: "{{ ansible_user_name }}"
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        state: present
+
+    - name: Configure passwordless sudo
+      copy:
+        content: "{{ ansible_user_name }} ALL=(ALL) NOPASSWD: ALL"
+        dest: "/etc/sudoers.d/{{ ansible_user_name }}"
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    - name: Get root authorized keys
+      slurp:
+        src: /root/.ssh/authorized_keys
+      register: root_keys
+
+    - name: Set authorized keys for ansible user
+      authorized_key:
+        user: "{{ ansible_user_name }}"
+        key: "{{ root_keys['content'] | b64decode }}"
+        state: present
