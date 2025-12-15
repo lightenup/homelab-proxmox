@@ -14,3 +14,4 @@ ansible/inventories/generated/
 .DS_Store
 .vscode/
 *.tfplan
+ansible/roles/geerlingguy.docker

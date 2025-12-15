@@ -46,3 +46,8 @@ variable "network_gateway" {
   description = "Default gateway for the LXC network"
   default     = "192.168.20.1"
 }
+
+variable "service_ips" {
+  type        = map(string)
+  description = "Map of service names to IP addresses (CIDR format)"
+}

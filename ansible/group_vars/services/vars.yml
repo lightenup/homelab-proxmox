@@ -1,0 +1,13 @@
+# Shared vars for service LXCs
+service_base_packages:
+  - curl
+  - git
+  - htop
+  - vim
+
+# Docker configuration (geerlingguy.docker)
+docker_users:
+  - root
+docker_install_compose_plugin: true
+docker_compose_package: docker-compose-plugin
+docker_compose_package_state: present

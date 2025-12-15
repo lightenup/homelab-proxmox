@@ -1,0 +1,6 @@
+---
+# Defaults for immich role
+immich_version: "v1.121.0"
+immich_port: 2283
+immich_install_dir: "/opt/immich"
+immich_data_dir: "/mnt/immich"
