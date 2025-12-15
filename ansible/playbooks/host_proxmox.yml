@@ -4,3 +4,4 @@
   become: true
   roles:
     - proxmox_host
+    - proxmox_mounts
