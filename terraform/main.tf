@@ -10,10 +10,12 @@ module "immich_lxc" {
   cores   = 4
   memory  = 4096
   disk_gb = 64
+  vmid    = 213
 
-  bridge  = var.services_bridge
-  ip      = "192.168.20.13/24"
-  gateway = "192.168.20.1"
+  bridge          = var.services_bridge
+  ip              = var.service_ips["immich"]
+  gateway         = var.network_gateway
+  ssh_public_keys = var.ssh_public_keys
 }
 
 module "adguard_lxc" {
@@ -28,10 +30,12 @@ module "adguard_lxc" {
   cores   = 2
   memory  = 2048
   disk_gb = 16
+  vmid    = 210
 
-  bridge  = var.services_bridge
-  ip      = "192.168.20.10/24"
-  gateway = "192.168.20.1"
+  bridge          = var.services_bridge
+  ip              = var.service_ips["adguard"]
+  gateway         = var.network_gateway
+  ssh_public_keys = var.ssh_public_keys
 }
 
 module "homeassistant_lxc" {
@@ -46,10 +50,12 @@ module "homeassistant_lxc" {
   cores   = 2
   memory  = 2048
   disk_gb = 32
+  vmid    = 212
 
-  bridge  = var.services_bridge
-  ip      = "192.168.20.12/24"
-  gateway = "192.168.20.1"
+  bridge          = var.services_bridge
+  ip              = var.service_ips["homeassistant"]
+  gateway         = var.network_gateway
+  ssh_public_keys = var.ssh_public_keys
 }
 
 module "reverse_proxy_lxc" {
@@ -64,8 +70,10 @@ module "reverse_proxy_lxc" {
   cores   = 1
   memory  = 1024
   disk_gb = 16
+  vmid    = 211
 
-  bridge  = var.services_bridge
-  ip      = "192.168.20.11/24"
-  gateway = "192.168.20.1"
+  bridge          = var.services_bridge
+  ip              = var.service_ips["reverse_proxy"]
+  gateway         = var.network_gateway
+  ssh_public_keys = var.ssh_public_keys
 }

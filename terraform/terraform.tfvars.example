@@ -1,6 +1,20 @@
-proxmox_api_url   = "https://proxmox.example:8006/api2/json"
-proxmox_api_token = "pve@pam!tokenid=xxxxxx"
-proxmox_node      = "pve"
-lxc_template      = "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"
-storage_pool      = "local-lvm"
-services_bridge   = "vmbr0"
+proxmox_api_url          = "https://192.168.1.112:8006/api2/json"
+proxmox_api_token_id     = "terraform@pve!token"
+proxmox_api_token_secret = "your-secret-token-here"
+proxmox_node             = "pve"
+lxc_template             = "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"
+storage_pool             = "local-lvm"
+services_bridge          = "vmbr0"
+
+network_gateway = "192.168.1.1"
+
+service_ips = {
+  adguard       = "192.168.1.210/24"
+  reverse_proxy = "192.168.1.211/24"
+  homeassistant = "192.168.1.212/24"
+  immich        = "192.168.1.213/24"
+}
+
+ssh_public_keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK..."
+]
