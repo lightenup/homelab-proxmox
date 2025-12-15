@@ -1,10 +1,21 @@
 ---
-- name: Ensure base packages in LXCs
-  ansible.builtin.apt:
-    name: "{{ service_base_packages }}"
-    state: present
+- name: Update apt cache
+  apt:
     update_cache: true
+    cache_valid_time: 3600
 
-- name: Ensure timezone is set
-  community.general.timezone:
-    name: Europe/Oslo
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+
+- name: Install core packages
+  apt:
+    name:
+      - python3
+      - curl
+      - wget
+      - git
+      - htop
+      - vim
+      - net-tools
+    state: present

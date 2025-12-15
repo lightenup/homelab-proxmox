@@ -4,7 +4,8 @@
   become: true
   roles:
     - lxc_base
-    - immich
-    - adguard
-    - homeassistant
-    - reverse_proxy
+    # Future roles:
+    # - immich
+    # - adguard
+    # - homeassistant
+    # - reverse_proxy

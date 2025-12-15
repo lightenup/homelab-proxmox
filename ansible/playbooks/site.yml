@@ -1,6 +1,6 @@
 ---
-- name: Configure Proxmox Host
-  import_playbook: host_proxmox.yml
+# - name: Configure Proxmox Host
+#   import_playbook: host_proxmox.yml
 
 - name: Configure Services
   import_playbook: services.yml
