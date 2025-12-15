@@ -4,8 +4,10 @@
   become: true
   roles:
     - lxc_base
-    # Future roles:
-    # - immich
-    # - adguard
-    # - homeassistant
-    # - reverse_proxy
+
+- name: Configure Immich
+  hosts: immich
+  become: true
+  roles:
+    - geerlingguy.docker
+    - immich

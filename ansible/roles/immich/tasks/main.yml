@@ -1,14 +1,47 @@
 ---
-- name: Placeholder for immich role
-  ansible.builtin.debug:
-    msg: "Install and configure Immich stack here (Docker/Compose, NFS mounts, etc.)"
+- name: Ensure Immich data directories exist
+  ansible.builtin.file:
+    path: "{{ immich_data_dir }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - library
+    - uploads
+    - profile
+    - thumbs
+    - video
+    - postgres
+    - redis
 
-- name: TODO - Intel Quick Sync / iGPU setup for Immich
-  ansible.builtin.debug:
-    msg: |
-      TODO:
-        - Ensure Intel iGPU (Quick Sync) is enabled in BIOS.
-        - On the Proxmox host, load iGPU modules and verify /dev/dri exists.
-        - In the Immich LXC, install VAAPI / intel-media drivers as needed.
-        - When running Immich via Docker/Compose, pass through /dev/dri to the container.
-        - Enable hardware acceleration in Immich's configuration (using VAAPI/Quick Sync).
+- name: Ensure Immich install directory exists
+  ansible.builtin.file:
+    path: "{{ immich_install_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Deploy Immich docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ immich_install_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart immich
+
+- name: Deploy Immich .env
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ immich_install_dir }}/.env"
+    mode: '0600'
+  notify: Restart immich
+
+- name: Ensure Immich stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ immich_install_dir }}"
+    state: present
+    remove_orphans: true
+
+- name: Wait for Immich to be reachable
+  ansible.builtin.wait_for:
+    port: "{{ immich_port }}"
+    host: "127.0.0.1"
+    delay: 10
+    timeout: 300

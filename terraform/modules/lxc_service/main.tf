@@ -25,6 +25,10 @@ resource "proxmox_lxc" "this" {
 
   ssh_public_keys = var.ssh_public_keys
 
+  features {
+    nesting = true
+  }
+
   dynamic "mountpoint" {
     for_each = var.mountpoints
     content {
