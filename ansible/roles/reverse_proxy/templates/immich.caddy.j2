@@ -1,0 +1,5 @@
+:80 {
+    reverse_proxy {{ immich_ip }}:{{ immich_port }} {
+        header_up X-Forwarded-Proto http
+    }
+}

@@ -11,3 +11,9 @@
   roles:
     - geerlingguy.docker
     - immich
+
+- name: Configure Reverse Proxy
+  hosts: reverse_proxy
+  become: true
+  roles:
+    - reverse_proxy
