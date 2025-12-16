@@ -1,0 +1,6 @@
+---
+- name: Configure Local DNS & Naming
+  hosts: proxmox_hosts:services
+  become: true
+  roles:
+    - mdns_base

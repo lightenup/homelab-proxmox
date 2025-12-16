@@ -1,0 +1,23 @@
+---
+- name: Install mDNS packages
+  ansible.builtin.apt:
+    name:
+      - avahi-daemon
+      - libnss-mdns
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure hostname is in /etc/hosts (Debian requirement)
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1\s+{{ ansible_hostname }}'
+    line: "127.0.1.1\t{{ ansible_hostname }}"
+    state: present
+  notify: Restart avahi-daemon
+
+- name: Enable and start avahi-daemon
+  ansible.builtin.service:
+    name: avahi-daemon
+    state: started
+    enabled: true
