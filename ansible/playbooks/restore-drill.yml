@@ -1,0 +1,166 @@
+---
+- name: Immich Restore Drill
+  hosts: immich
+  become: true
+  vars:
+    restore_dir: "/tmp/immich-restore-drill"
+  
+  tasks:
+    - name: Find latest backup
+      ansible.builtin.shell: "ls -t {{ immich_backup_path }}/immich-backup-*.tar.gz | head -n 1"
+      register: latest_backup_cmd
+      changed_when: false
+      failed_when: latest_backup_cmd.stdout == ""
+
+    - name: Set backup file fact
+      ansible.builtin.set_fact:
+        latest_backup_file: "{{ latest_backup_cmd.stdout }}"
+
+    - name: Get backup basename
+      ansible.builtin.set_fact:
+        backup_basename: "{{ latest_backup_file | basename | regex_replace('\\.tar\\.gz$', '') }}"
+
+    - name: Display latest backup
+      ansible.builtin.debug:
+        msg: "Testing backup: {{ latest_backup_file }}"
+
+    - name: Clean up previous restore directory
+      ansible.builtin.file:
+        path: "{{ restore_dir }}"
+        state: absent
+
+    - name: Create restore directory
+      ansible.builtin.file:
+        path: "{{ restore_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Extract backup
+      ansible.builtin.unarchive:
+        src: "{{ latest_backup_file }}"
+        dest: "{{ restore_dir }}"
+        remote_src: true
+
+    - name: Set extracted folder path
+      ansible.builtin.set_fact:
+        extracted_folder: "{{ restore_dir }}/{{ backup_basename }}"
+
+    - name: Copy .env from backup to restore root
+      ansible.builtin.copy:
+        src: "{{ extracted_folder }}/.env"
+        dest: "{{ restore_dir }}/.env"
+        remote_src: true
+
+    - name: Create mock upload directories
+      ansible.builtin.file:
+        path: "{{ restore_dir }}/upload_mock/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - library
+        - upload
+        - thumbs
+        - profile
+        - encoded-video
+        - backups
+
+    - name: Create mock .immich files
+      ansible.builtin.file:
+        path: "{{ restore_dir }}/upload_mock/{{ item }}/.immich"
+        state: touch
+        mode: '0644'
+      loop:
+        - library
+        - upload
+        - thumbs
+        - profile
+        - encoded-video
+        - backups
+
+    - name: Deploy restore docker-compose
+      ansible.builtin.template:
+        src: ../roles/immich_backup/templates/docker-compose.restore.yml.j2
+        dest: "{{ restore_dir }}/docker-compose.restore.yml"
+
+    - name: Restore Drill Block
+      block:
+        - name: Start restore database
+          community.docker.docker_compose_v2:
+            project_src: "{{ restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            services:
+              - database
+            state: present
+        
+        - name: Wait for database to be ready
+          ansible.builtin.command: docker exec immich_postgres_restore pg_isready -U postgres
+          register: db_check
+          until: db_check.rc == 0
+          retries: 30
+          delay: 2
+          changed_when: false
+
+        - name: Restore database dump
+          ansible.builtin.shell: "cat {{ extracted_folder }}/dump.sql | docker exec -i immich_postgres_restore psql -U postgres immich"
+          changed_when: true
+
+        - name: Start all services
+          community.docker.docker_compose_v2:
+            project_src: "{{ restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            state: present
+
+        - name: Wait for Immich API
+          ansible.builtin.uri:
+            url: "http://localhost:{{ immich_restore_test_port }}/api/server/ping"
+            return_content: true
+          register: api_check
+          until: api_check.status == 200
+          retries: 60
+          delay: 5
+          ignore_errors: true
+
+        - name: Debug failure
+          block:
+            - name: Get docker ps
+              ansible.builtin.command: docker ps -a
+              register: docker_ps
+              changed_when: false
+
+            - name: Display docker ps
+              ansible.builtin.debug:
+                var: docker_ps.stdout_lines
+
+            - name: Get container logs
+              ansible.builtin.command: docker logs immich_server_restore
+              register: container_logs
+              changed_when: false
+            
+            - name: Display container logs
+              ansible.builtin.debug:
+                var: container_logs.stdout_lines
+            
+            - name: Fail if API check failed
+              ansible.builtin.fail:
+                msg: "API check failed"
+          when: api_check.failed
+
+        - name: Display API response
+          ansible.builtin.debug:
+            var: api_check.content
+
+      always:
+        - name: Teardown restore stack
+          community.docker.docker_compose_v2:
+            project_src: "{{ restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            state: absent
+            remove_volumes: true
+        
+        - name: Remove restore directory
+          ansible.builtin.file:
+            path: "{{ restore_dir }}"
+            state: absent

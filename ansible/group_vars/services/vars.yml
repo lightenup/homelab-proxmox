@@ -15,3 +15,14 @@ docker_compose_package_state: present
 # Immich Configuration
 immich_ip: "192.168.1.213"
 immich_port: 2283
+immich_install_dir: "/opt/immich"
+immich_version: "v1.121.0"
+
+# Immich Backup Configuration
+immich_backup_path: "/mnt/immich/backups"
+immich_backup_retention_days: 7
+immich_backup_retention_weeks: 4
+immich_backup_retention_months: 6
+immich_backup_schedule: "*-*-* 04:30:00"
+immich_db_container_name: "immich_postgres"
+immich_restore_test_port: 2284

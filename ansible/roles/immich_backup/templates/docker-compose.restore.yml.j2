@@ -1,0 +1,47 @@
+name: immich-restore-test
+
+services:
+  immich-server:
+    container_name: immich_server_restore
+    image: ghcr.io/immich-app/immich-server:{{ immich_version }}
+    volumes:
+      - {{ restore_dir }}/upload_mock:/usr/src/app/upload
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - .env
+    ports:
+      - "{{ immich_restore_test_port }}:2283"
+    depends_on:
+      - redis
+      - database
+    restart: no
+
+  immich-machine-learning:
+    container_name: immich_machine_learning_restore
+    image: ghcr.io/immich-app/immich-machine-learning:{{ immich_version }}
+    volumes:
+      - model-cache-restore:/cache
+    env_file:
+      - .env
+    restart: no
+
+  redis:
+    container_name: immich_redis_restore
+    image: redis:6.2-alpine
+    restart: no
+
+  database:
+    container_name: immich_postgres_restore
+    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    environment:
+      POSTGRES_PASSWORD: {{ immich_db_password }}
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      - immich-postgres-restore:/var/lib/postgresql/data
+    restart: no
+
+volumes:
+  immich-postgres-restore:
+  model-cache-restore:
