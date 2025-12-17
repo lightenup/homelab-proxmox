@@ -12,6 +12,15 @@ As of **Iteration 1 (Bootstrap)**, the network is flat to simplify initial adopt
   - Home Assistant: `192.168.1.212`
   - Immich: `192.168.1.213`
 
+### Remote Access
+
+Remote access is provided by **Tailscale** running on the Proxmox host (`pve`).
+
+- **Mode**: Subnet Router
+- **Advertised Routes**: `192.168.1.0/24`
+- **ACL Policy**: Default Deny (see `docs/tailscale-acl.example.json`)
+- **Tags**: `tag:proxmox` applied to the host.
+
 *The sections below describe the target architecture to be implemented in future iterations.*
 
 ## 1. Goals

@@ -1,0 +1,31 @@
+{
+	"groups": {
+		"group:admin": ["jacobsen.andreas@gmail.com"]
+	},
+	"tagOwners": {
+		"tag:proxmox": ["group:admin"]
+	},
+	"acls": [
+		{
+			"action": "accept",
+			"src":    ["group:admin"],
+			"dst": [
+				"tag:proxmox:22",
+				"tag:proxmox:8006"
+			]
+		},
+		{
+			"action": "accept",
+			"src":    ["group:admin"],
+			"dst":    ["192.168.1.0/24:*"]
+		}
+	],
+	"ssh": [
+		{
+			"action": "check",
+			"src":    ["group:admin"],
+			"dst":    ["tag:proxmox"],
+			"users":  ["root", "autogroup:nonroot"]
+		}
+	]
+}
