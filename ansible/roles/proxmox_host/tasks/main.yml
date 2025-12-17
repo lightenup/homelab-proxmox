@@ -31,6 +31,11 @@
     cmd: pveam download local debian-12-standard_12.12-1_amd64.tar.zst
   when: not lxc_template_stat.stat.exists
 
+- name: Check if Immich LXC config exists
+  ansible.builtin.stat:
+    path: /etc/pve/lxc/213.conf
+  register: immich_lxc_conf
+
 - name: Add bind mount for Immich LXC
   ansible.builtin.lineinfile:
     path: /etc/pve/lxc/213.conf
@@ -38,6 +43,7 @@
     line: 'mp0: /mnt/nas/homelab_immich,mp=/mnt/immich'
     state: present
   register: immich_mount
+  when: immich_lxc_conf.stat.exists
 
 - name: Restart Immich LXC to apply mount
   ansible.builtin.command: pct reboot 213

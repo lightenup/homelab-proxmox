@@ -1,0 +1,56 @@
+---
+- name: Ensure Tailscale variables are defined
+  ansible.builtin.assert:
+    that:
+      - tailscale_auth_key is defined
+      - tailscale_advertise_routes is defined
+      - tailscale_advertise_tags is defined
+    fail_msg: "Tailscale variables are missing. Please check group_vars/proxmox_hosts.yml"
+
+- name: Install required dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - gpg
+    state: present
+    update_cache: true
+
+- name: Add Tailscale GPG key
+  ansible.builtin.get_url:
+    url: https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    mode: '0644'
+
+- name: Add Tailscale repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian bookworm main"
+    state: present
+    filename: tailscale
+
+- name: Install Tailscale
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+    update_cache: true
+
+- name: Enable and start Tailscale service
+  ansible.builtin.service:
+    name: tailscaled
+    state: started
+    enabled: true
+
+- name: Check Tailscale status
+  ansible.builtin.command: tailscale status
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+
+- name: Bring up Tailscale
+  ansible.builtin.command: >
+    tailscale up
+    --authkey={{ tailscale_auth_key }}
+    --advertise-routes={{ tailscale_advertise_routes }}
+    --ssh=false
+    --accept-routes
+    --reset
+  when: tailscale_status.rc != 0
