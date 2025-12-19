@@ -74,3 +74,39 @@ Then run the playbooks:
 cd ansible
 ansible-playbook playbooks/site.yml
 ```
+
+### 3. Monthly Maintenance
+
+Run monthly security updates with automatic reboots:
+
+```bash
+cd ansible
+ansible-playbook playbooks/update_monthly.yml
+```
+
+This orchestrates package updates across all services with serial execution to minimize downtime. See [Monthly Patching Runbook](docs/runbooks/monthly-patching.md) for detailed procedures.
+
+**Optional**: Patch Proxmox host with reboot:
+```bash
+ansible-playbook playbooks/update_monthly.yml -e "allow_host_reboot=true"
+```
+
+## Documentation
+
+### Operational Runbooks
+
+- [Monthly Patching](docs/runbooks/monthly-patching.md) - Security updates and reboot orchestration
+- [Tailscale Mobile Access](docs/runbooks/tailscale-mobile.md) - Remote access from phone (when available)
+
+### Architecture & Design
+
+- [Architecture Overview](docs/architecture.md) - Overall system design
+- [Network Layout](docs/network-layout.md) - Network segmentation and VLAN planning
+- [Naming and mDNS](docs/naming-and-mdns.md) - Hostname resolution strategy
+- [Reverse Proxy](docs/reverse-proxy.md) - Caddy reverse proxy configuration
+- [Operations Guide](docs/operations.md) - Day-to-day operational procedures
+
+### Service-Specific
+
+- [Immich Backup/Restore](docs/immich-backup-restore.md) - Photo backup and recovery procedures
+- [Immich Maintenance](docs/immich-maintenance.md) - Routine maintenance tasks

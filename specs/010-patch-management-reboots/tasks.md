@@ -842,17 +842,19 @@ These tasks incorporate the following specification clarifications:
 
 ## Documentation Tasks
 
-- [ ] **T073** Create operational runbook:
+- [x] **T073** Create operational runbook:
   - Create `docs/runbooks/monthly-patching.md`
   - Document when to run monthly patching
   - Document command to run
   - Document what to expect in output
   - Document common issues and solutions
+  - **Completed**: Comprehensive runbook created with execution procedures, troubleshooting, and recovery steps
 
-- [ ] **T074** Update main README if needed:
+- [x] **T074** Update main README if needed:
   - Add reference to monthly patching workflow
   - Link to operational runbook
   - Note Tailscale mobile access documentation
+  - **Completed**: README updated with Monthly Maintenance section and Documentation links
 
 - [ ] **T075** Document recovery procedures:
   - What to do if host reboot fails
