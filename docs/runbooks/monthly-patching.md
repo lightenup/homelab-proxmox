@@ -124,7 +124,7 @@ After patching completes:
 
 3. **Verify Docker Containers**
    ```bash
-   ssh immich
+   ssh 192.168.1.213  # immich
    docker ps
    # Should see immich containers running (restart: always configured)
    ```
@@ -134,7 +134,7 @@ After patching completes:
    ssh pve
    mount | grep /mnt/nas/homelab_immich
    
-   ssh immich
+   ssh 192.168.1.213  # immich
    mount | grep /mnt/immich
    ```
 
@@ -165,7 +165,7 @@ ansible-playbook playbooks/apt_diagnostics.yml --limit immich
    - Fix DNS configuration in LXC:
      ```bash
      # Check current DNS
-     ssh immich
+     ssh 192.168.1.213  # or immich.local
      cat /etc/resolv.conf
      
      # Option A: Fix in LXC (temporary - lost on reboot)
@@ -176,6 +176,10 @@ ansible-playbook playbooks/apt_diagnostics.yml --limit immich
      ssh pve
      pct set 213 --nameserver "192.168.1.1 8.8.8.8"
      pct stop 213 && pct start 213
+     
+     # Verify DNS works
+     ssh 192.168.1.213
+     nslookup deb.debian.org
      ```
 
 2. **APT Lock Held**
@@ -183,7 +187,7 @@ ansible-playbook playbooks/apt_diagnostics.yml --limit immich
    - Cause: Another apt/dpkg process running, or stale lock from crashed process
    - Resolution:
      ```bash
-     ssh immich
+     ssh 192.168.1.213  # or immich.local
      # Check what's holding the lock
      sudo lsof /var/lib/dpkg/lock-frontend
      
