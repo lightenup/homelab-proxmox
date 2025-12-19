@@ -25,12 +25,12 @@
   tasks:
     - name: "Set start timestamp"
       set_fact:
-        playbook_start_time: "{{ ansible_date_time.epoch }}"
-        playbook_start_iso: "{{ ansible_date_time.iso8601 }}"
+        playbook_start_time: "{{ ansible_facts.date_time.epoch }}"
+        playbook_start_iso: "{{ ansible_facts.date_time.iso8601 }}"
         cacheable: yes
 
 - name: "Preflight - Verify Ansible connectivity"
-  hosts: all
+  hosts: services:proxmox_hosts
   gather_facts: no
   tasks:
     - name: "Test SSH connectivity"
@@ -60,7 +60,7 @@
   tasks:
     - name: "Calculate playbook duration"
       set_fact:
-        playbook_duration: "{{ (ansible_date_time.epoch | int) - (playbook_start_time | int) }}"
+        playbook_duration: "{{ (ansible_facts.date_time.epoch | int) - (playbook_start_time | int) }}"
     
     - name: "Identify hosts with package updates"
       set_fact:
@@ -75,7 +75,7 @@
         msg:
           - "========== MONTHLY PATCHING SUMMARY =========="
           - "Start Time: {{ hostvars['localhost']['playbook_start_iso'] | default('N/A') }}"
-          - "End Time: {{ ansible_date_time.iso8601 }}"
+          - "End Time: {{ ansible_facts.date_time.iso8601 }}"
           - "Total Execution Time: {{ playbook_duration }}s ({{ (playbook_duration | int / 60) | round(1) }}m)"
           - ""
           - "Hosts Updated: {{ hosts_updated | length }}"

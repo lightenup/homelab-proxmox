@@ -1,0 +1,101 @@
+---
+# APT Diagnostics Playbook
+# 
+# Use this to diagnose apt cache update failures like the one on immich.
+# This runs various checks to identify network, DNS, or repository issues.
+#
+# Usage:
+#   ansible-playbook playbooks/apt_diagnostics.yml
+#   ansible-playbook playbooks/apt_diagnostics.yml --limit immich
+#
+# Feature: 010-patch-management-reboots
+
+- name: "APT Diagnostics"
+  hosts: services:proxmox_hosts
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: "Check basic network connectivity (ping Google DNS)"
+      command: ping -c 3 8.8.8.8
+      register: ping_result
+      changed_when: false
+      failed_when: false
+    
+    - name: "Display ping result"
+      debug:
+        msg: "{{ 'Network: OK' if ping_result.rc == 0 else 'Network: FAILED - No internet connectivity' }}"
+    
+    - name: "Check DNS resolution"
+      command: nslookup archive.ubuntu.com
+      register: dns_result
+      changed_when: false
+      failed_when: false
+    
+    - name: "Display DNS result"
+      debug:
+        msg: "{{ 'DNS: OK' if dns_result.rc == 0 else 'DNS: FAILED - Cannot resolve hostnames' }}"
+    
+    - name: "Check apt sources.list"
+      command: cat /etc/apt/sources.list
+      register: sources_list
+      changed_when: false
+    
+    - name: "Display apt sources"
+      debug:
+        var: sources_list.stdout_lines
+    
+    - name: "Check apt sources.list.d directory"
+      find:
+        paths: /etc/apt/sources.list.d
+        patterns: "*.list"
+      register: sources_list_d
+    
+    - name: "Display additional sources"
+      debug:
+        msg: "Additional sources files: {{ sources_list_d.files | map(attribute='path') | list }}"
+    
+    - name: "Try apt update with verbose output"
+      command: apt-get update -o Debug::pkgAcquire::Worker=1
+      register: apt_update_verbose
+      changed_when: false
+      failed_when: false
+    
+    - name: "Display apt update output"
+      debug:
+        var: apt_update_verbose.stdout_lines
+      when: apt_update_verbose.stdout_lines is defined
+    
+    - name: "Display apt update errors"
+      debug:
+        var: apt_update_verbose.stderr_lines
+      when: apt_update_verbose.stderr_lines is defined
+    
+    - name: "Check if apt is locked"
+      stat:
+        path: /var/lib/dpkg/lock-frontend
+      register: dpkg_lock
+    
+    - name: "Display lock status"
+      debug:
+        msg: "{{ 'APT LOCKED - Another process is using apt' if dpkg_lock.stat.exists else 'APT unlocked' }}"
+    
+    - name: "Check disk space"
+      command: df -h /var/cache/apt
+      register: disk_space
+      changed_when: false
+    
+    - name: "Display disk space"
+      debug:
+        var: disk_space.stdout_lines
+    
+    - name: "Summary - Diagnostics Complete"
+      debug:
+        msg:
+          - "============= APT DIAGNOSTICS SUMMARY ============="
+          - "Host: {{ inventory_hostname }}"
+          - "Network: {{ 'OK' if ping_result.rc == 0 else 'FAILED' }}"
+          - "DNS: {{ 'OK' if dns_result.rc == 0 else 'FAILED' }}"
+          - "APT Update: {{ 'OK' if apt_update_verbose.rc == 0 else 'FAILED (see details above)' }}"
+          - "APT Lock: {{ 'LOCKED' if dpkg_lock.stat.exists else 'Available' }}"
+          - "==================================================="
