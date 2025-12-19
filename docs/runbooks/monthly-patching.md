@@ -131,10 +131,10 @@ After patching completes:
 
 4. **Check Mounts**
    ```bash
-   ssh pve.local  # or 192.168.1.112
+   ssh root@pve.local  # or root@192.168.1.112
    mount | grep /mnt/nas/homelab_immich
    
-   ssh 192.168.1.213  # immich
+   ssh 192.168.1.213  # immich or immich.local
    mount | grep /mnt/immich
    ```
 
@@ -173,12 +173,12 @@ ansible-playbook playbooks/apt_diagnostics.yml --limit immich
      echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf
      
      # Option B: Fix in Proxmox (persistent - RECOMMENDED)
-     ssh pve.local  # or 192.168.1.112
-     pct set 213 --nameserver "192.168.1.1 8.8.8.8"
-     pct stop 213 && pct start 213
+     ssh root@pve.local  # or root@192.168.1.112
+     pct set 101 --nameserver "192.168.1.1 8.8.8.8"
+     pct stop 101 && pct start 101
      
      # Verify DNS works
-     ssh 192.168.1.213
+     ssh 192.168.1.213  # or immich.local
      nslookup deb.debian.org
      ```
 
@@ -249,7 +249,7 @@ ansible-playbook playbooks/apt_diagnostics.yml --limit immich
 - LXC `onboot: 1` not configured
 
 **Resolution**:
-1. Check current setting: `pct config <VMID> | grep onboot`
+1. Check current setting: `ssh root@pve.local` then `pct config <VMID> | grep onboot`
 2. Enable auto-start: `pct set <VMID> -onboot 1`
 3. Or update Terraform configuration and reapply
 
