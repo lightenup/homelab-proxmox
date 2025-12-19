@@ -46,6 +46,16 @@ Implement a safe, orchestrated monthly patching process for all homelab infrastr
 - Managing package holds or pinning
 - Handling catastrophic failure recovery (separate DR plan)
 
+## Clarifications
+
+### Session 2025-12-19
+
+- Q: In User Story 1, "containers auto-start correctly" after LXC reboot - does this refer to Docker containers inside the LXC or the LXC container itself being started by Proxmox? → A: Both - Docker containers have `restart: always` in compose files (already configured), AND LXCs have `onboot: 1` in Proxmox config
+- Q: When verification checks fail after patching (e.g., NFS mount missing), should the playbook fail or continue with warnings? → A: Fail playbook - Stop execution and exit with error on any verification failure (prevents declaring maintenance complete when infrastructure is broken)
+- Q: For "safe upgrade mode that doesn't remove packages", which Ansible apt module parameter should be used? → A: `upgrade: safe` - Explicit safe mode (functionally identical to "yes" but clearer intent)
+- Q: Should reboot timeout and SSH wait timeout use the same value (300s mentioned in spec)? → A: Split timing - 600s reboot timeout (allows fsck/slow hardware), 300s SSH wait (separates reboot completion from SSH availability)
+- Q: Should summary report show only total playbook execution time or include per-host timing? → A: Both - Total playbook wall-clock time + per-host breakdown (helps identify slow hosts for optimization)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Patch All LXCs Safely (Priority: P1)
@@ -60,7 +70,7 @@ As a homelab operator, I need to patch all LXC containers monthly with automatic
 
 1. **Given** the Ansible inventory is current, **When** I run `ansible-playbook playbooks/update_monthly.yml`, **Then** each LXC in the `services` group performs `apt update && apt upgrade`, reboots only if `/var/run/reboot-required` exists, and SSH remains accessible post-reboot
 2. **Given** no updates are available, **When** I re-run the playbook, **Then** it completes with `changed=0` except for "apt cache updated" tasks (idempotent)
-3. **Given** a kernel update requires reboot, **When** patching completes, **Then** the LXC automatically reboots and containers auto-start correctly
+3. **Given** a kernel update requires reboot, **When** patching completes, **Then** the LXC automatically reboots (Proxmox `onboot: 1` setting) and Docker containers auto-start via `restart: always` policy in compose files
 
 ---
 
@@ -91,7 +101,7 @@ As a homelab operator, I need a single command that patches services then host w
 **Acceptance Scenarios**:
 
 1. **Given** I run `update_monthly.yml`, **When** it completes, **Then** services group patched first, proxmox_hosts group patched second, with explicit ordering
-2. **Given** updates were applied, **When** playbook finishes, **Then** summary includes: which hosts changed, which rebooted, approximate package counts, and total duration
+2. **Given** updates were applied, **When** playbook finishes, **Then** summary includes: which hosts changed, which rebooted, approximate package counts, total duration, and per-host timing breakdown
 3. **Given** some hosts had no updates, **When** reviewing summary, **Then** report clearly indicates "no changes" vs "updates applied" per host
 
 ---
@@ -108,8 +118,8 @@ As a homelab operator, I need automated verification after patching that critica
 
 1. **Given** patching completed, **When** verification runs, **Then** it checks SSH connectivity to pve + all LXCs and reports success/failure
 2. **Given** Immich depends on NFS, **When** verification runs, **Then** it confirms `/mnt/nas/homelab_immich` exists on pve and bind mount exists in immich LXC
-3. **Given** services are deployed, **When** HTTP checks run, **Then** it validates HTTP 200 on immich:2283, homeassistant:8123, proxy:80 (best-effort, not hard failure if service intentionally down)
-4. **Given** AdGuard is not yet deployed, **When** verification runs, **Then** it skips optional checks gracefully without failing the playbook
+3. **Given** services are deployed, **When** HTTP checks run, **Then** it validates HTTP 200 on immich:2283, homeassistant:8123, proxy:80 and fails playbook if any service is unreachable
+4. **Given** AdGuard is not yet deployed, **When** verification runs for services that exist, **Then** all deployed services must pass health checks or playbook fails
 
 ---
 
@@ -146,7 +156,7 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 - Play 1: Patch `services` group (all LXCs)
 - Play 2: Patch `proxmox_hosts` group (pve only)
 
-**FR-002**: Implement `apt update` + `apt upgrade` (not dist-upgrade) using safe upgrade mode that doesn't remove packages
+**FR-002**: Implement `apt update` + `apt upgrade` using Ansible apt module with `upgrade: safe` parameter (never removes packages, explicit safe mode)
 
 **FR-003**: Support reboot detection using Debian/Ubuntu convention: check for `/var/run/reboot-required` file existence
 
@@ -158,24 +168,24 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 **FR-006**: Execute plays with `serial: 1` or small batches to avoid overwhelming services with simultaneous reboots
 
-**FR-007**: Wait for SSH connectivity after each reboot before proceeding (configurable timeout: 300 seconds default)
+**FR-007**: Configure reboot handling with split timeouts: reboot timeout 600 seconds (allows fsck and slow hardware), SSH reconnection wait 300 seconds (validates SSH availability post-boot)
 
 **FR-008**: Implement idempotency: re-running playbook should show minimal changes if packages already updated
 
 ### Verification
 
-**FR-009**: Post-update verification must check:
+**FR-009**: Post-update verification must check (all are critical - playbook fails if any check fails):
 - SSH connectivity to pve host
 - SSH connectivity to all LXCs in services group
 - NFS mount existence on pve: `/mnt/nas/homelab_immich`
 - Immich bind mount existence: `/mnt/immich` accessible in LXC 101
 
-**FR-010**: Implement optional HTTP health checks for:
+**FR-010**: Implement HTTP health checks (all are critical - playbook fails if service unreachable):
 - Immich: http://192.168.1.213:2283/api/server/ping
 - Home Assistant: http://192.168.1.212:8123
 - Reverse Proxy: http://192.168.1.211:80
 
-**FR-011**: HTTP checks must not hard-fail playbook if service is intentionally not running; use `failed_when: false` with reporting
+**FR-011**: All verification checks are mandatory and will cause playbook failure if unsuccessful (ensures operator does not declare maintenance complete when infrastructure is broken)
 
 ### Reporting
 
@@ -183,7 +193,8 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 - List of hosts that had package updates
 - List of hosts that rebooted
 - Approximate count of packages upgraded per host
-- Total playbook execution time
+- Total playbook wall-clock execution time
+- Per-host timing breakdown (helps identify slow hosts)
 - Any verification failures
 
 **FR-013**: Use Ansible `debug` tasks or custom callback plugin for summary output
@@ -220,9 +231,9 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 **SC-004**: Proxmox host does not reboot without explicit `-e allow_host_reboot=true` flag
 
-**SC-005**: Post-update verification detects missing NFS mount or bind mount and reports failure
+**SC-005**: Post-update verification detects missing NFS mount or bind mount and fails playbook
 
-**SC-006**: HTTP health checks run without failing playbook when services are intentionally down
+**SC-006**: HTTP health checks fail playbook when critical services are unreachable (preventing false declaration of maintenance success)
 
 **SC-007**: Summary report clearly shows which hosts updated, which rebooted, and verification status
 
@@ -259,8 +270,8 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 **Likelihood**: Low  
 **Mitigation**:
 - Verification checks detect missing HTTP endpoints
-- Document manual container start procedure: `pct start <VMID>`
-- Review `onboot: 1` setting for all production containers
+- Document manual recovery: LXC start via `pct start <VMID>`, Docker container start via `docker compose up -d`
+- Verify two-layer auto-start: LXC `onboot: 1` in Proxmox config + Docker `restart: always` in compose files
 
 ### Risk 4: Kernel Update Causes Hardware Incompatibility
 
@@ -291,6 +302,8 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 7. Sufficient disk space exists on all hosts for package downloads (~500MB buffer)
 8. SSH keys are properly configured for ansible_user on all hosts
 9. Proxmox backup retention is configured (VZDump) for pre-patch recovery option
+10. All production LXCs have `onboot: 1` configured in Proxmox
+11. All Docker services use `restart: always` policy in compose files
 
 ## Dependencies *(mandatory)*
 
