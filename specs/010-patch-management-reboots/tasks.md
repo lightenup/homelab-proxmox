@@ -10,7 +10,7 @@
 These tasks incorporate the following specification clarifications:
 
 1. **Container auto-start**: Both LXC (`onboot: 1` in Proxmox) and Docker (`restart: always` in compose files)
-2. **Verification failures**: All checks are critical - playbook fails on any verification failure
+2. **Verification strategy**: Two-tier approach - Infrastructure checks (SSH, mounts) are CRITICAL and fail playbook. Service HTTP checks are WARNING-ONLY and log to summary without failing (allows patching when services intentionally down)
 3. **Apt upgrade mode**: Use `upgrade: safe` parameter for explicit intent
 4. **Reboot timeouts**: Split timing - 600s reboot timeout / 300s SSH wait timeout
 5. **Summary timing**: Include both total execution time and per-host timing breakdown
@@ -68,12 +68,12 @@ These tasks incorporate the following specification clarifications:
   patch_wait_for_connection_timeout: 300
   allow_host_reboot: false
   
-  # Verification targets (clarified: all checks are critical and fail playbook)
+  # Verification targets (two-tier: infrastructure critical, HTTP warning-only)
   patch_verify_ssh: true
   patch_verify_mounts: true
   patch_verify_http: true
   
-  # HTTP endpoints (clarified: all are critical checks)
+  # HTTP endpoints (WARNING-ONLY - log failures without failing playbook)
   patch_http_endpoints:
     - name: "Immich API"
       url: "http://192.168.1.213:2283/api/server/ping"
@@ -399,7 +399,7 @@ These tasks incorporate the following specification clarifications:
     failed_when: not bind_mount_check.stat.exists
   ```
 
-- [ ] **T040** [US4] Implement HTTP health checks (clarified: all are critical checks):
+- [ ] **T040** [US4] Implement HTTP health checks (WARNING-ONLY - two-tier verification):
   ```yaml
   - name: "HTTP health check - {{ item.name }}"
     uri:
@@ -408,10 +408,20 @@ These tasks incorporate the following specification clarifications:
       timeout: 10
       status_code: 200
     register: http_check_result
+    failed_when: false
     when: 
       - patch_verify_http | bool
       - inventory_hostname == item.host
     loop: "{{ patch_http_endpoints }}"
+  
+  - name: "Log HTTP check warnings"
+    debug:
+      msg: "WARNING: {{ item.item.name }} is unreachable - {{ item.msg | default('No response') }}"
+    when:
+      - item.failed | default(false)
+    loop: "{{ http_check_result.results }}"
+    loop_control:
+      label: "{{ item.item.name | default('unknown') }}"
   ```
 
 - [ ] **T041** [US4] Add verification result tracking:
@@ -503,10 +513,11 @@ These tasks incorporate the following specification clarifications:
   - Stop immich container to simulate missing mount
   - Verify check reports issue
 
-- [ ] **T050** [US4] Test HTTP checks with service down (clarified: should fail playbook):
+- [ ] **T050** [US4] Test HTTP checks with service down (WARNING-ONLY behavior):
   - Stop homeassistant container
   - Run verification
-  - Verify HTTP check fails and playbook exits with error
+  - Verify HTTP check logs warning but playbook continues successfully
+  - Verify warning appears in summary output
 
 - [ ] **T051** [US3] Test summary report (clarified: includes per-host timing):
   - Run full playbook
@@ -518,10 +529,10 @@ These tasks incorporate the following specification clarifications:
     - Verification status
 
 **Phase 4 Verification**:
-- Post-update verification detects mount issues and fails playbook (US4)
-- HTTP checks fail playbook when services are unreachable (clarified behavior)
-- Summary report provides complete audit trail with per-host timing (US3)
-- Operator has clear success/failure visibility
+- Infrastructure checks (SSH, mounts) fail playbook when missing (US4 - critical)
+- HTTP service checks log warnings without failing playbook (US4 - operational flexibility)
+- Summary report provides complete audit trail with warnings and per-host timing (US3)
+- Operator can patch even with services intentionally down for maintenance
 
 ---
 

@@ -13,7 +13,7 @@ This plan implements monthly patch management for the homelab infrastructure wit
 - Implement reboot detection via `/var/run/reboot-required` check
 - Gate Proxmox host reboots with explicit `allow_host_reboot` variable
 - Serial execution to avoid simultaneous reboots overwhelming services
-- Best-effort HTTP checks that don't fail playbook
+- Two-tier verification: Infrastructure checks (SSH, mounts) are critical; HTTP service checks are warning-only
 
 ## Architecture
 
@@ -46,7 +46,7 @@ docs/
 1. **Orchestration**: `update_monthly.yml` → Play 1 (services) → Play 2 (proxmox_hosts)
 2. **Per-Host**: apt update → apt upgrade → check reboot required → conditional reboot → wait for SSH → verify
 3. **Reporting**: Gather facts → generate summary → display to operator
-4. **Verification**: SSH connectivity → NFS mounts → bind mounts → HTTP endpoints (best-effort)
+4. **Verification**: Infrastructure (SSH, mounts) - critical | Services (HTTP) - warning-only
 
 ### Ansible Inventory Integration
 
@@ -109,7 +109,7 @@ No inventory changes required.
 1. Implement `tasks/update.yml`: apt cache update + upgrade tasks
 2. Implement `tasks/reboot.yml`: check `/var/run/reboot-required` + conditional reboot
 3. Add reboot gating logic: respect `allow_host_reboot` variable for proxmox_hosts
-4. Implement wait-for-connection after reboot (300s timeout)
+4. Implement wait-for-connection after reboot (600s reboot timeout / 300s SSH wait)
 5. Add package change detection using `register` + `changed_when`
 6. Test idempotency: run twice, verify second run shows minimal changes
 
@@ -157,29 +157,31 @@ No inventory changes required.
 
 **Tasks**:
 1. Implement `tasks/verify.yml`:
-   - SSH connectivity check to all hosts
-   - NFS mount check on pve: `/mnt/nas/homelab_immich`
-   - Bind mount check on immich: `/mnt/immich`
-   - HTTP checks (best-effort): immich, homeassistant, proxy
-2. Add verification failure detection and reporting
+   - SSH connectivity check to all hosts (CRITICAL - fails playbook)
+   - NFS mount check on pve: `/mnt/nas/homelab_immich` (CRITICAL - fails playbook)
+   - Bind mount check on immich: `/mnt/immich` (CRITICAL - fails playbook)
+   - HTTP checks (WARNING-ONLY - logs to summary): immich, homeassistant, proxy
+2. Add verification failure detection and reporting (two-tier strategy)
 3. Implement summary generation:
    - Hosts updated (package count)
    - Hosts rebooted (list)
-   - Verification status (pass/fail per check)
-   - Total execution time
+   - Infrastructure verification status (pass/fail)
+   - Service HTTP check warnings
+   - Total execution time + per-host breakdown
 4. Use `debug` tasks to display summary at end
-5. Test verification failure paths (simulate missing mount)
+5. Test verification failure paths (simulate missing mount for critical check, stopped service for warning)
 
 **Verification**:
-- Verification detects SSH connectivity
-- Verification detects missing NFS mount (simulate by umount)
-- HTTP checks don't fail playbook when service down
-- Summary report shows accurate data for test run
+- Infrastructure checks (SSH, mounts) fail playbook when missing
+- HTTP service checks log warnings but playbook continues
+- Summary report shows both critical failures and HTTP warnings
+- Operator can patch even with services intentionally down
 
 **Deliverables**:
-- Post-update verification catches mount issues (US4)
-- Summary report provides audit trail (US3)
-- Operator has clear success/failure visibility
+- Post-update verification catches infrastructure issues and fails playbook (US4)
+- Service HTTP warnings don't block security patching (operational flexibility)
+- Summary report provides complete audit trail (US3)
+- Operator has clear success/failure/warning visibility
 
 ---
 
@@ -317,11 +319,18 @@ Not automated. Manual recovery procedures documented in runbook:
 **Rationale**: Prevents all services going down simultaneously, easier troubleshooting  
 **Alternatives Considered**: Parallel execution (faster but riskier)
 
-### Why Best-Effort HTTP Checks?
+### Why Two-Tier Verification (Critical vs Warning)?
 
-**Decision**: `failed_when: false` with reporting only  
-**Rationale**: Service may be intentionally down, shouldn't block patching  
-**Alternatives Considered**: Hard fail on HTTP errors (too strict), skip checks (no visibility)
+**Decision**: Infrastructure checks (SSH, mounts) are critical and fail playbook. Service HTTP checks log warnings only.  
+**Rationale**: 
+- Infrastructure failures indicate broken systems that need immediate attention
+- Services may be intentionally stopped for maintenance or troubleshooting
+- Security patching shouldn't be blocked by application-layer issues
+- Separates infrastructure health from service availability
+**Alternatives Considered**: 
+- All checks critical (too strict - blocks patching when services down)
+- All checks warning (too loose - misses infrastructure failures)
+- Conditional checks based on previous state (too complex)
 
 ## Success Criteria Mapping
 
@@ -332,7 +341,7 @@ Not automated. Manual recovery procedures documented in runbook:
 | SC-003 | Reboot + wait_for_connection with 5min timeout | Test with kernel update requiring reboot |
 | SC-004 | `when: allow_host_reboot is defined` condition | Run without flag, verify no reboot |
 | SC-005 | Verification tasks with mount checks | Simulate missing mount, verify detection |
-| SC-006 | `failed_when: false` on HTTP checks | Stop service, verify playbook continues |
+| SC-006 | HTTP checks with `failed_when: false` log warnings | Stop service, verify playbook continues with warning |
 | SC-007 | Debug tasks with summary dictionary | Run playbook, review terminal output |
 | SC-008 | Tailscale runbook with step-by-step guide | Follow from phone, verify access |
 | SC-009 | Diagnostics playbook with no root required | Run playbook, verify output shown |

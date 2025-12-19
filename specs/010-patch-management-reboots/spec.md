@@ -51,7 +51,7 @@ Implement a safe, orchestrated monthly patching process for all homelab infrastr
 ### Session 2025-12-19
 
 - Q: In User Story 1, "containers auto-start correctly" after LXC reboot - does this refer to Docker containers inside the LXC or the LXC container itself being started by Proxmox? → A: Both - Docker containers have `restart: always` in compose files (already configured), AND LXCs have `onboot: 1` in Proxmox config
-- Q: When verification checks fail after patching (e.g., NFS mount missing), should the playbook fail or continue with warnings? → A: Fail playbook - Stop execution and exit with error on any verification failure (prevents declaring maintenance complete when infrastructure is broken)
+- Q: When verification checks fail after patching (e.g., NFS mount missing), should the playbook fail or continue with warnings? → A: Two-tier approach - Infrastructure checks (SSH, mounts) are CRITICAL and fail playbook. Service HTTP checks are WARNING-ONLY and log to summary without failing playbook (services may be intentionally down for maintenance)
 - Q: For "safe upgrade mode that doesn't remove packages", which Ansible apt module parameter should be used? → A: `upgrade: safe` - Explicit safe mode (functionally identical to "yes" but clearer intent)
 - Q: Should reboot timeout and SSH wait timeout use the same value (300s mentioned in spec)? → A: Split timing - 600s reboot timeout (allows fsck/slow hardware), 300s SSH wait (separates reboot completion from SSH availability)
 - Q: Should summary report show only total playbook execution time or include per-host timing? → A: Both - Total playbook wall-clock time + per-host breakdown (helps identify slow hosts for optimization)
@@ -118,8 +118,8 @@ As a homelab operator, I need automated verification after patching that critica
 
 1. **Given** patching completed, **When** verification runs, **Then** it checks SSH connectivity to pve + all LXCs and reports success/failure
 2. **Given** Immich depends on NFS, **When** verification runs, **Then** it confirms `/mnt/nas/homelab_immich` exists on pve and bind mount exists in immich LXC
-3. **Given** services are deployed, **When** HTTP checks run, **Then** it validates HTTP 200 on immich:2283, homeassistant:8123, proxy:80 and fails playbook if any service is unreachable
-4. **Given** AdGuard is not yet deployed, **When** verification runs for services that exist, **Then** all deployed services must pass health checks or playbook fails
+3. **Given** services are deployed, **When** HTTP checks run, **Then** it validates HTTP 200 on immich:2283, homeassistant:8123, proxy:80 and logs warnings for unreachable services without failing playbook
+4. **Given** a service is intentionally stopped for maintenance, **When** verification runs, **Then** HTTP check logs warning in summary but allows playbook to complete successfully
 
 ---
 
@@ -174,18 +174,19 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 ### Verification
 
-**FR-009**: Post-update verification must check (all are critical - playbook fails if any check fails):
+**FR-009**: Post-update infrastructure verification must check (all are CRITICAL - playbook fails if any check fails):
 - SSH connectivity to pve host
 - SSH connectivity to all LXCs in services group
 - NFS mount existence on pve: `/mnt/nas/homelab_immich`
-- Immich bind mount existence: `/mnt/immich` accessible in LXC 101
+- Immich bind mount existence: `/mnt/immich` accessible in immich LXC (213)
 
-**FR-010**: Implement HTTP health checks (all are critical - playbook fails if service unreachable):
+**FR-010**: Implement HTTP service health checks (WARNING-ONLY - log failures in summary without failing playbook):
 - Immich: http://192.168.1.213:2283/api/server/ping
 - Home Assistant: http://192.168.1.212:8123
 - Reverse Proxy: http://192.168.1.211:80
+- Rationale: Services may be intentionally stopped for maintenance; HTTP failures should not block security patching
 
-**FR-011**: All verification checks are mandatory and will cause playbook failure if unsuccessful (ensures operator does not declare maintenance complete when infrastructure is broken)
+**FR-011**: Infrastructure checks (SSH, mounts) are mandatory and will cause playbook failure if unsuccessful. Service HTTP checks log warnings but do not fail playbook (two-tier verification strategy)
 
 ### Reporting
 
@@ -231,11 +232,11 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 **SC-004**: Proxmox host does not reboot without explicit `-e allow_host_reboot=true` flag
 
-**SC-005**: Post-update verification detects missing NFS mount or bind mount and fails playbook
+**SC-005**: Post-update verification detects missing NFS mount or bind mount and fails playbook (infrastructure checks are critical)
 
-**SC-006**: HTTP health checks fail playbook when critical services are unreachable (preventing false declaration of maintenance success)
+**SC-006**: HTTP health checks log warnings for unreachable services without failing playbook (allows patching even when services intentionally down)
 
-**SC-007**: Summary report clearly shows which hosts updated, which rebooted, and verification status
+**SC-007**: Summary report clearly shows which hosts updated, which rebooted, verification status, and any HTTP check warnings
 
 **SC-008**: Tailscale mobile runbook enables phone access to homelab services via Tailscale IP or MagicDNS
 
