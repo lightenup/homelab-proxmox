@@ -350,9 +350,9 @@ This task list organizes implementation work by user story (from spec.md) to ena
 
 ### Final Cleanup
 
-- [ ] T154 Commit all Ansible changes to git
-- [ ] T155 Commit all documentation updates to git
-- [ ] T156 Create pull request or merge feature branch to main
+- [X] T154 Commit all Ansible changes to git
+- [X] T155 Commit all documentation updates to git
+- [X] T156 Create pull request or merge feature branch to main
 - [ ] T157 Tag release if applicable
 
 ---
@@ -399,7 +399,15 @@ pct exec 101 -- bash -c "cd /opt/immich-app && docker compose up -d"
 
 Implementation notes and issues encountered:
 
-- [Date] [Note]
+- **2025-12-19**: Implementation completed successfully
+  - All configuration and templates were already updated prior to deployment
+  - Had to stop old v1 containers before deployment due to name conflict (expected)
+  - Deployment took ~55 seconds including image pulls
+  - All containers healthy immediately after deployment
+  - LXC reboot test confirmed containers auto-start correctly
+  - Idempotency verified: playbook runs in ~30 seconds with changed=1 (backup task only)
+  - Comprehensive documentation already existed in docs/immich-maintenance.md
+  - Commit c57e124: "feat(immich): Upgrade to v2.4.0 with v2 compose structure"
 
 ---
 
