@@ -5,7 +5,7 @@
 
 - name: Gather facts if not already present
   ansible.builtin.setup:
-  when: ansible_distribution is not defined
+  when: ansible_facts.distribution is not defined
 
 - name: Detect if system uses DEB822 format (.sources files)
   ansible.builtin.stat:
@@ -18,7 +18,7 @@
     - name: Backup existing debian.sources
       ansible.builtin.copy:
         src: /etc/apt/sources.list.d/debian.sources
-        dest: /etc/apt/sources.list.d/debian.sources.backup-{{ ansible_date_time.iso8601_basic_short }}
+        dest: /etc/apt/sources.list.d/debian.sources.backup-{{ ansible_facts.date_time.iso8601_basic_short }}
         remote_src: yes
         mode: '0644'
       when: backup_sources | bool
@@ -39,7 +39,7 @@
     - name: Backup existing sources.list
       ansible.builtin.copy:
         src: /etc/apt/sources.list
-        dest: /etc/apt/sources.list.backup-{{ ansible_date_time.iso8601_basic_short }}
+        dest: /etc/apt/sources.list.backup-{{ ansible_facts.date_time.iso8601_basic_short }}
         remote_src: yes
         mode: '0644'
       when: backup_sources | bool
@@ -65,5 +65,5 @@
 - name: Display repository configuration result
   ansible.builtin.debug:
     msg: >
-      Security-only repositories configured for {{ ansible_distribution }} {{ ansible_distribution_release }}.
+      Security-only repositories configured for {{ ansible_facts.distribution }} {{ ansible_facts.distribution_release }}.
       System will now receive ONLY security updates. For feature/bugfix updates, use the manual upgrade playbook.

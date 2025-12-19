@@ -2,7 +2,7 @@
 # Security-only repository configuration defaults
 
 # Debian release (detected automatically from ansible_facts)
-debian_release: "{{ ansible_distribution_release }}"
+debian_release: "{{ ansible_facts.distribution_release }}"
 
 # Repository configuration
 security_only_mode: true
