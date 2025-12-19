@@ -1,24 +1,42 @@
 ---
-- name: Ensure Immich data directories exist
-  ansible.builtin.file:
-    path: "{{ immich_data_dir }}/{{ item }}"
-    state: directory
-    mode: '0755'
-  loop:
-    - library
-    - uploads
-    - profile
-    - thumbs
-    - video
-    - postgres
-    - redis
+# Run preflight checks
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
 
+# Backup existing installation
+- name: Check if Immich install directory exists
+  ansible.builtin.stat:
+    path: "{{ immich_install_dir }}"
+  register: immich_dir
+
+- name: Backup existing Immich installation
+  ansible.builtin.copy:
+    src: "{{ immich_install_dir }}"
+    dest: "{{ immich_install_dir }}.backup-{{ ansible_date_time.iso8601_basic_short }}"
+    remote_src: true
+    mode: preserve
+  when: immich_dir.stat.exists
+
+# Create required directories
 - name: Ensure Immich install directory exists
   ansible.builtin.file:
     path: "{{ immich_install_dir }}"
     state: directory
     mode: '0755'
 
+- name: Ensure Immich data directory exists (for postgres)
+  ansible.builtin.file:
+    path: "{{ immich_data_dir }}/postgres"
+    state: directory
+    mode: '0755'
+
+- name: Ensure Immich upload location exists (NAS mount)
+  ansible.builtin.file:
+    path: "{{ immich_upload_location }}"
+    state: directory
+    mode: '0755'
+
+# Deploy configuration
 - name: Deploy Immich docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -33,11 +51,13 @@
     mode: '0600'
   notify: Restart immich
 
+# Start services
 - name: Ensure Immich stack is running
   community.docker.docker_compose_v2:
     project_src: "{{ immich_install_dir }}"
     state: present
     remove_orphans: true
+    pull: always
 
 - name: Wait for Immich to be reachable
   ansible.builtin.wait_for:
@@ -45,3 +65,14 @@
     host: "127.0.0.1"
     delay: 10
     timeout: 300
+
+# Health check
+- name: Verify Immich API health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ immich_port }}/api/server/ping"
+    method: GET
+    status_code: 200
+  register: health_check
+  retries: 10
+  delay: 10
+  until: health_check.status == 200
