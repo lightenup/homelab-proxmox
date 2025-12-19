@@ -131,7 +131,7 @@ After patching completes:
 
 4. **Check Mounts**
    ```bash
-   ssh pve
+   ssh pve.local  # or 192.168.1.112
    mount | grep /mnt/nas/homelab_immich
    
    ssh 192.168.1.213  # immich
@@ -172,8 +172,8 @@ ansible-playbook playbooks/apt_diagnostics.yml --limit immich
      echo "nameserver 192.168.1.1" | sudo tee /etc/resolv.conf
      echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf
      
-     # Option B: Fix in Proxmox (persistent)
-     ssh pve
+     # Option B: Fix in Proxmox (persistent - RECOMMENDED)
+     ssh pve.local  # or 192.168.1.112
      pct set 213 --nameserver "192.168.1.1 8.8.8.8"
      pct stop 213 && pct start 213
      
