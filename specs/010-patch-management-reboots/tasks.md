@@ -2,7 +2,18 @@
 
 **Feature Branch**: `010-patch-management-reboots`  
 **Created**: December 19, 2025  
-**Status**: Draft
+**Status**: Draft  
+**Last Updated**: December 19, 2025 (clarifications integrated)
+
+## Clarifications Applied (2025-12-19)
+
+These tasks incorporate the following specification clarifications:
+
+1. **Container auto-start**: Both LXC (`onboot: 1` in Proxmox) and Docker (`restart: always` in compose files)
+2. **Verification failures**: All checks are critical - playbook fails on any verification failure
+3. **Apt upgrade mode**: Use `upgrade: safe` parameter for explicit intent
+4. **Reboot timeouts**: Split timing - 600s reboot timeout / 300s SSH wait timeout
+5. **Summary timing**: Include both total execution time and per-host timing breakdown
 
 ## Task Conventions
 
@@ -52,17 +63,17 @@
 
 - [ ] **T009** [US1,2] Create `defaults/main.yml` with default variables:
   ```yaml
-  # Reboot handling
-  patch_reboot_timeout: 300
-  patch_wait_for_connection_timeout: 600
+  # Reboot handling (clarified: 600s reboot / 300s SSH wait)
+  patch_reboot_timeout: 600
+  patch_wait_for_connection_timeout: 300
   allow_host_reboot: false
   
-  # Verification targets
+  # Verification targets (clarified: all checks are critical and fail playbook)
   patch_verify_ssh: true
   patch_verify_mounts: true
   patch_verify_http: true
   
-  # HTTP endpoints (best-effort)
+  # HTTP endpoints (clarified: all are critical checks)
   patch_http_endpoints:
     - name: "Immich API"
       url: "http://192.168.1.213:2283/api/server/ping"
@@ -143,11 +154,11 @@
     register: apt_cache_result
   ```
 
-- [ ] **T016** [US1] Implement `tasks/update.yml` - Upgrade packages:
+- [ ] **T016** [US1] Implement `tasks/update.yml` - Upgrade packages (clarified: use upgrade=safe):
   ```yaml
-  - name: "Upgrade all packages (safe mode)"
+  - name: "Upgrade all packages (safe mode - never removes packages)"
     apt:
-      upgrade: yes
+      upgrade: safe
       autoremove: no
       autoclean: yes
     register: apt_upgrade_result
@@ -219,11 +230,13 @@
   - Verify packages upgrade if available
   - Verify no reboot occurs if not required
 
-- [ ] **T024** [US1] Simulate reboot-required condition:
+- [ ] **T024** [US1] Simulate reboot-required condition and verify auto-start (clarified):
   - Manually create `/var/run/reboot-required` on test LXC
   - Run playbook against that LXC
   - Verify reboot occurs
   - Verify SSH returns after reboot
+  - Verify LXC auto-started (Proxmox `onboot: 1` setting)
+  - Verify Docker containers auto-started (`restart: always` in compose files)
 
 - [ ] **T025** [US2] Test Proxmox host without reboot flag:
   ```bash
@@ -242,6 +255,12 @@
   - Run playbook twice against same host
   - Verify second run shows `changed=0` except apt cache update
   - Verify no unnecessary reboots
+
+- [ ] **T027a** [US1] Verify LXC auto-start configuration (clarified requirement):
+  - Check all production LXCs have `onboot: 1` in Proxmox config
+  - Command: `pct config <VMID> | grep onboot`
+  - Verify for: adguard (210), proxy (211), homeassistant (212), immich (213)
+  - If not set, update via Terraform or `pct set <VMID> -onboot 1`
 
 **Phase 2 Verification**:
 - LXC containers update and reboot automatically when needed (US1)
@@ -380,15 +399,15 @@
     failed_when: not bind_mount_check.stat.exists
   ```
 
-- [ ] **T040** [US4] Implement HTTP health checks (best-effort):
+- [ ] **T040** [US4] Implement HTTP health checks (clarified: all are critical checks):
   ```yaml
   - name: "HTTP health check - {{ item.name }}"
     uri:
       url: "{{ item.url }}"
       method: GET
       timeout: 10
+      status_code: 200
     register: http_check_result
-    failed_when: false
     when: 
       - patch_verify_http | bool
       - inventory_hostname == item.host
@@ -437,16 +456,21 @@
       playbook_duration: "{{ (ansible_date_time.epoch | int) - (playbook_start_time | int) }}"
   ```
 
-- [ ] **T046** [US3] Display summary report:
+- [ ] **T046** [US3] Display summary report (clarified: include per-host timing breakdown):
   ```yaml
   - name: "Display Summary Report"
     debug:
       msg:
         - "========== MONTHLY PATCHING SUMMARY =========="
-        - "Execution Time: {{ playbook_duration }}s"
+        - "Total Execution Time: {{ playbook_duration }}s"
         - ""
         - "Hosts Updated: {{ hosts_updated | length }}"
         - "  {{ hosts_updated | join(', ') }}"
+        - ""
+        - "Per-Host Timing:"
+        - "{% for host in groups['all'] %}"
+        - "  {{ host }}: {{ hostvars[host].host_duration | default('N/A') }}s"
+        - "{% endfor %}"
         - ""
         - "Hosts Rebooted: {{ hosts_rebooted | length }}"
         - "  {{ hosts_rebooted | join(', ') }}"
@@ -479,23 +503,24 @@
   - Stop immich container to simulate missing mount
   - Verify check reports issue
 
-- [ ] **T050** [US4] Test HTTP checks with service down:
+- [ ] **T050** [US4] Test HTTP checks with service down (clarified: should fail playbook):
   - Stop homeassistant container
   - Run verification
-  - Verify HTTP check reports failure but playbook continues
+  - Verify HTTP check fails and playbook exits with error
 
-- [ ] **T051** [US3] Test summary report:
+- [ ] **T051** [US3] Test summary report (clarified: includes per-host timing):
   - Run full playbook
   - Verify summary shows:
     - Correct host counts
     - Accurate reboot list
-    - Timing data
+    - Total execution time
+    - Per-host timing breakdown
     - Verification status
 
 **Phase 4 Verification**:
-- Post-update verification detects mount issues (US4)
-- HTTP checks don't fail playbook when service down
-- Summary report provides complete audit trail (US3)
+- Post-update verification detects mount issues and fails playbook (US4)
+- HTTP checks fail playbook when services are unreachable (clarified behavior)
+- Summary report provides complete audit trail with per-host timing (US3)
 - Operator has clear success/failure visibility
 
 ---
