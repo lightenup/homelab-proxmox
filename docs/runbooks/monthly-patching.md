@@ -140,6 +140,34 @@ After patching completes:
 
 ## Common Issues
 
+### Issue: Playbook fails at apt update step
+
+**Symptoms**: "Failed to update apt cache after 5 retries"
+
+**Possible Causes**:
+- Network connectivity issue
+- DNS resolution failure
+- Repository mirror down or unreachable
+- APT lock held by another process
+- Broken sources.list configuration
+
+**Diagnosis**:
+```bash
+# Run diagnostics playbook on affected host
+ansible-playbook playbooks/apt_diagnostics.yml --limit immich
+```
+
+**Resolution**:
+1. Review diagnostics output for specific failure
+2. If network/DNS issue, check host networking
+3. If repository down, wait and retry or change mirror
+4. If APT locked, wait for other process to finish:
+   ```bash
+   ssh immich
+   sudo lsof /var/lib/dpkg/lock-frontend
+   ```
+5. If sources.list broken, review and fix configuration
+
 ### Issue: Playbook fails at reboot step
 
 **Symptoms**: Timeout waiting for SSH reconnection
