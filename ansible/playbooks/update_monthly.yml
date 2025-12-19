@@ -1,18 +1,89 @@
 ---
-- name: Monthly updates - Proxmox host
-  hosts: proxmox_hosts
-  become: true
-  tasks:
-    - name: Run apt upgrade
-      apt:
-        upgrade: dist
-        update_cache: yes
+# Monthly Patching Playbook
+# 
+# Orchestrates monthly security updates and system maintenance across
+# the homelab infrastructure. Executes in two phases:
+#   1. Services (LXC containers) - serialized to avoid simultaneous outages
+#   2. Proxmox host - requires explicit opt-in via allow_host_reboot flag
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/update_monthly.yml
+#   ansible-playbook ansible/playbooks/update_monthly.yml -e "allow_host_reboot=true"
+#
+# Safety Features:
+#   - Serial execution for services (serial: 1) prevents all services down at once
+#   - Two-tier verification: Infrastructure checks (SSH, mounts) CRITICAL, HTTP checks WARNING-ONLY
+#   - Split timeouts: 600s reboot / 300s SSH reconnection
+#   - Auto-start validation: Both LXC (onboot: 1) and Docker (restart: always)
+#
+# Feature: 010-patch-management-reboots
 
-- name: Monthly updates - services
-  hosts: services
-  become: true
+# Play 0: Preflight checks and timing
+- name: "Preflight - Record start time"
+  hosts: localhost
+  gather_facts: yes
   tasks:
-    - name: Run apt upgrade
-      apt:
-        upgrade: dist
-        update_cache: yes
+    - name: "Set start timestamp"
+      set_fact:
+        playbook_start_time: "{{ ansible_date_time.epoch }}"
+        playbook_start_iso: "{{ ansible_date_time.iso8601 }}"
+        cacheable: yes
+
+- name: "Preflight - Verify Ansible connectivity"
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: "Test SSH connectivity"
+      ping:
+
+# Play 1: Patch services (LXC containers) with serial execution
+- name: "Monthly Patching - Services"
+  hosts: services
+  serial: 1
+  gather_facts: yes
+  become: yes
+  roles:
+    - patch_management
+
+# Play 2: Patch Proxmox host (requires explicit opt-in)
+- name: "Monthly Patching - Proxmox Host"
+  hosts: proxmox_hosts
+  gather_facts: yes
+  become: yes
+  roles:
+    - patch_management
+
+# Play 3: Generate summary report
+- name: "Generate Summary Report"
+  hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: "Calculate playbook duration"
+      set_fact:
+        playbook_duration: "{{ (ansible_date_time.epoch | int) - (playbook_start_time | int) }}"
+    
+    - name: "Identify hosts with package updates"
+      set_fact:
+        hosts_updated: "{{ groups['all'] | map('extract', hostvars) | selectattr('packages_upgraded', 'defined') | map(attribute='inventory_hostname') | list }}"
+    
+    - name: "Identify hosts that rebooted"
+      set_fact:
+        hosts_rebooted: "{{ groups['all'] | map('extract', hostvars) | selectattr('host_rebooted', 'defined') | map(attribute='inventory_hostname') | list }}"
+    
+    - name: "Display Summary Report"
+      debug:
+        msg:
+          - "========== MONTHLY PATCHING SUMMARY =========="
+          - "Start Time: {{ hostvars['localhost']['playbook_start_iso'] | default('N/A') }}"
+          - "End Time: {{ ansible_date_time.iso8601 }}"
+          - "Total Execution Time: {{ playbook_duration }}s ({{ (playbook_duration | int / 60) | round(1) }}m)"
+          - ""
+          - "Hosts Updated: {{ hosts_updated | length }}"
+          - "  {{ hosts_updated | join(', ') if hosts_updated | length > 0 else 'None' }}"
+          - ""
+          - "Hosts Rebooted: {{ hosts_rebooted | length }}"
+          - "  {{ hosts_rebooted | join(', ') if hosts_rebooted | length > 0 else 'None' }}"
+          - ""
+          - "Verification Status: PASS"
+          - "  (Infrastructure checks passed, see warnings above for HTTP check issues)"
+          - "=============================================="

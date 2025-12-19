@@ -1,0 +1,21 @@
+---
+# Package update and upgrade tasks
+# Feature: 010-patch-management-reboots
+
+- name: "Update apt cache"
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  register: apt_cache_result
+
+- name: "Upgrade all packages (safe mode - never removes packages)"
+  apt:
+    upgrade: safe
+    autoremove: no
+    autoclean: yes
+  register: apt_upgrade_result
+
+- name: "Record package upgrade count"
+  set_fact:
+    packages_upgraded: "{{ apt_upgrade_result.stdout_lines | select('search', 'upgraded') | list | length }}"
+  when: apt_upgrade_result.changed
