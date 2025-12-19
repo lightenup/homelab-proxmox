@@ -241,14 +241,14 @@ These tasks incorporate the following specification clarifications:
 
 ### Initial Testing
 
-- [x] **T023** [US1] Test patching on single LXC (adguard):
+- [x] **T023** [US1] Test patching on all hosts:
   ```bash
-  ansible-playbook ansible/playbooks/update_monthly.yml --limit adguard
+  ansible-playbook ansible/playbooks/update_monthly.yml
   ```
   - Verify apt update runs
   - Verify packages upgrade if available
   - Verify no reboot occurs if not required
-  - **Completed**: Tested in check mode, all tasks execute correctly
+  - **Completed**: Full execution successful - all 5 hosts patched (adguard, homeassistant, immich, reverse_proxy, proxmox). Execution time 105s (1.8m). Proxmox updated 2 packages. All verifications passed. DNS fix on immich (VMID 101) resolved prior apt cache failure.
 
 - [ ] **T024** [US1] Simulate reboot-required condition and verify auto-start (clarified):
   - Manually create `/var/run/reboot-required` on test LXC
