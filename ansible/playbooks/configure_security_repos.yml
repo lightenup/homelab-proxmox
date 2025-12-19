@@ -1,0 +1,48 @@
+---
+# Configure security-only apt repositories
+# This playbook restricts systems to only receive security updates
+# 
+# Usage:
+#   ansible-playbook playbooks/configure_security_repos.yml
+#   ansible-playbook playbooks/configure_security_repos.yml --limit services
+#   ansible-playbook playbooks/configure_security_repos.yml --limit proxmox
+#
+# What it does:
+#   - Backs up existing repository configuration
+#   - Configures ONLY security repositories
+#   - Removes feature/bugfix update sources
+#   - Validates repository access
+#
+# After running this:
+#   - Monthly patching (update_monthly.yml) will only install security updates
+#   - Use manual upgrade playbook for feature/bugfix updates when needed
+
+- name: Configure Security-Only Repositories
+  hosts: services:proxmox_hosts
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: Apply security-only repository configuration
+      ansible.builtin.include_role:
+        name: security_only_repos
+    
+    - name: Display next steps
+      ansible.builtin.debug:
+        msg: |
+          ===================================================================
+          Security-only repositories configured successfully!
+          
+          What this means:
+          - Monthly patching will now ONLY install security updates
+          - System will be more stable (no unexpected feature changes)
+          - For feature/bugfix updates, use: playbooks/upgrade_manual.yml
+          
+          To verify configuration:
+            ssh {{ inventory_hostname }}
+            cat /etc/apt/sources.list*
+          
+          To test security updates:
+            ansible-playbook playbooks/update_monthly.yml --limit {{ inventory_hostname }}
+          ===================================================================
+      run_once: no

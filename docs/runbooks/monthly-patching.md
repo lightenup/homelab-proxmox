@@ -6,13 +6,16 @@
 
 ## Overview
 
-This runbook describes the monthly security patching process for the homelab infrastructure. The playbook automatically updates packages, reboots systems when needed, and verifies system health afterward.
+This runbook describes the monthly **security-only** patching process for the homelab infrastructure. The playbook automatically installs security updates, reboots systems when needed, and verifies system health afterward.
+
+**Important**: Systems are configured for security-only updates to maintain maximum stability. Feature and bugfix updates require running the manual upgrade playbook when you have time to address potential issues.
 
 ## When to Run
 
 - **Schedule**: First weekend of each month
 - **Duration**: 10-15 minutes typical (depends on reboot requirements)
 - **Downtime**: Serial execution minimizes impact - only one service down at a time
+- **Update Type**: Security patches only (no feature changes)
 
 ## Prerequisites
 
@@ -20,6 +23,7 @@ This runbook describes the monthly security patching process for the homelab inf
 - Ansible vault password configured
 - Review any planned maintenance that might conflict
 - Backup verification (ensure recent backups exist)
+- Systems configured with security-only repositories (run `playbooks/configure_security_repos.yml` if not done)
 
 ## Standard Execution
 
@@ -40,13 +44,35 @@ ansible-playbook playbooks/update_monthly.yml
    - immich
    - reverse_proxy
 3. Each service:
-   - Updates apt cache
-   - Upgrades packages (safe mode - never removes packages)
+   - Updates apt cache (security repositories only)
+   - Upgrades packages (safe mode - security updates only, never removes packages)
    - Reboots if kernel/library updates require it
    - Waits for SSH to return (300s timeout)
    - Verifies infrastructure (NFS/bind mounts)
    - Checks HTTP health (warnings only)
 4. Summary report generated with timing and status
+
+### Manual Full Upgrade (Feature + Bugfix Updates)
+
+For non-security updates (features, bugfixes), use the manual upgrade playbook when you have time to troubleshoot potential issues:
+
+```bash
+# Dry run first
+ansible-playbook playbooks/upgrade_manual.yml --check
+
+# Upgrade specific host
+ansible-playbook playbooks/upgrade_manual.yml --limit adguard
+
+# Upgrade all services (skip confirmation pause with --skip-tags pause)
+ansible-playbook playbooks/upgrade_manual.yml --limit services --skip-tags pause
+```
+
+**What this does**:
+- Temporarily enables ALL Debian repositories
+- Performs full system upgrade (apt full-upgrade)
+- Handles reboots if needed
+- Restores security-only repository configuration
+- More risky - only run when you can monitor and fix issues
 
 ### Run Patching (Including Proxmox Host)
 

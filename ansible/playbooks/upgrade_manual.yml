@@ -1,0 +1,247 @@
+---
+# Manual Full System Upgrade (Feature + Bugfix + Security Updates)
+# 
+# ⚠️  WARNING: This performs FULL system upgrades including feature changes
+# ⚠️  Only run this when you have time to troubleshoot potential issues
+# ⚠️  Consider testing on non-critical hosts first
+#
+# Usage:
+#   # Dry run (see what would be upgraded)
+#   ansible-playbook playbooks/upgrade_manual.yml --check
+#   
+#   # Upgrade single host
+#   ansible-playbook playbooks/upgrade_manual.yml --limit adguard
+#   
+#   # Upgrade all services (one at a time for safety)
+#   ansible-playbook playbooks/upgrade_manual.yml --limit services
+#   
+#   # Upgrade Proxmox host (with reboot permission)
+#   ansible-playbook playbooks/upgrade_manual.yml --limit proxmox -e "allow_host_reboot=true"
+#
+# What it does:
+#   1. Temporarily enables ALL Debian repositories (feature + bugfix + security)
+#   2. Updates apt cache
+#   3. Performs full system upgrade (apt full-upgrade)
+#   4. Handles reboots if kernel/libraries updated
+#   5. Verifies system health after upgrade
+#   6. Restores security-only repository configuration
+#
+# After running:
+#   - System will have latest features and bugfixes
+#   - Repository config restored to security-only mode
+#   - Next monthly patching will only get security updates
+
+- name: Record Start Time
+  hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: Set start timestamp
+      ansible.builtin.set_fact:
+        manual_upgrade_start: "{{ ansible_facts.date_time.epoch }}"
+        manual_upgrade_start_iso: "{{ ansible_facts.date_time.iso8601 }}"
+
+- name: Manual Full System Upgrade
+  hosts: services:proxmox_hosts
+  serial: 1  # One host at a time for safety
+  gather_facts: yes
+  become: yes
+  
+  vars:
+    allow_host_reboot: false  # Override with -e for Proxmox upgrades
+  
+  tasks:
+    - name: Display upgrade warning
+      ansible.builtin.debug:
+        msg: |
+          ==================== WARNING ====================
+          Performing FULL system upgrade on {{ inventory_hostname }}
+          This includes feature updates that may change behavior
+          Monitor carefully and be prepared to troubleshoot
+          =================================================
+    
+    - name: Detect repository format
+      ansible.builtin.stat:
+        path: /etc/apt/sources.list.d/debian.sources
+      register: uses_deb822
+    
+    - name: Backup current repository configuration
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ item }}.backup-manual-upgrade-{{ ansible_facts.date_time.iso8601_basic_short }}"
+        remote_src: yes
+        mode: '0644'
+      loop:
+        - /etc/apt/sources.list.d/debian.sources
+      when: uses_deb822.stat.exists
+      ignore_errors: yes
+    
+    - name: Backup sources.list (traditional format)
+      ansible.builtin.copy:
+        src: /etc/apt/sources.list
+        dest: /etc/apt/sources.list.backup-manual-upgrade-{{ ansible_facts.date_time.iso8601_basic_short }}
+        remote_src: yes
+        mode: '0644'
+      when: not uses_deb822.stat.exists
+      ignore_errors: yes
+    
+    - name: Temporarily enable ALL repositories (DEB822 format)
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/debian.sources
+        content: |
+          # Temporary full repository configuration for manual upgrade
+          # Will be restored to security-only after upgrade completes
+          
+          Types: deb
+          URIs: http://deb.debian.org/debian/
+          Suites: {{ ansible_distribution_release }} {{ ansible_distribution_release }}-updates
+          Components: main contrib non-free-firmware
+          Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+          
+          Types: deb
+          URIs: http://security.debian.org/debian-security/
+          Suites: {{ ansible_distribution_release }}-security
+          Components: main contrib non-free-firmware
+          Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+        owner: root
+        group: root
+        mode: '0644'
+      when: uses_deb822.stat.exists
+    
+    - name: Temporarily enable ALL repositories (traditional format)
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list
+        content: |
+          # Temporary full repository configuration for manual upgrade
+          # Will be restored to security-only after upgrade completes
+          
+          deb http://deb.debian.org/debian {{ ansible_distribution_release }} main contrib
+          deb http://deb.debian.org/debian {{ ansible_distribution_release }}-updates main contrib
+          deb http://security.debian.org {{ ansible_distribution_release }}-security main contrib
+        owner: root
+        group: root
+        mode: '0644'
+      when: not uses_deb822.stat.exists
+    
+    - name: Update apt cache with all repositories
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 0
+    
+    - name: Show available upgrades
+      ansible.builtin.shell: |
+        apt list --upgradable 2>/dev/null | grep -v "^Listing" || echo "No upgrades available"
+      register: upgradable_packages
+      changed_when: false
+    
+    - name: Display available upgrades
+      ansible.builtin.debug:
+        msg: "{{ upgradable_packages.stdout_lines }}"
+    
+    - name: Pause for review (skip with --skip-tags pause)
+      ansible.builtin.pause:
+        prompt: |
+          
+          Review the package list above.
+          Press ENTER to continue with full upgrade, or Ctrl+C then A to abort.
+      tags: [pause]
+      when: upgradable_packages.stdout_lines | length > 1
+    
+    - name: Perform full system upgrade
+      ansible.builtin.apt:
+        upgrade: full
+        autoremove: no
+        autoclean: yes
+        force: yes
+      register: full_upgrade_result
+    
+    - name: Display upgrade results
+      ansible.builtin.debug:
+        msg: |
+          Packages upgraded: {{ full_upgrade_result.changed }}
+          {% if full_upgrade_result.changed %}
+          System has been upgraded with latest features and bugfixes
+          {% else %}
+          No upgrades were available
+          {% endif %}
+    
+    - name: Check if reboot required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_check
+    
+    - name: Determine reboot action
+      ansible.builtin.set_fact:
+        should_reboot: "{{ reboot_check.stat.exists and (inventory_hostname not in groups['proxmox_hosts'] or allow_host_reboot | bool) }}"
+    
+    - name: Reboot system if required and allowed
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+        post_reboot_delay: 30
+        test_command: uptime
+      when: should_reboot | bool
+      register: reboot_result
+    
+    - name: Wait for system to be fully ready
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+        delay: 10
+      when: should_reboot | bool
+    
+    - name: Gather facts after reboot
+      ansible.builtin.setup:
+      when: should_reboot | bool
+    
+    - name: Restore security-only repository configuration
+      ansible.builtin.include_role:
+        name: security_only_repos
+    
+    - name: Verify system health (run patch_management verification)
+      ansible.builtin.include_role:
+        name: patch_management
+        tasks_from: verify.yml
+    
+    - name: Record upgrade completion
+      ansible.builtin.set_fact:
+        upgrade_completed: yes
+        upgrade_rebooted: "{{ should_reboot | bool }}"
+
+- name: Generate Upgrade Summary
+  hosts: localhost
+  gather_facts: yes
+  tasks:
+    - name: Calculate duration
+      ansible.builtin.set_fact:
+        upgrade_duration: "{{ ansible_facts.date_time.epoch | int - hostvars['localhost']['manual_upgrade_start'] | int }}"
+        upgrade_end_iso: "{{ ansible_facts.date_time.iso8601 }}"
+    
+    - name: Identify upgraded hosts
+      ansible.builtin.set_fact:
+        upgraded_hosts: "{{ groups['services'] + groups['proxmox_hosts'] | default([]) | select('in', ansible_play_hosts_all) | list }}"
+    
+    - name: Identify rebooted hosts
+      ansible.builtin.set_fact:
+        rebooted_hosts: "{{ upgraded_hosts | select('in', hostvars.keys()) | select('extract', hostvars, ['upgrade_rebooted']) | select('equalto', true) | list }}"
+    
+    - name: Display summary
+      ansible.builtin.debug:
+        msg: |
+          ========== MANUAL FULL UPGRADE SUMMARY ==========
+          Start Time: {{ hostvars['localhost']['manual_upgrade_start_iso'] }}
+          End Time: {{ upgrade_end_iso }}
+          Total Execution Time: {{ upgrade_duration }}s ({{ (upgrade_duration | int / 60) | round(1) }}m)
+          
+          Hosts Upgraded: {{ upgraded_hosts | length }}
+            {{ upgraded_hosts | join(', ') if upgraded_hosts else 'None' }}
+          
+          Hosts Rebooted: {{ rebooted_hosts | length }}
+            {{ rebooted_hosts | join(', ') if rebooted_hosts else 'None' }}
+          
+          ⚠️  IMPORTANT: Monitor services for unexpected behavior
+          ⚠️  Feature updates may have changed application behavior
+          
+          Repository Configuration: Restored to security-only mode
+          Next Steps:
+            - Verify all services are functioning correctly
+            - Check application logs for any errors
+            - Monthly patching will now only install security updates
+          =================================================
