@@ -1,0 +1,344 @@
+# Implementation Tasks: Immich v2.4.0 Upgrade
+
+**Feature**: 009-immich-v2-upgrade  
+**Created**: December 19, 2024  
+**Status**: Not Started
+
+## Phase 1: Update Configuration Variables
+
+- [ ] Edit `ansible/group_vars/services/vars.yml`
+  - [ ] Change `immich_version` from "v1.121.0" to "v2.4.0"
+  - [ ] Add `immich_data_dir: "/opt/immich-data"` variable
+  - [ ] Verify `immich_install_dir: "/opt/immich-app"` is present
+  - [ ] Commit changes to git
+
+- [ ] Edit `ansible/roles/immich/defaults/main.yml`
+  - [ ] Update `immich_version` default to "v2.4.0"
+  - [ ] Add `immich_upload_location: "/mnt/immich/library-v2"` variable
+  - [ ] Add `immich_data_dir: "/opt/immich-data"` if not inherited
+  - [ ] Commit changes to git
+
+**STOP POINT**: Verify YAML syntax is correct: `yamllint ansible/group_vars/services/vars.yml ansible/roles/immich/defaults/main.yml`
+
+## Phase 2: Update Docker Compose Template
+
+- [ ] Update `ansible/roles/immich/templates/docker-compose.yml.j2`
+  - [ ] Replace file header comments with v2 reference
+  - [ ] Update `immich-server` service:
+    - [ ] Set image to `ghcr.io/immich-app/immich-server:{{ immich_version }}`
+    - [ ] Change volume mount from old path to `{{ immich_upload_location }}:/data`
+    - [ ] Keep port mapping `{{ immich_port }}:2283`
+    - [ ] Ensure depends_on includes redis and database
+    - [ ] Add restart: always
+    - [ ] Verify health check configuration
+  - [ ] Update `immich-machine-learning` service:
+    - [ ] Set image to `ghcr.io/immich-app/immich-machine-learning:{{ immich_version }}`
+    - [ ] Keep model-cache volume mount
+    - [ ] Add restart: always
+    - [ ] Verify health check configuration
+  - [ ] Update `redis` service:
+    - [ ] Change image from `redis:6.2-alpine` to `docker.io/valkey/valkey:9@sha256:fb8d272e529ea567b9bf1302245796f21a2672b8368ca3fcb938ac334e613c8f`
+    - [ ] Add health check: `redis-cli ping || exit 1`
+    - [ ] Add restart: always
+  - [ ] Update `database` service:
+    - [ ] Change image to `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23`
+    - [ ] Update volume mount to `{{ immich_data_dir }}/postgres:/var/lib/postgresql/data`
+    - [ ] Keep POSTGRES_* environment variables
+    - [ ] Add restart: always
+    - [ ] Verify health check configuration
+  - [ ] Remove any v1 microservices container definition (if present)
+  - [ ] Ensure `model-cache` named volume is defined
+  - [ ] Commit changes to git
+
+**STOP POINT**: Review template against upstream reference: https://github.com/immich-app/immich/releases/download/v2.4.0/docker-compose.yml
+
+## Phase 3: Update Environment Template
+
+- [ ] Update `ansible/roles/immich/templates/.env.j2`
+  - [ ] Add `UPLOAD_LOCATION={{ immich_upload_location }}`
+  - [ ] Add `DB_DATA_LOCATION={{ immich_data_dir }}/postgres`
+  - [ ] Add `IMMICH_VERSION={{ immich_version }}`
+  - [ ] Add `TZ=Etc/UTC` (or parameterize)
+  - [ ] Verify DB_HOSTNAME=database is present
+  - [ ] Verify DB_USERNAME=postgres is present
+  - [ ] Verify DB_PASSWORD={{ immich_db_password }} is present
+  - [ ] Verify DB_DATABASE_NAME=immich is present
+  - [ ] Verify REDIS_HOSTNAME=redis is present
+  - [ ] Remove any v1-only variables
+  - [ ] Commit changes to git
+
+**STOP POINT**: Verify all template variables are defined in defaults or group_vars
+
+## Phase 4: Update Ansible Role Tasks
+
+- [ ] Create `ansible/roles/immich/tasks/preflight.yml`
+  - [ ] Add task: Check NAS mount exists at `/mnt/immich`
+  - [ ] Add task: Check mount is writable
+  - [ ] Add task: Verify Docker daemon is running
+  - [ ] Add task: Check minimum disk space (10GB)
+  - [ ] Add task: Validate required variables are set
+  - [ ] Commit file
+
+- [ ] Update `ansible/roles/immich/tasks/main.yml`
+  - [ ] Add include for preflight checks at start
+  - [ ] Add task: Backup existing compose directory with timestamp
+    - [ ] Use `{{ ansible_date_time.iso8601_basic_short }}` for timestamp
+    - [ ] Target: `/opt/immich-app.backup-{{ timestamp }}`
+    - [ ] Only if `/opt/immich-app` exists
+  - [ ] Update directory creation task:
+    - [ ] Remove old v1 directory loop (library, uploads, thumbs, etc.)
+    - [ ] Add task: Create `{{ immich_data_dir }}/postgres`
+    - [ ] Add task: Create `{{ immich_upload_location }}`
+    - [ ] Set appropriate permissions and ownership
+  - [ ] Keep existing template deployment tasks
+  - [ ] Update docker compose task:
+    - [ ] Verify module is `community.docker.docker_compose_v2`
+    - [ ] Ensure `project_src: "{{ immich_install_dir }}"`
+    - [ ] Ensure `state: present`
+    - [ ] Ensure `remove_orphans: true`
+  - [ ] Update wait_for task:
+    - [ ] Keep port check on 2283
+    - [ ] Increase timeout to 300 seconds
+  - [ ] Add new task: Verify API health
+    - [ ] Use uri module to check `/api/server/ping`
+    - [ ] Retry up to 10 times with 10 second delay
+  - [ ] Commit changes
+
+- [ ] Review `ansible/roles/immich/handlers/main.yml`
+  - [ ] Verify "Restart immich" handler exists
+  - [ ] Ensure it uses docker compose v2 command format
+  - [ ] Commit any changes
+
+**STOP POINT**: Run syntax check: `ansible-playbook --syntax-check playbooks/site.yml`
+
+## Phase 5: Test Ansible Deployment
+
+- [ ] Run Ansible playbook in check mode first:
+  ```bash
+  ansible-playbook -i ansible/inventories/generated/hosts.yml \
+    ansible/playbooks/site.yml \
+    --limit immich \
+    --check --diff \
+    --ask-vault-pass
+  ```
+  - [ ] Review changes that would be made
+  - [ ] Verify no unexpected modifications
+
+- [ ] Run Ansible playbook for real:
+  ```bash
+  ansible-playbook -i ansible/inventories/generated/hosts.yml \
+    ansible/playbooks/site.yml \
+    --limit immich \
+    --ask-vault-pass
+  ```
+  - [ ] Monitor playbook execution
+  - [ ] Record any errors or warnings
+  - [ ] Verify successful completion
+
+**STOP POINT**: Do not proceed if playbook fails. Review errors and fix before continuing.
+
+## Phase 6: Verify Deployment
+
+- [ ] Check containers are running:
+  ```bash
+  pct exec 101 -- bash -c "cd /opt/immich-app && docker compose ps"
+  ```
+  - [ ] Verify immich_server is Up and healthy
+  - [ ] Verify immich_machine_learning is Up and healthy
+  - [ ] Verify immich_redis is Up and healthy
+  - [ ] Verify immich_postgres is Up and healthy
+
+- [ ] Check API health:
+  ```bash
+  curl -f http://192.168.1.213:2283/api/server/ping
+  ```
+  - [ ] Verify successful response
+  - [ ] Record response for documentation
+
+- [ ] Check web UI:
+  - [ ] Navigate to http://192.168.1.213:2283
+  - [ ] Verify Immich v2 interface loads
+  - [ ] Verify setup wizard appears (for fresh install)
+
+- [ ] Verify NAS storage:
+  ```bash
+  pct exec 101 -- ls -la /mnt/immich/library-v2
+  ```
+  - [ ] Verify directory exists
+  - [ ] Verify permissions allow Docker access
+
+- [ ] Check from Proxmox host:
+  ```bash
+  ls -la /mnt/nas/homelab_immich/library-v2
+  ```
+  - [ ] Verify directory is visible on NAS
+  - [ ] Verify bind mount is working
+
+**STOP POINT**: All verification checks must pass before proceeding
+
+## Phase 7: Test Idempotency
+
+- [ ] Re-run Ansible playbook:
+  ```bash
+  ansible-playbook -i ansible/inventories/generated/hosts.yml \
+    ansible/playbooks/site.yml \
+    --limit immich \
+    --ask-vault-pass
+  ```
+  - [ ] Verify output shows `changed=0`
+  - [ ] Verify containers do not restart
+  - [ ] Verify completion in under 2 minutes
+
+- [ ] Check containers still healthy:
+  ```bash
+  pct exec 101 -- bash -c "docker compose ps"
+  ```
+  - [ ] Verify all containers remain Up and healthy
+
+**STOP POINT**: If playbook shows changes on second run, review for non-idempotent tasks
+
+## Phase 8: Test Upload Functionality
+
+- [ ] Complete initial setup wizard:
+  - [ ] Navigate to http://192.168.1.213:2283
+  - [ ] Create admin account
+  - [ ] Complete wizard steps
+  - [ ] Record credentials securely
+
+- [ ] Upload test photo:
+  - [ ] Use web UI to upload a test image
+  - [ ] Verify upload succeeds
+  - [ ] Verify image is visible in gallery
+
+- [ ] Verify file on NAS:
+  ```bash
+  pct exec 101 -- find /mnt/immich/library-v2 -type f
+  ```
+  - [ ] Verify uploaded file exists in library path
+  - [ ] Note file organization structure
+
+- [ ] Test mobile app connection:
+  - [ ] Install/update Immich mobile app
+  - [ ] Configure with server URL http://192.168.1.213:2283
+  - [ ] Authenticate with admin account
+  - [ ] Verify gallery loads
+  - [ ] Upload test photo from mobile
+  - [ ] Verify appears in web UI
+
+**STOP POINT**: Upload functionality must work before marking deployment successful
+
+## Phase 9: Test Persistence
+
+- [ ] Restart containers:
+  ```bash
+  pct exec 101 -- bash -c "cd /opt/immich-app && docker compose restart"
+  ```
+  - [ ] Verify services come back up
+  - [ ] Verify uploads still visible
+  - [ ] Verify web UI still accessible
+
+- [ ] Reboot LXC:
+  ```bash
+  pct reboot 101
+  ```
+  - [ ] Wait for LXC to come back online
+  - [ ] Verify NAS mount is present: `pct exec 101 -- ls /mnt/immich`
+  - [ ] Verify containers auto-started
+  - [ ] Verify uploads still visible
+  - [ ] Verify web UI accessible
+
+**STOP POINT**: Data must persist across restarts
+
+## Phase 10: Document Procedures
+
+- [ ] Update `docs/immich-maintenance.md`:
+  - [ ] Add section: "Upgrading Immich"
+  - [ ] Document version bump procedure
+  - [ ] Document verification steps
+  - [ ] Document rollback procedure
+  - [ ] Add health check commands
+  - [ ] Commit changes
+
+- [ ] Add rollback procedure:
+  - [ ] Document backup location format
+  - [ ] Document restore steps
+  - [ ] Document verification after rollback
+  - [ ] Test rollback procedure (optional but recommended)
+
+**STOP POINT**: Documentation must be complete before marking feature done
+
+## Phase 11: Final Validation
+
+Run through all acceptance scenarios from spec:
+
+- [ ] **US1**: Operator upgrades via Ansible
+  - [ ] Run playbook succeeds
+  - [ ] v2.4.0 containers running
+  - [ ] API responds successfully
+  - [ ] Re-run is idempotent
+
+- [ ] **US2**: NAS storage validated
+  - [ ] UPLOAD_LOCATION set correctly
+  - [ ] Directory exists with correct permissions
+  - [ ] Upload test succeeds
+  - [ ] Files visible on NAS from host
+
+- [ ] **US3**: Break-glass manual procedure available
+  - [ ] Manual steps documented in plan.md
+  - [ ] Can be executed without Ansible
+
+- [ ] **US4**: Service health validated
+  - [ ] API endpoint responds
+  - [ ] Web UI loads
+  - [ ] All containers healthy
+  - [ ] Mobile app connects
+
+- [ ] **US5**: Rollback procedure available
+  - [ ] Backup exists
+  - [ ] Rollback steps documented
+  - [ ] (Optional) Rollback tested
+
+Run through all success criteria:
+
+- [ ] **SC-001**: Web UI accessible within 5 minutes
+- [ ] **SC-002**: API health endpoint responds
+- [ ] **SC-003**: Uploads on NAS survive restart
+- [ ] **SC-004**: Playbook re-run under 2 minutes, no changes
+- [ ] **SC-005**: All containers healthy within 3 minutes
+- [ ] **SC-006**: Single playbook command upgrade
+- [ ] **SC-007**: Mobile app connects successfully
+- [ ] **SC-008**: Functions after reboot
+- [ ] **SC-009**: Backup procedures work
+- [ ] **SC-010**: Documentation enables 10-minute validation
+
+## Completion Checklist
+
+- [ ] All phases completed successfully
+- [ ] All STOP POINT checks passed
+- [ ] All acceptance scenarios validated
+- [ ] All success criteria met
+- [ ] Documentation updated
+- [ ] Changes committed to git
+- [ ] Feature branch merged to main
+
+## Rollback Information
+
+**Backup Location**: `/opt/immich-app.backup-<timestamp>` (inside LXC 101)
+
+**Rollback Command**:
+```bash
+pct exec 101 -- bash -c "cd /opt/immich-app && docker compose down"
+pct exec 101 -- bash -c "rm -rf /opt/immich-app && mv /opt/immich-app.backup-<timestamp> /opt/immich-app"
+pct exec 101 -- bash -c "cd /opt/immich-app && docker compose up -d"
+```
+
+**After Rollback**:
+- Revert Ansible variables to v1.121.0
+- Re-run playbook to ensure consistency
+- Verify v1 is functioning
+
+## Notes
+
+Add implementation notes, issues encountered, and resolutions here:
+
+- [Date] [Note]
