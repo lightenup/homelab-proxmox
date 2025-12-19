@@ -157,6 +157,46 @@ After patching completes:
 ansible-playbook playbooks/apt_diagnostics.yml --limit immich
 ```
 
+**Common Root Causes**:
+
+1. **DNS Resolution Failure** (most common for LXCs)
+   - Symptoms: Network ping works, but nslookup/dig fails
+   - Error: "Temporary failure resolving 'deb.debian.org'"
+   - Fix DNS configuration in LXC:
+     ```bash
+     # Check current DNS
+     ssh immich
+     cat /etc/resolv.conf
+     
+     # Option A: Fix in LXC (temporary - lost on reboot)
+     echo "nameserver 192.168.1.1" | sudo tee /etc/resolv.conf
+     echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf
+     
+     # Option B: Fix in Proxmox (persistent)
+     ssh pve
+     pct set 213 --nameserver "192.168.1.1 8.8.8.8"
+     pct stop 213 && pct start 213
+     ```
+
+2. **APT Lock Held**
+   - Symptoms: "APT LOCKED - Another process is using apt"
+   - Cause: Another apt/dpkg process running, or stale lock from crashed process
+   - Resolution:
+     ```bash
+     ssh immich
+     # Check what's holding the lock
+     sudo lsof /var/lib/dpkg/lock-frontend
+     
+     # If no process found, remove stale locks
+     sudo rm /var/lib/dpkg/lock-frontend
+     sudo rm /var/lib/dpkg/lock
+     sudo rm /var/cache/apt/archives/lock
+     ```
+
+3. **Network/Repository Issues**
+   - If network ping fails, check LXC networking configuration
+   - If repository down, wait and retry or change mirror in sources.list
+
 **Resolution**:
 1. Review diagnostics output for specific failure
 2. If network/DNS issue, check host networking
