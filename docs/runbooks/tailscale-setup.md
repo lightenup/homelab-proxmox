@@ -291,3 +291,183 @@ cat /etc/sysctl.d/99-tailscale-subnet-router.conf
 
 ---
 
+## ACL Management
+
+### Understanding ACL Structure
+
+Tailscale Access Control Lists (ACLs) define who can access what resources in your tailnet. The ACL is structured as JSON with the following main sections:
+
+- **`groups`**: Define collections of users (e.g., admins, family, guests)
+- **`tagOwners`**: Specify who can apply tags to devices (e.g., tag:proxmox)
+- **`acls`**: Traffic rules matching source users/groups to destination devices/networks
+- **`ssh`**: SSH-specific access rules for Tailscale SSH feature
+
+**Example ACL structure** (see `docs/tailscale-acl.example.json` in repository):
+```json
+{
+  "groups": {
+    "group:admin": ["username@github"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["group:admin"],
+      "dst": ["192.168.1.0/24:*"]
+    }
+  ]
+}
+```
+
+---
+
+### Editing ACLs
+
+#### Where to Edit
+
+The ACL template file is located at `docs/tailscale-acl.example.json` in this repository. This file serves as:
+- Reference documentation for the ACL structure
+- Template for manual application to Tailscale admin console
+- Version control for ACL changes
+
+**⚠️ Important**: This file is NOT automatically applied. Changes must be manually copied to the Tailscale admin console (see "Applying ACL Changes" below).
+
+#### Common ACL Patterns
+
+**Adding a new service/port**:
+```json
+{
+  "action": "accept",
+  "src": ["group:admin"],
+  "dst": ["192.168.1.213:2283"]  // Immich photo service
+}
+```
+
+**Adding a new user to a group**:
+```json
+{
+  "groups": {
+    "group:admin": [
+      "user1@github",
+      "user2@github"  // ← Add new user
+    ]
+  }
+}
+```
+
+**Creating a new group with limited access**:
+```json
+{
+  "groups": {
+    "group:family": ["user3@github", "user4@github"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["group:family"],
+      "dst": ["192.168.1.213:2283"]  // Only allow Immich access
+    }
+  ]
+}
+```
+
+#### JSON Syntax Validation
+
+Before applying ACL changes, validate JSON syntax:
+
+```bash
+# Using jq (recommended)
+jq . docs/tailscale-acl.example.json
+
+# Using python
+python3 -m json.tool docs/tailscale-acl.example.json
+
+# Using online validator
+# Copy content to https://jsonlint.com/
+```
+
+---
+
+### Applying ACL Changes
+
+**⚠️ SAFETY WARNING**: Incorrect ACL changes can lock you out of your tailnet. Follow this procedure carefully.
+
+#### Step-by-Step Procedure
+
+1. **Edit the ACL template file**:
+   ```bash
+   # Edit the template in your repository
+   vim docs/tailscale-acl.example.json
+   
+   # Validate JSON syntax
+   jq . docs/tailscale-acl.example.json
+   ```
+
+2. **Commit changes to repository** (for version control):
+   ```bash
+   git add docs/tailscale-acl.example.json
+   git commit -m "acl: Add new service access for group:family"
+   git push
+   ```
+
+3. **Navigate to Tailscale admin console**:
+   - Go to https://login.tailscale.com/admin/acls
+   - **⚠️ KEEP THIS BROWSER TAB OPEN** until you verify access works
+
+4. **Copy and paste ACL JSON**:
+   - Copy entire content of `docs/tailscale-acl.example.json`
+   - Paste into the ACL editor in Tailscale admin
+   - Replace placeholder identities (e.g., `lightenup@github`) with real identities
+
+5. **Validate in Tailscale UI**:
+   - Click "Validate" button in Tailscale ACL editor
+   - Fix any syntax errors or validation warnings
+   - Review the "Policy Diff" showing what changed
+
+6. **Save ACL**:
+   - Click "Save" button
+   - ACL changes apply immediately (no restart required)
+
+7. **⚠️ Test access BEFORE closing admin console**:
+   - Test access to pve: `ssh root@100.67.156.70`
+   - Test access to LAN service: `curl http://192.168.1.213:2283`
+   - If locked out, revert ACL in admin console (still open)
+
+8. **Verify in Tailscale admin** (optional):
+   - Go to https://login.tailscale.com/admin/machines
+   - Check that subnet routes still show as "active"
+   - Check for any warnings on the pve device
+
+---
+
+### ⚠️ Safety Warning: ACL Rollback
+
+**If you lock yourself out**:
+
+1. **Admin console still open**: Click "Revert" or use browser back button to restore previous ACL
+2. **Admin console closed**: Contact another admin with access to revert the ACL
+3. **No other admin**: You may need to contact Tailscale support
+
+**Prevention tips**:
+- Always test access immediately after ACL changes
+- Keep admin console tab open during testing
+- Have a second admin account as backup
+- Make small incremental changes (easier to identify problems)
+- Commit ACL changes to repository with descriptive messages
+
+---
+
+### ACL Testing Checklist
+
+After applying ACL changes, verify the following:
+
+- [ ] **Proxmox web UI accessible**: https://100.67.156.70:8006
+- [ ] **Proxmox SSH accessible**: `ssh root@100.67.156.70`
+- [ ] **LAN service accessible**: Test one service (e.g., Immich at http://192.168.1.213:2283)
+- [ ] **Subnet routes active**: Check Tailscale admin → Machines → pve
+- [ ] **No warnings in Tailscale admin**: Verify pve device shows green/healthy
+- [ ] **Mobile access works**: Test from phone on cellular (if applicable)
+
+---
+
+
+

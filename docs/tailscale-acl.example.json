@@ -23,6 +23,11 @@
 	"groups": {
 		// Define user groups for access control
 		// Replace placeholder identities with real GitHub usernames + @github
+		//
+		// Common patterns:
+		// - Add admin: "newuser@github" to group:admin array
+		// - Create family group: "group:family": ["user1@github", "user2@github"]
+		// - Separate work/personal: Create multiple groups with different access levels
 		"group:admin": [
 			"lightenup@github"  // ← EXAMPLE: Replace with actual GitHub username + @github
 		]
