@@ -469,5 +469,150 @@ After applying ACL changes, verify the following:
 
 ---
 
+## Remote Access Verification
+
+### Prerequisites for Mobile Testing
+
+To verify end-to-end remote access from a mobile device, you need:
+
+1. **Mobile device** (smartphone or tablet)
+2. **Cellular data connection** (WiFi must be disabled to simulate remote access)
+3. **Tailscale app installed** on the mobile device
+   - iOS: https://apps.apple.com/us/app/tailscale/id1470499037
+   - Android: https://play.google.com/store/apps/details?id=com.tailscale.ipn
+4. **Tailscale account** logged in on mobile device (same account as pve)
+
+---
+
+### Mobile Device Checklist
+
+Follow this checklist to verify remote access is working correctly:
+
+#### Step 1: Disable WiFi / Enable Cellular
+- [ ] Turn OFF WiFi on your mobile device
+- [ ] Verify you're on cellular data (4G/5G/LTE)
+- [ ] Confirm you're NOT on your home network
+
+#### Step 2: Connect Tailscale VPN
+- [ ] Open Tailscale app on mobile device
+- [ ] Enable Tailscale connection (toggle to ON)
+- [ ] Verify Tailscale shows "Connected" status
+- [ ] Check that pve device appears in device list
+
+#### Step 3: Access Proxmox Web UI
+- [ ] Open browser on mobile device
+- [ ] Navigate to: https://100.67.156.70:8006
+- [ ] Accept self-signed certificate warning (Proxmox uses self-signed cert by default)
+- [ ] Verify Proxmox login page loads
+- [ ] (Optional) Log in and verify Proxmox UI functions normally
+
+#### Step 4: Access LAN Service (Example: Immich)
+- [ ] Open browser on mobile device
+- [ ] Navigate to: http://192.168.1.213:2283 (Immich photo service)
+- [ ] Verify service loads (may take 5-10 seconds first time)
+- [ ] Confirm service is accessible via private LAN IP through subnet router
+- [ ] Test other LAN services if needed (Home Assistant, AdGuard, etc.)
+
+**Success criteria**: All 4 steps complete without errors. If any step fails, see troubleshooting below.
+
+---
+
+### Admin Console Verification
+
+After mobile testing, verify the configuration in Tailscale admin console:
+
+1. **Navigate to Machines page**:
+   - Go to: https://login.tailscale.com/admin/machines
+   - Find the **pve** device in the list
+
+2. **Verify subnet route status**:
+   - Click on **pve** device
+   - Scroll to "Subnet routes" section
+   - Confirm **192.168.1.0/24** shows as:
+     - ✓ **Advertised** (pve is announcing the route)
+     - ✓ **Active** (route is approved and in use)
+     - ✓ **No warnings** (no IP forwarding issues)
+
+3. **Check for IP forwarding warnings**:
+   - On the pve device page, check for any yellow/red warnings
+   - Should be **NO** warnings like "IP forwarding not enabled"
+   - If warnings exist, rerun the Ansible playbook to fix configuration
+
+4. **Verify mobile device connectivity**:
+   - Find your mobile device in the machines list
+   - Confirm status shows "Active" or "Last seen: < 1 minute ago"
+   - Check that mobile device can reach 192.168.1.0/24 via pve
+
+**Expected result**: Subnet route shows active with no warnings, mobile device shows connected.
+
+---
+
+### Common Issues (Mobile Access)
+
+#### Tailscale Not Connected on Mobile
+
+**Symptom**: Tailscale app shows "Disconnected" or "Connecting..."
+
+**Solutions**:
+- Ensure cellular data is enabled and working
+- Try toggling Tailscale OFF then ON
+- Force quit and restart Tailscale app
+- Check if Tailscale VPN profile is allowed in device settings
+
+#### Subnet Routes Not Approved in Admin
+
+**Symptom**: Can access pve directly (100.67.156.70) but cannot access LAN services (192.168.1.x)
+
+**Cause**: Subnet routes require manual approval in Tailscale admin.
+
+**Solution**:
+1. Go to: https://login.tailscale.com/admin/machines
+2. Click on **pve** device
+3. Find "Subnet routes" section
+4. Click **Approve** next to 192.168.1.0/24
+
+#### IP Forwarding Warnings
+
+**Symptom**: Admin console shows "IP forwarding not enabled" warning on pve device
+
+**Cause**: IP forwarding is not enabled or not persisted correctly on pve.
+
+**Solution**:
+```bash
+# Rerun the Ansible playbook to fix IP forwarding
+ansible-playbook ansible/playbooks/tailscale.yml --tags configure
+
+# Verify IP forwarding is enabled
+ansible-playbook ansible/playbooks/verify_tailscale.yml
+```
+
+#### ACL Blocking Traffic
+
+**Symptom**: Can connect to Tailscale but cannot access pve or LAN services
+
+**Cause**: ACL rules are blocking traffic (likely GitHub identity format issue).
+
+**Solution**: See "Troubleshooting → Access Denied Despite Routes Working" section above.
+
+---
+
+### Expected Behavior
+
+When remote access is configured correctly, you should experience:
+
+- **Proxmox UI loads normally**: No slower than accessing over LAN (WireGuard is fast)
+- **LAN services accessible via private IPs**: Can reach any service at 192.168.1.x
+- **No latency spikes**: Routing through Tailscale is efficient (typically <50ms added latency)
+- **Persistent connection**: Tailscale maintains connection even when switching networks
+- **No port forwarding needed**: All access through encrypted WireGuard tunnel
+
+**Performance expectations**:
+- Proxmox web UI: Responsive, similar to local access
+- Immich photo loading: May be slower due to image sizes, but functional
+- SSH to pve: Interactive, no noticeable lag
+- Home Assistant: Real-time updates work normally
+
+---
+
 
 
