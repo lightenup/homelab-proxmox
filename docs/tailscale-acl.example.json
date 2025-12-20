@@ -1,6 +1,6 @@
 {
 	"groups": {
-		"group:admin": ["jacobsen.andreas@gmail.com"]
+		"group:admin": ["lightenup@github"]
 	},
 	"tagOwners": {
 		"tag:proxmox": ["group:admin"]
