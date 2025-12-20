@@ -1,0 +1,15 @@
+---
+# T020: Verify IPv6 forwarding is enabled
+# Purpose: Check that net.ipv6.conf.all.forwarding is set to 1
+
+- name: Check IPv6 forwarding status
+  ansible.builtin.command: sysctl -n net.ipv6.conf.all.forwarding
+  register: ipv6_forward_status
+  changed_when: false
+
+- name: Verify IPv6 forwarding is enabled
+  ansible.builtin.assert:
+    that:
+      - ipv6_forward_status.stdout == '1'
+    success_msg: "✓ IPv6 forwarding is enabled (value: 1)"
+    fail_msg: "✗ IPv6 forwarding disabled: current={{ ipv6_forward_status.stdout }}, expected=1"

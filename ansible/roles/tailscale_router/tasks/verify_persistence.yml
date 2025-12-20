@@ -1,0 +1,42 @@
+---
+# T021: Verify IP forwarding persistence configuration
+# Purpose: Ensure sysctl config file exists and contains correct values
+
+- name: Check if sysctl config file exists
+  ansible.builtin.stat:
+    path: /etc/sysctl.d/99-tailscale-subnet-router.conf
+  register: sysctl_file_stat
+
+- name: Read sysctl config file content
+  ansible.builtin.slurp:
+    path: /etc/sysctl.d/99-tailscale-subnet-router.conf
+  register: sysctl_content
+  when: sysctl_file_stat.stat.exists
+
+- name: Decode sysctl config content
+  ansible.builtin.set_fact:
+    sysctl_config: "{{ sysctl_content.content | b64decode }}"
+  when: sysctl_file_stat.stat.exists
+
+- name: Verify sysctl persistence file exists
+  ansible.builtin.assert:
+    that:
+      - sysctl_file_stat.stat.exists
+    success_msg: "✓ Sysctl persistence file exists"
+    fail_msg: "✗ Sysctl persistence file /etc/sysctl.d/99-tailscale-subnet-router.conf not found"
+
+- name: Verify IPv4 forwarding in persistence file
+  ansible.builtin.assert:
+    that:
+      - "'net.ipv4.ip_forward = 1' in sysctl_config or 'net.ipv4.ip_forward=1' in sysctl_config"
+    success_msg: "✓ IPv4 forwarding configured in persistence file"
+    fail_msg: "✗ IPv4 forwarding not found in sysctl config"
+  when: sysctl_file_stat.stat.exists
+
+- name: Verify IPv6 forwarding in persistence file
+  ansible.builtin.assert:
+    that:
+      - "'net.ipv6.conf.all.forwarding = 1' in sysctl_config or 'net.ipv6.conf.all.forwarding=1' in sysctl_config"
+    success_msg: "✓ IPv6 forwarding configured in persistence file"
+    fail_msg: "✗ IPv6 forwarding not found in sysctl config"
+  when: sysctl_file_stat.stat.exists

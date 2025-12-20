@@ -1,0 +1,36 @@
+---
+# T022: Verification playbook for Tailscale configuration
+# Purpose: Run diagnostic checks to verify subnet router setup
+# Usage: ansible-playbook playbooks/verify_tailscale.yml
+
+- name: Verify Tailscale subnet router configuration
+  hosts: proxmox_hosts
+  become: true
+  
+  vars:
+    tailscale_subnet_route: "192.168.1.0/24"
+  
+  tasks:
+    - name: Verify Tailscale connection status
+      ansible.builtin.import_tasks: roles/tailscale_router/tasks/verify_tailscale_status.yml
+      tags: [verify, verify-status]
+    
+    - name: Verify Tailscale IP address
+      ansible.builtin.import_tasks: roles/tailscale_router/tasks/verify_tailscale_ip.yml
+      tags: [verify, verify-ip]
+    
+    - name: Verify advertised routes
+      ansible.builtin.import_tasks: roles/tailscale_router/tasks/verify_routes.yml
+      tags: [verify, verify-routes]
+    
+    - name: Verify IPv4 forwarding
+      ansible.builtin.import_tasks: roles/tailscale_router/tasks/verify_ipv4_forwarding.yml
+      tags: [verify, verify-ipv4]
+    
+    - name: Verify IPv6 forwarding
+      ansible.builtin.import_tasks: roles/tailscale_router/tasks/verify_ipv6_forwarding.yml
+      tags: [verify, verify-ipv6]
+    
+    - name: Verify IP forwarding persistence
+      ansible.builtin.import_tasks: roles/tailscale_router/tasks/verify_persistence.yml
+      tags: [verify, verify-persistence]

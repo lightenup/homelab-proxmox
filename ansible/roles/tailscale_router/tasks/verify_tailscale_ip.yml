@@ -1,0 +1,12 @@
+---
+# T017: Verify Tailscale IP address
+# Purpose: Display the Tailscale IPv4 address for diagnostics
+
+- name: Get Tailscale IPv4 address
+  ansible.builtin.command: tailscale ip -4
+  register: tailscale_ipv4
+  changed_when: false
+
+- name: Display Tailscale IP address
+  ansible.builtin.debug:
+    msg: "Tailscale IPv4 address: {{ tailscale_ipv4.stdout }}"

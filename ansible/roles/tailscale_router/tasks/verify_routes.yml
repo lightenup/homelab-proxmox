@@ -1,0 +1,15 @@
+---
+# T018: Verify advertised routes include configured subnet
+# Purpose: Ensure subnet route 192.168.1.0/24 is advertised
+
+- name: Get currently advertised routes
+  ansible.builtin.shell: tailscale status --json | jq -r '.Self.AllowedIPs[]' 2>/dev/null || echo ""
+  register: advertised_routes
+  changed_when: false
+
+- name: Verify subnet route is advertised
+  ansible.builtin.assert:
+    that:
+      - "tailscale_subnet_route in advertised_routes.stdout"
+    success_msg: "✓ Subnet route {{ tailscale_subnet_route }} is advertised"
+    fail_msg: "✗ Subnet route {{ tailscale_subnet_route }} not found. Current advertised routes: {{ advertised_routes.stdout_lines }}"

@@ -1,0 +1,17 @@
+---
+# T016: Verify Tailscale connection status
+# Purpose: Check that Tailscale is logged in and connected
+
+- name: Get Tailscale status
+  ansible.builtin.command: tailscale status
+  register: tailscale_status_check
+  changed_when: false
+  failed_when: false
+
+- name: Verify Tailscale is logged in
+  ansible.builtin.assert:
+    that:
+      - tailscale_status_check.rc == 0
+      - "'logged in' in tailscale_status_check.stdout or tailscale_status_check.stdout | length > 0"
+    success_msg: "✓ Tailscale is connected and logged in"
+    fail_msg: "✗ Tailscale not logged in. Current status: {{ tailscale_status_check.stdout }}"

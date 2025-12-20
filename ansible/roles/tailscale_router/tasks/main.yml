@@ -38,3 +38,40 @@
   tags:
     - configure
     - tailscale
+
+# T023: Verification tasks (optional, run with --tags verify)
+- name: Verify Tailscale status
+  ansible.builtin.import_tasks: verify_tailscale_status.yml
+  tags:
+    - verify
+    - never
+
+- name: Verify Tailscale IP
+  ansible.builtin.import_tasks: verify_tailscale_ip.yml
+  tags:
+    - verify
+    - never
+
+- name: Verify advertised routes
+  ansible.builtin.import_tasks: verify_routes.yml
+  tags:
+    - verify
+    - never
+
+- name: Verify IPv4 forwarding
+  ansible.builtin.import_tasks: verify_ipv4_forwarding.yml
+  tags:
+    - verify
+    - never
+
+- name: Verify IPv6 forwarding
+  ansible.builtin.import_tasks: verify_ipv6_forwarding.yml
+  tags:
+    - verify
+    - never
+
+- name: Verify IP forwarding persistence
+  ansible.builtin.import_tasks: verify_persistence.yml
+  tags:
+    - verify
+    - never
