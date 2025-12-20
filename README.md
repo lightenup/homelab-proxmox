@@ -75,6 +75,18 @@ cd ansible
 ansible-playbook playbooks/site.yml
 ```
 
+**Available playbooks**:
+
+- `site.yml` - Apply all configurations to all hosts (bootstrap + services + host config)
+- `bootstrap.yml` - Initial setup of LXC containers (run after Terraform provision)
+- `services.yml` - Configure LXC services (Immich, AdGuard, Home Assistant, reverse proxy)
+- `host_proxmox.yml` - Configure Proxmox host-specific settings
+- `tailscale.yml` - Configure Tailscale subnet router for remote access
+- `verify_tailscale.yml` - Verify Tailscale configuration (diagnostics)
+- `update_monthly.yml` - Monthly security updates with orchestrated reboots
+
+---
+
 ### 3. Monthly Maintenance
 
 Run monthly security updates with automatic reboots:
@@ -96,7 +108,7 @@ ansible-playbook playbooks/update_monthly.yml -e "allow_host_reboot=true"
 ### Operational Runbooks
 
 - [Monthly Patching](docs/runbooks/monthly-patching.md) - Security updates and reboot orchestration
-- [Tailscale Mobile Access](docs/runbooks/tailscale-mobile.md) - Remote access from phone (when available)
+- [Tailscale Subnet Router Setup](docs/runbooks/tailscale-setup.md) - Remote access configuration and troubleshooting
 
 ### Architecture & Design
 

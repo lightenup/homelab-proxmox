@@ -116,11 +116,11 @@
 
 ### Implementation for User Story 5
 
-- [ ] T039 [US5] Add "Remote Access Verification" section to docs/runbooks/tailscale-setup.md with prerequisites (mobile device, cellular data, Tailscale app installed)
-- [ ] T040 [US5] Add "Mobile Device Checklist" to docs/runbooks/tailscale-setup.md with minimum 4 validation steps: 1) disable WiFi / enable cellular, 2) connect Tailscale VPN, 3) access Proxmox web UI at https://100.67.156.70:8006, 4) access LAN service at http://192.168.1.213:2283 (Immich example)
-- [ ] T041 [US5] Add "Admin Console Verification" subsection to docs/runbooks/tailscale-setup.md: navigate to Machines → pve, verify subnet route 192.168.1.0/24 shows as advertised and active, check for IP forwarding warnings (should be none)
-- [ ] T042 [US5] Add "Common Issues" subsection for mobile access: Tailscale not connected, subnet routes not approved in admin, IP forwarding warnings, ACL blocking traffic
-- [ ] T043 [US5] Add "Expected Behavior" section describing what successful remote access looks like: Proxmox UI loads normally, LAN services accessible via private IPs, no latency spikes (routing through Tailscale is efficient)
+- [X] T039 [US5] Add "Remote Access Verification" section to docs/runbooks/tailscale-setup.md with prerequisites (mobile device, cellular data, Tailscale app installed)
+- [X] T040 [US5] Add "Mobile Device Checklist" to docs/runbooks/tailscale-setup.md with minimum 4 validation steps: 1) disable WiFi / enable cellular, 2) connect Tailscale VPN, 3) access Proxmox web UI at https://100.67.156.70:8006, 4) access LAN service at http://192.168.1.213:2283 (Immich example)
+- [X] T041 [US5] Add "Admin Console Verification" subsection to docs/runbooks/tailscale-setup.md: navigate to Machines → pve, verify subnet route 192.168.1.0/24 shows as advertised and active, check for IP forwarding warnings (should be none)
+- [X] T042 [US5] Add "Common Issues" subsection for mobile access: Tailscale not connected, subnet routes not approved in admin, IP forwarding warnings, ACL blocking traffic
+- [X] T043 [US5] Add "Expected Behavior" section describing what successful remote access looks like: Proxmox UI loads normally, LAN services accessible via private IPs, no latency spikes (routing through Tailscale is efficient)
 
 **Checkpoint**: User Story 5 complete - comprehensive mobile remote access verification checklist
 
@@ -130,13 +130,13 @@
 
 **Purpose**: Documentation completeness, README updates, final validation
 
-- [ ] T044 [P] Add "Architecture" section to docs/runbooks/tailscale-setup.md with ASCII diagram showing pve as subnet router between Tailscale mesh (100.x network) and LAN (192.168.1.0/24)
-- [ ] T045 [P] Add "Security Considerations" section to docs/runbooks/tailscale-setup.md: auth key handling (never commit), ACL principle of least privilege, subnet router as single point of failure
-- [ ] T046 [P] Add "Disaster Recovery" section to docs/runbooks/tailscale-setup.md explaining how this feature enables pve rebuild scenario
-- [ ] T047 Update main README.md to reference new tailscale.yml playbook in "Available Playbooks" section
-- [ ] T048 Update main README.md to add docs/runbooks/tailscale-setup.md to "Documentation" section
-- [ ] T049 Review all tasks against FR-001 through FR-019 to ensure functional requirements coverage (validation checklist)
-- [ ] T050 Final idempotency test: run ansible-playbook playbooks/tailscale.yml --tags install,configure against already-configured pve (exclude verification tasks which always execute commands), verify changed=0 for all configuration tasks
+- [X] T044 [P] Add "Architecture" section to docs/runbooks/tailscale-setup.md with ASCII diagram showing pve as subnet router between Tailscale mesh (100.x network) and LAN (192.168.1.0/24)
+- [X] T045 [P] Add "Security Considerations" section to docs/runbooks/tailscale-setup.md: auth key handling (never commit), ACL principle of least privilege, subnet router as single point of failure
+- [X] T046 [P] Add "Disaster Recovery" section to docs/runbooks/tailscale-setup.md explaining how this feature enables pve rebuild scenario
+- [X] T047 Update main README.md to reference new tailscale.yml playbook in "Available Playbooks" section
+- [X] T048 Update main README.md to add docs/runbooks/tailscale-setup.md to "Documentation" section
+- [X] T049 Review all tasks against FR-001 through FR-019 to ensure functional requirements coverage (validation checklist)
+- [X] T050 Final idempotency test: run ansible-playbook playbooks/tailscale.yml --tags install,configure against already-configured pve (exclude verification tasks which always execute commands), verify changed=0 for all configuration tasks
 
 ---
 

@@ -8,7 +8,59 @@
 
 This runbook documents how to configure the Proxmox host as a Tailscale subnet router, enabling remote access to all LAN services (192.168.1.0/24) through the Tailscale VPN mesh network. The setup is fully automated via Ansible and designed for disaster recovery scenarios where the Proxmox host needs to be rebuilt from scratch.
 
-**Architecture**: Proxmox host (pve) acts as a gateway between the Tailscale mesh network (100.x.x.x addresses) and the local LAN (192.168.1.0/24), with IP forwarding enabled to route traffic between networks.
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Tailscale Mesh Network                   │
+│                      (100.x.x.x/10)                          │
+│                                                              │
+│  ┌──────────────┐         ┌──────────────┐                 │
+│  │ Mobile Phone │◄───────►│     pve      │                 │
+│  │ 100.x.x.x    │         │ 100.67.156.70│                 │
+│  │              │         │ (Subnet Router)                │
+│  └──────────────┘         └───────┬──────┘                 │
+│                                   │                         │
+└───────────────────────────────────┼─────────────────────────┘
+                                    │
+                                    │ Routes 192.168.1.0/24
+                                    │ (IP forwarding enabled)
+                                    │
+                    ┌───────────────▼───────────────┐
+                    │    Home LAN Network          │
+                    │    (192.168.1.0/24)          │
+                    │                              │
+                    │  ┌────────────────────────┐  │
+                    │  │ Proxmox (pve)          │  │
+                    │  │ 192.168.1.112          │  │
+                    │  └────────────────────────┘  │
+                    │                              │
+                    │  ┌────────────────────────┐  │
+                    │  │ Immich (LXC)           │  │
+                    │  │ 192.168.1.213:2283     │  │
+                    │  └────────────────────────┘  │
+                    │                              │
+                    │  ┌────────────────────────┐  │
+                    │  │ Home Assistant (LXC)   │  │
+                    │  │ 192.168.1.211:8123     │  │
+                    │  └────────────────────────┘  │
+                    │                              │
+                    │  ┌────────────────────────┐  │
+                    │  │ AdGuard (LXC)          │  │
+                    │  │ 192.168.1.210:3000     │  │
+                    │  └────────────────────────┘  │
+                    │                              │
+                    └──────────────────────────────┘
+```
+
+**How it works**:
+
+1. **pve** runs Tailscale and acts as a **subnet router**
+2. **pve** advertises the LAN subnet (192.168.1.0/24) to the Tailscale network
+3. Mobile devices connect to Tailscale and can access pve directly at 100.67.156.70
+4. Mobile devices can also access LAN services at 192.168.1.x via pve's routing
+5. IP forwarding on pve ensures packets are routed between Tailscale and LAN
+6. ACLs control which Tailscale users can access which services
 
 **Key Benefits**:
 - Remote access to all LAN services from anywhere
@@ -593,6 +645,138 @@ ansible-playbook ansible/playbooks/verify_tailscale.yml
 **Cause**: ACL rules are blocking traffic (likely GitHub identity format issue).
 
 **Solution**: See "Troubleshooting → Access Denied Despite Routes Working" section above.
+
+---
+
+## Security Considerations
+
+### Authentication Key Handling
+
+**CRITICAL: Never commit auth keys to git**
+
+The Tailscale authentication key (`tailscale_auth_key`) is a sensitive secret that grants access to your Tailscale network. If committed to git, anyone with repository access could join your Tailscale network.
+
+**Protection mechanisms**:
+
+1. **.gitignore patterns**: The repository `.gitignore` includes patterns to block:
+   - `**/vault.yml` (Ansible Vault files)
+   - `**/*secret*.yml` (any file with "secret" in the name)
+   - `**/*_secrets.yml` (secrets files)
+   - `**/tailscale_auth_key*` (specifically tailscale auth keys)
+   - `**/*.key` (generic key files)
+   - `**/*.pem` (generic PEM files)
+
+2. **Default configuration**: The `ansible/roles/tailscale_router/defaults/main.yml` file includes a commented-out auth key variable with a warning:
+   ```yaml
+   # tailscale_auth_key: "tskey-auth-xxxxx"  # DO NOT commit this to git
+   ```
+
+3. **Best practices**:
+   - **Use Ansible Vault**: Store auth keys in `ansible/group_vars/services/secrets.yml` encrypted with Ansible Vault
+   - **Use reusable keys**: Generate keys with "Reusable" and "Devices" tags in Tailscale admin for disaster recovery scenarios
+   - **Rotate keys**: If a key is accidentally committed, revoke it immediately in Tailscale admin and generate a new one
+
+### ACL Principle of Least Privilege
+
+**Best practice**: Grant only the minimum access required for each user/group.
+
+**Example**: Instead of granting all users access to all LAN services:
+
+```json
+// Too permissive (NOT recommended):
+"acls": [
+  {
+    "action": "accept",
+    "src": ["group:admin"],
+    "dst": ["192.168.1.0/24:*"]  // All ports on all services
+  }
+]
+
+// Better (least privilege):
+"acls": [
+  {
+    "action": "accept",
+    "src": ["group:family"],
+    "dst": [
+      "192.168.1.213:2283",  // Immich only
+      "192.168.1.211:8123"   // Home Assistant only
+    ]
+  },
+  {
+    "action": "accept",
+    "src": ["group:admin"],
+    "dst": [
+      "100.67.156.70:8006",  // Proxmox web UI
+      "100.67.156.70:22"     // Proxmox SSH
+    ]
+  }
+]
+```
+
+**Recommendations**:
+- Create separate groups for different access levels (family, admin, work)
+- Specify exact ports instead of wildcards (`:*`)
+- Test ACL changes immediately after applying
+- Keep an admin access rule that cannot be accidentally locked out
+
+### Subnet Router as Single Point of Failure
+
+**Risk**: If pve goes down, remote access to all LAN services is lost.
+
+**Mitigation strategies**:
+
+1. **Disaster recovery capability**: This Ansible playbook enables quick rebuild of pve from scratch
+2. **High availability (optional)**: Deploy a second Proxmox host as a backup subnet router
+3. **Monitoring**: Set up alerts for pve downtime (e.g., Tailscale admin shows device offline)
+4. **Local access preserved**: LAN services remain accessible from local network even if pve is down
+
+**Trade-off**: For most homelab scenarios, the simplicity of a single subnet router outweighs the complexity of HA setups.
+
+---
+
+## Disaster Recovery
+
+### Scenario: Proxmox Host Rebuild
+
+**Situation**: The Proxmox host (pve) has failed and needs to be rebuilt from scratch.
+
+**Recovery steps**:
+
+1. **Install Proxmox**: Install Proxmox VE on new hardware or restore from backup
+2. **Configure network**: Ensure pve has same IP (192.168.1.112) and internet access
+3. **Restore repository**: Clone homelab-proxmox repository to control node
+4. **Run Ansible playbook**:
+   ```bash
+   cd homelab-proxmox
+   ansible-playbook ansible/playbooks/tailscale.yml
+   ```
+5. **Verify connectivity**: Run verification playbook to confirm setup:
+   ```bash
+   ansible-playbook ansible/playbooks/verify_tailscale.yml
+   ```
+6. **Approve subnet routes**: In Tailscale admin, approve 192.168.1.0/24 route for new pve device
+7. **Test remote access**: Connect from mobile device and verify LAN services are accessible
+
+**Key advantage**: No need to remember manual configuration steps. The entire Tailscale setup is reproducible from the repository.
+
+### What This Feature Enables
+
+This Tailscale automation feature was specifically designed to address the disaster recovery scenario where the Proxmox host needs to be rebuilt. Before this automation:
+
+- Manual Tailscale installation and configuration required
+- Subnet router setup required multiple manual commands
+- IP forwarding persistence required manual sysctl file creation
+- ACL configuration required manual copy-paste into admin console
+- Risk of forgetting steps or misconfiguring
+
+After this automation:
+
+- **Single playbook run** rebuilds entire Tailscale configuration
+- **Idempotent**: Can be run multiple times without breaking existing setup
+- **Verified**: Automated verification tasks confirm all components working
+- **Documented**: Comprehensive runbook with troubleshooting guides
+
+**Recovery time**: From bare Proxmox install to full remote access in < 5 minutes (excluding Proxmox installation time).
 
 ---
 
