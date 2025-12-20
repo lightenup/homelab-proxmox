@@ -1,0 +1,12 @@
+---
+# Main entry point for patch_management role
+# Feature: 010-patch-management-reboots
+
+- name: "Patch Management - Update packages"
+  include_tasks: update.yml
+
+- name: "Patch Management - Handle reboot if needed"
+  include_tasks: reboot.yml
+
+- name: "Patch Management - Verify system health"
+  include_tasks: verify.yml

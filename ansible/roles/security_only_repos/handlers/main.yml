@@ -1,0 +1,6 @@
+---
+# Handlers for security_only_repos role
+
+- name: update apt cache
+  ansible.builtin.apt:
+    update_cache: yes

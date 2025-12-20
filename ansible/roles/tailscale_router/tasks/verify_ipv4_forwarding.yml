@@ -1,0 +1,15 @@
+---
+# T019: Verify IPv4 forwarding is enabled
+# Purpose: Check that net.ipv4.ip_forward is set to 1
+
+- name: Check IPv4 forwarding status
+  ansible.builtin.command: sysctl -n net.ipv4.ip_forward
+  register: ipv4_forward_status
+  changed_when: false
+
+- name: Verify IPv4 forwarding is enabled
+  ansible.builtin.assert:
+    that:
+      - ipv4_forward_status.stdout == '1'
+    success_msg: "✓ IPv4 forwarding is enabled (value: 1)"
+    fail_msg: "✗ IPv4 forwarding disabled: current={{ ipv4_forward_status.stdout }}, expected=1"

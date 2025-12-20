@@ -1,0 +1,44 @@
+---
+# Default variables for patch_management role
+# Feature: 010-patch-management-reboots
+
+# Reboot handling
+# Split timeouts per clarification: 600s reboot timeout / 300s SSH reconnection wait
+patch_reboot_timeout: 600
+patch_wait_for_connection_timeout: 300
+
+# Host reboot protection (Proxmox host requires explicit opt-in)
+allow_host_reboot: false
+
+# Verification targets (two-tier approach)
+# - Infrastructure checks (SSH, mounts): CRITICAL - fail playbook if these fail
+# - HTTP checks: WARNING-ONLY - log failures without failing playbook
+patch_verify_ssh: true
+patch_verify_mounts: true
+patch_verify_http: true
+
+# HTTP endpoints for service health checks (WARNING-ONLY)
+# These will log warnings but NOT fail the playbook if unavailable
+# This allows patching to proceed even when services are intentionally down
+patch_http_endpoints:
+  - name: "Immich API"
+    url: "http://192.168.1.213:2283/api/server/ping"
+    host: "immich"
+  - name: "Home Assistant"
+    url: "http://192.168.1.212:8123"
+    host: "homeassistant"
+  - name: "Reverse Proxy"
+    url: "http://192.168.1.211:80"
+    host: "proxy"
+
+# NFS mounts to verify (CRITICAL)
+# These are infrastructure checks - failure indicates broken systems
+patch_nfs_mounts:
+  - path: "/mnt/nas/homelab_immich"
+    host: "pve"
+
+# Bind mounts to verify (CRITICAL)
+# These are infrastructure checks - failure indicates broken systems
+patch_bind_mounts:
+  - path: "/mnt/immich"
+    host: "immich"

@@ -1,0 +1,40 @@
+---
+# Reboot detection and handling tasks
+# Feature: 010-patch-management-reboots
+
+- name: "Check if reboot is required"
+  stat:
+    path: /var/run/reboot-required
+  register: reboot_required_file
+
+- name: "Set reboot decision for LXCs"
+  set_fact:
+    should_reboot: "{{ reboot_required_file.stat.exists }}"
+  when: "'services' in group_names"
+
+- name: "Set reboot decision for Proxmox host (gated)"
+  set_fact:
+    should_reboot: "{{ reboot_required_file.stat.exists and allow_host_reboot | default(false) | bool }}"
+  when: "'proxmox_hosts' in group_names"
+
+- name: "Reboot system if required"
+  reboot:
+    reboot_timeout: "{{ patch_reboot_timeout }}"
+    msg: "Rebooting for kernel/library updates"
+  when: should_reboot | default(false) | bool
+  register: reboot_result
+
+- name: "Record reboot event"
+  set_fact:
+    host_rebooted: true
+    cacheable: yes
+  when: reboot_result.changed
+
+- name: "Wait for system to become reachable"
+  wait_for_connection:
+    timeout: "{{ patch_wait_for_connection_timeout }}"
+  when: reboot_result.changed
+
+- name: "Gather facts after reboot"
+  setup:
+  when: reboot_result.changed

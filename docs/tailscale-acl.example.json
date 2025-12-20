@@ -1,26 +1,63 @@
 {
+	// ========================================================================
+	// ⚠️ THIS IS AN EXAMPLE/TEMPLATE FILE - NOT A PRODUCTION ACL
+	// ========================================================================
+	// This file demonstrates the ACL structure with PLACEHOLDER identities.
+	// The real ACL with actual GitHub identities is applied manually via
+	// the Tailscale admin console (https://login.tailscale.com/admin/acls).
+	//
+	// DO NOT commit real user identities or secrets to this repository.
+	//
+	// CRITICAL: GitHub Identity Format Requirement
+	// =============================================
+	// When using GitHub authentication, user identities MUST use the format:
+	//   username@github  (NOT email addresses like user@example.com)
+	//
+	// Example: If your GitHub username is "ajacobsen", use "ajacobsen@github"
+	// Find your identity: Tailscale Admin → Settings → Users
+	//
+	// Using the wrong format (email instead of username@github) will cause
+	// all traffic to be DENIED despite routes showing as active.
+	// ========================================================================
+
 	"groups": {
-		"group:admin": ["jacobsen.andreas@gmail.com"]
+		// Define user groups for access control
+		// Replace placeholder identities with real GitHub usernames + @github
+		//
+		// Common patterns:
+		// - Add admin: "newuser@github" to group:admin array
+		// - Create family group: "group:family": ["user1@github", "user2@github"]
+		// - Separate work/personal: Create multiple groups with different access levels
+		"group:admin": [
+			"lightenup@github"  // ← EXAMPLE: Replace with actual GitHub username + @github
+		]
 	},
+	
 	"tagOwners": {
+		// Define who can apply tags to devices
 		"tag:proxmox": ["group:admin"]
 	},
+	
 	"acls": [
+		// Allow admin group to access Proxmox web UI and SSH
 		{
 			"action": "accept",
 			"src":    ["group:admin"],
 			"dst": [
-				"tag:proxmox:22",
-				"tag:proxmox:8006"
+				"tag:proxmox:22",    // SSH access
+				"tag:proxmox:8006"   // Proxmox web UI
 			]
 		},
+		// Allow admin group to access entire LAN subnet through pve subnet router
 		{
 			"action": "accept",
 			"src":    ["group:admin"],
-			"dst":    ["192.168.1.0/24:*"]
+			"dst":    ["192.168.1.0/24:*"]  // All ports on LAN
 		}
 	],
+	
 	"ssh": [
+		// Allow admin group to SSH to Proxmox hosts
 		{
 			"action": "check",
 			"src":    ["group:admin"],

@@ -1,0 +1,55 @@
+---
+# Post-update verification tasks
+# Feature: 010-patch-management-reboots
+# Two-tier verification: Infrastructure (SSH, mounts) CRITICAL, HTTP checks WARNING-ONLY
+
+# Infrastructure checks (CRITICAL - will fail playbook)
+- name: "Verify NFS mount on Proxmox host"
+  stat:
+    path: "{{ item.path }}"
+  register: nfs_mount_check
+  when: 
+    - patch_verify_mounts | bool
+    - inventory_hostname == item.host
+  loop: "{{ patch_nfs_mounts }}"
+  failed_when: not nfs_mount_check.stat.exists
+
+- name: "Verify bind mount in Immich LXC"
+  stat:
+    path: "{{ item.path }}"
+  register: bind_mount_check
+  when:
+    - patch_verify_mounts | bool
+    - inventory_hostname == item.host
+  loop: "{{ patch_bind_mounts }}"
+  failed_when: not bind_mount_check.stat.exists
+
+# HTTP health checks (WARNING-ONLY - will NOT fail playbook)
+- name: "HTTP health check"
+  uri:
+    url: "{{ item.url }}"
+    method: GET
+    timeout: 10
+    status_code: 200
+  register: http_check_result
+  failed_when: false
+  when: 
+    - patch_verify_http | bool
+    - inventory_hostname == item.host
+  loop: "{{ patch_http_endpoints }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "Log HTTP check warnings"
+  debug:
+    msg: "WARNING: {{ item.item.name }} is unreachable - {{ item.msg | default('No response') }}"
+  when:
+    - item.failed | default(false)
+  loop: "{{ http_check_result.results }}"
+  loop_control:
+    label: "{{ item.item.name | default('unknown') }}"
+
+- name: "Record verification results"
+  set_fact:
+    verification_passed: true
+    cacheable: yes

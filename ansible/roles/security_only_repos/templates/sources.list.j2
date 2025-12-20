@@ -1,0 +1,8 @@
+# Security-only repository configuration for Debian {{ debian_release }}
+# Managed by Ansible - role: security_only_repos
+# Last updated: {{ ansible_facts.date_time.iso8601 }}
+#
+# This configuration provides ONLY security updates.
+# For feature and bugfix updates, run the manual upgrade playbook.
+
+deb http://security.debian.org {{ debian_release }}-security main contrib

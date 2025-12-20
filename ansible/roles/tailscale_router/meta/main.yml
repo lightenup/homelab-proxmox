@@ -1,0 +1,25 @@
+---
+# T002: Role metadata for tailscale_router
+# Purpose: Configure Proxmox host as Tailscale subnet router
+
+galaxy_info:
+  role_name: tailscale_router
+  author: Homelab Administrator
+  description: Configure Tailscale subnet router on Proxmox host for remote LAN access
+  license: MIT
+  min_ansible_version: "2.9"
+  
+  platforms:
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - tailscale
+    - vpn
+    - networking
+    - proxmox
+    - subnet-router
+
+dependencies: []

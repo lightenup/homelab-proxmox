@@ -1,0 +1,7 @@
+---
+# T012: Handler to reload sysctl configuration
+# Purpose: Apply sysctl changes when configuration file is modified
+
+- name: Reload sysctl configuration
+  ansible.builtin.command: sysctl --system
+  changed_when: true

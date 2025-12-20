@@ -1,0 +1,26 @@
+---
+# T009: Handle Tailscale authentication
+# Purpose: Authenticate Tailscale if not already connected, using optional auth key
+
+- name: Authenticate Tailscale with auth key (if provided and not authenticated)
+  ansible.builtin.command: "tailscale up --authkey={{ tailscale_auth_key }}"
+  when:
+    - not tailscale_authenticated
+    - tailscale_auth_key is defined
+    - tailscale_auth_key | length > 0
+  no_log: true  # Don't log auth key
+
+- name: Fail if not authenticated and no auth key provided
+  ansible.builtin.fail:
+    msg: |
+      ERROR: Tailscale not authenticated. Either:
+        (1) Run 'tailscale up' manually on pve, or
+        (2) Provide tailscale_auth_key variable via:
+            - ansible-vault: ansible/group_vars/proxmox_hosts/vault.yml
+            - CLI: --extra-vars "tailscale_auth_key=tskey-..."
+      
+      Generate auth key at: https://login.tailscale.com/admin/settings/keys
+      Recommended: Use reusable key with 'Devices' tag, no expiration
+  when:
+    - not tailscale_authenticated
+    - tailscale_auth_key is not defined or tailscale_auth_key | length == 0

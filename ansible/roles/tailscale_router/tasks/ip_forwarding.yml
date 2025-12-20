@@ -1,0 +1,12 @@
+---
+# T011: Configure IP forwarding persistence
+# Purpose: Deploy sysctl configuration and ensure it persists across reboots
+
+- name: Deploy sysctl configuration for IP forwarding
+  ansible.builtin.template:
+    src: 99-tailscale-subnet-router.conf.j2
+    dest: /etc/sysctl.d/99-tailscale-subnet-router.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload sysctl configuration
