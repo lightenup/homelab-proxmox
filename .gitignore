@@ -10,6 +10,15 @@
 ansible/inventories/generated/
 *.retry
 
+# T005 [CONSTITUTION COMPLIANCE] - Secrets protection (Principle II)
+# Never commit secrets: Tailscale auth keys, vault files, private keys, passwords
+**/vault.yml
+**/*secret*.yml
+**/*_secrets.yml
+**/tailscale_auth_key*
+**/*.key
+**/*.pem
+
 # IDE / OS
 .DS_Store
 .vscode/

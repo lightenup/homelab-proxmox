@@ -1,0 +1,11 @@
+---
+# T003: Main playbook for Tailscale subnet router configuration
+# Purpose: Configure Proxmox host (pve) as Tailscale subnet router for remote LAN access
+# Usage: ansible-playbook playbooks/tailscale.yml
+
+- name: Configure Tailscale subnet router
+  hosts: proxmox_hosts
+  become: true
+  
+  roles:
+    - tailscale_router
