@@ -220,16 +220,33 @@ README.md                                # UPDATE: Add playbook reference
 
 ## Implementation Phases
 
-### Phase 1: Foundation (MVP Core)
-**Goal**: Working playbook that configures pve as Tailscale subnet router
+### Phase 1: Setup (Shared Infrastructure + Constitution Compliance)
+**Goal**: Create role structure, playbook scaffolding, and ensure secrets protection before any secret handling
 
 **Deliverables**:
 - Role structure (directories, meta, defaults, handlers)
 - Main playbook (tailscale.yml)
+- **[CRITICAL]** .gitignore verification (Constitution Principle II compliance - MUST execute before Phase 2)
+
+**Tasks**: T001-T005 (5 tasks)
+
+**Success Criteria**:
+- Role directory structure exists
+- Main playbook created
+- .gitignore patterns verified/added for all secret file types
+
+**Constitution Note**: T005 (.gitignore verification) is NON-NEGOTIABLE and must complete before Phase 2 begins
+
+### Phase 2: US1 Implementation (MVP Core)
+**Goal**: Working playbook that configures pve as Tailscale subnet router
+
+**Deliverables**:
 - Core tasks: install, service, auth detection, auth handling
 - IP forwarding configuration (template + task)
 - Subnet route advertisement
 - Orchestration (main.yml)
+
+**Tasks**: T006-T015 (10 tasks)
 
 **Success Criteria**:
 - Run playbook against pve → idempotent (changed=0)
@@ -239,7 +256,9 @@ README.md                                # UPDATE: Add playbook reference
 
 **Testing**: Run against existing pve setup (should be no-op)
 
-### Phase 2: Diagnostics
+**MVP Delivery**: Phase 1 Setup (5 tasks) + Phase 2 US1 (10 tasks) = 15 total tasks
+
+### Phase 3: US3 Verification (Diagnostics)
 **Goal**: Verification playbook for troubleshooting
 
 **Deliverables**:
@@ -247,32 +266,67 @@ README.md                                # UPDATE: Add playbook reference
 - Verification playbook (verify_tailscale.yml)
 - Tag support in main.yml
 
+**Tasks**: T016-T023 (8 tasks)
+
 **Success Criteria**:
 - Run verify playbook → all checks pass
 - Failed checks show current vs expected values
 
-### Phase 3: Documentation (Critical)
+### Phase 4: US2 Documentation (Critical - GitHub Identity Format)
 **Goal**: Runbook preventing common pitfalls
 
 **Deliverables**:
 - docs/runbooks/tailscale-setup.md (comprehensive)
 - Comments in docs/tailscale-acl.example.json
-- README.md updates
+
+**Tasks**: T024-T032 (9 tasks)
 
 **Success Criteria**:
 - 3+ explicit warnings about GitHub identity format
-- Step-by-step ACL application procedure
-- Mobile verification checklist
+- Step-by-step procedures for setup
 - Troubleshooting section
 
-### Phase 4: Polish
-**Goal**: Production-ready with safety checks
+### Phase 5: US4 ACL Management
+**Goal**: Safe manual ACL application procedures
 
 **Deliverables**:
-- .gitignore patterns for secrets
+- ACL management documentation
+- Safety warnings and rollback procedures
+
+**Tasks**: T033-T038 (6 tasks)
+
+**Success Criteria**:
+- Step-by-step ACL application procedure
+- Safety warnings and testing checklist
+
+### Phase 6: US5 Mobile Verification
+**Goal**: End-to-end remote access validation
+
+**Deliverables**:
+- Mobile verification checklist (minimum 4 steps)
+- Admin console verification procedures
+
+**Tasks**: T039-T043 (5 tasks)
+
+**Success Criteria**:
+- Comprehensive mobile testing checklist
+- Expected behavior documented
+
+### Phase 7: Polish & Final Validation
+**Goal**: Production-ready with complete documentation
+
+**Deliverables**:
 - Architecture diagrams
 - Security considerations
+- README updates
 - Final validation (FR coverage, idempotency)
+
+**Tasks**: T044-T050 (7 tasks)
+
+**Success Criteria**:
+- All documentation complete
+- All 19 FRs validated
+- Idempotency test passes
 
 ## Critical Implementation Notes
 
