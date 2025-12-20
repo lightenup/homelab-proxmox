@@ -1,0 +1,9 @@
+---
+# T007: Ensure tailscaled service is enabled and running
+# Purpose: Start Tailscale daemon for VPN connectivity
+
+- name: Ensure tailscaled service is enabled and started
+  ansible.builtin.systemd:
+    name: tailscaled
+    enabled: yes
+    state: started

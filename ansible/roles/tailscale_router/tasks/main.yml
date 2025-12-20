@@ -1,0 +1,40 @@
+---
+# T014: Main task orchestration for tailscale_router role
+# Purpose: Execute all configuration tasks in proper sequence
+
+- name: Install Tailscale
+  ansible.builtin.import_tasks: install.yml
+  tags:
+    - install
+    - tailscale
+
+- name: Ensure Tailscale service is running
+  ansible.builtin.import_tasks: service.yml
+  tags:
+    - install
+    - configure
+    - tailscale
+
+- name: Check Tailscale authentication
+  ansible.builtin.import_tasks: check_auth.yml
+  tags:
+    - configure
+    - tailscale
+
+- name: Authenticate Tailscale if needed
+  ansible.builtin.import_tasks: authenticate.yml
+  tags:
+    - configure
+    - tailscale
+
+- name: Configure IP forwarding
+  ansible.builtin.import_tasks: ip_forwarding.yml
+  tags:
+    - configure
+    - tailscale
+
+- name: Configure subnet routes
+  ansible.builtin.import_tasks: subnet_routes.yml
+  tags:
+    - configure
+    - tailscale

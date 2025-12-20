@@ -1,0 +1,14 @@
+---
+# T013: Configure subnet route advertisement
+# Purpose: Advertise LAN subnet through Tailscale for remote access
+
+- name: Check currently advertised routes
+  ansible.builtin.shell: tailscale status --json | jq -r '.Self.AllowedIPs[]' 2>/dev/null || echo ""
+  register: current_routes
+  changed_when: false
+  failed_when: false
+
+- name: Advertise subnet route if not already configured
+  ansible.builtin.command: "tailscale up --advertise-routes={{ tailscale_subnet_route }}"
+  when: tailscale_subnet_route not in current_routes.stdout
+  changed_when: tailscale_subnet_route not in current_routes.stdout

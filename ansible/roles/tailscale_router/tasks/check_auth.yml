@@ -1,0 +1,13 @@
+---
+# T008: Detect Tailscale authentication status
+# Purpose: Check if Tailscale is already authenticated to avoid re-auth
+
+- name: Check Tailscale authentication status
+  ansible.builtin.command: tailscale status
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+
+- name: Set authentication status fact
+  ansible.builtin.set_fact:
+    tailscale_authenticated: "{{ 'logged in' in tailscale_status.stdout or tailscale_status.rc == 0 }}"
