@@ -3,8 +3,20 @@
 **Purpose**: Prove Immich photo backup recovery from Hetzner Object Storage without Synology NAS or Proxmox infrastructure.
 
 **Last Updated**: December 21, 2025  
-**Estimated Duration**: 2-4 hours (depends on download bandwidth)  
-**Data Scope**: Immich photos (1.73 TB total, ~10-50 GB sample for selective restore)
+**Status**: Phase D Partial Completion - Critical structure findings documented  
+**Next Attempt**: January 2026 with external storage
+
+**Estimated Duration**: 4-6 hours (depends on download bandwidth and disk space)  
+**Data Scope**: Immich photos (1.73 TB original, ~355 GB Pool buckets + 9 GB metadata = **~365 GB total** required for complete extraction)
+
+⚠️ **IMPORTANT DRILL FINDINGS (December 2025)**:
+- Backup size significantly larger than initial estimate (355 GB vs 15 GB)
+- Pool structure has nested subdirectories: `Pool/0/0/`, `Pool/0/1/`, ... `Pool/0/17/`
+- Download script flattened directory structure - **requires fix before next attempt**
+- Hyper Backup Explorer validates complete bucket integrity before allowing extraction
+- Partial data downloads result in "data corrupted" error
+- **Minimum disk space**: 400 GB free (365 GB download + working space)
+- **Recommended**: External drive or VM with 500+ GB available
 
 ---
 
@@ -33,7 +45,8 @@ This runbook validates that encrypted Immich photo backups stored in Hetzner Obj
 3. **Standard utilities** (usually pre-installed):
    - bash/zsh shell
    - sha256sum (or shasum on macOS)
-   - Disk space: ~100-150 GB free
+   - **Disk space: 400-500 GB free** (365 GB backup + extracted photos + working space)
+   - **Recommendation**: Use external drive or dedicated VM for drill
 
 ### Credentials Required (from Bitwarden)
 
@@ -130,7 +143,7 @@ _Syno_TaskConfig
 
 ## Phase B: Download Sample Data
 
-**Goal**: Download _Syno_TaskConfig (1.63 KB) for connectivity test, then metadata + one Pool chunk.
+**Goal**: Download _Syno_TaskConfig (1.63 KB) for connectivity test, then metadata + Pool indexes (~6 GB).
 
 ### B1. Write download script
 
@@ -170,160 +183,243 @@ for folder in Config Control Guard; do
 done
 ```
 
-### B4. Download one Pool chunk (sample data)
+### B4. Download Pool indexes (photo data indexes)
 
 ```bash
-# List Pool folder to identify chunks
-./hetzner_list.sh DiskStation413j_1.hbk/Pool
+# List Pool folder to verify structure
+./hetzner_list.sh DiskStation413j_1.hbk/Pool | head -30
 
-# Select one chunk file (typically 100 MB - 50 GB)
-# Example chunk name: Pool/0/0/0000000000000001
-CHUNK_FILE="<chunk-file-from-listing>"
+# Pool structure:
+# - file_pool/: Small metadata files (~0.01 GB, 229 files)
+# - chunk_index/: Deduped photo data indexes (~6 GB, 767 files at 8 MB each)
+# - 0/0/, 0/1/, ... bucket subdirectories: Actual photo data chunks (100+ GB EACH)
+# - Total Pool: ~271 GB across 11,891 files
 
-# Download selected chunk
-DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/Pool/${CHUNK_FILE}" ~/dr-restore/sample-data/
+# Download file_pool and chunk_index for testing (6 GB total)
+mkdir -p ~/dr-restore/sample-data
+
+# file_pool (~0.01 GB, metadata)
+DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/Pool/file_pool" ~/dr-restore/sample-data/
+
+# chunk_index (~6 GB, indexes)
+DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/Pool/chunk_index" ~/dr-restore/sample-data/
 ```
 
-**Document download metrics** (for drill report):
-- _Syno_TaskConfig: 1.63 KB, [duration], [bandwidth]
-- Metadata folders: [size], [duration]
-- Pool chunk: [size], [duration]
-- Total downloaded: [GB]
+**Expected**: ~6 GB download, 996 files, 5-10 minutes at 10-20 MiB/s bandwidth.
+
+**Note**: Phase B completed December 2025 with metadata and indexes. Phase D (full download) deferred to next attempt with external storage.
+
+**December 2025 download metrics**:
+- _Syno_TaskConfig: 1.63 KB, <1s
+- Config: 8.964 GB, 4m58s, 9.679 MiB/s
+- Control: ~0 B
+- Guard: 5.841 MB
+- Pool indexes (file_pool + chunk_index): 5.987 GiB, 6m51s, 17.783 MiB/s
+- Pool buckets: 271 GB (partial, folders 0, 10-17)
+- **Total**: 271 GB in ~45 minutes (stopped due to disk space)
+- Egress cost: €0.00 (within 1 TB free tier)
 
 ---
 
-## Phase C: Decrypt & Extract Photos
+## Phase C: First Extraction Attempt (December 2025)
 
-**Goal**: Use Hyper Backup Explorer's selective restore to extract 10-20 Immich photos.
+**Attempted**: Open backup in Hyper Backup Explorer with partial data (metadata + indexes only)
 
-### C1. Install Hyper Backup Explorer
+**Result**: ❌ Failed with error "Stored data on the backup destination are corrupted"
 
-**macOS:**
-```bash
-# Download from https://www.synology.com/en-us/support/download/
-# Search for "Hyper Backup Explorer"
-# Install .dmg package
-open ~/Downloads/HyperBackupExplorer-*.dmg
+**Root Cause Discovery**:
+1. Hyper Backup uses block-level deduplication
+2. Files stored as chunks in Pool bucket subdirectories (Pool/0/0/, Pool/0/1/, etc.)
+3. Metadata + indexes map files to chunks but don't contain actual photo data
+4. Hyper Backup Explorer validates chunk integrity before allowing extraction
+5. Missing/incomplete chunks → validation failure → corruption error
+
+**Key Learning**: **Indexes alone cannot support file extraction** - complete bucket data required
+
+---
+
+## Phase C (Revised): Recovery Options Analysis
+
+### Option 1: Download Full Backup Data (RECOMMENDED for production disaster)
+- Download all Pool bucket subdirectories (~265 GB additional)
+- Total download: 280 GB, ~3-4 hours at 20 MiB/s, €0.00 within 1 TB free tier
+- Use Hyper Backup Explorer to browse and selectively restore
+- **Pros**: Official Synology tool, full backup access
+- **Cons**: Large download, time-consuming
+
+### Option 2: Community Tool - hyperbackup_decrypt (EXPERIMENTAL)
+- Python script: https://github.com/mistersandman/hyperbackup_decrypt (9 years old, may need updates)
+- Directly decrypts Pool chunks without Hyper Backup Explorer
+- Still requires downloading Pool bucket data
+- **Pros**: Command-line access, no NAS needed
+- **Cons**: Unmaintained, requires Python setup, still needs full data download
+
+### Option 3: Synology C2 Storage Connection (EASIEST for testing)
+- Configure Hyper Backup to also backup to Synology C2 Storage
+- Use Hyper Backup Explorer "Browse backup in Synology C2 Storage"
+- Browse and restore directly from C2 without downloads
+- **Pros**: No downloads, official support, instant access
+- **Cons**: Additional subscription cost (~$5/TB/month)
+
+### Option 4: Mount Backup on Replacement NAS (REALISTIC DR scenario)
+- Obtain replacement Synology NAS (same or newer model)
+- Connect to Hetzner S3 via Hyper Backup
+- Use "Data Relink" feature to reconnect to existing backup
+- Restore files directly to new NAS
+- **Pros**: Official DR workflow, full backup access
+- **Cons**: Requires purchasing/borrowing replacement NAS
+
+**DRILL DECISION POINT**: For this drill validation, choose Option 1 to prove end-to-end recovery capability.
+
+**DRILL DECISION POINT**: For this drill validation, choose Option 1 to prove end-to-end recovery capability.
+
+---
+
+## Phase D: Download Pool Bucket Data (December 2025 Partial Attempt)
+
+**Status**: Partial completion with critical findings
+
+### D1. December 2025 Drill Results
+
+**Downloaded**:
+- Config: 9 GB ✅
+- Control: ~0 B ✅
+- Guard: 5.8 MB ✅
+- Pool indexes: 6 GB (file_pool + chunk_index) ✅
+- Pool buckets: 271 GB partial (folders 0, 10-17 only) ⚠️
+
+**Missing**:
+- Pool/0/1/ through Pool/0/9/ (~110 GB)
+- Other Pool bucket subdirectories
+
+**Total Downloaded**: 271 GB  
+**Total Required**: ~365 GB  
+**Completion**: ~74%
+
+### D2. Critical Findings
+
+**1. Backup Structure Discovery**:
+```
+DiskStation413j_1.hbk/
+├── Config/ (9 GB metadata)
+├── Control/ (version control)
+├── Guard/ (integrity DBs)
+├── Pool/
+│   ├── file_pool/ (file metadata, 229 files)
+│   ├── chunk_index/ (chunk mappings, 767 files @ 8MB each)
+│   └── 0/ ← NESTED STRUCTURE!
+│       ├── 0/ (bucket subdirectory with .bucket.2 and .index.2 files)
+│       ├── 1/ (bucket subdirectory)
+│       ├── 2/ ... 17/ (18 subdirectories total)
+│       └── Each ~20-30 GB
+├── SynologyHyperBackup.bkpi (0 bytes marker file)
+└── synobkpinfo.db (3 KB)
 ```
 
-**Linux:**
-```bash
-# Download Windows version and use Wine, or
-# Check if Linux native version is available
-# See Synology Download Center for latest options
-```
+**2. Download Script Issue**:
+- Current script: `./hetzner_download.sh "DiskStation413j_1.hbk/Pool/0"`
+- rclone flattened structure, downloaded Pool/0/X/ to backup root as X/
+- **Fix required**: Download must preserve nested paths
 
-**Windows:**
-```bash
-# Download installer from Synology Download Center
-# Run HyperBackupExplorer-setup.exe
-```
+**3. Hyper Backup Explorer Validation**:
+- Tool validates bucket integrity before allowing file browsing
+- Missing or incorrectly structured buckets → "data corrupted" error
+- Cannot extract files without complete bucket data in correct structure
 
-### C2. Retrieve encryption key from Bitwarden
+**4. Disk Space Requirements**:
+- Initial estimate: 20 GB (wrong)
+- Actual requirement: 365 GB minimum
+- Drill machine: 460 GB total, insufficient for complete download + OS + apps
 
-Open Bitwarden and navigate to item `[BITWARDEN_ENCRYPTION_KEY_ITEM]`. Copy the encryption password.
+### D3. Lessons Learned for Next Attempt
 
-### C3. Open backup in Hyper Backup Explorer
+**✅ What Worked**:
+- Hetzner S3 credentials and access ✅
+- rclone configuration and downloads ✅
+- Backup structure discovery and documentation ✅
+- Egress costs: €0.00 (within 1 TB free tier) ✅
+
+**❌ What Failed**:
+- Insufficient disk space (need 500 GB+)
+- Download script path handling
+- Initial size estimate off by ~350 GB
+- Assumption that indexes alone sufficient for extraction
+
+**🔧 Required Fixes**:
+1. Update download script to preserve directory structure
+2. Use external drive or VM with 500+ GB space
+3. Download complete Pool bucket structure
+4. Verify structure before attempting extraction
+
+**📋 Next Attempt Checklist**:
+- [ ] External drive with 500+ GB available
+- [ ] Fixed download script (preserve paths)
+- [ ] Download all Pool/0/0/ through Pool/0/17/
+- [ ] Verify structure: `ls ~/dr-restore/backup/.../Pool/0/0/*.bucket.2`
+- [ ] Open in Hyper Backup Explorer
+- [ ] Extract sample photos
+- [ ] Document complete success or blockers
+
+---
+
+## Phase E: Extract Photos with Hyper Backup Explorer (For Next Attempt)
+
+### E1. Open Complete Backup
 
 1. Launch Hyper Backup Explorer
-2. **File → Browse for Backup**
-3. Navigate to `~/dr-restore/metadata/`
-4. Select the folder containing Config, Control, Guard
+2. Click **"Browse Local Backup"**
+3. Navigate to `~/dr-restore/backup/DiskStation413j_1.hbk/`
+4. **Select the `SynologyHyperBackup.bkpi` file**
 5. Enter encryption password when prompted (from Bitwarden)
-6. Wait for backup to load
+6. Wait for backup to load (may take 2-5 minutes for full validation)
 
-**Expected**: Folder tree displays with Immich backup structure visible (e.g., `/immich/library/` or `/var/lib/immich/`).
+**Expected**: Folder tree displays with backup structure visible
 
-### C4. Navigate to Immich photos folder
+### E2. Navigate to Immich Photos
 
-In Hyper Backup Explorer:
-1. Expand folder tree
-2. Locate Immich photos directory (typically `/immich/library/photos/` or similar)
-3. Browse date folders to find photo files
+1. Expand folder tree: **@Share → homelab_immich**
+2. Locate photo storage directory (likely `upload/` or `library/` subfolder)
+3. Browse date folders to find photos
 
-### C5. Select sample photos for extraction
+### E3. Extract Sample Photos
 
-1. Select 10-20 photo files from different date folders
-2. Choose variety: different dates, file types (jpg, png, heic, raw)
+1. Select 10-20 photos from different dates/users
+2. Right-click → **Restore**
+3. Target directory: `~/dr-restore/extracted/`
+4. Monitor extraction progress
 
-### C6. Extract selected photos
-
-1. Right-click selected photos → **Restore**
-2. Choose target directory: `~/dr-restore/extracted/`
-3. Monitor extraction progress
-4. Record extraction time
-
-**⚠️ STOP POINT**: If decryption fails or extraction errors occur:
-- Verify encryption key from Bitwarden is correct
-- Check metadata folders are complete (Config, Control, Guard)
-- Re-download metadata if corrupted
-- Consider break-glass procedure if Bitwarden key is incorrect
-
----
-
-## Phase D: Verify Photo Integrity
-
-**Goal**: Confirm extracted photos are viewable and uncorrupted.
-
-### D1. Count extracted photos
+### E4. Verify Extraction
 
 ```bash
-cd ~/dr-restore/extracted
-find . -type f -iname "*.jpg" -o -iname "*.png" -o -iname "*.heic" -o -iname "*.raw" | wc -l
-```
+# Count extracted files
+find ~/dr-restore/extracted -type f -name "*.jpg" -o -name "*.png" -o -name "*.heic" | wc -l
 
-**Expected**: 10-20 photo files.
-
-### D2. Generate SHA256 hashes
-
-```bash
+# Generate SHA256 hashes
 find ~/dr-restore/extracted -type f | while read file; do
   sha256sum "$file"
 done > ~/dr-restore/verification-hashes.txt
-
-# View hashes
-cat ~/dr-restore/verification-hashes.txt
 ```
 
-### D3. Manually inspect photos
+### E5. Manual Photo Inspection
 
-1. Open 3-5 photos in image viewer (Preview, Photos, Windows Photo Viewer)
-2. Verify images display correctly:
-   - No corruption artifacts
+1. Open 3-5 photos in image viewer (Preview.app on macOS)
+2. Verify:
+   - Images display correctly (no corruption)
    - Recognizable content
-   - Colors appear natural
+   - Natural colors
+   - EXIF data present
 
-### D4. Check EXIF data (optional)
-
-```bash
-# macOS/Linux
-exiftool ~/dr-restore/extracted/<photo>.jpg
-
-# Or use image viewer properties
-```
-
-Verify EXIF metadata is present (date, camera model, etc.).
-
-### D5. Generate verification summary
-
-**Document in drill notes:**
-- Total photos extracted: [10-20]
-- SHA256 hashes: [DOCUMENTED in verification-hashes.txt]
-- Manual inspection: [PASS - 3-5 photos viewable]
-- EXIF data: [PASS/SKIP]
-- **Overall assessment**: SUCCESS (Immich photos recoverable from Hetzner backup)
-
-**⚠️ STOP POINT**: If photos are corrupted or unreadable:
-- Re-download Pool chunk (may be corrupted)
-- Verify encryption key is correct
-- Check Hyper Backup Explorer version compatibility
-- Investigate backup integrity at source
+**SUCCESS CRITERIA**: 10-20 photos extracted, viewable, and uncorrupted.
 
 ---
 
-## Phase E: Documentation
+## Phase F: Drill Report and Documentation
 
-### E1. Complete drill report
+## Phase F: Drill Report and Documentation
+
+## Phase G: Drill Report and Cleanup (After Successful Extraction)
+
+### G1. Complete drill report
 
 Use template in `specs/012-disaster-recovery-drill/tasks.md` (T039) to document:
 - Execution date and duration
@@ -334,7 +430,7 @@ Use template in `specs/012-disaster-recovery-drill/tasks.md` (T039) to document:
 
 Save as: `scripts/dr/drill-reports/YYYY-MM-DD-drill-report.md`
 
-### E2. Update this runbook
+### G2. Update this runbook
 
 Add any lessons learned:
 - Clarify ambiguous steps
@@ -343,7 +439,105 @@ Add any lessons learned:
 
 ---
 
-## Break-Glass Procedures
+## Phase F: Next Attempt Instructions (January 2026)
+
+### F1. Preparation
+
+**Required Resources**:
+- [ ] External drive with **500+ GB free space** (or VM with dedicated storage)
+- [ ] Updated download script (fixes applied December 2025)
+- [ ] Hetzner credentials from Bitwarden
+- [ ] Backup encryption key from Bitwarden
+- [ ] 4-6 hours available for download
+
+**Environment Setup**:
+```bash
+# If using external drive
+export DR_RESTORE_PATH="/Volumes/ExternalDrive/dr-restore"
+mkdir -p "$DR_RESTORE_PATH/backup"
+
+# If using VM
+# Ensure VM has 500GB disk, mount at /mnt/dr-restore
+export DR_RESTORE_PATH="/mnt/dr-restore"
+```
+
+### F2. Complete Pool Download (CORRECTED)
+
+The December 2025 script has been fixed to preserve directory structure.
+
+```bash
+cd /Users/Andreas.Jacobsen/Development/private/homelab-proxmox/scripts/dr
+
+# Download all Pool/0 subdirectories (0/ through 17/)
+# Script now preserves nested structure: Pool/0/0/, Pool/0/1/, etc.
+for i in {0..17}; do
+  echo "Downloading Pool/0/$i..."
+  DOWNLOAD_DRY_RUN=false ./hetzner_download.sh \
+    "DiskStation413j_1.hbk/Pool/0/$i" \
+    "$DR_RESTORE_PATH/backup"
+done
+```
+
+**Expected Result**:
+```
+$DR_RESTORE_PATH/backup/DiskStation413j_1.hbk/
+├── Config/
+├── Control/
+├── Guard/
+├── Pool/
+│   ├── file_pool/
+│   ├── chunk_index/
+│   └── 0/
+│       ├── 0/ (*.bucket.2, *.index.2 files)
+│       ├── 1/
+│       ├── 2/
+│       └── ... 17/
+├── SynologyHyperBackup.bkpi
+└── synobkpinfo.db
+```
+
+**Verification**:
+```bash
+# Check structure
+ls -la "$DR_RESTORE_PATH/backup/DiskStation413j_1.hbk/Pool/0/"
+# Should show: 0/ 1/ 2/ ... 17/ (18 subdirectories)
+
+# Check bucket files exist
+ls "$DR_RESTORE_PATH/backup/DiskStation413j_1.hbk/Pool/0/0/" | head
+# Should show: 0.bucket.2, 0.index.2, 1.bucket.2, 1.index.2, etc.
+
+# Check total size
+du -sh "$DR_RESTORE_PATH/backup/DiskStation413j_1.hbk/"
+# Should show: ~365 GB
+```
+
+### F3. Extract Photos with Hyper Backup Explorer
+
+1. Launch Hyper Backup Explorer
+2. Browse Local Backup → Select `$DR_RESTORE_PATH/backup/DiskStation413j_1.hbk/SynologyHyperBackup.bkpi`
+3. Enter encryption password (from Bitwarden)
+4. Wait for validation (may take 5-10 minutes with complete data)
+5. Navigate to @Share → homelab_immich
+6. Extract 10-20 sample photos to verify
+7. Check photo metadata, viewability, EXIF data
+
+### F4. Document Completion
+
+If successful:
+- [ ] Create drill report: `scripts/dr/drill-reports/2026-01-XX-drill-report.md`
+- [ ] Update runbook with actual timings
+- [ ] Note any issues encountered
+- [ ] Commit and push findings
+
+If failed:
+- [ ] Document error messages and symptoms
+- [ ] Check structure: `tree -L 3 $DR_RESTORE_PATH/backup/`
+- [ ] Compare with expected structure above
+- [ ] Open issue for further investigation
+
+---
+
+## Phase G: Drill Report and Cleanup (After Successful Extraction)
 
 **IMPORTANT**: All break-glass storage is PHYSICAL/OFFLINE ONLY. No encryption keys stored in git repository.
 
