@@ -19,6 +19,11 @@ ansible/inventories/generated/
 **/*.key
 **/*.pem
 
+# Disaster Recovery drill files (local only) - Feature 012
+scripts/dr/rclone.conf
+scripts/dr/*.env
+scripts/dr/drill-reports/
+
 # IDE / OS
 .DS_Store
 .vscode/
