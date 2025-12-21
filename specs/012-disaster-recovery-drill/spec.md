@@ -9,30 +9,27 @@
 
 ### Initial Requirements (2025-12-21)
 
-- **Backup Location**: Hetzner Object Storage (S3-compatible endpoint)
-- **Backup Format**: Assumed to be Synology Hyper Backup format (encrypted archives) - must be confirmed during drill execution
-- **Encryption Key Storage**: Bitwarden vault (with break-glass documentation if Bitwarden unavailable)
+- **Backup Location**: Hetzner Object Storage at `nbg1.your-objectstorage.com`, bucket `synbackup`, path `DiskStation413j_1.hbk`
+- **Backup Format**: Synology Hyper Backup format confirmed (Config, Control, Guard, Pool folders visible, 1.73 TB total, 73,650 files)
+- **Backup Scope**: Immich photos only (primary critical data for validation)
+- **Encryption Key Storage**: Bitwarden vault (break-glass procedures documented but not implemented in initial drill)
 - **Independence Requirement**: Drill must be executable without access to Proxmox or Synology NAS (laptop or fresh VM only)
 - **Secret Handling**: NO credentials, encryption keys, or rclone configs committed to git - use environment variables and local .gitignored files
 - **Automation Philosophy**: Manual-first approach with scripts for repeatable steps (list, download, verify), but avoid over-automation of one-time drill activities
 
-### Open Questions
+### Session 2025-12-21
 
-- **Q1**: What is the exact backup format? (Hyper Backup archives, restic, borg, tar.gz.gpg?)
-  - **Status**: To be confirmed in Phase A - will determine tooling for decrypt/extract
-  - **Decision Point**: Task T004 includes confirming backup format before proceeding
-  
-- **Q2**: Are there multiple backup sets or a single consolidated backup?
-  - **Status**: To be discovered during Hetzner bucket listing (Phase A)
-  
-- **Q3**: What is the expected backup size and download time?
-  - **Status**: Will be measured during drill execution and documented in final report
+- **Q: Which service data should be validated during the drill?** → A: Focus on Immich data only (photos are most critical, 1.73 TB dataset)
+- **Q: What is the Hetzner S3 bucket name and path structure?** → A: Bucket `synbackup`, path `DiskStation413j_1.hbk`, endpoint `nbg1.your-objectstorage.com`
+- **Q: Which small file should be used for Phase B connectivity test?** → A: `_Syno_TaskConfig` (1.63 KB) - smallest file, quick validation
+- **Q: What does "full backup download" mean for 1.73 TB backup?** → A: Download metadata + Config + one Pool data chunk (~10-50 GB sample) to prove decrypt/extract workflow using Hyper Backup Explorer's selective restore capability
+- **Q: Which break-glass method should be implemented for initial drill?** → A: Bitwarden only for now; break-glass procedures documented but not implemented in initial drill (future enhancement)
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Catastrophic Infrastructure Loss (Priority: P1)
 
-As a homelab administrator, when both my Proxmox host and Synology NAS are destroyed (fire, flood, theft, ransomware), I need to be able to access and decrypt my encrypted backups from Hetzner Object Storage using only a laptop and credentials from Bitwarden, so I can recover critical data (photos, documents) without depending on my original infrastructure.
+As a homelab administrator, when both my Proxmox host and Synology NAS are destroyed (fire, flood, theft, ransomware), I need to be able to access and decrypt my encrypted Immich photo backups from Hetzner Object Storage using only a laptop and credentials from Bitwarden, so I can recover critical data without depending on my original infrastructure.
 
 **Why this priority**: This is the fundamental disaster recovery scenario. All other capabilities are meaningless if we cannot recover data when primary infrastructure is lost. This drill validates that our backup strategy actually works in a worst-case scenario.
 
@@ -103,7 +100,7 @@ As a homelab administrator, when I need to recover backups but cannot access Bit
 
 #### Download Requirements
 
-- **FR-007**: Drill MUST download a small test file first (proof of connectivity and credentials) before attempting full backup download
+- **FR-007**: Drill MUST download `_Syno_TaskConfig` file (1.63 KB) first as connectivity test before downloading larger metadata and Pool chunks
 - **FR-008**: Download script MUST support dry-run mode (list what would be downloaded without actually downloading)
 - **FR-009**: Download script MUST log download progress (files, bytes transferred, estimated time remaining)
 - **FR-010**: Downloaded files MUST be verified for integrity (checksum validation where available)
@@ -111,7 +108,7 @@ As a homelab administrator, when I need to recover backups but cannot access Bit
 
 #### Decrypt/Extract Requirements
 
-- **FR-012**: Drill MUST confirm backup format (Hyper Backup, restic, borg, tar.gz.gpg, other) before attempting decrypt
+- **FR-012**: Drill MUST validate Hyper Backup format structure (Config, Control, Guard, Pool folders present) before attempting decrypt
 - **FR-013**: If Hyper Backup format, decrypt/extract MUST use Synology Hyper Backup Explorer tool
 - **FR-014**: Decryption process MUST succeed using encryption key from Bitwarden
 - **FR-015**: Extracted files MUST be accessible on local filesystem for verification
@@ -121,7 +118,7 @@ As a homelab administrator, when I need to recover backups but cannot access Bit
 
 - **FR-017**: Verification script MUST count total files extracted and compare to expected baseline (if known)
 - **FR-018**: Verification script MUST support selective file hash checking (sample N random files or specific critical files)
-- **FR-019**: Drill MUST validate that at least one sample file can be opened and content appears intact (e.g., photo viewable, document readable)
+- **FR-019**: Drill MUST validate that at least one sample Immich photo can be opened and displays correctly (image viewable, EXIF data intact)
 - **FR-020**: Verification phase MUST clearly indicate SUCCESS or FAILURE based on file count and hash checks
 
 #### Documentation Requirements
@@ -143,7 +140,7 @@ As a homelab administrator, when I need to recover backups but cannot access Bit
 
 ### Non-Functional Requirements
 
-- **NFR-001**: Drill execution MUST complete in a reasonable timeframe (target: <4 hours for full backup restore, <30 minutes for small test file)
+- **NFR-001**: Drill execution MUST complete in a reasonable timeframe (target: <4 hours for sample restore including 10-50 GB download, <5 minutes for 1.63 KB connectivity test)
 - **NFR-002**: Download script SHOULD support resumable downloads if connection interrupted
 - **NFR-003**: Scripts SHOULD be POSIX-compliant shell (bash/zsh) for maximum portability
 - **NFR-004**: Runbook SHOULD be accessible offline (no external dependencies for documentation)
@@ -158,14 +155,14 @@ The disaster recovery drill is considered successful when all of the following c
 - [ ] List all backup objects in S3 bucket (confirm backup exists and is accessible)
 - [ ] Identify backup format and document findings
 
-### Phase B: Small File Download Test
-- [ ] Download a small test file (target: <100MB) to verify connectivity and credentials
-- [ ] Verify downloaded file integrity (checksum if available)
+### Phase B: Sm`_Syno_TaskConfig` file (1.63 KB) to verify connectivity and credentials
+- [ ] Verify downloaded file integrity (file size matches expected 1.63 KB)
 - [ ] Document download speed and time taken
 
 ### Phase C: Decrypt/Extract Proof
-- [ ] Download full encrypted backup (or representative subset)
+- [ ] Download metadata folders (Config, Control, Guard) and one Pool data chunk (~10-50 GB sample from 1.73 TB total)
 - [ ] Decrypt using encryption key from Bitwarden
+- [ ] Use Hyper Backup Explorer selective restore to extract sample Immich photos
 - [ ] Successfully extract files to local filesystem
 - [ ] Confirm file extraction completed without errors
 
@@ -182,19 +179,19 @@ The disaster recovery drill is considered successful when all of the following c
 - [ ] Document any costs incurred (Hetzner egress fees)
 - [ ] Document issues encountered and resolutions
 - [ ] Document lessons learned and runbook improvements needed
-
-### Break-Glass Validation (Optional but Recommended)
-- [ ] Break-glass procedure documented in runbook
-- [ ] Alternative encryption key source is documented and accessible
+Future Enhancement)
+- [ ] Break-glass procedures documented in runbook for reference
+- [ ] Alternative encryption key storage method identified (encrypted USB, paper backup, or trusted contact)
+- [ ] Break-glass implementation and testing deferred to post-initial-drill (not blocking initial success)accessible
 - [ ] Key retrieval method tested without Bitwarden access
 
 ## Assumptions *(mandatory)*
 
 1. **Backup Existence**: At least one encrypted backup already exists in Hetzner Object Storage (this drill does NOT create backups, only validates recovery)
-2. **Credential Availability**: Hetzner S3 credentials and encryption key are stored in Bitwarden and accessible during drill
-3. **Backup Format**: Initial assumption is Synology Hyper Backup format, but drill includes checkpoint to confirm actual format
+2. **Credential Availability**: Hetzner S3 credentials and encryption key are stored in Bitwarden and accessible during drill (no break-glass implementation required for initial drill)
+3. **Backup Format**: Synology Hyper Backup format confirmed (1.73 TB, 73,650 files in bucket `synbackup/DiskStation413j_1.hbk`)
 4. **Network Access**: Machine executing drill has internet access with sufficient bandwidth for multi-GB downloads
-5. **Disk Space**: Local machine has sufficient free disk space to download and extract full backup (estimate: 2-3x backup size)
+5. **Disk Space**: Local machine has sufficient free disk space for sample download and extraction (estimate: 100-150 GB for metadata + one Pool chunk + extracted files)
 6. **Tool Availability**: Standard Linux tools are available (bash, curl/wget, rclone or aws-cli); specialized tools (Hyper Backup Explorer) documented for installation
 7. **Backup Integrity**: Backups created by existing process are valid and not corrupted (this drill tests restore process, not backup creation)
 8. **S3 Compatibility**: Hetzner Object Storage adheres to standard S3 API for authentication and object access
