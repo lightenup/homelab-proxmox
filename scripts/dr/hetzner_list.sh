@@ -6,6 +6,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Check prerequisites
+if ! command -v rclone &> /dev/null; then
+  echo "Error: rclone is not installed"
+  echo ""
+  echo "Install rclone:"
+  echo "  macOS:   brew install rclone"
+  echo "  Linux:   sudo apt install rclone  # or dnf install rclone"
+  echo "  Windows: choco install rclone"
+  echo ""
+  echo "See: https://rclone.org/install/"
+  exit 1
+fi
+
 # Load environment variables if .env exists
 if [ -f "${SCRIPT_DIR}/.env" ]; then
   # shellcheck disable=SC1091
