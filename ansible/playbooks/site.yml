@@ -4,3 +4,7 @@
 
 - name: Configure Services
   import_playbook: services.yml
+
+- name: Configure Monitoring
+  import_playbook: monitoring.yml
+  tags: monitoring

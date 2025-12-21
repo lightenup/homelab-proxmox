@@ -1,0 +1,24 @@
+---
+- name: Verify Uptime Kuma container is running
+  ansible.builtin.shell:
+    cmd: docker ps --filter name=uptime-kuma --format '{{"{{"}}.Status{{"}}"}}'
+  register: container_status
+  changed_when: false
+  failed_when: "'Up' not in container_status.stdout"
+
+- name: Wait for Uptime Kuma port to be listening
+  ansible.builtin.wait_for:
+    host: localhost
+    port: 3001
+    timeout: 120
+    state: started
+
+- name: Wait for Uptime Kuma HTTP response
+  ansible.builtin.uri:
+    url: http://localhost:3001
+    method: GET
+    status_code: 200
+  register: http_response
+  until: http_response.status == 200
+  retries: 20
+  delay: 3

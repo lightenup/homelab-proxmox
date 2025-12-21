@@ -1,0 +1,25 @@
+---
+# Example vault file structure for monitoring secrets
+# Create actual vault with: ansible-vault create ansible/group_vars/monitoring/vault.yml
+
+# Uptime Kuma admin credentials
+uptime_kuma_admin_user: "admin"
+uptime_kuma_admin_password: "CHANGE_ME_STRONG_PASSWORD"
+
+# SMTP configuration for email notifications
+smtp_host: "smtp.gmail.com"
+smtp_port: 587
+smtp_user: "homelab-alerts@example.com"
+smtp_password: "CHANGE_ME_APP_SPECIFIC_PASSWORD"
+smtp_from: "homelab-alerts@example.com"
+smtp_to: "admin@example.com"
+
+# Alternative SMTP providers (uncomment and configure as needed):
+# 
+# Outlook/Office365:
+# smtp_host: "smtp.office365.com"
+# smtp_port: 587
+# 
+# Self-hosted:
+# smtp_host: "mail.yourdomain.com"
+# smtp_port: 587

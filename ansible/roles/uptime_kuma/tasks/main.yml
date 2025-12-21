@@ -1,0 +1,74 @@
+---
+- name: Wait for Uptime Kuma to be ready
+  ansible.builtin.uri:
+    url: "{{ uptime_kuma_api_url }}"
+    method: GET
+    status_code: 200
+  register: uptime_kuma_ready
+  until: uptime_kuma_ready.status == 200
+  retries: "{{ uptime_kuma_api_max_retries }}"
+  delay: "{{ uptime_kuma_api_retry_delay }}"
+  changed_when: false
+
+- name: Install Node.js and npm (required for Socket.IO client)
+  ansible.builtin.apt:
+    name:
+      - nodejs
+      - npm
+    state: present
+    update_cache: true
+  become: true
+
+- name: Create temporary directory for configuration script
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: uptime_kuma
+  register: temp_config_dir
+  changed_when: false
+
+- name: Copy Socket.IO configuration script
+  ansible.builtin.copy:
+    src: configure_uptime_kuma.js
+    dest: "{{ temp_config_dir.path }}/configure_uptime_kuma.js"
+    mode: '0755'
+  changed_when: false
+
+- name: Template monitoring configuration file
+  ansible.builtin.template:
+    src: monitoring_config.json.j2
+    dest: "{{ temp_config_dir.path }}/config.json"
+    mode: '0600'
+  changed_when: false
+  no_log: true
+
+- name: Install socket.io-client npm package
+  community.general.npm:
+    name: socket.io-client
+    path: "{{ temp_config_dir.path }}"
+    state: present
+  changed_when: false
+
+- name: Configure Uptime Kuma via Socket.IO
+  ansible.builtin.command:
+    cmd: >
+      node configure_uptime_kuma.js
+      "{{ uptime_kuma_admin_user }}"
+      "{{ uptime_kuma_admin_password }}"
+      "{{ temp_config_dir.path }}/config.json"
+    chdir: "{{ temp_config_dir.path }}"
+  environment:
+    UPTIME_KUMA_URL: "{{ uptime_kuma_api_url }}"
+  register: configure_result
+  changed_when: "'created' in configure_result.stdout"
+
+- name: Display configuration result
+  ansible.builtin.debug:
+    msg: "{{ configure_result.stdout_lines }}"
+  when: configure_result.stdout_lines is defined
+
+- name: Clean up temporary directory
+  ansible.builtin.file:
+    path: "{{ temp_config_dir.path }}"
+    state: absent
+  changed_when: false
+  tags: verify

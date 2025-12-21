@@ -1,0 +1,12 @@
+---
+- name: Setup admin account (first-time only)
+  ansible.builtin.uri:
+    url: "{{ uptime_kuma_api_url }}/api/setup"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ uptime_kuma_admin_user }}"
+      password: "{{ uptime_kuma_admin_password }}"
+    status_code: 200
+  when: uptime_kuma_needs_setup | default(false)
+  no_log: true

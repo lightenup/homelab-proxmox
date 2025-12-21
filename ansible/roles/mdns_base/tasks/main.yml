@@ -11,8 +11,8 @@
 - name: Ensure hostname is in /etc/hosts (Debian requirement)
   ansible.builtin.lineinfile:
     path: /etc/hosts
-    regexp: '^127\.0\.1\.1\s+{{ ansible_hostname }}'
-    line: "127.0.1.1\t{{ ansible_hostname }}"
+    regexp: '^127\.0\.1\.1\s+{{ ansible_facts["hostname"] }}'
+    line: "127.0.1.1\t{{ ansible_facts['hostname'] }}"
     state: present
   notify: Restart avahi-daemon
 

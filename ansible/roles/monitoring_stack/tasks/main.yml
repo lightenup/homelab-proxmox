@@ -1,0 +1,17 @@
+---
+- name: Install Docker
+  ansible.builtin.include_tasks: install_docker.yml
+  tags: docker
+
+- name: Create monitoring directories
+  ansible.builtin.include_tasks: create_directories.yml
+
+- name: Deploy Docker Compose file
+  ansible.builtin.include_tasks: deploy_compose.yml
+
+- name: Configure systemd service
+  ansible.builtin.include_tasks: systemd_service.yml
+
+- name: Verify monitoring stack
+  ansible.builtin.include_tasks: verify.yml
+  tags: verify

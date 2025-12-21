@@ -1,0 +1,23 @@
+{
+  "smtp": {
+    "host": "{{ smtp_host | default('') }}",
+    "port": {{ smtp_port | default(587) }},
+    "secure": false,
+    "user": "{{ smtp_user | default('') }}",
+    "password": "{{ smtp_password | default('') }}",
+    "from": "{{ smtp_from | default('') }}",
+    "to": "{{ smtp_to | default('') }}"
+  },
+  "monitors": [
+{% for target in monitoring_targets %}
+    {
+      "name": "{{ target.name }}",
+      "type": "{{ target.type }}",
+      "url": "{{ target.url }}",
+      "interval": {{ target.interval }},
+      "ignoreTls": {{ target.ignoreTls | default(false) | lower }}
+    }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ]
+}
