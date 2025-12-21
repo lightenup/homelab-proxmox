@@ -22,7 +22,7 @@
 - **Q: Which service data should be validated during the drill?** → A: Focus on Immich data only (photos are most critical, 1.73 TB dataset)
 - **Q: What is the Hetzner S3 bucket name and path structure?** → A: Bucket `synbackup`, path `DiskStation413j_1.hbk`, endpoint `nbg1.your-objectstorage.com`
 - **Q: Which small file should be used for Phase B connectivity test?** → A: `_Syno_TaskConfig` (1.63 KB) - smallest file, quick validation
-- **Q: What does "full backup download" mean for 1.73 TB backup?** → A: Download metadata + Config + one Pool data chunk (~10-50 GB sample) to prove decrypt/extract workflow using Hyper Backup Explorer's selective restore capability
+- **Q: What does "full backup download" mean for 1.73 TB backup?** → A: Download metadata + Config + one Pool data chunk (~10-50 GB sample subset) to prove decrypt/extract workflow using Hyper Backup Explorer's selective restore feature (not full 1.73 TB)
 - **Q: Which break-glass method should be implemented for initial drill?** → A: Bitwarden only for now; break-glass procedures documented but not implemented in initial drill (future enhancement)
 
 ## User Scenarios & Testing *(mandatory)*
@@ -160,9 +160,9 @@ The disaster recovery drill is considered successful when all of the following c
 - [ ] Document download speed and time taken
 
 ### Phase C: Decrypt/Extract Proof
-- [ ] Download metadata folders (Config, Control, Guard) and one Pool data chunk (~10-50 GB sample from 1.73 TB total)
+- [ ] Download metadata folders (Config, Control, Guard) and one Pool data chunk (~10-50 GB sample subset from 1.73 TB total)
 - [ ] Decrypt using encryption key from Bitwarden
-- [ ] Use Hyper Backup Explorer selective restore to extract sample Immich photos
+- [ ] Use Hyper Backup Explorer's selective restore feature to extract sample Immich photos (10-20 photos as proof of concept)
 - [ ] Successfully extract files to local filesystem
 - [ ] Confirm file extraction completed without errors
 
@@ -221,6 +221,8 @@ Future Enhancement)
 - Break-glass key escrow service (encrypted key file stored with trusted third party)
 
 ## Break-Glass Recovery Procedures *(mandatory)*
+
+**IMPORTANT - Constitution Compliance**: All break-glass storage methods described below are PHYSICAL/OFFLINE ONLY. No encryption keys, encrypted files, or credential references are stored in this git repository per Constitution Principle II (Secrets Policy: "Never commit secrets"). Break-glass materials exist outside version control.
 
 ### Scenario: Bitwarden Unavailable
 

@@ -85,10 +85,9 @@
 
 ---
 
-## Phase B: Download Drill Payload (12 tasks)
-0 tasks)
+## Phase B: Download Drill Payload (10 tasks)
 
-**Goal**: Download _Syno_TaskConfig (1.63 KB) for connectivity test, then metadata + one Pool chunk (~10-50 GB)
+**Goal**: Download _Syno_TaskConfig (1.63 KB) for connectivity test, then metadata + one Pool chunk (~10-50 GB sample for selective restore)
 - [ ] **T009**: Write hetzner_download.sh script
   - **Files**: `scripts/dr/hetzner_download.sh`
   - **Details**:
@@ -363,7 +362,7 @@
     37**: Finalize runbook with all phases documented
   - **Files**: `docs/runbooks/disaster-recovery-drill.md`
   - **Details**: Ensure complete structure:
-    1. Overview: Prove Immich photo recovery from Hetzner (1.73 TB, sample restore)
+    1. Overview: Prove Immich photo recovery from Hetzner (1.73 TB, selective restore of sample subset)
     2. Prerequisites: rclone, Hyper Backup Explorer, ~100-150 GB disk space
     3. Phase A: Access synbackup/DiskStation413j_1.hbk
     4. Phase B: Download _Syno_TaskConfig + metadata + one Pool chunk
@@ -372,7 +371,7 @@
     7. Break-glass procedures (documented, not implemented in initial drill)
     8. Troubleshooting common issues
     9. Drill report template
-  - **Validation**: All sections complete, runbook is self-sufficient for execution
+  - **Validation**: All sections complete, runbook is self-sufficient for execution, break-glass section includes all three methods (USB drive, paper backup, trusted contact) with retrieval steps
 
 - [ ] **T038**: Add troubleshooting section to runbook
   - **Files**: `docs/runbooks/disaster-recovery-drill.md`
