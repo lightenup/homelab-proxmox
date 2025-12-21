@@ -1,0 +1,20 @@
+---
+- name: Configure Monitoring Stack
+  hosts: monitoring
+  become: true
+  
+  pre_tasks:
+    - name: Load vault variables explicitly
+      include_vars:
+        file: "{{ playbook_dir }}/../host_vars/monitoring/vault.yml"
+      no_log: true
+    
+    - name: Load host variables explicitly
+      include_vars:
+        file: "{{ playbook_dir }}/../host_vars/monitoring/vars.yml"
+  
+  roles:
+    - lxc_base
+    - mdns_base
+    - monitoring_stack
+    - uptime_kuma

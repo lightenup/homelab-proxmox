@@ -1,0 +1,17 @@
+---
+- name: Verify monitor count
+  ansible.builtin.uri:
+    url: "{{ uptime_kuma_api_url }}/api/monitor"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ uptime_kuma_auth_token }}"
+    return_content: true
+  register: final_monitors
+  changed_when: false
+
+- name: Assert correct number of monitors
+  ansible.builtin.assert:
+    that:
+      - final_monitors.json | length == monitoring_targets | length
+    fail_msg: "Expected {{ monitoring_targets | length }} monitors, found {{ final_monitors.json | length }}"
+    success_msg: "All {{ monitoring_targets | length }} monitors successfully created"

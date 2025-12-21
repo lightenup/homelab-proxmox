@@ -73,3 +73,22 @@ module "reverse_proxy_lxc" {
   gateway         = var.network_gateway
   ssh_public_keys = join("\n", var.ssh_public_keys)
 }
+
+module "monitoring_lxc" {
+  source = "./modules/lxc_service"
+
+  name         = "monitoring-lxc"
+  hostname     = "monitoring"
+  node         = var.proxmox_node
+  ostemplate   = var.lxc_template
+  storage_pool = var.storage_pool
+
+  cores   = 2
+  memory  = 2048
+  disk_gb = 10
+
+  bridge          = var.services_bridge
+  ip              = var.service_ips["monitoring"]
+  gateway         = var.network_gateway
+  ssh_public_keys = join("\n", var.ssh_public_keys)
+}

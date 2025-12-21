@@ -1,0 +1,11 @@
+---
+# Uptime Kuma container configuration
+uptime_kuma_version: "1"
+uptime_kuma_port: 3001
+uptime_kuma_data_dir: "/opt/monitoring/data"
+
+# Docker configuration
+monitoring_install_dir: "/opt/monitoring"
+
+# Timezone
+timezone: "Europe/Copenhagen"

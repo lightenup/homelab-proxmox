@@ -1,0 +1,10 @@
+---
+- name: Install Docker
+  ansible.builtin.import_role:
+    name: geerlingguy.docker
+
+- name: Verify Docker service is running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
