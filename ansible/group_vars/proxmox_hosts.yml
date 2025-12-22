@@ -12,3 +12,27 @@ tailscale_auth_key: !vault |
           333733356437376136346665333839306436
 tailscale_advertise_routes: "192.168.1.0/24"
 tailscale_advertise_tags: "tag:proxmox"
+
+# Proxmox Configuration Backup (Feature 013)
+proxmox_backup_enabled: true
+proxmox_backup_schedule: "daily"
+proxmox_backup_time: "02:00"
+
+# NAS Configuration
+proxmox_backup_nas_host: "192.168.1.109"
+proxmox_backup_nas_path: "/volume1/homelab_backups/proxmox"
+
+# Encryption (keys stored in Bitwarden, deploy via environment variables)
+proxmox_backup_age_public_key: "{{ lookup('env', 'PROXMOX_BACKUP_AGE_PUBLIC_KEY') }}"
+# proxmox_backup_age_private_key: defined in vault or deployment script
+
+# Optional: Enable IaC artifact backup (requires repo on PVE)
+# proxmox_backup_repo_path: "/root/homelab-proxmox"
+
+# Optional: Opt-in for sensitive data (default: false)
+# proxmox_backup_include_tailscale_state: false
+# proxmox_backup_include_rclone_conf: false
+
+# Retention policy
+proxmox_backup_retention_daily: 30
+proxmox_backup_retention_monthly: 12

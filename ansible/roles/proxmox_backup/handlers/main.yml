@@ -1,0 +1,15 @@
+---
+# ansible/roles/proxmox_backup/handlers/main.yml
+# Handlers for Proxmox backup role
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: reload systemd
+
+- name: Restart backup timer
+  ansible.builtin.systemd:
+    name: proxmox-backup.timer
+    state: restarted
+    enabled: true
+  listen: restart backup timer

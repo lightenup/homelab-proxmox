@@ -1,0 +1,23 @@
+---
+# ansible/roles/proxmox_backup/tasks/main.yml
+# Main orchestration for Proxmox configuration backup automation
+# Feature: 013-proxmox-config-backup
+# Architecture: Choice 3, Option A - Deploys bash script, does NOT execute at runtime
+
+- name: Install backup prerequisites
+  ansible.builtin.import_tasks: prerequisites.yml
+  tags:
+    - backup
+    - prerequisites
+
+- name: Deploy backup script
+  ansible.builtin.import_tasks: deploy_script.yml
+  tags:
+    - backup
+    - script
+
+- name: Deploy systemd units
+  ansible.builtin.import_tasks: systemd.yml
+  tags:
+    - backup
+    - systemd
