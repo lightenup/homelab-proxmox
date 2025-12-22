@@ -1,0 +1,62 @@
+---
+# ansible/roles/proxmox_backup/tasks/systemd.yml
+# Deploy systemd timer and service units
+# Feature: 013-proxmox-config-backup
+
+- name: Deploy proxmox-backup.service unit
+  ansible.builtin.template:
+    src: proxmox-backup.service.j2
+    dest: /etc/systemd/system/proxmox-backup.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart backup timer
+  tags:
+    - backup
+    - systemd
+
+- name: Deploy proxmox-backup.timer unit
+  ansible.builtin.template:
+    src: proxmox-backup.timer.j2
+    dest: /etc/systemd/system/proxmox-backup.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart backup timer
+  tags:
+    - backup
+    - systemd
+
+- name: Enable and start proxmox-backup.timer
+  ansible.builtin.systemd:
+    name: proxmox-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: proxmox_backup_enabled | default(true) | bool
+  tags:
+    - backup
+    - systemd
+
+- name: Disable proxmox-backup.timer if not enabled
+  ansible.builtin.systemd:
+    name: proxmox-backup.timer
+    enabled: false
+    state: stopped
+  when: not (proxmox_backup_enabled | default(true) | bool)
+  tags:
+    - backup
+    - systemd
+
+- name: Verify timer status
+  ansible.builtin.systemd:
+    name: proxmox-backup.timer
+  register: timer_status
+  tags:
+    - backup
+    - systemd
+    - validate
