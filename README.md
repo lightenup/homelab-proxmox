@@ -105,6 +105,15 @@ ansible-playbook playbooks/update_monthly.yml -e "allow_host_reboot=true"
 
 ## Documentation
 
+### Disaster Recovery
+
+Disaster recovery procedures for Immich photo backups stored in Hetzner Object Storage.
+
+- **Runbook**: [docs/runbooks/disaster-recovery-drill.md](docs/runbooks/disaster-recovery-drill.md)
+- **Scripts**: [scripts/dr/](scripts/dr/) (list, download, verify)
+- **Specification**: [specs/012-disaster-recovery-drill/](specs/012-disaster-recovery-drill/)
+- **Last Drill**: See `scripts/dr/drill-reports/` for execution history
+
 ### Operational Runbooks
 
 - [Monthly Patching](docs/runbooks/monthly-patching.md) - Security updates and reboot orchestration

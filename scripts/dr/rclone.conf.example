@@ -1,0 +1,25 @@
+# rclone configuration template for Hetzner Object Storage
+# Copy this file to rclone.conf and populate with actual credentials from Bitwarden
+# The rclone.conf file is gitignored to prevent credential leakage
+
+[hetzner-backup]
+type = s3
+provider = Other
+env_auth = false
+# From Bitwarden "s3 bucket synbackup" → Access Key field
+access_key_id = YOUR_HETZNER_ACCESS_KEY_HERE
+# From Bitwarden "s3 bucket synbackup" → secret field
+secret_access_key = YOUR_HETZNER_SECRET_KEY_HERE
+endpoint = https://nbg1.your-objectstorage.com
+acl = private
+region = nbg1
+
+# Usage:
+# 1. Retrieve Hetzner S3 credentials from Bitwarden
+#    - Access Key (e.g., "ABC123" format) → access_key_id above
+#    - secret (e.g., "ABC123..." format) → secret_access_key above
+#    - NOTE: NOT the console login (K123) - that's for web portal
+#    - NOTE: NOT the Synology encryption key - that's used in Phase C (Hyper Backup Explorer)
+# 2. Copy this file: cp rclone.conf.example rclone.conf
+# 3. Edit rclone.conf and replace placeholder values
+# 4. Test connection: rclone ls hetzner-backup:synbackup
