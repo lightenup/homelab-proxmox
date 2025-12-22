@@ -44,6 +44,8 @@
 
 ## Phase 3: User Story 1 - Recover from Complete Host Failure (Priority: P1) 🎯 MVP
 
+**Tasks**: T015-T028 (14 tasks)
+
 **Goal**: Create basic backup functionality for Proxmox host configuration files
 
 **Independent Test**: Run backup manually, verify /etc/pve/lxc/*.conf, /etc/network/interfaces, and /etc/fstab exist in staging directory before compression
@@ -67,11 +69,13 @@
 - [ ] T027 [US1] Implement staging cleanup in ansible/roles/proxmox_backup/tasks/cleanup.yml (remove staging directory contents after successful transfer)
 - [ ] T028 [US1] Create main backup orchestration task in ansible/roles/proxmox_backup/tasks/main.yml (call all tasks in sequence with error handling)
 
-**Checkpoint**: At this point, User Story 1 should be fully functional - manual backup run creates encrypted archive on NAS
+**Checkpoint**: **MVP COMPLETE** - User Story 1 fully functional, manual backup creates encrypted archive on NAS
 
 ---
 
 ## Phase 4: User Story 2 - Deterministic Infrastructure Rebuild (Priority: P1)
+
+**Tasks**: T029-T038 (10 tasks)
 
 **Goal**: Add IaC artifact backup (Terraform state, Ansible inventory) to enable infrastructure rebuild
 
@@ -92,11 +96,13 @@
 - [ ] T037 [US2] Add verification step for deterministic state in ansible/roles/proxmox_backup/tasks/verify_iac.yml (check Terraform state file size > 0, Ansible inventory valid YAML)
 - [ ] T038 [US2] Update manifest generation to include IaC artifacts in ansible/roles/proxmox_backup/tasks/manifest.yml
 
-**Checkpoint**: At this point, User Story 2 should be fully functional - backup includes IaC artifacts, infrastructure can be rebuilt deterministically
+**Checkpoint**: User Story 2 complete - backup includes IaC artifacts, infrastructure can be rebuilt deterministically
 
 ---
 
 ## Phase 5: User Story 3 - Scheduled Automated Backups (Priority: P1)
+
+**Tasks**: T039-T048 (10 tasks)
 
 **Goal**: Automate backup execution via systemd timer running daily at 2 AM
 
@@ -117,11 +123,13 @@
 - [ ] T047 [US3] Log rotation actions in ansible/roles/proxmox_backup/tasks/rotate.yml (log deleted filenames, reason, timestamp to /var/log/proxmox-backup.log)
 - [ ] T048 [US3] Add idempotency verification in ansible/roles/proxmox_backup/tasks/main.yml (running twice creates new backup with new timestamp only)
 
-**Checkpoint**: At this point, User Story 3 should be fully functional - backups run automatically, rotation policy enforced, timer persists across reboots
+**Checkpoint**: User Story 3 complete - backups run automatically, rotation policy enforced, timer persists across reboots
 
 ---
 
 ## Phase 6: User Story 4 - Verify Backup Integrity Without Restore (Priority: P2)
+
+**Tasks**: T049-T056 (8 tasks)
 
 **Goal**: Provide verification command to decrypt and validate backup archives without full extraction
 
@@ -140,11 +148,13 @@
 - [ ] T055 [US4] Add exit code handling in scripts/backup/verify_proxmox_backup.sh (0=success, 1=decryption failure, 2=checksum mismatch, 3=missing files)
 - [ ] T056 [US4] Document verification procedure in docs/operations/backups-proxmox-config.md (command usage, exit codes, troubleshooting)
 
-**Checkpoint**: At this point, User Story 4 should be fully functional - operators can verify backup integrity independently, post-backup validation ensures archive quality
+**Checkpoint**: User Story 4 complete - operators can verify backup integrity independently, post-backup validation ensures archive quality
 
 ---
 
 ## Phase 7: User Story 5 - Email Notification on Failure (Priority: P3)
+
+**Tasks**: T057-T064 (8 tasks)
 
 **Goal**: Send email notifications when backups fail for early warning
 
@@ -163,11 +173,13 @@
 - [ ] T063 [US5] Add notification configuration to ansible/group_vars/proxmox_hosts.yml (SMTP host, port, from/to addresses, enable/disable flags)
 - [ ] T064 [US5] Document notification setup in docs/operations/backups-proxmox-config.md (SMTP config, testing procedure, troubleshooting)
 
-**Checkpoint**: At this point, User Story 5 should be fully functional - operators receive email alerts on backup failures, can optionally enable success notifications
+**Checkpoint**: User Story 5 complete - operators receive email alerts on backup failures, can optionally enable success notifications
 
 ---
 
 ## Phase 8: Polish & Cross-Cutting Concerns
+
+**Tasks**: T065-T080 (16 tasks)
 
 **Purpose**: Documentation, edge case handling, security hardening, and final integration
 
@@ -197,20 +209,24 @@
 ### Story Completion Order
 
 ```
-Phase 1 (Setup) → Phase 2 (Foundational) → All User Stories (P1 stories in parallel)
-                                            ↓
-                        Phase 3 (US1: Basic Backup) ← MVP COMPLETE HERE
-                                            ↓
-                        Phase 4 (US2: IaC Artifacts) (builds on US1)
-                                            ↓
-                        Phase 5 (US3: Automation) (builds on US1+US2)
-                                            ↓
-                        Phase 6 (US4: Verification) (enhances US1-US3)
-                                            ↓
-                        Phase 7 (US5: Notifications) (enhances US1-US4)
-                                            ↓
-                        Phase 8 (Polish) (completes all stories)
+Phase 1 (Setup: T001-T007) ← Role structure + manual setup documentation
+            ↓
+Phase 2 (Foundational: T008-T014) ← Packages, staging, logging (blocking)
+            ↓
+Phase 3 (US1: T015-T028) ← Basic Backup → MVP COMPLETE HERE  
+            ↓
+Phase 4 (US2: T029-T038) ← IaC Artifacts (builds on US1 pipeline)
+            ↓
+Phase 5 (US3: T039-T048) ← Automation (builds on US1+US2 complete backup)
+            ↓
+Phase 6 (US4: T049-T056) ← Verification (enhances US1-US3 reliability)
+            ↓
+Phase 7 (US5: T057-T064) ← Notifications (enhances US1-US4 monitoring)
+            ↓
+Phase 8 (Polish: T065-T080) ← Completes all stories, production-ready
 ```
+
+**Note**: Manual prerequisites (NAS setup, key generation) documented in Phase 1 must be completed by operator before automated tasks can run.
 
 ### User Story Dependencies
 
@@ -245,30 +261,34 @@ Phase 1 (Setup) → Phase 2 (Foundational) → All User Stories (P1 stories in p
 **Goal**: Complete User Story 1 only - prove basic backup works end-to-end
 
 **Deliverables**:
-- Phases 1-3 complete (Setup → Foundational → US1)
+- Phases 1-3 complete (Setup → Foundational → US1 Basic Backup)
+- Manual prerequisites completed (NAS share, key generation, NFS test)
+- Ansible role structure established
 - Manual backup execution functional
 - Encrypted archive on NAS with Proxmox configs
 - Basic restore documentation
 
-**Timeline**: 2-3 days of focused work
+**Timeline**: 1 week (Phase 1: 1 day, Phase 2: 1 day, Phase 3: 2-3 days, plus 1 day for manual setup)
 
 **Validation**: Run backup manually, decrypt archive, verify LXC configs present
 
 ### Incremental Delivery
 
-1. **Week 1**: MVP (US1) - Basic backup functionality
-2. **Week 2**: US2 (IaC artifacts) + US3 (automation) - Complete backup + scheduling
-3. **Week 3**: US4 (verification) + US5 (notifications) - Reliability + monitoring
-4. **Week 4**: Phase 8 (polish) - Documentation + edge cases
+1. **Week 1**: MVP (Phases 1-3: Setup + Foundation + US1) - Basic backup functionality
+2. **Week 2**: Phases 4-5 (US2 IaC artifacts + US3 automation) - Complete backup + scheduling
+3. **Week 3**: Phases 6-7 (US4 verification + US5 notifications) - Reliability + monitoring
+4. **Week 4**: Phase 8 (Polish) - Documentation + edge cases
 
 ### Testing Checkpoints
 
-- **After T028**: Test manual backup execution → encrypted archive on NAS
-- **After T038**: Test IaC artifact restore → Terraform plan shows zero diff
-- **After T048**: Wait 48 hours → verify two backups exist, rotation works
-- **After T056**: Run verification → detects corrupted archive (test with truncated file)
-- **After T064**: Simulate failure → email received within 5 minutes
-- **After T080**: Full integration test → backup runs via site.yml, all features working
+- **After Phase 1 (T007)**: Setup documentation complete
+- **After Phase 2 (T014)**: Foundation ready - packages installed, staging created, logging configured
+- **After Phase 3 (T028)**: Test manual backup execution → encrypted archive on NAS (MVP COMPLETE)
+- **After Phase 4 (T038)**: Test IaC artifact restore → Terraform plan shows zero diff
+- **After Phase 5 (T048)**: Wait 48 hours → verify two backups exist, rotation works
+- **After Phase 6 (T056)**: Run verification → detects corrupted archive (test with truncated file)
+- **After Phase 7 (T064)**: Simulate failure → email received within 5 minutes
+- **After Phase 8 (T080)**: Full integration test → backup runs via site.yml, all features working
 
 ---
 
@@ -325,19 +345,23 @@ Phase 1 (Setup) → Phase 2 (Foundational) → All User Stories (P1 stories in p
 
 ## Task Summary
 
-**Total Tasks**: 80
-- Phase 1 (Setup): 7 tasks
-- Phase 2 (Foundational): 7 tasks
-- Phase 3 (US1 - Basic Backup): 14 tasks
-- Phase 4 (US2 - IaC Artifacts): 10 tasks
-- Phase 5 (US3 - Automation): 10 tasks
-- Phase 6 (US4 - Verification): 8 tasks
-- Phase 7 (US5 - Notifications): 8 tasks
-- Phase 8 (Polish): 16 tasks
+**Total Tasks**: 80 (across 8 phases)
+
+**Phase Breakdown**:
+- Phase 1 (Setup): 7 tasks (T001-T007) - role structure, documentation, manual setup docs
+- Phase 2 (Foundational): 7 tasks (T008-T014) - packages, staging, logging
+- Phase 3 (US1 - Basic Backup): 14 tasks (T015-T028) 🎯 MVP
+- Phase 4 (US2 - IaC Artifacts): 10 tasks (T029-T038)
+- Phase 5 (US3 - Automation): 10 tasks (T039-T048)
+- Phase 6 (US4 - Verification): 8 tasks (T049-T056)
+- Phase 7 (US5 - Notifications): 8 tasks (T057-T064)
+- Phase 8 (Polish): 16 tasks (T065-T080)
 
 **Parallel Opportunities**: 28 tasks marked [P] can run in parallel (35% of tasks)
 
 **MVP Scope**: 28 tasks (Phases 1-3) = 1 week of work
+
+**Note**: Phase 1 includes documentation for manual prerequisites (NAS setup, key generation, NFS test) that operators must complete before running automated tasks
 
 **Full Feature**: 80 tasks = 3-4 weeks of focused work
 
