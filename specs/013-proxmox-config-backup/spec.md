@@ -1,9 +1,11 @@
 # Feature Specification: Proxmox Config Backup Automation
 
-**Feature Branch**: `013-proxmox-config-backup`  
+**Feature Branch**: `017-proxmox-config-backup`  
 **Created**: December 22, 2025  
-**Status**: Draft  
+**Status**: Draft (Architecture Corrected: Choice 3, Option A)  
 **Input**: "Automate backups of Proxmox configuration and homelab IaC artifacts with encryption and rotation"
+
+**Architecture Decision**: Systemd timer runs local bash script on PVE host. Ansible deploys/configures the script, packages, and systemd units but is NOT the runtime.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -106,12 +108,12 @@ As a homelab operator, I need email notifications when backups fail so I can inv
 - **FR-002**: System MUST back up Proxmox storage configuration (/etc/pve/storage.cfg)
 - **FR-003**: System MUST back up network configuration (/etc/network/interfaces and /etc/network/interfaces.d/*)
 - **FR-004**: System MUST back up system fstab (/etc/fstab) containing NFS mount definitions
-- **FR-005**: System MUST back up Tailscale state and configuration (/var/lib/tailscale/*, /etc/default/tailscaled)
-- **FR-006**: System MUST back up Terraform state files (terraform.tfstate, terraform.tfstate.backup) from IaC repository location
-- **FR-007**: System MUST back up Ansible inventory files (inventories/generated/hosts.yml, group_vars/*, host_vars/*)
-- **FR-008**: System MUST back up Ansible playbook files (playbooks/*.yml, roles/*/tasks/*.yml)
-- **FR-009**: System MUST back up key documentation files (README.md, docs/operations/*.md, docs/runbooks/*.md)
-- **FR-010**: System MUST back up rclone configuration if present (/root/.config/rclone/rclone.conf or /etc/rclone/rclone.conf)
+- **FR-005**: System MAY back up Tailscale state and configuration (/var/lib/tailscale/*, /etc/default/tailscaled) if proxmox_backup_include_tailscale_state=true (default: false, opt-in for security)
+- **FR-006**: System MUST back up Terraform state files (terraform.tfstate, terraform.tfstate.backup) from IaC repository location if proxmox_backup_repo_path is defined
+- **FR-007**: System MUST back up Ansible inventory files (inventories/generated/hosts.yml, group_vars/*, host_vars/*) from IaC repository location if proxmox_backup_repo_path is defined
+- **FR-008**: System MUST back up Ansible playbook files (playbooks/*.yml, roles/*/tasks/*.yml) from IaC repository location if proxmox_backup_repo_path is defined
+- **FR-009**: System MUST back up key documentation files (README.md, docs/operations/*.md, docs/runbooks/*.md) from IaC repository location if proxmox_backup_repo_path is defined
+- **FR-010**: System MAY back up rclone configuration if present (/root/.config/rclone/rclone.conf or /etc/rclone/rclone.conf) if proxmox_backup_include_rclone_conf=true (default: false, opt-in for security)
 
 #### Exclusions
 
@@ -145,17 +147,25 @@ As a homelab operator, I need email notifications when backups fail so I can inv
 - **FR-029**: System MUST implement rotation policy: keep 12 monthly backups (first backup of each month)
 - **FR-030**: System MUST rotate old backups BEFORE creating new backup (fail-safe if disk full)
 - **FR-031**: System MUST preserve at least 1 successful backup even if rotation policy would delete it
-- **FR-032**: System MUST log rotation actions (which files deleted, reason, timestamp)
+- **FR-032**: System MUST log rotation actions (which files deleted, reason, timestamp) to systemd journal
+
+#### Script Deployment & Configuration
+
+- **FR-032a**: Ansible role MUST deploy bash script template to /usr/local/sbin/proxmox-config-backup (mode 0750, owner root:root)
+- **FR-032b**: Bash script MUST use strict mode (set -euo pipefail) and structured error handling
+- **FR-032c**: Bash script MUST acquire exclusive lock using flock(1) before any operations
+- **FR-032d**: Bash script MUST create timestamped staging directory (/var/backups/proxmox-staging/<timestamp>)
+- **FR-032e**: Bash script MUST implement retry logic with exponential backoff for /etc/pve access (max 3 attempts)
 
 #### Execution & Automation
 
-- **FR-033**: System MUST be implemented as Ansible role (proxmox_backup or similar)
+- **FR-033**: System MUST be implemented as local bash script (/usr/local/sbin/proxmox-config-backup) deployed by Ansible role
 - **FR-034**: System MUST be idempotent - running twice produces same result (new backup created, old rotated)
-- **FR-035**: System MUST support manual execution via Ansible playbook or script wrapper
-- **FR-036**: System MUST support scheduled execution via systemd timer (preferred) or cron
+- **FR-035**: System MUST support manual execution via direct script invocation or systemd service start
+- **FR-036**: System MUST support scheduled execution via systemd timer running the local script (NOT ansible-playbook)
 - **FR-037**: System MUST run as root user on Proxmox host (required for /etc/pve access)
-- **FR-038**: System MUST log all operations to /var/log/proxmox-backup.log with timestamps and severity levels
-- **FR-039**: System MUST implement lock file mechanism to prevent concurrent backup executions
+- **FR-038**: System MUST log all operations to systemd journal (journalctl) with structured logging
+- **FR-039**: System MUST implement flock-based locking to prevent concurrent backup executions (NOT manual lockfile)
 
 #### Verification & Monitoring
 
@@ -265,7 +275,7 @@ As a homelab operator, I need email notifications when backups fail so I can inv
 - **ASM-015**: Homelab is single-node Proxmox (no cluster, /etc/pve is local filesystem)
 - **ASM-016**: LXC count is stable (3-10 containers, not hundreds)
 - **ASM-017**: Terraform state is local (not using remote backend like S3 or Terraform Cloud)
-- **ASM-018**: Ansible repository is cloned locally on laptop (not on Proxmox host itself)
+- **ASM-018**: For US2 (IaC artifacts), IaC repository MUST be cloned/synced to PVE host at proxmox_backup_repo_path OR US2 is skipped
 - **ASM-019**: Network connectivity is reliable between Proxmox and NAS (both on same VLAN/subnet)
 - **ASM-020**: Time synchronization is working (backup timestamps are accurate)
 
@@ -288,9 +298,9 @@ As a homelab operator, I need email notifications when backups fail so I can inv
 
 ### Internal Dependencies
 
-- **DEP-005**: Terraform state file location must be known and accessible (homelab-proxmox/terraform/terraform.tfstate)
-- **DEP-006**: Ansible repository location must be specified (assumption: /opt/ansible-homelab or similar)
-- **DEP-007**: Existing Ansible roles must be compatible with backup playbook execution order
+- **DEP-005**: For US2, proxmox_backup_repo_path variable MUST be defined pointing to IaC repo checkout on PVE host (e.g., /root/homelab-proxmox)
+- **DEP-006**: If proxmox_backup_repo_path undefined, US2 (IaC artifacts) tasks are skipped and backup contains only US1 Proxmox config
+- **DEP-007**: Backup script must NOT depend on Ansible being installed on PVE (Ansible only for deployment)
 - **DEP-008**: Proxmox host must have Ansible dependencies installed (python3, python3-apt, etc.)
 
 ### Prerequisite Tasks

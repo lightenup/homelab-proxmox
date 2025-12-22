@@ -3,59 +3,66 @@
 **Branch**: `013-proxmox-config-backup` | **Date**: 2025-12-22 | **Spec**: [spec.md](./spec.md)  
 **Input**: Feature specification from `/specs/013-proxmox-config-backup/spec.md`
 
+**Architecture Decision**: Choice 3, Option A - Local script runtime. Systemd timer runs bash script on PVE host. Ansible deploys/configures the script, packages, systemd units, and configuration file but is NOT the runtime.
+
 ## Summary
 
 Automate backup of Proxmox host configuration files and Infrastructure-as-Code artifacts (Terraform state, Ansible inventory) to enable disaster recovery. Backups will be encrypted using age, stored on Synology NAS via NFS, rotated automatically (30 daily + 12 monthly), and scheduled via systemd timer. Primary goal: restore complete Proxmox configuration to fresh install in under 2 hours.
 
-**Key Requirement**: All Proxmox host configs (/etc/pve, network, fstab, Tailscale) and IaC state (Terraform, Ansible) must be backed up daily, encrypted at rest, and verifiable without full restore.
+**Key Requirement**: All Proxmox host configs (/etc/pve, network, fstab, optionally Tailscale/rclone) and IaC state (Terraform, Ansible - if repo path defined) must be backed up daily, encrypted at rest, and verifiable without full restore.
 
-**Technical Approach**: Ansible role implementing backup pipeline: collect → manifest → compress (tar.zst) → encrypt (age) → transfer (NFS) → verify → rotate. Systemd timer for scheduling. Manual restore with documented runbook.
+**Technical Approach**: Bash script (/usr/local/sbin/proxmox-config-backup) implements backup pipeline: collect → manifest → compress (tar.zst) → encrypt (age) → transfer (NFS) → verify → rotate. Script uses flock for locking, journald for logging. Ansible role deploys script template, configuration file (/etc/proxmox-backup.conf), systemd units, and required packages. Manual restore with documented runbook.
 
 ## Technical Context
 
-**Language/Version**: Bash 5.x (scripts), Ansible 2.15+ (automation), Python 3.11+ (Ansible execution on Proxmox)  
+**Language/Version**: Bash 5.x (backup script runtime), Ansible 2.15+ (deployment only)  
 **Primary Dependencies**: 
 - age 1.1+ (encryption)
 - zstd 1.5+ (compression)
 - nfs-common (NFS client)
 - systemd 252+ (timer/service)
-- Ansible community.general collection (mount, systemd modules)
+- flock (file locking, included in util-linux)
+- mail/sendmail (email notifications, optional)
 
 **Storage**: 
-- Staging: `/var/backups/proxmox-staging/` on Proxmox host (ephemeral, ~100 MB)
+- Staging: `/var/backups/proxmox-staging/<timestamp>/` on Proxmox host (ephemeral per-run, ~100 MB)
 - Persistent: Synology NAS `/volume1/homelab_backups/proxmox/` via NFS mount (~4 GB for 42 backups)
-- Backup format: tar.zst.age (compressed then encrypted)
+- Backup format: `proxmox-backup-YYYYMMDD-HHMMSS.tar.zst.age` (compressed then encrypted)
+- Configuration: `/etc/proxmox-backup.conf` (NAS mount, age key path, retention policy, repo path)
 
 **Testing**: 
-- Manual validation: Run backup → decrypt → verify file contents
-- Integration test: Ansible playbook `test_backup.yml` (simulate full cycle)
+- Manual validation: Run /usr/local/sbin/proxmox-config-backup → decrypt → verify file contents
+- Verification: /usr/local/sbin/proxmox-config-backup --verify <path> (decrypt + checksum validation)
+- Integration test: Ansible playbook `test_backup.yml` (deploy script, run manually, verify archive)
 - Restore drill: Quarterly test restore to fresh Proxmox install (separate from automation)
 
 **Target Platform**: 
 - Proxmox VE 8.x (Debian 12-based) on host `pve` (192.168.1.112)
 - Synology DSM 7.x NAS (192.168.1.109) with NFS service
 
-**Project Type**: Infrastructure automation (Ansible-driven, no application code)
+**Project Type**: Infrastructure automation (Ansible for deployment, bash script for runtime)
 
 **Performance Goals**: 
-- Backup completion: <10 minutes (typical homelab: 3-5 LXCs, 10 MB Terraform state, 50 MB Ansible repo)
+- Backup completion: <10 minutes (typical homelab: 3-5 LXCs, 10 MB Terraform state if repo defined, 50 MB Ansible repo if repo defined)
 - Archive size: <100 MB compressed+encrypted
-- Verification: <60 seconds (decrypt + list + checksum validation)
+- Verification: <60 seconds (decrypt + list + SHA256 checksum validation)
 - Rotation scan: <30 seconds (42 files @ ~100 MB each)
 
 **Constraints**: 
-- Must run as root (required for /etc/pve access)
-- No secrets in plaintext in staging or logs
-- Encryption key stored in Bitwarden (manual injection, not in git)
-- Lock file prevents concurrent execution
+- Script must run as root (required for /etc/pve access)
+- No secrets in plaintext in staging, logs, or script variables
+- Encryption key stored in Bitwarden (manual injection into /etc/proxmox-backup.conf, not in git)
+- flock prevents concurrent execution
+- Tailscale state and rclone config backup opt-in only (default: false for security)
+- IaC artifacts require proxmox_backup_repo_path defined, otherwise skipped
 - Pre-backup rotation (fail-safe if NAS disk full)
 - Staging cleanup after successful backup (no sensitive data persists)
 
 **Scale/Scope**: 
 - Single Proxmox host (not clustered)
 - 3-10 LXC containers
-- Terraform state: <20 MB
-- Ansible repository: <100 MB (including roles)
+- Terraform state: <20 MB (if repo path defined)
+- Ansible repository: <100 MB (including roles, if repo path defined)
 - Documentation: ~10 markdown files
 - Backup retention: 30 daily + 12 monthly = 42 archives (~4 GB total)
 
@@ -73,24 +80,26 @@ Automate backup of Proxmox host configuration files and Infrastructure-as-Code a
 
 ✅ **II. Secrets Policy**
 - Age encryption key stored in Bitwarden (not in git)
-- Key injected via environment variable or git-ignored vars file
-- Backup verification checks for plaintext secrets (fails if found)
-- SMTP credentials reused from existing Kuma setup (already in Bitwarden)
+- Key path configured in /etc/proxmox-backup.conf (deployed by Ansible from group_vars)
+- Backup script scans for plaintext secrets in IaC artifacts (fails if found)
+- SMTP credentials for notifications stored in Bitwarden (configured in /etc/proxmox-backup.conf)
+- Tailscale state and rclone config backup opt-in only (default: false)
 - No Proxmox tokens, passwords, or private keys in committed code
 
 ✅ **III. Separation of Concerns**
 - **Terraform**: Not modified (manages LXC existence/sizing only)
-- **Ansible**: Owns backup configuration and execution (runs on Proxmox host)
+- **Ansible**: Deploys backup script, config, systemd units (does NOT execute backup at runtime)
+- **Bash Script**: Runtime backup execution (independent from Ansible)
 - No mixing of responsibilities
 
 ✅ **Networking**
 - Uses existing static IPs: Proxmox host (192.168.1.112), NAS (192.168.1.109)
-- No IP scattering: NAS mount point defined in `ansible/group_vars/proxmox_hosts.yml`
+- No IP scattering: NAS mount point defined in /etc/proxmox-backup.conf (deployed from group_vars)
 - NFS mount uses local network (no Tailscale required for backup transfer)
 
 ✅ **Access Control**
 - Ansible connects to Proxmox via SSH using existing keys (already configured)
-- Runs as root for /etc/pve access (homelab tradeoff, documented)
+- Backup script runs as root via systemd (required for /etc/pve access, homelab tradeoff)
 - No public exposure (backups stay on local NAS)
 
 ✅ **State Management**
@@ -108,15 +117,15 @@ Automate backup of Proxmox host configuration files and Infrastructure-as-Code a
 - CI/CD not modified (feature is Proxmox host automation, not pipeline change)
 
 ✅ **Repo Layout**
-- Documentation: `docs/operations/backups-proxmox-config.md`
+- Documentation: `docs/operations/backups-proxmox-config.md` and `docs/operations/backups-proxmox-config-restore.md`
 - Ansible role: `ansible/roles/proxmox_backup/`
-- Ansible playbook: `ansible/playbooks/backup_proxmox.yml`
-- Helper scripts: `scripts/backup/`
+- Ansible playbook: `ansible/playbooks/backup_proxmox.yml` (wrapper for role)
+- Backup script: Deployed to `/usr/local/sbin/proxmox-config-backup` on PVE host
 - Consistent with existing repository structure
 
 ### Verdict: ✅ NO VIOLATIONS
 
-All constitution principles satisfied. No complexity justification required.
+All constitution principles satisfied. Architecture follows Choice 3, Option A (local script runtime) for simplicity and independence from Ansible at runtime.
 
 ## Project Structure
 
@@ -124,7 +133,7 @@ All constitution principles satisfied. No complexity justification required.
 
 ```text
 specs/013-proxmox-config-backup/
-├── spec.md                      # Feature specification
+├── spec.md                      # Feature specification (Architecture: Choice 3, Option A)
 ├── plan.md                      # This file (implementation plan)
 ├── tasks.md                     # Concrete implementation tasks (80 tasks)
 └── checklists/
@@ -136,54 +145,37 @@ specs/013-proxmox-config-backup/
 ```text
 ansible/
 ├── roles/
-│   └── proxmox_backup/          # NEW: Backup automation role
+│   └── proxmox_backup/          # NEW: Backup script deployment role
 │       ├── defaults/
-│       │   └── main.yml         # Default variables (backup paths, retention policy)
+│       │   └── main.yml         # Default variables (NAS mount, retention, repo path, opt-ins)
 │       ├── handlers/
-│       │   └── main.yml         # Handlers (restart services if needed)
+│       │   └── main.yml         # Handlers (restart systemd timer if config changes)
 │       ├── tasks/
-│       │   ├── main.yml         # Main orchestration (calls subtasks in order)
-│       │   ├── prerequisites.yml # Install age, zstd, verify nfs-common
-│       │   ├── setup.yml        # Create staging directory, configure logging
-│       │   ├── lock.yml         # Create/check lock file
-│       │   ├── logging.yml      # Configure /var/log/proxmox-backup.log
-│       │   ├── collect_proxmox.yml # Copy /etc/pve configs to staging
-│       │   ├── collect_network.yml # Copy network configs to staging
-│       │   ├── collect_system.yml  # Copy fstab to staging
-│       │   ├── collect_tailscale.yml # Copy Tailscale configs to staging
-│       │   ├── collect_optional.yml # Copy rclone config if present
-│       │   ├── collect_terraform.yml # Copy Terraform state from repo
-│       │   ├── collect_ansible.yml  # Copy Ansible inventory/playbooks/roles
-│       │   ├── collect_docs.yml    # Copy documentation files
-│       │   ├── verify_iac.yml      # Verify IaC artifacts (state file size, YAML valid)
-│       │   ├── manifest.yml        # Generate manifest.txt (file paths, sizes, SHA256)
-│       │   ├── compress.yml        # Create tar.zst from staging
-│       │   ├── encrypt.yml         # Encrypt with age (tar.zst → tar.zst.age)
-│       │   ├── mount_nas.yml       # Mount NFS share from NAS
-│       │   ├── transfer.yml        # Copy encrypted archive to NFS mount
-│       │   ├── verify.yml          # Post-backup verification (decrypt + checksum)
-│       │   ├── rotate.yml          # Delete old backups (30 daily + 12 monthly)
-│       │   ├── cleanup.yml         # Remove staging directory contents
-│       │   ├── notify.yml          # Send email notification (failure/success)
-│       │   └── systemd.yml         # Deploy systemd timer/service units
+│       │   ├── main.yml         # Main orchestration (prerequisites, deploy script, deploy config, install systemd)
+│       │   ├── prerequisites.yml # Install age, zstd, verify nfs-common, verify util-linux (flock)
+│       │   ├── deploy_script.yml # Deploy script template to /usr/local/sbin/proxmox-config-backup (mode 0750)
+│       │   ├── deploy_config.yml # Deploy /etc/proxmox-backup.conf from template (NAS, keys, retention, repo path)
+│       │   └── systemd.yml      # Deploy systemd timer/service units, enable timer
 │       └── templates/
-│           ├── proxmox-backup.service.j2  # Systemd service unit
-│           ├── proxmox-backup.timer.j2    # Systemd timer unit
-│           ├── backup_notification.j2     # Email notification template
-│           └── backup_logger.sh.j2        # Systemd journal logging helper
+│           ├── proxmox-config-backup.sh.j2  # Bash script template (main runtime logic)
+│           ├── proxmox-backup.conf.j2       # Configuration file template
+│           ├── proxmox-backup.service.j2    # Systemd service unit (ExecStart=/usr/local/sbin/proxmox-config-backup)
+│           └── proxmox-backup.timer.j2      # Systemd timer unit (OnCalendar=daily 02:00)
 ├── playbooks/
-│   ├── backup_proxmox.yml       # NEW: Backup playbook wrapper (calls proxmox_backup role)
-│   ├── test_backup.yml          # NEW: Integration test playbook
+│   ├── backup_proxmox.yml       # NEW: Backup playbook wrapper (deploys proxmox_backup role to PVE host)
+│   ├── test_backup.yml          # NEW: Integration test playbook (deploy script, run manually, verify)
 │   └── site.yml                 # MODIFIED: Include proxmox_backup role for proxmox_hosts
 └── group_vars/
-    └── proxmox_hosts.yml        # MODIFIED: Add backup variables (NAS mount, schedule, paths)
-
-scripts/
-└── backup/                       # NEW: Helper scripts
-    ├── run_proxmox_backup.sh    # Manual backup execution wrapper
-    └── verify_proxmox_backup.sh # Standalone verification script (decrypt + list + checksum)
+    └── proxmox_hosts.yml        # MODIFIED: Add backup variables (NAS mount, age key path, schedule, repo path, opt-ins)
 
 docs/
+├── operations/
+│   ├── backups-proxmox-config.md         # NEW: Main backup documentation (quickstart, manual execution, monitoring)
+│   └── backups-proxmox-config-restore.md # NEW: Restore runbook (step-by-step per file type)
+
+# NOTE: No scripts/ directory needed - backup script deployed to /usr/local/sbin/proxmox-config-backup on PVE host
+# Script includes all runtime logic: collection, compression, encryption, transfer, rotation, verification, notification
+```
 └── operations/
     ├── backups-proxmox-config.md         # NEW: Backup setup, configuration, manual execution
     └── backups-proxmox-config-restore.md # NEW: Restore runbook (step-by-step)
@@ -215,21 +207,23 @@ docs/
 
 **Structure Decision**: 
 
-This is an **infrastructure automation project** (Ansible-driven), not a traditional application. The structure follows Ansible best practices:
+This is an **infrastructure automation project** with **local script runtime** (Architecture: Choice 3, Option A). The structure follows these principles:
 
-1. **Ansible Role Pattern**: Core logic in `ansible/roles/proxmox_backup/tasks/` with subtasks for each stage of backup pipeline (collect → compress → encrypt → transfer → verify → rotate)
+1. **Script-Based Runtime**: Core backup logic in bash script `/usr/local/sbin/proxmox-config-backup` deployed to PVE host. Script is independent from Ansible at runtime - uses strict mode (`set -euo pipefail`), flock for locking, journald for logging.
 
-2. **Playbook Wrapper**: `ansible/playbooks/backup_proxmox.yml` provides simple entry point for manual execution and systemd service
+2. **Ansible for Deployment Only**: `ansible/roles/proxmox_backup/` deploys script template, configuration file (`/etc/proxmox-backup.conf`), systemd units, and required packages. Ansible does NOT execute backup logic at runtime.
 
-3. **Helper Scripts**: `scripts/backup/` contains standalone scripts for operators (manual backup, verification)
+3. **Configuration File Pattern**: `/etc/proxmox-backup.conf` contains runtime configuration (NAS mount point, age key path, retention policy, repo path, opt-in flags). Script sources this file at startup.
 
-4. **Documentation-First**: Restore runbook and operational procedures documented before implementation (Phase 8 task)
+4. **Playbook Wrapper**: `ansible/playbooks/backup_proxmox.yml` provides simple entry point for deploying/updating backup infrastructure to Proxmox host.
 
-5. **Staging Pattern**: Backup uses ephemeral staging directory on Proxmox host (/var/backups/proxmox-staging/), cleaned after successful transfer. This prevents secrets persisting on disk and provides clear rollback point if backup fails.
+5. **Documentation-First**: Restore runbook and operational procedures (manual script execution: `/usr/local/sbin/proxmox-config-backup`, verification: `proxmox-config-backup --verify <path>`) documented before implementation.
 
-6. **Systemd Integration**: Timer/service units deployed via Ansible templates, enabling native systemd management (`systemctl status proxmox-backup.timer`)
+6. **Staging Pattern**: Script creates timestamped staging directory `/var/backups/proxmox-staging/<timestamp>/`, collects files, compresses+encrypts, transfers to NAS, then cleans up staging on success.
 
-**No application source structure needed** - this is pure infrastructure automation with configuration files and scripts.
+7. **Systemd Integration**: Timer runs script directly (`ExecStart=/usr/local/sbin/proxmox-config-backup`), not ansible-playbook. Native systemd management (`systemctl status proxmox-backup.timer`, `journalctl -u proxmox-backup.service`).
+
+**No application source structure needed** - this is infrastructure automation with bash script runtime and Ansible-based deployment.
 
 ## Complexity Tracking
 
@@ -279,76 +273,89 @@ All constitution principles satisfied:
      proxmox_backup_enabled: true
      proxmox_backup_nas_host: "192.168.1.109"
      proxmox_backup_nas_path: "/volume1/homelab_backups/proxmox"
+     proxmox_backup_age_key_path: "/root/.age/proxmox-backup.key"  # Where private key will be stored
+     proxmox_backup_repo_path: "/root/homelab-proxmox"  # Path to IaC repo on PVE (if cloned/synced)
      proxmox_backup_schedule: "daily"
      proxmox_backup_time: "02:00"
      proxmox_backup_retention_daily: 30
      proxmox_backup_retention_monthly: 12
+     proxmox_backup_include_tailscale_state: false  # Opt-in (default: false)
+     proxmox_backup_include_rclone_conf: false      # Opt-in (default: false)
+     proxmox_backup_notify_on_success: false        # Opt-in (default: false)
+     proxmox_backup_smtp_host: ""                   # For email notifications
+     proxmox_backup_email_to: ""                    # Notification recipient
      ```
    - Create git-ignored vars file: `ansible/group_vars/proxmox_hosts_secrets.yml`:
      ```yaml
      proxmox_backup_age_public_key: "<public-key-from-bitwarden>"
+     proxmox_backup_age_private_key: "<private-key-from-bitwarden>"  # Deployed to PVE, never committed
      ```
 
 **Checkpoint**: Manual prerequisites complete, ready for Phase 1 implementation
 
 ---
 
-### Phase 1: Foundation (Tasks T001-T014)
+### Phase 1: Foundation (Tasks T001-T013)
 
-**Purpose**: Ansible role structure, package installation, staging setup, logging
+**Purpose**: Ansible role structure, package installation, script deployment, configuration deployment
 
 **Deliverables**:
 - Ansible role structure created (`ansible/roles/proxmox_backup/`)
-- age and zstd installed on Proxmox host
-- Staging directory created with correct permissions
-- Lock file mechanism implemented
-- Logging configured (/var/log/proxmox-backup.log with rotation)
+- age, zstd, and nfs-common installed on Proxmox host
+- Backup script deployed to `/usr/local/sbin/proxmox-config-backup` (mode 0750, owner root:root)
+- Configuration file deployed to `/etc/proxmox-backup.conf` (mode 0600, owner root:root)
+- Staging directory structure ready (`/var/backups/proxmox-staging/`)
+- Systemd timer and service units deployed
 
 **Success Criteria**:
-- Role structure exists with all subdirectories (tasks, templates, defaults, handlers)
+- Role structure exists with all subdirectories (tasks, templates, defaults)
 - `age --version` and `zstd --version` succeed on Proxmox host
-- `/var/backups/proxmox-staging/` exists with 700 permissions
-- Lock file creation/check works (second invocation fails with "already running")
-- Log file exists and accepts writes
+- `/usr/local/sbin/proxmox-config-backup` exists and is executable
+- `/etc/proxmox-backup.conf` exists with correct permissions (0600)
+- Script uses `set -euo pipefail`, flock for locking, journald for logging
+- Script includes all required functions: collect_*, compress_*, encrypt_*, transfer_*, rotate_*, cleanup_*
 
 **Validation**:
 ```bash
 # On Proxmox host
 age --version  # Should show 1.1.0+
 zstd --version # Should show 1.5.0+
-ls -ld /var/backups/proxmox-staging/  # Should show drwx------ root root
-ls -l /var/log/proxmox-backup.log     # Should show -rw-r--r-- root root
+ls -l /usr/local/sbin/proxmox-config-backup  # Should show -rwxr-x--- root root
+ls -l /etc/proxmox-backup.conf              # Should show -rw------- root root
+head -5 /usr/local/sbin/proxmox-config-backup | grep "set -euo pipefail"  # Should match
 ```
 
-**Timeline**: 1 day
+**Timeline**: 1-2 days (role structure + script template development)
 
 ---
 
-### Phase 2: User Story 1 - Basic Backup (Tasks T015-T028)
+### Phase 2: User Story 1 - Basic Backup (Tasks T014-T027)
 
-**Purpose**: Core backup functionality - collect Proxmox configs, compress, encrypt, transfer to NAS
+**Purpose**: Core backup functionality - implement script functions for Proxmox configs collection, compression, encryption, transfer
 
 **Deliverables**:
-- Proxmox config collection (LXC, storage, network, fstab, Tailscale, rclone)
-- Manifest generation (file paths, sizes, SHA256 hashes)
-- tar.zst compression
-- age encryption
-- NFS mount and transfer to NAS
-- File permissions on NAS (640 root:root)
-- Staging cleanup after successful transfer
+- Script functions implemented: collect_proxmox_configs(), collect_network(), collect_fstab()
+- Optional collection functions with guards: collect_tailscale_state(), collect_rclone_conf()
+- Manifest generation: generate_manifest() with SHA256 hashes
+- Compression: compress_staging() creates tar.zst
+- Encryption: encrypt_archive() uses age with public key
+- Transfer: mount_nas(), transfer_to_nas(), set_permissions()
+- Cleanup: cleanup_staging() removes timestamped staging dir
+- Orchestration: main() with flock, trap handlers, journald logging, exit codes
 
 **Success Criteria**:
-- All critical Proxmox config files in staging directory before compression
+- All critical Proxmox config files collected to timestamped staging directory
 - tar.zst archive created with all staging contents
-- age encryption produces .tar.zst.age file
+- age encryption produces .tar.zst.age file with timestamped name
 - Encrypted archive transferred to NAS at correct path
-- Staging directory empty after successful transfer
+- Staging directory removed after successful transfer
 - Archive decryptable with private key
+- journalctl shows structured log entries for backup run
 
 **Validation**:
 ```bash
-# Run backup manually
-ansible-playbook ansible/playbooks/backup_proxmox.yml
+# Run backup manually on Proxmox host
+/usr/local/sbin/proxmox-config-backup
 
 # Check NAS
 ssh root@192.168.1.109
