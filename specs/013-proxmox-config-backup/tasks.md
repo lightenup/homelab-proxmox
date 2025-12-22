@@ -1,6 +1,6 @@
 # Tasks: Proxmox Config Backup Automation
 
-**Feature**: 017-proxmox-config-backup  
+**Feature**: 013-proxmox-config-backup  
 **Input**: [spec.md](./spec.md)  
 **Created**: December 22, 2025  
 **Architecture**: Choice 3, Option A - Local script runtime (systemd → bash script)

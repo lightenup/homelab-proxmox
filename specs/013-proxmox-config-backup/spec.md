@@ -1,6 +1,6 @@
 # Feature Specification: Proxmox Config Backup Automation
 
-**Feature Branch**: `017-proxmox-config-backup`  
+**Feature Branch**: `013-proxmox-config-backup`  
 **Created**: December 22, 2025  
 **Status**: Draft (Architecture Corrected: Choice 3, Option A)  
 **Input**: "Automate backups of Proxmox configuration and homelab IaC artifacts with encryption and rotation"
