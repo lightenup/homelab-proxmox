@@ -10,6 +10,12 @@
     - backup
     - prerequisites
 
+- name: Sync IaC repository to PVE (for User Story 2)
+  ansible.builtin.import_tasks: sync_repo.yml
+  tags:
+    - backup
+    - repo
+
 - name: Deploy backup script
   ansible.builtin.import_tasks: deploy_script.yml
   tags:

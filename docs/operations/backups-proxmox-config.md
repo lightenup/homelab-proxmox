@@ -596,6 +596,68 @@ done
 
 ---
 
+## CI/CD Integration
+
+### Current Workflow (Laptop-Based)
+
+The backup system is deployed using Ansible from your local development machine:
+
+**Deployment Flow**:
+```
+Laptop (macOS) 
+  → Ansible over SSH 
+    → PVE Host (192.168.1.112)
+      → Deploy backup script + systemd timer
+      → Clone/update homelab-proxmox repo to /root/homelab-proxmox
+      → systemd timer runs backup daily at 02:00
+```
+
+**Benefits**:
+- Simple setup (no additional infrastructure)
+- Manual control over deployments
+- Fast iteration during development
+
+**Limitations**:
+- Requires laptop available for deployments
+- Manual execution required
+
+### Future Workflow (GitHub Actions on Raspberry Pi)
+
+The system is designed to transition seamlessly to GitHub Actions:
+
+**Planned Flow**:
+```
+GitHub Push 
+  → GitHub Actions (self-hosted runner on Raspberry Pi) 
+    → Ansible over SSH 
+      → PVE Host (192.168.1.112)
+        → Deploy backup script + systemd timer
+        → Clone/update homelab-proxmox repo to /root/homelab-proxmox
+        → systemd timer runs backup daily at 02:00
+```
+
+**Benefits**:
+- Automated deployments on git push
+- CI/CD best practices (testing, validation)
+- No laptop dependency
+- Audit trail via GitHub Actions logs
+
+**Implementation Notes**:
+- Repository sync task (`sync_repo.yml`) supports both workflows
+- IaC artifacts backed up from `/root/homelab-proxmox` (works for both)
+- Age key stored in GitHub Secrets for automated deployments
+- Ansible inventory managed in repo
+
+**Transition Steps** (Future):
+1. Set up GitHub Actions self-hosted runner on Raspberry Pi
+2. Add workflow file (`.github/workflows/deploy-proxmox-backup.yml`)
+3. Store age private key in GitHub Secrets
+4. Configure Ansible vault password in GitHub Secrets
+5. Test deployment via GitHub Actions
+6. Enable automatic deployments on push to main
+
+---
+
 ## Support
 
 For issues or questions:
