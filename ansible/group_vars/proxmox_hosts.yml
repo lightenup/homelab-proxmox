@@ -26,8 +26,8 @@ proxmox_backup_nas_path: "/volume1/homelab_backups/proxmox"
 proxmox_backup_age_public_key: "{{ lookup('env', 'PROXMOX_BACKUP_AGE_PUBLIC_KEY') }}"
 # proxmox_backup_age_private_key: defined in vault or deployment script
 
-# Optional: Enable IaC artifact backup (requires repo on PVE)
-# proxmox_backup_repo_path: "/root/homelab-proxmox"
+# Enable IaC artifact backup
+proxmox_backup_repo_path: "/root/homelab-proxmox"
 
 # Optional: Opt-in for sensitive data (default: false)
 # proxmox_backup_include_tailscale_state: false
