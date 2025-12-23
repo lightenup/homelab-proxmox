@@ -64,7 +64,6 @@ verify_backup() {
     local backup_file="$1"
     local age_key_file="${AGE_KEY_FILE:-/root/.age/proxmox-backup.key}"
     local temp_dir=""
-    local exit_code=$EXIT_SUCCESS
 
     # Validate inputs
     if [[ ! -f "$backup_file" ]]; then
@@ -82,7 +81,7 @@ verify_backup() {
 
     # Create temporary directory for verification
     temp_dir=$(mktemp -d -t proxmox-verify-XXXXXX)
-    trap 'rm -rf "$temp_dir"' EXIT
+    trap "rm -rf '$temp_dir'" EXIT RETURN
 
     # Step 1: Test decryption
     log_info "Step 1/4: Testing decryption..."
