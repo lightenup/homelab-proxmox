@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: "Decommission PVE host email notifications and migrate to Kuma push monitoring for Proxmox backup alerting"
 
+## Clarifications
+
+### Session 2025-12-23
+
+- Q: What is the exact HTTP API format for Kuma push monitor integration? → A: `curl -X POST "${KUMA_PUSH_URL}?status=up&msg=Backup_completed"`
+- Q: How should the backup script determine failure vs success for Kuma status? → A: Exit code based (if $? != 0, then failure)
+- Q: Should discovery phase override be opt-in or opt-out when conflicts detected? → A: Opt-in override flag required (safe default, abort unless forced)
+- Q: Should playbook runs be idempotent (safe to run multiple times)? → A: Fully idempotent (check state, skip if already applied)
+- Q: Variable naming convention for email enable/disable/uninstall flags? → A: Single control variable `proxmox_backup_email_mode` with values: `enabled`, `kuma_only`, `disabled`, `removed`
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Migrate to Centralized Monitoring (Priority: P1)
@@ -74,29 +84,30 @@ As a homelab operator, after running email-disabled for weeks without issues, I 
 
 **Core Push Monitoring (US1)**:
 
-- **FR-001**: System MUST send HTTP POST to Kuma push monitor URL on backup success (status=up, message="Backup completed successfully")
-- **FR-002**: System MUST send HTTP POST to Kuma push monitor URL on backup failure (status=down, message includes failure reason)
+- **FR-001**: System MUST send HTTP POST to Kuma push monitor URL on backup success using format: `curl -X POST "${KUMA_PUSH_URL}?status=up&msg=Backup_completed_successfully"` with 5s timeout
+- **FR-002**: System MUST send HTTP POST to Kuma push monitor URL on backup failure using format: `curl -X POST "${KUMA_PUSH_URL}?status=down&msg=${FAILURE_REASON}"` with URL-encoded message
+- **FR-002a**: System MUST detect backup failure via exit code (if final exit code != 0, backup failed) - standard Unix success/failure convention
 - **FR-003**: System MUST continue backup execution if Kuma push fails (network timeout, bad URL, etc.) - push failures MUST NOT fail the backup
 - **FR-004**: System MUST log Kuma push attempts to journald (success/failure with URL and response code)
 - **FR-005**: System MUST fall back silently if `KUMA_PUSH_URL` is not configured (no crash, no error)
 - **FR-006**: Kuma push timeout MUST be <= 5 seconds (don't block backup for network issues)
-- **FR-007**: System MUST gate host email behavior behind `ENABLE_HOST_EMAIL` flag (default: false)
+- **FR-007**: System MUST control email/Kuma behavior via `proxmox_backup_email_mode` state variable (enabled|kuma_only|disabled|removed) - single source of truth for notification state
 
 **Safe Disable (US2)**:
 
 - **FR-008**: Ansible MUST perform discovery phase before disable/uninstall (check packages, services, config files, other usage)
-- **FR-009**: Ansible MUST abort disable if non-backup mail usage detected (journald logs, systemd units, other scripts) unless override flag set
-- **FR-010**: Ansible MUST stop and disable Postfix service when `proxmox_backup_remove_host_email: true`
-- **FR-011**: Ansible MUST remove SMTP variables from `/etc/proxmox-backup.conf` when email disabled
-- **FR-012**: Ansible MUST preserve ability to re-enable email via `proxmox_backup_enable_host_email: true` (rollback path)
+- **FR-009**: Ansible MUST abort disable if non-backup mail usage detected (journald logs, systemd units, other scripts) unless explicit opt-in override flag `proxmox_backup_force_remove_email: true` is set (safe default prevents accidental breakage)
+- **FR-010**: Ansible MUST stop and disable Postfix service when `proxmox_backup_email_mode` is set to `disabled` or `removed`
+- **FR-011**: Ansible MUST remove SMTP variables from `/etc/proxmox-backup.conf` when mode is `disabled` or `removed`
+- **FR-012**: Ansible MUST support rollback to `enabled` mode (re-enable Postfix, restore SMTP config from vault)
 - **FR-013**: Ansible MUST leave backup script email function intact (commented/gated) for potential future use
 - **FR-014**: Ansible MUST add comment to config noting "Kuma owns notifications now" when email disabled
 
 **Package Removal (US3)**:
 
-- **FR-015**: Package uninstall MUST require explicit confirmation flag (`proxmox_backup_uninstall_confirmed: true`)
-- **FR-016**: Ansible MUST fail with clear error if uninstall requested without confirmation
-- **FR-017**: Ansible MUST use `apt-get remove --purge` to remove mailutils, postfix when `proxmox_backup_remove_host_email_packages: true`
+- **FR-015**: Package uninstall (mode `removed`) MUST require explicit confirmation flag (`proxmox_backup_uninstall_confirmed: true`) - prevents accidental permanent removal
+- **FR-016**: Ansible MUST fail with clear error if mode `removed` requested without confirmation flag
+- **FR-017**: Ansible MUST use `apt-get remove --purge` to remove mailutils, postfix when `proxmox_backup_email_mode: removed`
 - **FR-018**: Ansible MUST run `apt-get autoremove --purge` after package removal
 - **FR-019**: Ansible MUST remove `/etc/postfix/` directory after Postfix uninstall (if owned by package)
 - **FR-020**: Ansible MUST remove `/etc/msmtprc` if exists and mailutils removed
@@ -110,6 +121,7 @@ As a homelab operator, after running email-disabled for weeks without issues, I 
 - **FR-025**: Discovery MUST scan `/etc/systemd`, `/usr/local/sbin`, `/opt` for mail command usage (grep for sendmail|mail|msmtp)
 - **FR-026**: Discovery MUST report findings to Ansible output (packages found, services running, potential conflicts)
 - **FR-027**: Ansible MUST log all disable/uninstall actions to journald on target host
+- **FR-027a**: All Ansible tasks MUST be fully idempotent - check current state before acting, safe to re-run multiple times without errors or unexpected side effects (standard Ansible best practice)
 
 **Verification (US2/US3)**:
 
@@ -121,6 +133,11 @@ As a homelab operator, after running email-disabled for weeks without issues, I 
 
 ### Key Entities
 
+- **Email Mode State Machine**: `proxmox_backup_email_mode` variable controls notification behavior with four states:
+  - `enabled`: Email notifications active via Postfix SMTP (legacy default)
+  - `kuma_only`: Kuma push enabled, email function present but not invoked (transition state)
+  - `disabled`: Postfix stopped/disabled, SMTP config removed, Kuma push active (reversible)
+  - `removed`: Mail packages uninstalled, only Kuma push available (requires confirmation, permanent)
 - **Kuma Push Monitor**: Uptime Kuma monitor configured in "Push" mode, generates unique URL for receiving heartbeat/status updates via HTTP POST
 - **Backup Configuration**: `/etc/proxmox-backup.conf` - contains KUMA_PUSH_URL, ENABLE_HOST_EMAIL flag, and (if enabled) SMTP variables
 - **Email Notification Function**: `send_email_notification()` in backup script - gated behind ENABLE_HOST_EMAIL, preserved for rollback
