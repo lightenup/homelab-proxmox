@@ -15,13 +15,13 @@
 
 **Purpose**: Project initialization, NAS setup, and encryption key preparation
 
-- [ ] T001 Create Ansible role structure: ansible/roles/proxmox_backup/{tasks,handlers,defaults,templates}/main.yml
-- [ ] T002 Document NAS share creation in docs/operations/backups-proxmox-config.md (manual prerequisite: /volume1/homelab_backups/proxmox/)
-- [ ] T003 Document NFS export configuration in docs/operations/backups-proxmox-config.md (manual prerequisite: export to 192.168.1.112)
-- [ ] T004 Document age key generation procedure in docs/operations/backups-proxmox-config.md (manual prerequisite: age-keygen + Bitwarden storage)
-- [ ] T005 Create backup playbook wrapper: ansible/playbooks/backup_proxmox.yml
-- [ ] T006 Add backup variables to ansible/group_vars/proxmox_hosts.yml (backup schedule, staging paths, NAS mount point)
-- [ ] T007 Create script for manual backup execution: scripts/backup/run_proxmox_backup.sh
+- [X] T001 Create Ansible role structure: ansible/roles/proxmox_backup/{tasks,handlers,defaults,templates}/main.yml
+- [X] T002 Document NAS share creation in docs/operations/backups-proxmox-config.md (manual prerequisite: /volume1/homelab_backups/proxmox/)
+- [X] T003 Document NFS export configuration in docs/operations/backups-proxmox-config.md (manual prerequisite: export to 192.168.1.112)
+- [X] T004 Document age key generation procedure in docs/operations/backups-proxmox-config.md (manual prerequisite: age-keygen + Bitwarden storage)
+- [X] T005 Create backup playbook wrapper: ansible/playbooks/backup_proxmox.yml
+- [X] T006 Add backup variables to ansible/group_vars/proxmox_hosts.yml (backup schedule, staging paths, NAS mount point)
+- [X] T007 Create script for manual backup execution: scripts/backup/run_proxmox_backup.sh
 
 ---
 
@@ -31,12 +31,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T008 Install age encryption tool on Proxmox host via Ansible task in ansible/roles/proxmox_backup/tasks/prerequisites.yml
-- [ ] T009 Install zstd compression tool on Proxmox host via Ansible task in ansible/roles/proxmox_backup/tasks/prerequisites.yml
-- [ ] T010 Verify NFS mount prerequisites in ansible/roles/proxmox_backup/tasks/prerequisites.yml (nfs-common package)
-- [ ] T011 Create staging directory /var/backups/proxmox-staging/ with correct permissions in ansible/roles/proxmox_backup/tasks/setup.yml
-- [ ] T012 Deploy backup script template to /usr/local/sbin/proxmox-config-backup (mode 0750) in ansible/roles/proxmox_backup/tasks/deploy_script.yml (script uses flock for locking, strict mode, retry logic for /etc/pve)
-- [ ] T013 Deploy backup configuration file to /etc/proxmox-backup.conf in ansible/roles/proxmox_backup/tasks/deploy_script.yml (contains vars: NAS mount, age key path, retention policy, repo path)
+- [X] T008 Install age encryption tool on Proxmox host via Ansible task in ansible/roles/proxmox_backup/tasks/prerequisites.yml
+- [X] T009 Install zstd compression tool on Proxmox host via Ansible task in ansible/roles/proxmox_backup/tasks/prerequisites.yml
+- [X] T010 Verify NFS mount prerequisites in ansible/roles/proxmox_backup/tasks/prerequisites.yml (nfs-common package)
+- [X] T011 Create staging directory /var/backups/proxmox-staging/ with correct permissions in ansible/roles/proxmox_backup/tasks/setup.yml
+- [X] T012 Deploy backup script template to /usr/local/sbin/proxmox-config-backup (mode 0750) in ansible/roles/proxmox_backup/tasks/deploy_script.yml (script uses flock for locking, strict mode, retry logic for /etc/pve)
+- [X] T013 Deploy backup configuration file to /etc/proxmox-backup.conf in ansible/roles/proxmox_backup/tasks/deploy_script.yml (contains vars: NAS mount, age key path, retention policy, repo path)
 
 **Checkpoint**: Foundation ready - script deployed, configuration ready for US1 implementation
 
@@ -52,24 +52,35 @@
 
 **Acceptance**: Script collects all critical Proxmox config files, compresses, encrypts, and transfers to NAS
 
+**Status**: ✅ **COMPLETE** - All functions implemented and tested successfully (Dec 23, 2025)
+
 ### Implementation for User Story 1
 
-- [ ] T014 [P] [US1] Implement collection functions in script: collect_proxmox_configs() copies /etc/pve/lxc/*.conf to staging with retry/backoff
-- [ ] T015 [P] [US1] Add script function: collect /etc/pve/storage.cfg
-- [ ] T016 [P] [US1] Add script function: collect /etc/network/interfaces and /etc/network/interfaces.d/*
-- [ ] T017 [P] [US1] Add script function: collect /etc/fstab
-- [ ] T018 [P] [US1] Add script function: collect Tailscale config (only if INCLUDE_TAILSCALE=true in /etc/proxmox-backup.conf)
-- [ ] T019 [P] [US1] Add script function: collect rclone config (only if INCLUDE_RCLONE=true in /etc/proxmox-backup.conf)
-- [ ] T020 [US1] Add script function: generate_manifest() creates manifest.txt with sha256sum
-- [ ] T021 [US1] Add script function: compress_staging() creates tar.zst with timestamp
-- [ ] T022 [US1] Add script function: encrypt_archive() uses age with public key
-- [ ] T023 [US1] Add script function: mount_nas() mounts NFS or verifies mounted
-- [ ] T024 [US1] Add script function: transfer_to_nas() copies encrypted archive
-- [ ] T025 [US1] Add script function: set_permissions() chmod 640 root:root on NAS
-- [ ] T026 [US1] Add script function: cleanup_staging() removes timestamped staging dir
-- [ ] T027 [US1] Complete script: main() with flock, trap handlers, journald logging, exit codes
+- [X] T014 [P] [US1] Implement collection functions in script: collect_proxmox_configs() copies /etc/pve/lxc/*.conf to staging with retry/backoff
+- [X] T015 [P] [US1] Add script function: collect /etc/pve/storage.cfg
+- [X] T016 [P] [US1] Add script function: collect /etc/network/interfaces and /etc/network/interfaces.d/*
+- [X] T017 [P] [US1] Add script function: collect /etc/fstab
+- [X] T018 [P] [US1] Add script function: collect Tailscale config (only if INCLUDE_TAILSCALE=true in /etc/proxmox-backup.conf)
+- [X] T019 [P] [US1] Add script function: collect rclone config (only if INCLUDE_RCLONE=true in /etc/proxmox-backup.conf)
+- [X] T020 [US1] Add script function: generate_manifest() creates manifest.txt with sha256sum
+- [X] T021 [US1] Add script function: compress_staging() creates tar.zst with timestamp
+- [X] T022 [US1] Add script function: encrypt_archive() uses age with public key
+- [X] T023 [US1] Add script function: mount_nas() mounts NFS or verifies mounted
+- [X] T024 [US1] Add script function: transfer_to_nas() copies encrypted archive
+- [X] T025 [US1] Add script function: set_permissions() chmod 640 root:root on NAS
+- [X] T026 [US1] Add script function: cleanup_staging() removes timestamped staging dir
+- [X] T027 [US1] Complete script: main() with flock, trap handlers, journald logging, exit codes
 
 **Checkpoint**: **MVP COMPLETE** - User Story 1 fully functional, manual backup creates encrypted archive on NAS
+
+**Test Results** (Dec 23, 2025):
+- ✅ Backup ran successfully: `/usr/local/sbin/proxmox-config-backup`
+- ✅ Archive created: `proxmox-backup-20251223-092833.tar.zst.age` (1.3 KB)
+- ✅ Stored on NAS: `/volume1/homelab_backups/proxmox/`
+- ✅ Decryption verified: All files extracted successfully
+- ✅ Contents verified: LXC configs (100-104.conf), storage.cfg, interfaces, fstab
+- ✅ Cleanup verified: Staging directory removed
+- ✅ Timer scheduled: Next run Wed 2025-12-24 00:04:32 CET
 
 ---
 
