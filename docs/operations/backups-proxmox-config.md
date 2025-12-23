@@ -658,6 +658,80 @@ GitHub Push
 
 ---
 
+## Backup Verification
+
+### Manual Verification
+
+Use the verification script to check backup integrity without full restore:
+
+**Basic Verification**:
+```bash
+# On Proxmox host
+/root/homelab-proxmox/scripts/backup/verify_proxmox_backup.sh \
+  /mnt/nas-backup/proxmox/proxmox-backup-20251223-120000.tar.zst.age
+```
+
+**Verification Process**:
+1. ✓ Decryption test (validates age key and encryption)
+2. ✓ Decompression test (validates zstd integrity)
+3. ✓ Required files check (storage.cfg, manifest.txt, etc.)
+4. ✓ Checksum validation (verifies file integrity via SHA256)
+
+**Exit Codes**:
+- `0` - Success: backup is valid and complete
+- `1` - Decryption failed (invalid key or corrupted encryption)
+- `2` - Checksum mismatch (file corruption detected)
+- `3` - Missing required files (incomplete backup)
+- `4` - Invalid usage
+
+**Custom Age Key**:
+```bash
+AGE_KEY_FILE=/path/to/key verify_proxmox_backup.sh backup.tar.zst.age
+```
+
+### Automated Post-Backup Verification
+
+The backup script automatically verifies each backup after creation:
+
+**Verification Steps**:
+1. File size check (minimum 1KB)
+2. Decryption test (first 1MB)
+3. Archive structure validation (tar listing)
+
+**Monitoring Verification**:
+```bash
+# Check verification status in logs
+journalctl -u proxmox-backup.service -n 50 | grep -i verify
+
+# Expected output:
+# INFO: Verifying backup integrity
+# INFO: Testing decryption of backup archive
+# INFO: Verifying archive structure
+# INFO: Backup verification passed: 4.0K
+# INFO: ✓ File size valid
+# INFO: ✓ Decryption successful
+# INFO: ✓ Archive structure valid
+```
+
+### Quarterly Verification Drill
+
+Run comprehensive verification on all recent backups:
+
+```bash
+# Verify last 7 daily backups
+ssh root@192.168.1.112 'for backup in $(ls -t /mnt/nas-backup/proxmox/proxmox-backup-*.tar.zst.age | head -7); do
+  echo "Verifying: $(basename $backup)"
+  /root/homelab-proxmox/scripts/backup/verify_proxmox_backup.sh "$backup" || echo "FAILED: $backup"
+done'
+```
+
+**Expected Results**:
+- All backups should pass verification
+- Any failures indicate corruption or key issues
+- Document failures and investigate immediately
+
+---
+
 ## Support
 
 For issues or questions:

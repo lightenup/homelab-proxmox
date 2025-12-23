@@ -226,6 +226,35 @@ collect_iac_artifacts() {
 }
 
 # ============================================================================
+# Manifest & Checksum Functions
+# ============================================================================
+
+generate_manifest() {
+  log_info "Generating manifest with checksums"
+  
+  local manifest_file="${STAGING_DIR}/manifest.txt"
+  
+  cat > "$manifest_file" <<EOF
+# Proxmox Backup Manifest
+# Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+# Backup ID: ${TIMESTAMP}
+# Host: $(hostname)
+# Format: SHA256 filepath
+
+EOF
+  
+  # Generate checksums for all files in staging
+  find "${STAGING_DIR}" -type f ! -name "manifest.txt" | while IFS= read -r file; do
+    local rel_path="${file#${STAGING_DIR}/}"
+    local checksum=$(sha256sum "$file" | awk '{print $1}')
+    echo "$checksum  ./$rel_path" >> "$manifest_file"
+  done
+  
+  local file_count=$(grep -c -v '^#' "$manifest_file" || true)
+  log_info "Manifest generated: $file_count files checksummed"
+}
+
+# ============================================================================
 # Compression & Encryption Functions
 # ============================================================================
 
@@ -334,7 +363,24 @@ verify_backup() {
     return 1
   fi
   
+  # Test decryption (decrypt first 1MB to verify key and format)
+  log_info "Testing decryption of backup archive"
+  if ! head -c 1048576 "$backup_file" | age -d -i "${AGE_PRIVATE_KEY:-/root/.age/proxmox-backup.key}" > /dev/null 2>&1; then
+    log_error "Decryption test failed - backup may be corrupted or key invalid"
+    return 1
+  fi
+  
+  # Quick integrity check: list tar contents without extracting
+  log_info "Verifying archive structure"
+  if ! age -d -i "${AGE_PRIVATE_KEY:-/root/.age/proxmox-backup.key}" "$backup_file" 2>/dev/null | zstd -d 2>/dev/null | tar -t > /dev/null 2>&1; then
+    log_error "Archive structure verification failed - backup corrupted"
+    return 1
+  fi
+  
   log_info "Backup verification passed: $(du -sh "$backup_file" | cut -f1)"
+  log_info "✓ File size valid"
+  log_info "✓ Decryption successful"
+  log_info "✓ Archive structure valid"
 }
 
 # ============================================================================
@@ -384,20 +430,23 @@ main() {
   collect_proxmox_config
   collect_iac_artifacts
   
-  # Step 2: Compress and encrypt
+  # Step 2: Generate manifest with checksums
+  generate_manifest
+  
+  # Step 3: Compress and encrypt
   compress_staging
   encrypt_archive
   
-  # Step 3: Mount NAS
+  # Step 4: Mount NAS
   mount_nas
   
-  # Step 4: Rotate old backups (BEFORE transfer for disk-full safety)
+  # Step 5: Rotate old backups (BEFORE transfer for disk-full safety)
   rotate_backups
   
-  # Step 5: Transfer new backup
+  # Step 6: Transfer new backup
   transfer_backup
   
-  # Step 6: Verify backup integrity
+  # Step 7: Verify backup integrity
   verify_backup
   
   log_info "Backup process complete"
