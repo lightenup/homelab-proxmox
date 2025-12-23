@@ -198,18 +198,35 @@
 
 **Acceptance**: Failure emails sent with specific error context, optional success emails include metrics
 
+**Status**: ✅ **COMPLETE** (Dec 23, 2025) - Email notification system implemented (disabled by default)
+
 ### Implementation for User Story 5
 
-- [ ] T057 [P] [US5] Add send_email_notification() function to script template (compose subject, body with error/success details, use mail/sendmail command)
-- [ ] T058 [P] [US5] Add SMTP configuration to /etc/proxmox-backup.conf (SMTP_HOST, SMTP_PORT, EMAIL_FROM, EMAIL_TO, NOTIFY_ON_SUCCESS variables)
-- [ ] T059 [US5] Add failure notification to trap handler in main() (on ERR trap, call send_email_notification with exit code and error context)
-- [ ] T060 [US5] Include backup metrics in notification in send_email_notification() (archive size, duration, file count, checksum from manifest)
-- [ ] T061 [US5] Add optional success notification in main() (after successful transfer, if NOTIFY_ON_SUCCESS=true, call send_email_notification with success metrics)
-- [ ] T062 [US5] Implement notification for specific failure types in send_email_notification() (detect failure type from exit code and last journald entries: NFS mount failure, encryption failure, disk full, verification failure)
-- [ ] T063 [US5] Add notification configuration to ansible/group_vars/proxmox_hosts.yml and deploy via config template (SMTP host, port, from/to addresses, enable/disable flags)
-- [ ] T064 [US5] Document notification setup in docs/operations/backups-proxmox-config.md (SMTP config in /etc/proxmox-backup.conf, testing with script, troubleshooting mail delivery)
+- [X] T057 [P] [US5] Add send_email_notification() function to script template (compose subject, body with error/success details, use mail/sendmail command)
+- [X] T058 [P] [US5] Add SMTP configuration to /etc/proxmox-backup.conf (SMTP_HOST, SMTP_PORT, EMAIL_FROM, EMAIL_TO, NOTIFY_ON_SUCCESS variables)
+- [X] T059 [US5] Add failure notification to trap handler in main() (on ERR trap, call send_email_notification with exit code and error context)
+- [X] T060 [US5] Include backup metrics in notification in send_email_notification() (archive size, duration, file count, checksum from manifest)
+- [X] T061 [US5] Add optional success notification in main() (after successful transfer, if NOTIFY_ON_SUCCESS=true, call send_email_notification with success metrics)
+- [X] T062 [US5] Implement notification for specific failure types in send_email_notification() (detect failure type from exit code and last journald entries: NFS mount failure, encryption failure, disk full, verification failure)
+- [X] T063 [US5] Add notification configuration to ansible/group_vars/proxmox_hosts.yml and deploy via config template (SMTP host, port, from/to addresses, enable/disable flags)
+- [X] T064 [US5] Document notification setup in docs/operations/backups-proxmox-config.md (SMTP config in /etc/proxmox-backup.conf, testing with script, troubleshooting mail delivery)
 
 **Checkpoint**: User Story 5 complete - operators receive email alerts on backup failures, can optionally enable success notifications
+
+**Implementation Notes**:
+- Email notifications disabled by default (requires mailutils package)
+- Failure types categorized: collection, compression, encryption, mount, disk_full, transfer, verification
+- Success notifications optional (set NOTIFY_ON_SUCCESS=true)
+- Detailed documentation for SMTP setup (Postfix local, msmtp relay, Gmail)
+- Test commands provided for simulating failures
+
+**Test Results** (Dec 23, 2025):
+- ✅ Enhanced notification function deployed
+- ✅ Failure type detection via exit codes
+- ✅ Backup metrics included (size, file count)
+- ✅ Configuration deployed to /etc/proxmox-backup.conf
+- ✅ Documentation complete with troubleshooting guide
+- ⚠️  Email delivery not tested (requires mail package configuration)
 
 ---
 
