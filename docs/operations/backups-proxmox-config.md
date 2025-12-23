@@ -732,6 +732,182 @@ done'
 
 ---
 
+## Email Notifications
+
+### Overview
+
+The backup system can send email notifications on backup failures (and optionally on success). This provides early warning for backup issues without needing to actively monitor logs.
+
+**Default Behavior**: Email notifications are disabled by default.
+
+### Prerequisites
+
+**1. Install mail utilities on Proxmox host**:
+```bash
+ssh root@192.168.1.112
+apt update && apt install mailutils
+```
+
+**2. Configure mail relay** (choose one):
+
+**Option A: Use Postfix as local relay** (simplest):
+```bash
+# During mailutils installation, select "Local only"
+# Test with:
+echo "Test email" | mail -s "Test from Proxmox" your-email@example.com
+```
+
+**Option B: Use external SMTP** (more reliable):
+```bash
+# Install ssmtp or msmtp for SMTP relay
+apt install msmtp msmtp-mta
+```
+
+Configure `/etc/msmtprc`:
+```bash
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /var/log/msmtp.log
+
+account        default
+host           smtp.gmail.com
+port           587
+from           proxmox-backup@yourdomain.com
+user           your-email@gmail.com
+password       your-app-password
+
+account default : default
+```
+
+Set permissions: `chmod 600 /etc/msmtprc`
+
+### Configuration
+
+**1. Update Ansible variables** in `ansible/group_vars/proxmox_hosts.yml`:
+```yaml
+# Enable email notifications
+proxmox_backup_notify_on_success: false  # true to get success emails too
+proxmox_backup_smtp_host: "smtp.gmail.com"
+proxmox_backup_email_from: "proxmox-backup@homelab.local"
+proxmox_backup_email_to: "admin@example.com"
+```
+
+**2. Redeploy configuration**:
+```bash
+export PROXMOX_BACKUP_AGE_PUBLIC_KEY='age19c...'
+./scripts/backup/run_proxmox_backup.sh
+```
+
+**3. Verify configuration deployed**:
+```bash
+ssh root@192.168.1.112 'grep -A 3 "Email Notifications" /etc/proxmox-backup.conf'
+```
+
+Expected output:
+```
+# Optional: Email Notifications
+NOTIFY_ON_SUCCESS=false
+SMTP_HOST="smtp.gmail.com"
+EMAIL_FROM="proxmox-backup@homelab.local"
+EMAIL_TO="admin@example.com"
+```
+
+### Notification Types
+
+**Failure Notifications** (always sent if SMTP configured):
+- **Trigger**: Any backup failure (exit code > 0)
+- **Content**: 
+  - Timestamp and hostname
+  - Exit code and failure type
+  - Specific error details
+  - Recent log entries (last 10 lines)
+  - Recommended actions
+- **Subject**: `[Proxmox] ⚠️ Backup FAILED - 20251223-120000`
+
+**Success Notifications** (optional):
+- **Trigger**: Successful backup completion
+- **Enabled**: Set `proxmox_backup_notify_on_success: true`
+- **Content**:
+  - Timestamp and hostname
+  - Archive size and file count
+  - Verification status
+  - Next scheduled backup
+- **Subject**: `[Proxmox] Backup completed successfully - 20251223-120000`
+
+### Failure Types Detected
+
+The notification system categorizes failures for faster troubleshooting:
+
+| Failure Type | Exit Code | Description | Common Causes |
+|--------------|-----------|-------------|---------------|
+| `collection` | 2-4 | Config collection failed | /etc/pve access issues, permission denied |
+| `compression` | 5 | Compression failed | Disk full, corrupt files |
+| `encryption` | 6 | Encryption failed | Invalid age public key |
+| `mount` | 7 | NFS mount failed | Network issue, NFS export misconfigured |
+| `disk_full` | 8 | Insufficient space | NAS storage full |
+| `transfer` | 9 | Copy to NAS failed | Network timeout, NAS unavailable |
+| `verification` | 10 | Backup verification failed | Corrupted archive, bad encryption |
+
+### Testing Email Notifications
+
+**Test mail delivery**:
+```bash
+# On Proxmox host
+ssh root@192.168.1.112
+echo "Test email from Proxmox backup system" | mail -s "[Test] Proxmox Backup" your-email@example.com
+```
+
+**Simulate backup failure** (trigger failure notification):
+```bash
+# Temporarily break NFS mount to test failure notification
+ssh root@192.168.1.112
+systemctl stop proxmox-backup.timer
+umount /mnt/nas-backup
+/usr/local/sbin/proxmox-config-backup
+# Check email for failure notification
+# Restore mount: mount -t nfs 192.168.1.109:/volume1/homelab_backups /mnt/nas-backup
+systemctl start proxmox-backup.timer
+```
+
+**Test success notification** (if enabled):
+```bash
+# Enable success notifications temporarily
+ssh root@192.168.1.112
+sed -i 's/NOTIFY_ON_SUCCESS=false/NOTIFY_ON_SUCCESS=true/' /etc/proxmox-backup.conf
+/usr/local/sbin/proxmox-config-backup
+# Check email for success notification
+# Revert: sed -i 's/NOTIFY_ON_SUCCESS=true/NOTIFY_ON_SUCCESS=false/' /etc/proxmox-backup.conf
+```
+
+### Troubleshooting
+
+**No emails received**:
+1. Check mail command: `which mail` (should return `/usr/bin/mail`)
+2. Test mail directly: `echo "test" | mail -s "test" your@email.com`
+3. Check mail logs: `journalctl -u postfix -n 50` or `tail -f /var/log/mail.log`
+4. Verify SMTP config: `cat /etc/msmtprc` (if using msmtp)
+5. Check backup logs: `journalctl -u proxmox-backup.service | grep -i email`
+
+**Email sent but not received**:
+1. Check spam folder
+2. Verify email address: `grep EMAIL_TO /etc/proxmox-backup.conf`
+3. Check mail queue: `mailq` (should be empty)
+4. Test with different recipient
+
+**Success emails not sent**:
+1. Verify enabled: `grep NOTIFY_ON_SUCCESS /etc/proxmox-backup.conf` (should be `true`)
+2. Check that backup succeeded: `journalctl -u proxmox-backup.service -n 20`
+3. Success notifications only sent if SMTP is fully configured
+
+**Email formatting issues**:
+- Email body uses plain text with newlines
+- Subject includes timestamp for threading
+- No HTML formatting (mail command limitation)
+
+---
+
 ## Support
 
 For issues or questions:

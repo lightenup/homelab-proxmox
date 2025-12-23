@@ -62,6 +62,8 @@ log_warning() {
 
 cleanup() {
   local exit_code=$?
+  local failure_type="unknown"
+  
   log_info "Cleanup: Removing staging directory ${STAGING_DIR}"
   
   if [[ -d "$STAGING_DIR" ]]; then
@@ -78,6 +80,22 @@ cleanup() {
     send_email_notification "success"
   else
     log_error "Backup failed with exit code: $exit_code"
+    
+    # Determine failure type from exit code
+    case $exit_code in
+      2) failure_type="collection" ;;
+      3) failure_type="collection" ;;
+      4) failure_type="collection" ;;
+      5) failure_type="compression" ;;
+      6) failure_type="encryption" ;;
+      7) failure_type="mount" ;;
+      8) failure_type="disk_full" ;;
+      9) failure_type="transfer" ;;
+      10) failure_type="verification" ;;
+      *) failure_type="unknown" ;;
+    esac
+    
+    send_email_notification "failure" "$failure_type"
     send_email_notification "failure"
   fi
 }
@@ -389,6 +407,7 @@ verify_backup() {
 
 send_email_notification() {
   local status="$1"
+  local failure_type="${2:-unknown}"
   
   # Email notifications disabled by default
   if [[ "${NOTIFY_ON_SUCCESS:-false}" != "true" && "$status" == "success" ]]; then
@@ -402,17 +421,89 @@ send_email_notification() {
   
   local subject
   local body
+  local metrics=""
+  
+  # Collect backup metrics if available
+  if [[ -f "${ARCHIVE_ENCRYPTED:-}" ]]; then
+    local archive_size=$(du -h "$ARCHIVE_ENCRYPTED" 2>/dev/null | cut -f1 || echo "unknown")
+    local file_count=$(tar -tf "$ARCHIVE_BASE" 2>/dev/null | wc -l || echo "unknown")
+    metrics="Archive size: $archive_size\nFiles backed up: $file_count"
+  fi
   
   if [[ "$status" == "success" ]]; then
-    subject="[Proxmox] Backup completed successfully"
-    body="Proxmox configuration backup completed at ${TIMESTAMP}\n\nBackup: ${BACKUP_NAME}.tar.zst.age\nLocation: ${NAS_MOUNT}/\n\nNext backup: $(systemctl list-timers proxmox-backup.timer --no-pager | tail -n 2 | head -n 1)"
+    subject="[Proxmox] Backup completed successfully - ${TIMESTAMP}"
+    body="✓ Proxmox configuration backup completed successfully
+
+Timestamp: ${TIMESTAMP}
+Host: $(hostname)
+Backup: ${BACKUP_NAME}.tar.zst.age
+Location: ${NAS_MOUNT}/
+
+Metrics:
+$metrics
+
+Verification: Passed (decryption, structure, checksums)
+
+Next scheduled backup:
+$(systemctl list-timers proxmox-backup.timer --no-pager 2>/dev/null | tail -n 2 | head -n 1 || echo 'Check systemctl status proxmox-backup.timer')
+
+---
+This is an automated notification from the Proxmox backup system."
   else
-    subject="[Proxmox] Backup FAILED"
-    body="Proxmox configuration backup failed at ${TIMESTAMP}\n\nExit code: ${EXIT_CODE}\n\nCheck logs: journalctl -u proxmox-backup.service -n 100\n\nPlease investigate immediately."
+    # Determine failure type from exit code and context
+    local failure_details=""
+    case "$failure_type" in
+      "mount")
+        failure_details="NFS mount failed - check network connectivity and NFS export configuration"
+        ;;
+      "encryption")
+        failure_details="Encryption failed - verify age public key in /etc/proxmox-backup.conf"
+        ;;
+      "disk_full")
+        failure_details="Insufficient disk space - check NAS storage capacity"
+        ;;
+      "verification")
+        failure_details="Backup verification failed - archive may be corrupted"
+        ;;
+      "collection")
+        failure_details="Configuration collection failed - check /etc/pve accessibility"
+        ;;
+      *)
+        failure_details="Unexpected failure during backup process"
+        ;;
+    esac
+    
+    subject="[Proxmox] ⚠️ Backup FAILED - ${TIMESTAMP}"
+    body="✗ Proxmox configuration backup FAILED
+
+Timestamp: ${TIMESTAMP}
+Host: $(hostname)
+Exit code: ${EXIT_CODE:-unknown}
+Failure type: ${failure_type}
+
+Details:
+${failure_details}
+
+Metrics:
+$metrics
+
+Recent log entries:
+$(journalctl -u proxmox-backup.service -n 10 --no-pager 2>/dev/null || echo 'Log unavailable')
+
+Action required:
+1. Check logs: journalctl -u proxmox-backup.service -n 100
+2. Verify NAS accessibility: mount | grep nas-backup
+3. Test manual backup: /usr/local/sbin/proxmox-config-backup
+4. Contact system administrator if issue persists
+
+---
+This is an automated alert from the Proxmox backup system.
+IMMEDIATE ATTENTION REQUIRED."
   fi
   
   # Send via mail command (requires mailutils or similar)
-  echo -e "$body" | mail -s "$subject" -r "${EMAIL_FROM}" "${EMAIL_TO}" 2>/dev/null || true
+  echo -e "$body" | mail -s "$subject" -r "${EMAIL_FROM}" "${EMAIL_TO}" 2>/dev/null || \
+    log_warning "Failed to send email notification (mail command unavailable)"
 }
 
 # ============================================================================

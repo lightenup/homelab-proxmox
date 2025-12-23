@@ -38,3 +38,11 @@ proxmox_backup_age_public_key: "{{ lookup('env', 'PROXMOX_BACKUP_AGE_PUBLIC_KEY'
 # Retention policy
 proxmox_backup_retention_daily: 30
 proxmox_backup_retention_monthly: 12
+
+# Email Notifications (disabled by default)
+proxmox_backup_notify_on_success: false
+# Uncomment and configure to enable email notifications:
+# proxmox_backup_smtp_host: "smtp.example.com"
+# proxmox_backup_email_from: "proxmox-backup@homelab.local"
+# proxmox_backup_email_to: "admin@example.com"
+# Note: Requires mail/mailutils package on Proxmox host
