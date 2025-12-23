@@ -1,0 +1,35 @@
+---
+# ansible/roles/proxmox_backup/tasks/main.yml
+# Main orchestration for Proxmox configuration backup automation
+# Feature: 013-proxmox-config-backup
+# Architecture: Choice 3, Option A - Deploys bash script, does NOT execute at runtime
+
+- name: Install backup prerequisites
+  ansible.builtin.import_tasks: prerequisites.yml
+  tags:
+    - backup
+    - prerequisites
+
+- name: Sync IaC repository to PVE (for User Story 2)
+  ansible.builtin.import_tasks: sync_repo.yml
+  tags:
+    - backup
+    - repo
+
+- name: Configure SMTP relay for email notifications
+  ansible.builtin.import_tasks: configure_smtp.yml
+  tags:
+    - backup
+    - smtp
+
+- name: Deploy backup script
+  ansible.builtin.import_tasks: deploy_script.yml
+  tags:
+    - backup
+    - script
+
+- name: Deploy systemd units
+  ansible.builtin.import_tasks: systemd.yml
+  tags:
+    - backup
+    - systemd

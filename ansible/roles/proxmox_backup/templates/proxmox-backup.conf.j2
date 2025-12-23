@@ -1,0 +1,41 @@
+# {{ ansible_managed }}
+# Proxmox Backup Configuration
+# Feature: 013-proxmox-config-backup
+# File: /etc/proxmox-backup.conf
+
+# NAS Configuration
+NAS_HOST="{{ proxmox_backup_nas_host }}"
+NAS_PATH="{{ proxmox_backup_nas_path }}"
+NAS_MOUNT="{{ proxmox_backup_nas_mount_point }}"
+
+# Storage
+STAGING_BASE="{{ proxmox_backup_staging_base }}"
+
+# Encryption (age)
+AGE_KEY_PATH="{{ proxmox_backup_age_key_path }}"
+AGE_PUBLIC_KEY="{{ proxmox_backup_age_public_key }}"
+
+# Retention Policy
+RETENTION_DAILY={{ proxmox_backup_retention_daily }}
+RETENTION_MONTHLY={{ proxmox_backup_retention_monthly }}
+
+# Optional: IaC Repository (if undefined, US2 skipped)
+{% if proxmox_backup_repo_path is defined %}
+REPO_PATH="{{ proxmox_backup_repo_path }}"
+{% else %}
+# REPO_PATH not defined - IaC artifact backup disabled
+{% endif %}
+
+# Optional: Sensitive Data Inclusion (opt-in only, default: false)
+INCLUDE_TAILSCALE={{ proxmox_backup_include_tailscale_state | default(false) | bool | lower }}
+INCLUDE_RCLONE={{ proxmox_backup_include_rclone_conf | default(false) | bool | lower }}
+
+# Optional: Email Notifications
+NOTIFY_ON_SUCCESS={{ proxmox_backup_notify_on_success | default(false) | bool | lower }}
+{% if proxmox_backup_smtp_host is defined %}
+SMTP_HOST="{{ proxmox_backup_smtp_host }}"
+EMAIL_FROM="{{ proxmox_backup_email_from }}"
+EMAIL_TO="{{ proxmox_backup_email_to }}"
+{% else %}
+# Email notifications not configured
+{% endif %}

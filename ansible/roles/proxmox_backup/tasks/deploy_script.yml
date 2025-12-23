@@ -1,0 +1,51 @@
+---
+# ansible/roles/proxmox_backup/tasks/deploy_script.yml
+# Deploy backup script and configuration
+# Feature: 013-proxmox-config-backup
+
+- name: Deploy backup script template
+  ansible.builtin.template:
+    src: proxmox-config-backup.sh.j2
+    dest: "{{ proxmox_backup_script_path }}"
+    owner: root
+    group: root
+    mode: '0750'
+  tags:
+    - backup
+    - script
+
+- name: Deploy backup configuration file
+  ansible.builtin.template:
+    src: proxmox-backup.conf.j2
+    dest: "{{ proxmox_backup_config_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  notify: restart backup timer
+  tags:
+    - backup
+    - script
+
+- name: Deploy age private key
+  ansible.builtin.copy:
+    content: "{{ proxmox_backup_age_private_key }}"
+    dest: "{{ proxmox_backup_age_key_path }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when: proxmox_backup_age_private_key is defined
+  no_log: true
+  tags:
+    - backup
+    - script
+    - secrets
+
+- name: Verify script executable
+  ansible.builtin.stat:
+    path: "{{ proxmox_backup_script_path }}"
+  register: script_stat
+  failed_when: not script_stat.stat.executable
+  tags:
+    - backup
+    - script
+    - validate

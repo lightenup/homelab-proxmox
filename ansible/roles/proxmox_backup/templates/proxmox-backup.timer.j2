@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+# systemd timer unit for Proxmox configuration backup
+# Feature: 013-proxmox-config-backup
+# File: /etc/systemd/system/proxmox-backup.timer
+
+[Unit]
+Description=Proxmox Configuration Backup Timer
+Documentation=file:///usr/local/share/doc/proxmox-backup/README.md
+Requires=proxmox-backup.service
+
+[Timer]
+{% if proxmox_backup_schedule == "daily" %}
+OnCalendar=daily
+{% elif proxmox_backup_schedule == "weekly" %}
+OnCalendar=weekly
+{% elif proxmox_backup_schedule == "hourly" %}
+OnCalendar=hourly
+{% else %}
+OnCalendar={{ proxmox_backup_schedule }}
+{% endif %}
+{% if proxmox_backup_time is defined %}
+OnCalendar=*-*-* {{ proxmox_backup_time }}:00
+{% endif %}
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

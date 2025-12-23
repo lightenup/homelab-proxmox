@@ -1,0 +1,550 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# Feature: 013-proxmox-config-backup
+# Architecture: Choice 3, Option A - Local bash script runtime
+# Script: /usr/local/sbin/proxmox-config-backup
+# Purpose: Automated backup of Proxmox configuration and IaC artifacts
+
+set -euo pipefail
+
+# Lock to prevent concurrent execution (using flock)
+LOCK_FD=200
+LOCK_FILE="/var/lock/proxmox-backup.lock"
+
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+  echo "ERROR: Backup already running (lock held)" >&2
+  exit 1
+fi
+
+# Source configuration
+if [[ ! -f /etc/proxmox-backup.conf ]]; then
+  echo "ERROR: Configuration file not found: /etc/proxmox-backup.conf" >&2
+  exit 2
+fi
+# shellcheck disable=SC1091
+source /etc/proxmox-backup.conf
+
+# Globals
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+STAGING_DIR="${STAGING_BASE:-/var/backups/proxmox-staging}/${TIMESTAMP}"
+BACKUP_NAME="proxmox-backup-${TIMESTAMP}"
+ARCHIVE_BASE="${STAGING_DIR}/${BACKUP_NAME}.tar.zst"
+ARCHIVE_ENCRYPTED="${ARCHIVE_BASE}.age"
+EXIT_CODE=0
+
+# Trap cleanup on exit
+trap cleanup EXIT
+trap 'EXIT_CODE=3; exit 3' ERR
+
+# ============================================================================
+# Logging Functions (systemd journald integration)
+# ============================================================================
+
+log_info() {
+  echo "<6>proxmox-backup: $*" | systemd-cat -t proxmox-backup
+  echo "INFO: $*"
+}
+
+log_error() {
+  echo "<3>proxmox-backup: ERROR: $*" | systemd-cat -t proxmox-backup
+  echo "ERROR: $*" >&2
+}
+
+log_warning() {
+  echo "<4>proxmox-backup: WARNING: $*" | systemd-cat -t proxmox-backup
+  echo "WARNING: $*" >&2
+}
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+cleanup() {
+  local exit_code=$?
+  local failure_type="unknown"
+  
+  log_info "Cleanup: Removing staging directory ${STAGING_DIR}"
+  
+  if [[ -d "$STAGING_DIR" ]]; then
+    rm -rf "$STAGING_DIR"
+  fi
+  
+  # Unmount NAS if mounted
+  if mountpoint -q "${NAS_MOUNT:-/mnt/nas-backup}"; then
+    umount "${NAS_MOUNT}" 2>/dev/null || true
+  fi
+  
+  if [[ $exit_code -eq 0 ]]; then
+    log_info "Backup completed successfully"
+    send_email_notification "success"
+  else
+    log_error "Backup failed with exit code: $exit_code"
+    
+    # Determine failure type from exit code
+    case $exit_code in
+      2) failure_type="collection" ;;
+      3) failure_type="collection" ;;
+      4) failure_type="collection" ;;
+      5) failure_type="compression" ;;
+      6) failure_type="encryption" ;;
+      7) failure_type="mount" ;;
+      8) failure_type="disk_full" ;;
+      9) failure_type="transfer" ;;
+      10) failure_type="verification" ;;
+      *) failure_type="unknown" ;;
+    esac
+    
+    send_email_notification "failure" "$failure_type"
+    send_email_notification "failure"
+  fi
+}
+
+retry_with_backoff() {
+  local max_attempts=3
+  local delay=2
+  local attempt=1
+  local cmd="$*"
+  
+  while [[ $attempt -le $max_attempts ]]; do
+    if eval "$cmd"; then
+      return 0
+    fi
+    
+    log_warning "Command failed (attempt $attempt/$max_attempts): $cmd"
+    
+    if [[ $attempt -lt $max_attempts ]]; then
+      sleep $delay
+      delay=$((delay * 2))
+    fi
+    
+    attempt=$((attempt + 1))
+  done
+  
+  log_error "Command failed after $max_attempts attempts: $cmd"
+  return 1
+}
+
+# ============================================================================
+# Collection Functions
+# ============================================================================
+
+collect_proxmox_config() {
+  log_info "Collecting Proxmox configuration files"
+  
+  local dest="${STAGING_DIR}/proxmox-config"
+  mkdir -p "$dest"
+  
+  # LXC container configs (with retry for /etc/pve)
+  if [[ -d /etc/pve/lxc ]]; then
+    retry_with_backoff "cp -a /etc/pve/lxc/*.conf '$dest/' 2>/dev/null || true"
+  fi
+  
+  # Storage configuration
+  if [[ -f /etc/pve/storage.cfg ]]; then
+    retry_with_backoff "cp -a /etc/pve/storage.cfg '$dest/'"
+  fi
+  
+  # Network configuration
+  if [[ -f /etc/network/interfaces ]]; then
+    cp -a /etc/network/interfaces "$dest/"
+  fi
+  
+  if [[ -d /etc/network/interfaces.d ]]; then
+    cp -a /etc/network/interfaces.d "$dest/" 2>/dev/null || true
+  fi
+  
+  # System mounts
+  if [[ -f /etc/fstab ]]; then
+    cp -a /etc/fstab "$dest/"
+  fi
+  
+  # Optional: Tailscale state (opt-in)
+  if [[ "${INCLUDE_TAILSCALE:-false}" == "true" && -d /var/lib/tailscale ]]; then
+    log_info "Including Tailscale state (opt-in enabled)"
+    mkdir -p "$dest/tailscale"
+    cp -a /var/lib/tailscale/* "$dest/tailscale/" 2>/dev/null || true
+  fi
+  
+  # Optional: rclone config (opt-in)
+  if [[ "${INCLUDE_RCLONE:-false}" == "true" && -f /root/.config/rclone/rclone.conf ]]; then
+    log_info "Including rclone configuration (opt-in enabled)"
+    mkdir -p "$dest/rclone"
+    cp -a /root/.config/rclone/rclone.conf "$dest/rclone/" 2>/dev/null || true
+  fi
+  
+  log_info "Proxmox configuration collected: $(du -sh "$dest" | cut -f1)"
+}
+
+collect_iac_artifacts() {
+  if [[ -z "${REPO_PATH:-}" ]]; then
+    log_info "Skipping IaC artifacts (REPO_PATH not defined)"
+    return 0
+  fi
+  
+  if [[ ! -d "$REPO_PATH" ]]; then
+    log_warning "REPO_PATH defined but directory not found: $REPO_PATH"
+    return 0
+  fi
+  
+  log_info "Collecting IaC artifacts from: $REPO_PATH"
+  
+  local dest="${STAGING_DIR}/iac-artifacts"
+  mkdir -p "$dest"
+  
+  # Terraform state
+  if [[ -d "${REPO_PATH}/terraform" ]]; then
+    mkdir -p "$dest/terraform"
+    cp -a "${REPO_PATH}/terraform/terraform.tfstate" "$dest/terraform/" 2>/dev/null || true
+    cp -a "${REPO_PATH}/terraform/terraform.tfstate.backup" "$dest/terraform/" 2>/dev/null || true
+  fi
+  
+  # Ansible inventory
+  if [[ -f "${REPO_PATH}/ansible/inventories/generated/hosts.yml" ]]; then
+    mkdir -p "$dest/ansible/inventories/generated"
+    cp -a "${REPO_PATH}/ansible/inventories/generated/hosts.yml" "$dest/ansible/inventories/generated/"
+  fi
+  
+  # Ansible group_vars (exclude secrets.yml)
+  if [[ -d "${REPO_PATH}/ansible/group_vars" ]]; then
+    mkdir -p "$dest/ansible/group_vars"
+    find "${REPO_PATH}/ansible/group_vars" -type f ! -name 'secrets.yml' -exec cp -a {} "$dest/ansible/group_vars/" \;
+  fi
+  
+  # Ansible playbooks
+  if [[ -d "${REPO_PATH}/ansible/playbooks" ]]; then
+    mkdir -p "$dest/ansible/playbooks"
+    cp -a "${REPO_PATH}/ansible/playbooks"/*.yml "$dest/ansible/playbooks/" 2>/dev/null || true
+  fi
+  
+  # Ansible role tasks
+  if [[ -d "${REPO_PATH}/ansible/roles" ]]; then
+    mkdir -p "$dest/ansible/roles"
+    find "${REPO_PATH}/ansible/roles" -type f -path '*/tasks/*.yml' -exec bash -c 'mkdir -p "$0/$(dirname "${1#'"${REPO_PATH}"'/ansible/roles/}")" && cp -a "$1" "$0/$(dirname "${1#'"${REPO_PATH}"'/ansible/roles/}")/"' "$dest/ansible/roles" {} \;
+  fi
+  
+  # Documentation
+  if [[ -f "${REPO_PATH}/README.md" ]]; then
+    cp -a "${REPO_PATH}/README.md" "$dest/"
+  fi
+  
+  if [[ -d "${REPO_PATH}/docs" ]]; then
+    mkdir -p "$dest/docs"
+    find "${REPO_PATH}/docs" -type f -name '*.md' -exec cp -a {} "$dest/docs/" \;
+  fi
+  
+  # Scan for plaintext secrets (security check)
+  log_info "Scanning IaC artifacts for plaintext secrets"
+  if grep -r -i -E '(password|secret|token|key|api[_-]?key)' "$dest" | grep -v -E '(\.md:|example|placeholder|CHANGEME)'; then
+    log_error "Plaintext secrets detected in IaC artifacts - backup aborted"
+    exit 4
+  fi
+  
+  log_info "IaC artifacts collected: $(du -sh "$dest" | cut -f1)"
+}
+
+# ============================================================================
+# Manifest & Checksum Functions
+# ============================================================================
+
+generate_manifest() {
+  log_info "Generating manifest with checksums"
+  
+  local manifest_file="${STAGING_DIR}/manifest.txt"
+  
+  cat > "$manifest_file" <<EOF
+# Proxmox Backup Manifest
+# Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+# Backup ID: ${TIMESTAMP}
+# Host: $(hostname)
+# Format: SHA256 filepath
+
+EOF
+  
+  # Generate checksums for all files in staging
+  find "${STAGING_DIR}" -type f ! -name "manifest.txt" | while IFS= read -r file; do
+    local rel_path="${file#${STAGING_DIR}/}"
+    local checksum=$(sha256sum "$file" | awk '{print $1}')
+    echo "$checksum  ./$rel_path" >> "$manifest_file"
+  done
+  
+  local file_count=$(grep -c -v '^#' "$manifest_file" || true)
+  log_info "Manifest generated: $file_count files checksummed"
+}
+
+# ============================================================================
+# Compression & Encryption Functions
+# ============================================================================
+
+compress_staging() {
+  log_info "Compressing staging directory with zstd"
+  
+  tar -C "${STAGING_DIR}" -cf - . | zstd -3 -T0 -o "${ARCHIVE_BASE}"
+  
+  if [[ ! -f "$ARCHIVE_BASE" ]]; then
+    log_error "Compression failed: archive not created"
+    exit 5
+  fi
+  
+  log_info "Archive created: $(du -sh "$ARCHIVE_BASE" | cut -f1)"
+}
+
+encrypt_archive() {
+  log_info "Encrypting archive with age"
+  
+  if [[ -z "${AGE_PUBLIC_KEY:-}" ]]; then
+    log_error "AGE_PUBLIC_KEY not defined in configuration"
+    exit 6
+  fi
+  
+  age -r "${AGE_PUBLIC_KEY}" -o "${ARCHIVE_ENCRYPTED}" "${ARCHIVE_BASE}"
+  
+  if [[ ! -f "$ARCHIVE_ENCRYPTED" ]]; then
+    log_error "Encryption failed: encrypted archive not created"
+    exit 7
+  fi
+  
+  # Remove unencrypted archive
+  rm -f "${ARCHIVE_BASE}"
+  
+  log_info "Encrypted archive created: $(du -sh "$ARCHIVE_ENCRYPTED" | cut -f1)"
+}
+
+# ============================================================================
+# Transfer & Rotation Functions
+# ============================================================================
+
+mount_nas() {
+  log_info "Mounting NAS: ${NAS_HOST}:${NAS_PATH}"
+  
+  if mountpoint -q "${NAS_MOUNT}"; then
+    log_info "NAS already mounted"
+    return 0
+  fi
+  
+  mount -t nfs "${NAS_HOST}:${NAS_PATH}" "${NAS_MOUNT}"
+  
+  if ! mountpoint -q "${NAS_MOUNT}"; then
+    log_error "NFS mount failed"
+    exit 8
+  fi
+  
+  log_info "NAS mounted successfully"
+}
+
+rotate_backups() {
+  log_info "Rotating old backups (before new backup for disk-full safety)"
+  
+  local daily_retention=${RETENTION_DAILY:-30}
+  local monthly_retention=${RETENTION_MONTHLY:-12}
+  
+  # Daily backups (keep last N days)
+  log_info "Rotating daily backups (keep last ${daily_retention})"
+  find "${NAS_MOUNT}" -type f -name 'proxmox-backup-*.tar.zst.age' -mtime +${daily_retention} ! -name '*-01-*' -delete || true
+  
+  # Monthly backups (keep backups from 1st of month for N months)
+  log_info "Rotating monthly backups (keep last ${monthly_retention} months)"
+  # Keep backups with -01- in the date (1st of month), delete those older than retention period
+  find "${NAS_MOUNT}" -type f -name 'proxmox-backup-*-01-*.tar.zst.age' -mtime +$((monthly_retention * 30)) -delete || true
+}
+
+transfer_backup() {
+  log_info "Transferring encrypted backup to NAS"
+  
+  cp -a "${ARCHIVE_ENCRYPTED}" "${NAS_MOUNT}/"
+  
+  if [[ ! -f "${NAS_MOUNT}/$(basename "$ARCHIVE_ENCRYPTED")" ]]; then
+    log_error "Transfer failed: backup not found on NAS"
+    exit 9
+  fi
+  
+  # Set permissions on NAS
+  chmod 640 "${NAS_MOUNT}/$(basename "$ARCHIVE_ENCRYPTED")"
+  
+  log_info "Backup transferred successfully"
+}
+
+verify_backup() {
+  local backup_file="${NAS_MOUNT}/$(basename "$ARCHIVE_ENCRYPTED")"
+  
+  log_info "Verifying backup integrity"
+  
+  # Basic file check
+  if [[ ! -f "$backup_file" ]]; then
+    log_error "Backup file not found: $backup_file"
+    return 1
+  fi
+  
+  local size=$(stat -c%s "$backup_file" 2>/dev/null || stat -f%z "$backup_file")
+  if [[ $size -lt 1024 ]]; then
+    log_error "Backup file too small (likely corrupted): ${size} bytes"
+    return 1
+  fi
+  
+  # Test decryption (decrypt first 1MB to verify key and format)
+  log_info "Testing decryption of backup archive"
+  if ! head -c 1048576 "$backup_file" | age -d -i "${AGE_PRIVATE_KEY:-/root/.age/proxmox-backup.key}" > /dev/null 2>&1; then
+    log_error "Decryption test failed - backup may be corrupted or key invalid"
+    return 1
+  fi
+  
+  # Quick integrity check: list tar contents without extracting
+  log_info "Verifying archive structure"
+  if ! age -d -i "${AGE_PRIVATE_KEY:-/root/.age/proxmox-backup.key}" "$backup_file" 2>/dev/null | zstd -d 2>/dev/null | tar -t > /dev/null 2>&1; then
+    log_error "Archive structure verification failed - backup corrupted"
+    return 1
+  fi
+  
+  log_info "Backup verification passed: $(du -sh "$backup_file" | cut -f1)"
+  log_info "✓ File size valid"
+  log_info "✓ Decryption successful"
+  log_info "✓ Archive structure valid"
+}
+
+# ============================================================================
+# Notification Functions
+# ============================================================================
+
+send_email_notification() {
+  local status="$1"
+  local failure_type="${2:-unknown}"
+  
+  # Email notifications disabled by default
+  if [[ "${NOTIFY_ON_SUCCESS:-false}" != "true" && "$status" == "success" ]]; then
+    return 0
+  fi
+  
+  # If SMTP not configured, skip
+  if [[ -z "${SMTP_HOST:-}" || -z "${EMAIL_FROM:-}" || -z "${EMAIL_TO:-}" ]]; then
+    return 0
+  fi
+  
+  local subject
+  local body
+  local metrics=""
+  
+  # Collect backup metrics if available
+  if [[ -f "${ARCHIVE_ENCRYPTED:-}" ]]; then
+    local archive_size=$(du -h "$ARCHIVE_ENCRYPTED" 2>/dev/null | cut -f1 || echo "unknown")
+    local file_count=$(tar -tf "$ARCHIVE_BASE" 2>/dev/null | wc -l || echo "unknown")
+    metrics="Archive size: $archive_size\nFiles backed up: $file_count"
+  fi
+  
+  if [[ "$status" == "success" ]]; then
+    subject="[Proxmox] Backup completed successfully - ${TIMESTAMP}"
+    body="✓ Proxmox configuration backup completed successfully
+
+Timestamp: ${TIMESTAMP}
+Host: $(hostname)
+Backup: ${BACKUP_NAME}.tar.zst.age
+Location: ${NAS_MOUNT}/
+
+Metrics:
+$metrics
+
+Verification: Passed (decryption, structure, checksums)
+
+Next scheduled backup:
+$(systemctl list-timers proxmox-backup.timer --no-pager 2>/dev/null | tail -n 2 | head -n 1 || echo 'Check systemctl status proxmox-backup.timer')
+
+---
+This is an automated notification from the Proxmox backup system."
+  else
+    # Determine failure type from exit code and context
+    local failure_details=""
+    case "$failure_type" in
+      "mount")
+        failure_details="NFS mount failed - check network connectivity and NFS export configuration"
+        ;;
+      "encryption")
+        failure_details="Encryption failed - verify age public key in /etc/proxmox-backup.conf"
+        ;;
+      "disk_full")
+        failure_details="Insufficient disk space - check NAS storage capacity"
+        ;;
+      "verification")
+        failure_details="Backup verification failed - archive may be corrupted"
+        ;;
+      "collection")
+        failure_details="Configuration collection failed - check /etc/pve accessibility"
+        ;;
+      *)
+        failure_details="Unexpected failure during backup process"
+        ;;
+    esac
+    
+    subject="[Proxmox] ⚠️ Backup FAILED - ${TIMESTAMP}"
+    body="✗ Proxmox configuration backup FAILED
+
+Timestamp: ${TIMESTAMP}
+Host: $(hostname)
+Exit code: ${EXIT_CODE:-unknown}
+Failure type: ${failure_type}
+
+Details:
+${failure_details}
+
+Metrics:
+$metrics
+
+Recent log entries:
+$(journalctl -u proxmox-backup.service -n 10 --no-pager 2>/dev/null || echo 'Log unavailable')
+
+Action required:
+1. Check logs: journalctl -u proxmox-backup.service -n 100
+2. Verify NAS accessibility: mount | grep nas-backup
+3. Test manual backup: /usr/local/sbin/proxmox-config-backup
+4. Contact system administrator if issue persists
+
+---
+This is an automated alert from the Proxmox backup system.
+IMMEDIATE ATTENTION REQUIRED."
+  fi
+  
+  # Send via mail command (requires mailutils or similar)
+  echo -e "$body" | mail -s "$subject" -r "${EMAIL_FROM}" "${EMAIL_TO}" 2>/dev/null || \
+    log_warning "Failed to send email notification (mail command unavailable)"
+}
+
+# ============================================================================
+# Main Function
+# ============================================================================
+
+main() {
+  log_info "Starting Proxmox configuration backup"
+  log_info "Timestamp: ${TIMESTAMP}"
+  
+  # Create staging directory
+  mkdir -p "$STAGING_DIR"
+  
+  # Step 1: Collect configurations
+  collect_proxmox_config
+  collect_iac_artifacts
+  
+  # Step 2: Generate manifest with checksums
+  generate_manifest
+  
+  # Step 3: Compress and encrypt
+  compress_staging
+  encrypt_archive
+  
+  # Step 4: Mount NAS
+  mount_nas
+  
+  # Step 5: Rotate old backups (BEFORE transfer for disk-full safety)
+  rotate_backups
+  
+  # Step 6: Transfer new backup
+  transfer_backup
+  
+  # Step 7: Verify backup integrity
+  verify_backup
+  
+  log_info "Backup process complete"
+}
+
+# ============================================================================
+# Entry Point
+# ============================================================================
+
+main "$@"

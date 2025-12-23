@@ -1,0 +1,130 @@
+---
+# ansible/roles/proxmox_backup/tasks/sync_repo.yml
+# Ensure IaC repository is present on PVE host for backup
+# Feature: 013-proxmox-config-backup (Phase 4, User Story 2)
+
+- name: Check if REPO_PATH is defined
+  ansible.builtin.set_fact:
+    repo_sync_enabled: "{{ proxmox_backup_repo_path is defined and proxmox_backup_repo_path | length > 0 }}"
+  tags:
+    - backup
+    - repo
+
+- name: Skip repo sync if not configured
+  ansible.builtin.debug:
+    msg: "REPO_PATH not defined - skipping repository sync (IaC backup disabled)"
+  when: not repo_sync_enabled
+  tags:
+    - backup
+    - repo
+
+- name: Update apt cache before git installation
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: repo_sync_enabled
+  tags:
+    - backup
+    - repo
+
+- name: Ensure Debian main repository configured
+  ansible.builtin.apt_repository:
+    repo: "deb http://deb.debian.org/debian {{ ansible_distribution_release }} main"
+    state: present
+    filename: debian-main
+  when: repo_sync_enabled
+  tags:
+    - backup
+    - repo
+
+- name: Update apt cache after adding Debian repo
+  ansible.builtin.apt:
+    update_cache: true
+  when: repo_sync_enabled
+  tags:
+    - backup
+    - repo
+
+- name: Install git for repository management
+  ansible.builtin.apt:
+    name: git
+    state: present
+  when: repo_sync_enabled
+  tags:
+    - backup
+    - repo
+
+- name: Check if repository already exists
+  ansible.builtin.stat:
+    path: "{{ proxmox_backup_repo_path }}/.git"
+  register: repo_exists
+  when: repo_sync_enabled
+  tags:
+    - backup
+    - repo
+
+- name: Clone repository if not present
+  ansible.builtin.git:
+    repo: "{{ proxmox_backup_repo_url }}"
+    dest: "{{ proxmox_backup_repo_path }}"
+    version: main
+    accept_hostkey: true
+  when:
+    - repo_sync_enabled
+    - not repo_exists.stat.exists
+    - proxmox_backup_repo_url is defined
+  tags:
+    - backup
+    - repo
+
+- name: Update repository if already present
+  ansible.builtin.git:
+    repo: "{{ proxmox_backup_repo_url }}"
+    dest: "{{ proxmox_backup_repo_path }}"
+    version: main
+    update: true
+    accept_hostkey: true
+  when:
+    - repo_sync_enabled
+    - repo_exists.stat.exists
+    - proxmox_backup_repo_url is defined
+  tags:
+    - backup
+    - repo
+
+- name: Set repository permissions
+  ansible.builtin.file:
+    path: "{{ proxmox_backup_repo_path }}"
+    owner: root
+    group: root
+    mode: '0755'
+    recurse: false
+  when: repo_sync_enabled
+  tags:
+    - backup
+    - repo
+
+- name: Verify repository is valid
+  ansible.builtin.command:
+    cmd: "git -C {{ proxmox_backup_repo_path }} rev-parse --git-dir"
+  register: git_verify
+  changed_when: false
+  failed_when: git_verify.rc != 0
+  when: repo_sync_enabled
+  tags:
+    - backup
+    - repo
+    - validate
+
+- name: Display repository status
+  ansible.builtin.debug:
+    msg:
+      - "Repository synced: {{ proxmox_backup_repo_path }}"
+      - "Git directory: {{ git_verify.stdout }}"
+      - "IaC artifact backup: ENABLED"
+  when:
+    - repo_sync_enabled
+    - git_verify is defined
+  tags:
+    - backup
+    - repo

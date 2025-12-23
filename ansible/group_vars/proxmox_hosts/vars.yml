@@ -1,0 +1,58 @@
+proxmox_unattended_upgrades_enable: true
+
+# Tailscale Configuration
+tailscale_auth_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          63343665393962303237336163313735373938336463613737303061383230663465633036656336
+          3838336139626664303966653362666437326563303361620a636138663731646463313162343933
+          34323464333337323333653064353538633837633039613261303533646238633231366264646631
+          6238633565633133320a353662326534383438303361343463386165396664643530653736363434
+          37636439376564353530383633646236316236386165393235613235363562643435636363323534
+          35376532343337376164383464353766643937653130333564616562643638653832363566663730
+          333733356437376136346665333839306436
+tailscale_advertise_routes: "192.168.1.0/24"
+tailscale_advertise_tags: "tag:proxmox"
+
+# Proxmox Configuration Backup (Feature 013)
+proxmox_backup_enabled: true
+proxmox_backup_schedule: "daily"
+proxmox_backup_time: "02:00"
+
+# NAS Configuration
+proxmox_backup_nas_host: "192.168.1.109"
+proxmox_backup_nas_path: "/volume1/homelab_backups/proxmox"
+
+# Encryption (keys stored in Bitwarden, deploy via environment variables)
+proxmox_backup_age_public_key: "{{ lookup('env', 'PROXMOX_BACKUP_AGE_PUBLIC_KEY') }}"
+# proxmox_backup_age_private_key: defined in vault or deployment script
+
+# Enable IaC artifact backup
+# IaC artifact backup (Phase 4) - Disabled until GitHub auth configured
+# proxmox_backup_repo_path: "/root/homelab-proxmox"
+# proxmox_backup_repo_url: "https://github.com/lightenup/homelab-proxmox.git"
+
+# Optional: Opt-in for sensitive data (default: false)
+# proxmox_backup_include_tailscale_state: false
+# proxmox_backup_include_rclone_conf: false
+
+# Retention policy
+proxmox_backup_retention_daily: 30
+proxmox_backup_retention_monthly: 12
+
+# Email Notifications - Postfix SMTP relay via Gmail
+proxmox_backup_notify_on_success: false
+
+# Gmail SMTP credentials (from feature 011 monitoring setup)
+# Note: smtp_user and smtp_password are defined in ansible/host_vars/monitoring/vault.yml
+# and are reused here for Proxmox backup notifications
+
+# Email configuration
+proxmox_backup_smtp_host: "{{ smtp_host | default('smtp.gmail.com') }}"
+proxmox_backup_smtp_port: "{{ smtp_port | default(587) }}"
+proxmox_backup_smtp_user: "{{ smtp_user | default('') }}"
+proxmox_backup_smtp_password: "{{ smtp_password | default('') }}"
+proxmox_backup_email_from: "{{ smtp_from | default('homelab-backup@gmail.com') }}"
+proxmox_backup_email_to: "jacobsen.andreas@gmail.com"
+
+# Note: Requires mailutils package on Proxmox host
+# Note: SMTP credentials should be configured in monitoring vault (ansible/group_vars/monitoring/vault.yml)

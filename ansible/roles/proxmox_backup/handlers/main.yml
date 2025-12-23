@@ -1,0 +1,26 @@
+---
+# ansible/roles/proxmox_backup/handlers/main.yml
+# Handlers for Proxmox backup role
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: reload systemd
+
+- name: Restart backup timer
+  ansible.builtin.systemd:
+    name: proxmox-backup.timer
+    state: restarted
+    enabled: true
+  listen: restart backup timer
+
+- name: Hash sasl_passwd
+  ansible.builtin.command:
+    cmd: postmap /etc/postfix/sasl_passwd
+  listen: hash sasl_passwd
+
+- name: Reload postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: reloaded
+  listen: reload postfix

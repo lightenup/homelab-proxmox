@@ -1,0 +1,55 @@
+---
+# Configure Postfix SMTP relay for Gmail
+
+- name: Install SASL authentication modules
+  ansible.builtin.apt:
+    name:
+      - libsasl2-modules
+      - mailutils
+    state: present
+    update_cache: yes
+
+- name: Configure Postfix main.cf for Gmail relay
+  ansible.builtin.blockinfile:
+    path: /etc/postfix/main.cf
+    block: |
+      # Gmail SMTP relay configuration
+      relayhost = [smtp.gmail.com]:587
+      smtp_tls_security_level = encrypt
+      smtp_sasl_auth_enable = yes
+      smtp_sasl_security_options = noanonymous
+      smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+      smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+      
+      # Force IPv4 for SMTP (fixes DNS resolution issues with Tailscale)
+      inet_protocols = ipv4
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - Gmail SMTP relay"
+    create: no
+  notify: Reload postfix
+
+- name: Create SASL password file
+  ansible.builtin.template:
+    src: sasl_passwd.j2
+    dest: /etc/postfix/sasl_passwd
+    owner: root
+    group: root
+    mode: '0600'
+  notify:
+    - Hash sasl_passwd
+    - Reload postfix
+  when: smtp_user is defined and smtp_password is defined
+
+- name: Display SMTP configuration status
+  ansible.builtin.debug:
+    msg: |
+      SMTP relay configuration:
+      {% if smtp_user is defined and smtp_password is defined %}
+      ✓ Gmail credentials configured
+      - SMTP host: smtp.gmail.com:587
+      - Username: {{ smtp_user }}
+      - Status: Ready to send emails
+      {% else %}
+      ⚠ Gmail credentials NOT configured
+      - You need to provide smtp_user and smtp_password variables
+      - See: https://support.google.com/accounts/answer/185833 (App passwords)
+      {% endif %}

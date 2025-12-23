@@ -1,0 +1,40 @@
+---
+# ansible/roles/proxmox_backup/defaults/main.yml
+# Default variables for Proxmox backup automation
+
+# Backup configuration
+proxmox_backup_enabled: true
+proxmox_backup_schedule: "daily"
+proxmox_backup_time: "02:00"
+
+# Storage paths
+proxmox_backup_staging_base: "/var/backups/proxmox-staging"
+proxmox_backup_script_path: "/usr/local/sbin/proxmox-config-backup"
+proxmox_backup_config_path: "/etc/proxmox-backup.conf"
+
+# NAS configuration
+proxmox_backup_nas_host: "192.168.1.109"
+proxmox_backup_nas_path: "/volume1/homelab_backups/proxmox"
+proxmox_backup_nas_mount_point: "/mnt/nas-backup"
+
+# Encryption
+proxmox_backup_age_key_path: "/root/.age/proxmox-backup.key"
+# proxmox_backup_age_public_key: defined in group_vars or vault
+# proxmox_backup_age_private_key: defined in group_vars or vault (git-ignored)
+
+# IaC repository (optional - if undefined, US2 skipped)
+# proxmox_backup_repo_path: "/root/homelab-proxmox"
+
+# Retention policy
+proxmox_backup_retention_daily: 30
+proxmox_backup_retention_monthly: 12
+
+# Optional inclusions (security: opt-in only, default false)
+proxmox_backup_include_tailscale_state: false
+proxmox_backup_include_rclone_conf: false
+
+# Email notifications (optional)
+proxmox_backup_notify_on_success: false
+# proxmox_backup_smtp_host: ""
+# proxmox_backup_email_from: ""
+# proxmox_backup_email_to: ""
