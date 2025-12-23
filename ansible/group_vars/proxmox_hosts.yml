@@ -39,10 +39,17 @@ proxmox_backup_age_public_key: "{{ lookup('env', 'PROXMOX_BACKUP_AGE_PUBLIC_KEY'
 proxmox_backup_retention_daily: 30
 proxmox_backup_retention_monthly: 12
 
-# Email Notifications (disabled by default)
+# Email Notifications (disabled by default - requires monitoring feature 011 SMTP setup)
 proxmox_backup_notify_on_success: false
-# Uncomment and configure to enable email notifications:
-# proxmox_backup_smtp_host: "smtp.example.com"
-# proxmox_backup_email_from: "proxmox-backup@homelab.local"
-# proxmox_backup_email_to: "admin@example.com"
-# Note: Requires mail/mailutils package on Proxmox host
+
+# Reuse SMTP configuration from monitoring feature (011) when available
+# These will automatically activate once monitoring is deployed with SMTP config
+proxmox_backup_smtp_host: "{{ smtp_host | default('smtp.gmail.com') }}"
+proxmox_backup_smtp_port: "{{ smtp_port | default(587) }}"
+proxmox_backup_smtp_user: "{{ smtp_user | default('') }}"
+proxmox_backup_smtp_password: "{{ smtp_password | default('') }}"
+proxmox_backup_email_from: "{{ smtp_from | default('homelab-backup@gmail.com') }}"
+proxmox_backup_email_to: "jacobsen.andreas@gmail.com"
+
+# Note: Requires mailutils package on Proxmox host
+# Note: SMTP credentials should be configured in monitoring vault (ansible/group_vars/monitoring/vault.yml)
