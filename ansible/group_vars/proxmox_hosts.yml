@@ -42,11 +42,9 @@ proxmox_backup_retention_monthly: 12
 # Email Notifications - Postfix SMTP relay via Gmail
 proxmox_backup_notify_on_success: false
 
-# Gmail SMTP credentials (configure these to enable email notifications)
-# Get Gmail app password: https://myaccount.google.com/apppasswords
-# Uncomment and set these variables (or store in vault):
-# smtp_user: "your-email@gmail.com"
-# smtp_password: "your-16-character-app-password"
+# Gmail SMTP credentials (from feature 011 monitoring setup)
+# Note: smtp_user and smtp_password are defined in ansible/host_vars/monitoring/vault.yml
+# and are reused here for Proxmox backup notifications
 
 # Email configuration
 proxmox_backup_smtp_host: "{{ smtp_host | default('smtp.gmail.com') }}"
