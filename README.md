@@ -107,12 +107,31 @@ ansible-playbook playbooks/update_monthly.yml -e "allow_host_reboot=true"
 
 ### Disaster Recovery
 
-Disaster recovery procedures for Immich photo backups stored in Hetzner Object Storage.
+Disaster recovery procedures for Immich photo backups and Proxmox configuration backups.
 
-- **Runbook**: [docs/runbooks/disaster-recovery-drill.md](docs/runbooks/disaster-recovery-drill.md)
-- **Scripts**: [scripts/dr/](scripts/dr/) (list, download, verify)
-- **Specification**: [specs/012-disaster-recovery-drill/](specs/012-disaster-recovery-drill/)
+- **Immich DR**: [docs/runbooks/disaster-recovery-drill.md](docs/runbooks/disaster-recovery-drill.md)
+- **Proxmox Backup**: [docs/operations/backups-proxmox-config.md](docs/operations/backups-proxmox-config.md)
+- **Proxmox Restore**: [docs/operations/backups-proxmox-config-restore.md](docs/operations/backups-proxmox-config-restore.md)
 - **Last Drill**: See `scripts/dr/drill-reports/` for execution history
+
+#### Proxmox Configuration Backup (Feature 013)
+
+**Automated daily backups** of Proxmox VE configuration to NAS:
+- **Schedule**: Daily at 2:00 AM via systemd timer
+- **Location**: `192.168.1.109:/volume1/homelab_backups/proxmox/`
+- **Retention**: 30 daily + 12 monthly backups
+- **Contents**: LXC configs, storage config, network config, fstab, IaC artifacts (optional)
+- **Encryption**: Age (age-encryption.org) with public key cryptography
+- **Verification**: Automated post-backup checksum validation
+- **Notifications**: Email alerts on backup failures (Gmail SMTP relay)
+
+**Quick Recovery**:
+1. Mount NAS: `mount -t nfs 192.168.1.109:/volume1/homelab_backups/proxmox /mnt/nas-backup`
+2. Decrypt latest: `age --decrypt -i /root/.age/proxmox-backup.key backup.tar.zst.age > backup.tar.zst`
+3. Extract: `tar --use-compress-program=zstd -xvf backup.tar.zst`
+4. Follow [restore runbook](docs/operations/backups-proxmox-config-restore.md)
+
+**Manual Backup**: `ssh root@192.168.1.112 /usr/local/sbin/proxmox-config-backup`
 
 ### Operational Runbooks
 
