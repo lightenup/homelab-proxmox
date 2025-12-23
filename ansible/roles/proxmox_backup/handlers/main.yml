@@ -13,3 +13,14 @@
     state: restarted
     enabled: true
   listen: restart backup timer
+
+- name: Hash sasl_passwd
+  ansible.builtin.command:
+    cmd: postmap /etc/postfix/sasl_passwd
+  listen: hash sasl_passwd
+
+- name: Reload postfix
+  ansible.builtin.systemd:
+    name: postfix
+    state: reloaded
+  listen: reload postfix

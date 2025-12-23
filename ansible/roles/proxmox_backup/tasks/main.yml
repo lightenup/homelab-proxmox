@@ -16,6 +16,12 @@
     - backup
     - repo
 
+- name: Configure SMTP relay for email notifications
+  ansible.builtin.import_tasks: configure_smtp.yml
+  tags:
+    - backup
+    - smtp
+
 - name: Deploy backup script
   ansible.builtin.import_tasks: deploy_script.yml
   tags:
