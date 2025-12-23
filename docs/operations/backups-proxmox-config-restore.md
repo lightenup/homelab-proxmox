@@ -524,7 +524,8 @@ echo "New public key: $NEW_PUBLIC_KEY"
 # Store in "Proxmox Backup Age Key" item
 
 # 4. Update Ansible configuration
-# Edit ansible/group_vars/proxmox_hosts.yml or export environment variable
+# The public key is deployed via environment variable (not in vars file)
+# Ensure PROXMOX_BACKUP_AGE_PUBLIC_KEY is set when running playbook
 
 # 5. Redeploy backup configuration
 export PROXMOX_BACKUP_AGE_PUBLIC_KEY="$NEW_PUBLIC_KEY"

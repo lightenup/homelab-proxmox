@@ -337,7 +337,7 @@ systemctl list-timers proxmox-backup.timer
 
 ### Backup Variables
 
-Located in `ansible/group_vars/proxmox_hosts.yml`:
+Located in `ansible/group_vars/proxmox_hosts/vars.yml`:
 
 ```yaml
 proxmox_backup_enabled: true
@@ -346,7 +346,6 @@ proxmox_backup_time: "02:00"
 
 proxmox_backup_nas_host: "192.168.1.109"
 proxmox_backup_nas_path: "/volume1/homelab_backups/proxmox"
-proxmox_backup_age_key_path: "/root/.age/proxmox-backup.key"
 
 # Optional: Enable IaC artifact backup (requires repo on PVE)
 # proxmox_backup_repo_path: "/root/homelab-proxmox"
@@ -785,13 +784,20 @@ Set permissions: `chmod 600 /etc/msmtprc`
 
 ### Configuration
 
-**1. Update Ansible variables** in `ansible/group_vars/proxmox_hosts.yml`:
+**1. Update Ansible variables** in `ansible/group_vars/proxmox_hosts/vars.yml`:
 ```yaml
 # Enable email notifications
 proxmox_backup_notify_on_success: false  # true to get success emails too
-proxmox_backup_smtp_host: "smtp.gmail.com"
-proxmox_backup_email_from: "proxmox-backup@homelab.local"
-proxmox_backup_email_to: "admin@example.com"
+```
+
+**2. SMTP credentials** are securely stored in `ansible/group_vars/proxmox_hosts/vault.yml` (encrypted):
+```yaml
+# View with: ansible-vault view ansible/group_vars/proxmox_hosts/vault.yml
+smtp_host: "smtp.gmail.com"
+smtp_user: "your-email@gmail.com"
+smtp_password: "your-app-password"  # Gmail app password
+smtp_from: "your-email@gmail.com"
+smtp_to: "your-email@gmail.com"
 ```
 
 **2. Redeploy configuration**:
