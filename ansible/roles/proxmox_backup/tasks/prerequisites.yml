@@ -11,10 +11,44 @@
     - backup
     - prerequisites
 
-- name: Install age encryption tool
-  ansible.builtin.apt:
-    name: age
-    state: present
+- name: Install age encryption tool from GitHub releases
+  ansible.builtin.get_url:
+    url: "https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz"
+    dest: /tmp/age.tar.gz
+    mode: '0644'
+  tags:
+    - backup
+    - prerequisites
+
+- name: Extract age binary
+  ansible.builtin.unarchive:
+    src: /tmp/age.tar.gz
+    dest: /tmp
+    remote_src: true
+  tags:
+    - backup
+    - prerequisites
+
+- name: Install age binaries to /usr/local/bin
+  ansible.builtin.copy:
+    src: "/tmp/age/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    mode: '0755'
+    remote_src: true
+  loop:
+    - age
+    - age-keygen
+  tags:
+    - backup
+    - prerequisites
+
+- name: Clean up age download
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/age.tar.gz
+    - /tmp/age
   tags:
     - backup
     - prerequisites
