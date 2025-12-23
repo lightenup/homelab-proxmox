@@ -1,0 +1,43 @@
+---
+# ansible/playbooks/backup_proxmox.yml
+# Deploy Proxmox configuration backup automation
+# Feature: 013-proxmox-config-backup
+# Architecture: Choice 3, Option A - Deploys script, config, systemd units
+
+- name: Deploy Proxmox Configuration Backup System
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Verify backup prerequisites
+      ansible.builtin.assert:
+        that:
+          - proxmox_backup_enabled | default(false) | bool
+          - proxmox_backup_nas_host is defined
+          - proxmox_backup_nas_path is defined
+          - proxmox_backup_age_public_key is defined
+        fail_msg: "Required backup variables not defined. Check ansible/group_vars/proxmox_hosts.yml"
+        success_msg: "Backup prerequisites validated"
+      tags:
+        - backup
+        - validate
+
+    - name: Deploy proxmox_backup role
+      ansible.builtin.include_role:
+        name: proxmox_backup
+      tags:
+        - backup
+
+    - name: Display backup status
+      ansible.builtin.debug:
+        msg:
+          - "✓ Backup system deployed successfully"
+          - "Script: /usr/local/sbin/proxmox-config-backup"
+          - "Config: /etc/proxmox-backup.conf"
+          - "Timer: systemctl status proxmox-backup.timer"
+          - "Logs: journalctl -u proxmox-backup.service -f"
+          - ""
+          - "Test manual backup: ssh root@{{ ansible_host }} /usr/local/sbin/proxmox-config-backup"
+      tags:
+        - backup
