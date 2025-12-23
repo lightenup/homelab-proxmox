@@ -28,7 +28,7 @@ proxmox_backup_age_public_key: "{{ lookup('env', 'PROXMOX_BACKUP_AGE_PUBLIC_KEY'
 
 # Enable IaC artifact backup
 proxmox_backup_repo_path: "/root/homelab-proxmox"
-proxmox_backup_repo_url: "https://github.com/your_username/homelab-proxmox.git"  # Update with actual URL
+proxmox_backup_repo_url: "https://github.com/lightenup/homelab-proxmox.git"
 
 # Optional: Opt-in for sensitive data (default: false)
 # proxmox_backup_include_tailscale_state: false
