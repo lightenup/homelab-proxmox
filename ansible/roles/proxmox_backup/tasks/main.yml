@@ -18,18 +18,9 @@
 
 - name: Configure SMTP relay for email notifications
   ansible.builtin.import_tasks: configure_smtp.yml
-  when: proxmox_backup_enable_host_email | default(false)
   tags:
     - backup
     - smtp
-
-- name: Remove host-level email notifications (if requested)
-  ansible.builtin.import_tasks: remove_host_email.yml
-  when: proxmox_backup_remove_host_email | default(false)
-  tags:
-    - backup
-    - decommission
-    - email-removal
 
 - name: Deploy backup script
   ansible.builtin.import_tasks: deploy_script.yml

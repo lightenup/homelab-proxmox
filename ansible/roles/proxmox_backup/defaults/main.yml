@@ -29,17 +29,6 @@ proxmox_backup_age_key_path: "/root/.age/proxmox-backup.key"
 proxmox_backup_retention_daily: 30
 proxmox_backup_retention_monthly: 12
 
-# Email decommissioning (Feature 013 - Phase 7 deprecation)
-# Host-level email is being replaced by Kuma push monitoring
-proxmox_backup_remove_host_email: false  # Set true to disable email config
-proxmox_backup_remove_host_email_packages: false  # Set true to uninstall mail packages
-proxmox_backup_uninstall_postfix: false  # Set true to remove Postfix (requires confirmation)
-proxmox_backup_uninstall_confirmed: false  # Safety flag, must be explicitly set
-
-# Host-level email (DEPRECATED - use Kuma monitoring instead)
-# If you must use host email, set proxmox_backup_enable_host_email: true
-proxmox_backup_enable_host_email: false
-
 # Optional inclusions (security: opt-in only, default false)
 proxmox_backup_include_tailscale_state: false
 proxmox_backup_include_rclone_conf: false

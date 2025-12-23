@@ -77,7 +77,6 @@ cleanup() {
   
   if [[ $exit_code -eq 0 ]]; then
     log_info "Backup completed successfully"
-    send_kuma_push "success" "Backup completed: ${BACKUP_NAME}"
     send_email_notification "success"
   else
     log_error "Backup failed with exit code: $exit_code"
@@ -96,8 +95,8 @@ cleanup() {
       *) failure_type="unknown" ;;
     esac
     
-    send_kuma_push "failure" "Backup failed: ${failure_type}"
     send_email_notification "failure" "$failure_type"
+    send_email_notification "failure"
   fi
 }
 
@@ -406,48 +405,11 @@ verify_backup() {
 # Notification Functions
 # ============================================================================
 
-send_kuma_push() {
-  local status="$1"
-  local message="${2:-}"
-  
-  # Skip if Kuma push URL not configured
-  if [[ -z "${KUMA_PUSH_URL:-}" ]]; then
-    log_info "Kuma push not configured - skipping push notification"
-    return 0
-  fi
-  
-  local push_url="$KUMA_PUSH_URL"
-  local timestamp=$(date +%s)
-  
-  if [[ "$status" == "success" ]]; then
-    # Push success with status=up
-    push_url="${push_url%\?*}?status=up&msg=Backup+completed&ping=${timestamp}"
-  else
-    # Push failure with status=down
-    local encoded_msg=$(echo "$message" | sed 's/ /+/g' | head -c 100)
-    push_url="${push_url%\?*}?status=down&msg=${encoded_msg}&ping=${timestamp}"
-  fi
-  
-  # Send push (timeout 10s)
-  if curl -fsS -m 10 "$push_url" >/dev/null 2>&1; then
-    log_info "✓ Kuma push notification sent ($status)"
-  else
-    log_warning "Failed to send Kuma push notification (check KUMA_PUSH_URL and network)"
-  fi
-}
-
 send_email_notification() {
   local status="$1"
   local failure_type="${2:-unknown}"
   
-  # DEPRECATED: Host-level email is being replaced by Kuma push monitoring
-  # Email notifications disabled by default (safe-by-default)
-  # To re-enable temporarily, set ENABLE_HOST_EMAIL=true in /etc/proxmox-backup.conf
-  if [[ "${ENABLE_HOST_EMAIL:-false}" != "true" ]]; then
-    return 0
-  fi
-  
-  # Email notifications disabled by default for success
+  # Email notifications disabled by default
   if [[ "${NOTIFY_ON_SUCCESS:-false}" != "true" && "$status" == "success" ]]; then
     return 0
   fi
