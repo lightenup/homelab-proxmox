@@ -13,7 +13,7 @@
     {
       "name": "{{ target.name }}",
       "type": "{{ target.type }}",
-      "url": "{{ target.url }}",
+      "url": "{{ target.url | default('') }}",
       "interval": {{ target.interval }},
       "ignoreTls": {{ target.ignoreTls | default(false) | lower }}
     }{% if not loop.last %},{% endif %}

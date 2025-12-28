@@ -19,6 +19,16 @@ Goals:
   - Installed manually from ISO.
   - Runs a VLAN-aware Linux bridge for multiple logical networks.
 
+## Backup & Monitoring
+
+- **Proxmox Configuration Backup**:
+  - Automated daily backup of `/etc` and `/var/lib/pve-cluster`.
+  - Encrypted with `age` and stored on NAS.
+  - Monitoring:
+    - **Legacy**: Email notifications via Postfix (Gmail relay).
+    - **Target**: Uptime Kuma Push notifications (Heartbeat).
+    - Controlled by `proxmox_backup_email_mode` Ansible variable.
+
 - **Synology NAS**
   - Provides storage (e.g. NFS) for services, especially Immich.
   - Also stores backups (including Terraform state backups).

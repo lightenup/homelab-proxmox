@@ -17,7 +17,7 @@ Migrate Proxmox backup notifications from host-based SMTP (Postfix) to centraliz
 **Project Type**: Infrastructure automation (Ansible role modification)
 **Performance Goals**: <5s timeout for Kuma push, backup duration unchanged
 **Constraints**: Kuma push must not fail backups, reversibility required, idempotent operations
-**Scale/Scope**: 2-3 PVE hosts, single proxmox_backup Ansible role, 3 user stories
+**Scale/Scope**: 2-3 PVE hosts, single proxmox_backup Ansible role, 4 user stories
 
 ## Constitution Check
 
@@ -45,13 +45,20 @@ specs/014-email-decommission/
 ```text
 ansible/
 ├── group_vars/
+│   ├── monitoring/
+│   │   └── vars.yml                    # Modify: Add Proxmox Push monitor definition
 │   └── proxmox_hosts/
-│       ├── vars.yml                    # Add: proxmox_backup_kuma_push_url, proxmox_backup_email_mode
+│       ├── vars.yml                    # Add: proxmox_backup_email_mode (URL will be dynamic)
 │       └── vault.yml                   # Existing: SMTP credentials (preserved for rollback)
 ├── roles/
+│   ├── uptime_kuma/
+│   │   ├── files/
+│   │   │   └── configure_uptime_kuma.js # Modify: Support 'push' type and return URL
+│   │   └── tasks/
+│   │       └── main.yml                # Modify: Register output of configuration script
 │   └── proxmox_backup/
 │       ├── defaults/
-│       │   └── main.yml                # Modify: Add state machine defaults, Kuma URL default, override flags
+│       │   └── main.yml                # Modify: Add state machine defaults, override flags
 │       ├── tasks/
 │       │   ├── main.yml                # Modify: Include new task files conditionally
 │       │   ├── discovery.yml           # Create: Discovery phase (packages, services, usage detection)
@@ -69,6 +76,7 @@ docs/
 ```
 
 **Structure Decision**: Extend existing `proxmox_backup` role with conditional task files. State machine in config template controls behavior. Discovery phase in separate task file for clarity. Templates modified to support both email and Kuma modes.
+**Automation Decision**: Enhance `uptime_kuma` role to handle Push monitor creation and URL retrieval. Pass this URL to `proxmox_backup` role via Ansible facts or hostvars.
 
 ## Architecture Decisions
 
@@ -95,8 +103,23 @@ proxmox_backup_email_mode: "kuma_only"  # Safe default: Kuma + email code preser
 
 # group_vars/proxmox_hosts/vars.yml
 proxmox_backup_email_mode: "disabled"   # Operator sets desired state
-proxmox_backup_kuma_push_url: "https://kuma.example.com/api/push/xxxx"
+# proxmox_backup_kuma_push_url is now dynamic, retrieved from Kuma role
 ```
+
+### 2. Kuma Push URL Automation
+
+**Decision**: Use `uptime_kuma` role to create monitor and export URL
+
+**Mechanism**:
+1.  Update `configure_uptime_kuma.js` to accept `push` monitor type.
+2.  Script creates/updates monitor and prints the Push URL to stdout (JSON).
+3.  Ansible task registers this output.
+4.  `proxmox_backup` role uses `hostvars['monitoring']['kuma_monitor_url']` (or similar) to configure the backup script.
+
+**Rationale**:
+- Avoids manual copy-paste errors.
+- Keeps monitoring config centralized in `uptime_kuma` role.
+- Fully automated setup.
 
 ### 2. Kuma Push Integration
 

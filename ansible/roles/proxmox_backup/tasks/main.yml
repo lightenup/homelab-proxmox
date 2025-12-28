@@ -4,6 +4,12 @@
 # Feature: 013-proxmox-config-backup
 # Architecture: Choice 3, Option A - Deploys bash script, does NOT execute at runtime
 
+- name: Discover current state
+  ansible.builtin.include_tasks: discovery.yml
+  tags:
+    - backup
+    - always
+
 - name: Install backup prerequisites
   ansible.builtin.import_tasks: prerequisites.yml
   tags:
@@ -16,11 +22,36 @@
     - backup
     - repo
 
-- name: Configure SMTP relay for email notifications
-  ansible.builtin.import_tasks: configure_smtp.yml
+# State Machine: Email Configuration
+- name: Enable Email Notifications (Legacy Mode)
+  ansible.builtin.include_tasks: enable_email.yml
+  when: proxmox_backup_email_mode == 'enabled'
   tags:
     - backup
     - smtp
+    - email
+
+- name: Configure Uptime Kuma Push (Target Mode)
+  ansible.builtin.include_tasks: configure_kuma.yml
+  when: proxmox_backup_email_mode == 'kuma_only'
+  tags:
+    - backup
+    - kuma
+
+- name: Disable Email Notifications
+  ansible.builtin.include_tasks: disable_email.yml
+  when: proxmox_backup_email_mode in ['kuma_only', 'disabled']
+  tags:
+    - backup
+    - smtp
+    - email
+
+- name: Remove Email Packages
+  ansible.builtin.include_tasks: remove_packages.yml
+  when: proxmox_backup_email_mode == 'removed'
+  tags:
+    - backup
+    - cleanup
 
 - name: Deploy backup script
   ansible.builtin.import_tasks: deploy_script.yml

@@ -26,3 +26,16 @@ To verify that remote access is working correctly:
 *   **Host not appearing**: Check `systemctl status tailscaled` on the Proxmox host.
 *   **Routes not working**: Ensure you approved the `192.168.1.0/24` route in the Tailscale Admin Console.
 *   **Key Expired**: If the auth key expires, generate a new one and update `ansible/group_vars/proxmox_hosts.yml`.
+
+## Proxmox Configuration Backup
+
+- **Main Operations Guide**: [Proxmox Configuration Backup Operations](operations/backups-proxmox-config.md)
+- **Restore Guide**: [Proxmox Configuration Restore](operations/backups-proxmox-config-restore.md)
+
+### Email Decommissioning & Kuma Migration
+
+We have migrated from email notifications to Uptime Kuma Push monitoring.
+
+-   **Runbook**: [Proxmox Backup Email Decommissioning](operations/backups-proxmox-config-email-decommission.md)
+-   **Current Mode**: `kuma_only` (Email disabled, Kuma active)
+-   **Configuration**: `ansible/group_vars/proxmox_hosts/vars.yml`

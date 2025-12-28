@@ -1,0 +1,7 @@
+---
+# ansible/roles/proxmox_backup/tasks/enable_email.yml
+# Re-enable host email notifications (Legacy Mode)
+# Ensures Postfix is running and configured
+
+- name: Configure SMTP (Legacy)
+  ansible.builtin.import_tasks: configure_smtp.yml

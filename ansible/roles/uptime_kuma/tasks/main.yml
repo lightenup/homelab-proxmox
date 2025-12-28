@@ -58,8 +58,14 @@
     chdir: "{{ temp_config_dir.path }}"
   environment:
     UPTIME_KUMA_URL: "{{ uptime_kuma_api_url }}"
+    UPTIME_KUMA_PUBLIC_URL: "http://{{ ansible_host }}:3001"
   register: configure_result
   changed_when: "'created' in configure_result.stdout"
+
+- name: Parse Push Monitor URLs
+  ansible.builtin.set_fact:
+    uptime_kuma_push_monitors: "{{ (configure_result.stdout | regex_search('__PUSH_MONITORS_JSON__\\n([\\s\\S]*?)\\n__END_PUSH_MONITORS_JSON__', '\\1'))[0] | from_json }}"
+  when: "'__PUSH_MONITORS_JSON__' in configure_result.stdout"
 
 - name: Display configuration result
   ansible.builtin.debug:

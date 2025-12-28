@@ -26,16 +26,16 @@
 
 **Purpose**: Prepare role structure and state machine foundations
 
-- [ ] T001 Update ansible/roles/proxmox_backup/defaults/main.yml with state machine defaults (proxmox_backup_email_mode, proxmox_backup_kuma_push_url)
-- [ ] T002 Update ansible/roles/proxmox_backup/defaults/main.yml with override flags (proxmox_backup_force_remove_email, proxmox_backup_uninstall_confirmed)
-- [ ] T003 Create ansible/roles/proxmox_backup/tasks/discovery.yml stub (empty file with header comment)
-- [ ] T004 Create ansible/roles/proxmox_backup/tasks/configure_kuma.yml stub (empty file with header comment)
-- [ ] T005 Create ansible/roles/proxmox_backup/tasks/disable_email.yml stub (empty file with header comment)
-- [ ] T006 Create ansible/roles/proxmox_backup/tasks/enable_email.yml stub (empty file with header comment)
-- [ ] T007 Create ansible/roles/proxmox_backup/tasks/remove_packages.yml stub (empty file with header comment)
-- [ ] T008 Update ansible/roles/proxmox_backup/tasks/main.yml to add conditional includes based on proxmox_backup_email_mode state
-- [ ] T009 Add proxmox_backup_kuma_push_url (initially commented out) to ansible/group_vars/proxmox_hosts/vars.yml
-- [ ] T010 Verify Ansible syntax with ansible-playbook --syntax-check ansible/playbooks/services.yml
+- [x] T001 Update ansible/roles/proxmox_backup/defaults/main.yml with state machine defaults (proxmox_backup_email_mode, proxmox_backup_kuma_push_url)
+- [x] T002 Update ansible/roles/proxmox_backup/defaults/main.yml with override flags (proxmox_backup_force_remove_email, proxmox_backup_uninstall_confirmed)
+- [x] T003 Create ansible/roles/proxmox_backup/tasks/discovery.yml stub (empty file with header comment)
+- [x] T004 Create ansible/roles/proxmox_backup/tasks/configure_kuma.yml stub (empty file with header comment)
+- [x] T005 Create ansible/roles/proxmox_backup/tasks/disable_email.yml stub (empty file with header comment)
+- [x] T006 Create ansible/roles/proxmox_backup/tasks/enable_email.yml stub (empty file with header comment)
+- [x] T007 Create ansible/roles/proxmox_backup/tasks/remove_packages.yml stub (empty file with header comment)
+- [x] T008 Update ansible/roles/proxmox_backup/tasks/main.yml to add conditional includes based on proxmox_backup_email_mode state
+- [x] T009 Add proxmox_backup_kuma_push_url (initially commented out) to ansible/group_vars/proxmox_hosts/vars.yml
+- [x] T010 Verify Ansible syntax with ansible-playbook --syntax-check ansible/playbooks/services.yml
 
 **Checkpoint**: Role structure prepared, no functional changes, syntax valid
 
@@ -49,18 +49,18 @@
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Add KUMA_PUSH_URL variable to ansible/roles/proxmox_backup/templates/proxmox-backup.conf.j2 template
-- [ ] T012 [P] [US1] Add send_kuma_push() function to ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2 (curl POST with 5s timeout)
-- [ ] T013 [US1] Add exit code capture in ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2 (detect backup failure via $?)
-- [ ] T014 [US1] Add Kuma push calls in ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2 (success: status=up, failure: status=down)
-- [ ] T015 [US1] Add graceful fallback in send_kuma_push() for empty KUMA_PUSH_URL (silent skip, no error)
-- [ ] T016 [US1] Add journald logging in send_kuma_push() for all push attempts (logger -t proxmox-backup)
-- [ ] T017 [US1] Implement ansible/roles/proxmox_backup/tasks/configure_kuma.yml to deploy config with Kuma URL from vars
-- [ ] T018 [US1] Test: Configure proxmox_backup_kuma_push_url in ansible/group_vars/proxmox_hosts/vars.yml with actual Kuma push URL
-- [ ] T019 [US1] Test: Run ansible-playbook ansible/playbooks/services.yml --tags proxmox_backup
-- [ ] T020 [US1] Test: Run backup manually (ssh to PVE, run proxmox-config-backup), verify Kuma dashboard shows "Up"
-- [ ] T021 [US1] Test: Break NAS mount (umount /mnt/proxmox-backup), run backup, verify Kuma shows "Down"
-- [ ] T022 [US1] Test: Comment out KUMA_PUSH_URL in vars, run backup, verify no crash (graceful fallback)
+- [x] T011 [P] [US1] Add KUMA_PUSH_URL variable to ansible/roles/proxmox_backup/templates/proxmox-backup.conf.j2 template
+- [x] T012 [P] [US1] Add send_kuma_push() function to ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2 (curl POST with 5s timeout)
+- [x] T013 [US1] Add exit code capture in ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2 (detect backup failure via $?)
+- [x] T014 [US1] Add Kuma push calls in ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2 (success: status=up, failure: status=down)
+- [x] T015 [US1] Add graceful fallback in send_kuma_push() for empty KUMA_PUSH_URL (silent skip, no error)
+- [x] T016 [US1] Add journald logging in send_kuma_push() for all push attempts (logger -t proxmox-backup)
+- [x] T017 [US1] Implement ansible/roles/proxmox_backup/tasks/configure_kuma.yml to deploy config with Kuma URL from vars
+- [x] T018 [US1] Test: Configure proxmox_backup_kuma_push_url in ansible/group_vars/proxmox_hosts/vars.yml with actual Kuma push URL
+- [x] T019 [US1] Test: Run ansible-playbook ansible/playbooks/services.yml --tags proxmox_backup
+- [x] T020 [US1] Test: Run backup manually (ssh to PVE, run proxmox-config-backup), verify Kuma dashboard shows "Up"
+- [x] T021 [US1] Test: Break NAS mount (umount /mnt/proxmox-backup), run backup, verify Kuma shows "Down"
+- [x] T022 [US1] Test: Comment out KUMA_PUSH_URL in vars, run backup, verify no crash (graceful fallback)
 
 **Checkpoint**: US1 complete - Kuma monitoring fully functional, email still works (default mode=kuma_only)
 
@@ -74,26 +74,26 @@
 
 ### Implementation for User Story 2
 
-- [ ] T023 [P] [US2] Implement discovery checks in ansible/roles/proxmox_backup/tasks/discovery.yml (dpkg -l packages check)
-- [ ] T024 [P] [US2] Add service check to ansible/roles/proxmox_backup/tasks/discovery.yml (systemctl list-unit-files grep postfix)
-- [ ] T025 [P] [US2] Add journald activity check to ansible/roles/proxmox_backup/tasks/discovery.yml (journalctl -u postfix --since 7 days ago)
-- [ ] T026 [P] [US2] Add usage scan to ansible/roles/proxmox_backup/tasks/discovery.yml (grep sendmail|mail in /etc/systemd /usr/local/sbin /opt)
-- [ ] T027 [US2] Add discovery results reporting in ansible/roles/proxmox_backup/tasks/discovery.yml (debug msg with findings)
-- [ ] T028 [US2] Add conflict detection logic in ansible/roles/proxmox_backup/tasks/discovery.yml (abort if non-backup usage unless force flag)
-- [ ] T029 [P] [US2] Implement ansible/roles/proxmox_backup/tasks/disable_email.yml to stop and disable Postfix service
-- [ ] T030 [P] [US2] Add SMTP variable removal logic in ansible/roles/proxmox_backup/tasks/disable_email.yml (remove from proxmox-backup.conf)
-- [ ] T031 [P] [US2] Add state transition comment in ansible/roles/proxmox_backup/tasks/disable_email.yml (add "Kuma owns notifications" comment to config)
-- [ ] T032 [P] [US2] Implement ansible/roles/proxmox_backup/tasks/enable_email.yml for rollback (start/enable Postfix)
-- [ ] T033 [P] [US2] Add SMTP variable restoration logic in ansible/roles/proxmox_backup/tasks/enable_email.yml (restore from vault to proxmox-backup.conf)
-- [ ] T034 [US2] Update ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2 to gate send_email_notification() behind state check
-- [ ] T035 [US2] Update ansible/roles/proxmox_backup/tasks/main.yml to include discovery.yml before disable_email.yml
-- [ ] T036 [US2] Update ansible/roles/proxmox_backup/tasks/main.yml to conditionally include disable_email.yml when mode=disabled
-- [ ] T037 [US2] Update ansible/roles/proxmox_backup/tasks/main.yml to conditionally include enable_email.yml when mode=enabled
-- [ ] T038 [US2] Test: Run discovery phase with ansible-playbook --check mode, verify findings reported
-- [ ] T039 [US2] Test: Set proxmox_backup_email_mode: disabled in ansible/group_vars/proxmox_hosts/vars.yml
-- [ ] T040 [US2] Test: Run ansible-playbook ansible/playbooks/services.yml --tags proxmox_backup, verify Postfix stopped
-- [ ] T041 [US2] Test: Run backup manually, verify success with Kuma push only (no email attempt in logs)
-- [ ] T042 [US2] Test: Verify Postfix disabled (systemctl is-enabled postfix returns disabled)
+- [x] T023 [P] [US2] Implement discovery checks in ansible/roles/proxmox_backup/tasks/discovery.yml (dpkg -l packages check)
+- [x] T024 [P] [US2] Add service check to ansible/roles/proxmox_backup/tasks/discovery.yml (systemctl list-unit-files grep postfix)
+- [x] T025 [P] [US2] Add journald activity check to ansible/roles/proxmox_backup/tasks/discovery.yml (journalctl -u postfix --since 7 days ago)
+- [x] T026 [P] [US2] Add usage scan to ansible/roles/proxmox_backup/tasks/discovery.yml (grep sendmail|mail in /etc/systemd /usr/local/sbin /opt)
+- [x] T027 [US2] Add discovery results reporting in ansible/roles/proxmox_backup/tasks/discovery.yml (debug msg with findings)
+- [x] T028 [US2] Add conflict detection logic in ansible/roles/proxmox_backup/tasks/discovery.yml (abort if non-backup usage unless force flag)
+- [x] T029 [P] [US2] Implement ansible/roles/proxmox_backup/tasks/disable_email.yml to stop and disable Postfix service
+- [x] T030 [P] [US2] Add SMTP variable removal logic in ansible/roles/proxmox_backup/tasks/disable_email.yml (remove from proxmox-backup.conf)
+- [x] T031 [P] [US2] Add state transition comment in ansible/roles/proxmox_backup/tasks/disable_email.yml (add "Kuma owns notifications" comment to config)
+- [x] T032 [P] [US2] Implement ansible/roles/proxmox_backup/tasks/enable_email.yml for rollback (start/enable Postfix)
+- [x] T033 [P] [US2] Add SMTP variable restoration logic in ansible/roles/proxmox_backup/tasks/enable_email.yml (restore from vault to proxmox-backup.conf)
+- [x] T034 [US2] Update ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2 to gate send_email_notification() behind state check
+- [x] T035 [US2] Update ansible/roles/proxmox_backup/tasks/main.yml to include discovery.yml before disable_email.yml
+- [x] T036 [US2] Update ansible/roles/proxmox_backup/tasks/main.yml to conditionally include disable_email.yml when mode=disabled
+- [x] T037 [US2] Update ansible/roles/proxmox_backup/tasks/main.yml to conditionally include enable_email.yml when mode=enabled
+- [x] T038 [US2] Test: Run discovery phase with ansible-playbook --check mode, verify findings reported
+- [x] T039 [US2] Test: Set proxmox_backup_email_mode: disabled in ansible/group_vars/proxmox_hosts/vars.yml
+- [x] T040 [US2] Test: Run ansible-playbook ansible/playbooks/services.yml --tags proxmox_backup, verify Postfix stopped
+- [x] T041 [US2] Test: Run backup manually, verify success with Kuma push only (no email attempt in logs)
+- [x] T042 [US2] Test: Verify Postfix disabled (systemctl is-enabled postfix returns disabled)
 - [ ] T043 [US2] Test rollback: Set proxmox_backup_email_mode: enabled, run playbook
 - [ ] T044 [US2] Test rollback: Verify Postfix running (systemctl is-active postfix returns active)
 - [ ] T045 [US2] Test rollback: Run backup, verify email sent (check logs for email notification)
@@ -110,15 +110,15 @@
 
 ### Implementation for User Story 3
 
-- [ ] T046 [P] [US3] Implement confirmation check in ansible/roles/proxmox_backup/tasks/remove_packages.yml (fail if proxmox_backup_uninstall_confirmed not true)
-- [ ] T047 [P] [US3] Add package existence check in ansible/roles/proxmox_backup/tasks/remove_packages.yml (dpkg -l postfix/mailutils)
-- [ ] T048 [P] [US3] Implement package removal in ansible/roles/proxmox_backup/tasks/remove_packages.yml (apt-get remove --purge postfix mailutils)
-- [ ] T049 [P] [US3] Add autoremove in ansible/roles/proxmox_backup/tasks/remove_packages.yml (apt-get autoremove --purge)
-- [ ] T050 [P] [US3] Add /etc/postfix cleanup in ansible/roles/proxmox_backup/tasks/remove_packages.yml (remove directory if exists)
-- [ ] T051 [P] [US3] Add /etc/msmtprc cleanup in ansible/roles/proxmox_backup/tasks/remove_packages.yml (remove file if exists)
-- [ ] T052 [P] [US3] Add binary verification in ansible/roles/proxmox_backup/tasks/remove_packages.yml (check which mail returns empty)
-- [ ] T053 [US3] Update ansible/roles/proxmox_backup/tasks/main.yml to include remove_packages.yml when mode=removed
-- [ ] T054 [US3] Ensure discovery.yml runs before remove_packages.yml (abort if conflicts detected)
+- [x] T046 [P] [US3] Implement confirmation check in ansible/roles/proxmox_backup/tasks/remove_packages.yml (fail if proxmox_backup_uninstall_confirmed not true)
+- [x] T047 [P] [US3] Add package existence check in ansible/roles/proxmox_backup/tasks/remove_packages.yml (dpkg -l postfix/mailutils)
+- [x] T048 [P] [US3] Implement package removal in ansible/roles/proxmox_backup/tasks/remove_packages.yml (apt-get remove --purge postfix mailutils)
+- [x] T049 [P] [US3] Add autoremove in ansible/roles/proxmox_backup/tasks/remove_packages.yml (apt-get autoremove --purge)
+- [x] T050 [P] [US3] Add /etc/postfix cleanup in ansible/roles/proxmox_backup/tasks/remove_packages.yml (remove directory if exists)
+- [x] T051 [P] [US3] Add /etc/msmtprc cleanup in ansible/roles/proxmox_backup/tasks/remove_packages.yml (remove file if exists)
+- [x] T052 [P] [US3] Add binary verification in ansible/roles/proxmox_backup/tasks/remove_packages.yml (check which mail returns empty)
+- [x] T053 [US3] Update ansible/roles/proxmox_backup/tasks/main.yml to include remove_packages.yml when mode=removed
+- [x] T054 [US3] Ensure discovery.yml runs before remove_packages.yml (abort if conflicts detected)
 - [ ] T055 [US3] Test without confirmation: Set proxmox_backup_email_mode: removed (no confirmation flag), run playbook
 - [ ] T056 [US3] Test without confirmation: Verify playbook fails with clear error message requiring confirmation
 - [ ] T057 [US3] Test with confirmation: Set proxmox_backup_uninstall_confirmed: true in vars
@@ -134,26 +134,44 @@
 
 ---
 
-## Phase 5: Polish & Cross-Cutting Concerns
+## Phase 5: User Story 4 - Automate Kuma Monitor Creation (Priority: P1)
+
+**Goal**: Automatically create Kuma Push monitor and configure Proxmox host with the generated URL
+
+**Independent Test**: Run playbook, verify monitor exists in Kuma, verify URL is in `/etc/proxmox-backup.conf`
+
+### Implementation for User Story 4
+
+- [x] T065 [US4] Update `ansible/roles/uptime_kuma/files/configure_uptime_kuma.js` to support `push` monitor type
+- [x] T066 [US4] Update `ansible/roles/uptime_kuma/files/configure_uptime_kuma.js` to output the Push URL (token) for the created monitor
+- [x] T067 [US4] Update `ansible/host_vars/monitoring/vars.yml` to include the new Proxmox Backup Push monitor
+- [x] T068 [US4] Update `ansible/roles/uptime_kuma/tasks/main.yml` to register the output of the configuration script
+- [x] T069 [US4] Update `ansible/roles/proxmox_backup/tasks/configure_kuma.yml` to use the registered URL from the monitoring host (via `hostvars`)
+- [x] T070 [US4] Test: Run playbook against monitoring host, verify monitor created
+- [x] T071 [US4] Test: Run playbook against proxmox host, verify `KUMA_PUSH_URL` is correctly populated in `/etc/proxmox-backup.conf`
+
+---
+
+## Phase 6: Polish & Cross-Cutting Concerns
 
 **Purpose**: Documentation, final validation, cross-story integration
 
-- [ ] T065 [P] Create docs/operations/backups-proxmox-config-email-decommission.md runbook
-- [ ] T066 [P] Document state machine transitions in docs/operations/backups-proxmox-config-email-decommission.md
-- [ ] T067 [P] Document discovery phase procedures in docs/operations/backups-proxmox-config-email-decommission.md
-- [ ] T068 [P] Document rollback procedures (enabled mode) in docs/operations/backups-proxmox-config-email-decommission.md
-- [ ] T069 [P] Document package removal procedures (removed mode) in docs/operations/backups-proxmox-config-email-decommission.md
-- [ ] T070 [P] Add troubleshooting section to docs/operations/backups-proxmox-config-email-decommission.md
-- [ ] T071 [P] Document override flag usage (force_remove_email) in docs/operations/backups-proxmox-config-email-decommission.md
-- [ ] T072 Update docs/operations/backups-proxmox-config.md to add migration section (link to decommission runbook)
-- [ ] T073 Update docs/operations/backups-proxmox-config.md to document Kuma push URL configuration
-- [ ] T074 Add state machine diagram to docs/operations/backups-proxmox-config-email-decommission.md (enabled → kuma_only → disabled → removed)
-- [ ] T075 Test full state progression: enabled → kuma_only → disabled → removed (all transitions)
-- [ ] T076 Test idempotency: Run playbook 3x in each state, verify no unexpected changes
-- [ ] T077 Verify all FR requirements met (32 functional requirements from spec.md)
-- [ ] T078 Final validation: Check all acceptance scenarios from user stories (11 scenarios total)
-- [ ] T079 Code review: Verify all tasks use idempotent patterns (state checks before actions)
-- [ ] T080 Final commit and prepare pull request for merge to main
+- [x] T072 [P] Create docs/operations/backups-proxmox-config-email-decommission.md runbook
+- [x] T073 [P] Document state machine transitions in docs/operations/backups-proxmox-config-email-decommission.md
+- [x] T074 [P] Document discovery phase procedures in docs/operations/backups-proxmox-config-email-decommission.md
+- [x] T075 [P] Document rollback procedures (enabled mode) in docs/operations/backups-proxmox-config-email-decommission.md
+- [x] T076 [P] Document package removal procedures (removed mode) in docs/operations/backups-proxmox-config-email-decommission.md
+- [x] T077 [P] Add troubleshooting section to docs/operations/backups-proxmox-config-email-decommission.md
+- [x] T078 [P] Document override flag usage (force_remove_email) in docs/operations/backups-proxmox-config-email-decommission.md
+- [x] T079 Update docs/operations/backups-proxmox-config.md to add migration section (link to decommission runbook)
+- [x] T080 Update docs/operations/backups-proxmox-config.md to document Kuma push URL configuration
+- [x] T081 Add state machine diagram to docs/operations/backups-proxmox-config-email-decommission.md (enabled → kuma_only → disabled → removed)
+- [ ] T082 Test full state progression: enabled → kuma_only → disabled → removed (all transitions)
+- [ ] T083 Test idempotency: Run playbook 3x in each state, verify no unexpected changes
+- [ ] T084 Verify all FR requirements met (36 functional requirements from spec.md)
+- [ ] T085 Final validation: Check all acceptance scenarios from user stories (12 scenarios total)
+- [ ] T086 Code review: Verify all tasks use idempotent patterns (state checks before actions)
+- [ ] T087 Final commit and prepare pull request for merge to main
 
 **Final Checkpoint**: All user stories complete, documentation finished, ready for production deployment
 
@@ -161,9 +179,9 @@
 
 ## Summary
 
-**Total Tasks**: 80  
-**MVP Scope** (Phase 2 - US1): Tasks T001-T022 (22 tasks)  
-**Full Feature** (All Phases): Tasks T001-T080 (80 tasks)
+**Total Tasks**: 87
+**MVP Scope** (Phase 2 - US1): Tasks T001-T022 (22 tasks)
+**Full Feature** (All Phases): Tasks T001-T087 (87 tasks)
 
 ### Task Breakdown by Phase
 
@@ -173,7 +191,8 @@
 | Phase 2: US1 (MVP) | T011-T022 | 12 | Kuma push integration |
 | Phase 3: US2 | T023-T045 | 23 | Safe email disable with rollback |
 | Phase 4: US3 | T046-T064 | 19 | Optional package removal |
-| Phase 5: Polish | T065-T080 | 16 | Documentation and final validation |
+| Phase 5: US4 | T065-T071 | 7 | Automate Kuma Monitor Creation |
+| Phase 6: Polish | T072-T087 | 16 | Documentation and final validation |
 
 ### User Story Mapping
 

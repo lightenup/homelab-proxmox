@@ -1,7 +1,7 @@
 # Proxmox Configuration Backup Operations
 
 **Feature**: 013-proxmox-config-backup  
-**Last Updated**: 2025-12-22
+**Last Updated**: 2025-12-28
 
 ## Overview
 
@@ -13,7 +13,7 @@ Automated backup system for Proxmox host configuration and Infrastructure-as-Cod
 
 ## Manual Prerequisites
 
-⚠️ **CRITICAL**: Complete ALL steps below BEFORE running `./scripts/backup/run_proxmox_backup.sh`
+⚠️ **CRITICAL**: Complete ALL steps below BEFORE running Ansible deployment.
 
 These one-time setup tasks must be completed by operator before running automated backups.
 
@@ -21,7 +21,7 @@ These one-time setup tasks must be completed by operator before running automate
 - ✅ Synology NAS accessible at 192.168.1.109
 - ✅ NAS shared folder: `/volume1/homelab_backups` (created in Step 1)
 - ✅ NFS export configured for PVE host 192.168.1.112 (Step 2)
-- ✅ Age encryption keypair generated and in Bitwarden (Step 4)
+- ✅ Age encryption keypair generated and configured in Ansible (Step 4)
 
 ---
 
@@ -200,58 +200,46 @@ showmount -e 192.168.1.109
 
 ### 4. Age Encryption Key Generation
 
-**Purpose**: Generate age keypair for backup encryption and store in Bitwarden
+**Purpose**: Generate age keypair for backup encryption and configure Ansible
 
 **Prerequisites**: age must be installed on your local machine (see section 0 above)
 
 **Steps**:
 
-1. Generate keypair:
+1. Run the generation script:
    ```bash
-   age-keygen -o proxmox-backup.key
+   ./scripts/generate_backup_keys.sh
    ```
    
-   Output shows:
-   ```
-   Public key: age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   ```
+   This will:
+   - Generate a new keypair in `ansible/secrets/age.key` (git-ignored)
+   - Output the public key
+   - Output the private key (for Ansible Vault)
+
+2. Update `ansible/group_vars/proxmox_hosts/vars.yml`:
+   - Set `proxmox_backup_age_public_key` to the generated public key.
+   - Encrypt the private key using `ansible-vault encrypt_string` and set `proxmox_backup_age_private_key`.
 
 3. Store keys in Bitwarden:
    - Open Bitwarden
    - Create new **Secure Note**
    - Title: "Proxmox Backup Encryption Key"
-   - Add custom field "Public Key": `age1xxx...` (from output)
-   - Add custom field "Private Key": (paste contents of `proxmox-backup.key` file)
+   - Add custom field "Public Key": `age1xxx...`
+   - Add custom field "Private Key": (paste contents of `ansible/secrets/age.key`)
    - Add custom field "Homelab": "homelab-proxmox"
-   - Add note: "Created: 2025-12-22 | Used for: Proxmox config backups on NAS"
+   - Add note: "Created: 2025-12-28 | Used for: Proxmox config backups on NAS"
    - Save
-
-4. Test encryption/decryption:
-   ```bash
-   # Encrypt test file
-   echo "test data" | age -r age1xxx... -o test.age
-   
-   # Decrypt test file
-   age -d -i proxmox-backup.key test.age
-   # Should output: test data
-   
-   # Clean up
-   rm test.age proxmox-backup.key
-   ```
-
-5. Key will be deployed to PVE by Ansible (stored in `/root/.age/proxmox-backup.key`)
 
 **Key Security**:
 - ✅ Private key stored in Bitwarden (encrypted at rest)
-- ✅ Private key deployed to PVE via Ansible (git-ignored variables)
+- ✅ Private key deployed to PVE via Ansible (encrypted in vault)
 - ✅ Public key can be committed to git (encryption only, safe)
 - ⚠️ **CRITICAL**: Do NOT lose private key - backups unrecoverable without it
-- 📋 **RECOMMENDATION**: Print paper backup of private key, store in safe
 
 **Key Rotation**:
-- Old backups remain encrypted with old key
-- Both keys required after rotation (documented in key rotation procedure)
-- Test decryption of old backup with old key before discarding
+- Run `./scripts/generate_backup_keys.sh` again (will require deleting old key file first)
+- Update Ansible variables
+- Redeploy: `ansible-playbook playbooks/site.yml --tags backup`
 
 ---
 
@@ -263,10 +251,10 @@ showmount -e 192.168.1.109
 
 ```bash
 # From repo root
-cd /Users/Andreas.Jacobsen/Development/private/homelab-proxmox
+cd /Users/Andreas.Jacobsen/Development/private/homelab-proxmox/ansible
 
 # Deploy backup role to Proxmox host
-ansible-playbook ansible/playbooks/backup_proxmox.yml
+ansible-playbook playbooks/site.yml --tags backup
 
 # Verify deployment
 ssh root@192.168.1.112 "ls -lh /usr/local/sbin/proxmox-config-backup /etc/proxmox-backup.conf"
@@ -318,7 +306,7 @@ systemctl list-timers proxmox-backup.timer
 **Current Workflow** (December 2025):
 - Ansible executed from local laptop
 - Repo: `/Users/Andreas.Jacobsen/Development/private/homelab-proxmox`
-- Deployment: Manual via `./scripts/backup/run_proxmox_backup.sh`
+- Deployment: Manual via `ansible-playbook`
 
 **Future Workflow** (Planned):
 - Ansible executed from Raspberry Pi with GitHub Actions runner
@@ -368,13 +356,27 @@ Deployed by Ansible, sources variables from group_vars. Contains:
 - Age key paths
 - Retention policy
 - Optional features (Tailscale, rclone, IaC repo path)
-- Email notification settings (if configured)
+- Notification settings
 
 ---
 
 ## Monitoring
 
-### Backup Success/Failure
+### Uptime Kuma (Primary)
+
+The backup script sends push notifications to Uptime Kuma.
+
+- **Monitor Name**: "Proxmox Backup"
+- **Type**: Push
+- **Status**:
+  - **Up**: Backup completed successfully.
+  - **Down**: Backup failed (message contains failure type).
+
+**Configuration**:
+- The Kuma Push URL is automatically retrieved from the monitoring host during Ansible deployment.
+- It is stored in `/etc/proxmox-backup.conf` as `KUMA_URL`.
+
+### Backup Success/Failure Logs
 
 **Check last backup status**:
 ```bash
@@ -389,16 +391,16 @@ journalctl -u proxmox-backup.service -n 50
 ssh root@192.168.1.109 "ls -lhtr /volume1/homelab_backups/proxmox/"
 ```
 
-**Email notifications** (if configured):
-- Failure: Email sent immediately with error details
-- Success: Email sent only if `proxmox_backup_notify_on_success: true`
+---
 
-### Integration with Uptime Kuma (Future)
+## Email Decommissioning
 
-Monitor backup freshness:
-- Check latest backup timestamp on NAS
-- Alert if no backup in last 36 hours
-- Integration documented in Phase 8 (T078)
+We are transitioning from local Email notifications (Postfix) to Centralized Monitoring (Uptime Kuma).
+
+See [backups-proxmox-config-email-decommission.md](./backups-proxmox-config-email-decommission.md) for the full runbook on how to:
+1.  Disable email notifications.
+2.  Rollback to email if needed.
+3.  Permanently remove email packages.
 
 ---
 
@@ -462,12 +464,7 @@ ps aux | grep proxmox-config-backup
 ```bash
 # On PVE host
 mkdir -p /root/.age
-echo 'AGE-SECRET-KEY-1xxx...' > /root/.age/proxmox-backup.key
-chmod 600 /root/.age/proxmox-backup.key
-
-# Verify
-ls -l /root/.age/proxmox-backup.key
-# Should show: -rw------- 1 root root
+# Check Ansible logs for why key deployment failed
 ```
 
 ### Ansible "no hosts matched"
@@ -492,7 +489,7 @@ proxmox_hosts:
       ansible_user: root
 
 # Re-run deployment
-./scripts/backup/run_proxmox_backup.sh
+ansible-playbook playbooks/site.yml --tags backup
 ```
 
 ---
@@ -557,7 +554,7 @@ See [backups-proxmox-config-restore.md](./backups-proxmox-config-restore.md) for
 ## Security
 
 - 🔐 **Encryption**: age with public/private keypair
-- 🔐 **Key storage**: Private key in Bitwarden + deployed to PVE (git-ignored)
+- 🔐 **Key storage**: Private key in Bitwarden + deployed to PVE (encrypted in vault)
 - 🔐 **Archive permissions**: 640 root:root on NAS
 - 🔐 **Sensitive data**: Opt-in only (Tailscale state, rclone config default: excluded)
 - 🔐 **Secret scanning**: Script fails if plaintext credentials detected in IaC artifacts
@@ -731,189 +728,6 @@ done'
 
 ---
 
-## Email Notifications
-
-### Overview
-
-The backup system can send email notifications on backup failures (and optionally on success). This provides early warning for backup issues without needing to actively monitor logs.
-
-**Default Behavior**: Email notifications are disabled by default.
-
-### Prerequisites
-
-**1. Install mail utilities on Proxmox host**:
-```bash
-ssh root@192.168.1.112
-apt update && apt install mailutils
-```
-
-**2. Configure mail relay** (choose one):
-
-**Option A: Use Postfix as local relay** (simplest):
-```bash
-# During mailutils installation, select "Local only"
-# Test with:
-echo "Test email" | mail -s "Test from Proxmox" your-email@example.com
-```
-
-**Option B: Use external SMTP** (more reliable):
-```bash
-# Install ssmtp or msmtp for SMTP relay
-apt install msmtp msmtp-mta
-```
-
-Configure `/etc/msmtprc`:
-```bash
-defaults
-auth           on
-tls            on
-tls_trust_file /etc/ssl/certs/ca-certificates.crt
-logfile        /var/log/msmtp.log
-
-account        default
-host           smtp.gmail.com
-port           587
-from           proxmox-backup@yourdomain.com
-user           your-email@gmail.com
-password       your-app-password
-
-account default : default
-```
-
-Set permissions: `chmod 600 /etc/msmtprc`
-
-### Configuration
-
-**1. Update Ansible variables** in `ansible/group_vars/proxmox_hosts/vars.yml`:
-```yaml
-# Enable email notifications
-proxmox_backup_notify_on_success: false  # true to get success emails too
-```
-
-**2. SMTP credentials** are securely stored in `ansible/group_vars/proxmox_hosts/vault.yml` (encrypted):
-```yaml
-# View with: ansible-vault view ansible/group_vars/proxmox_hosts/vault.yml
-smtp_host: "smtp.gmail.com"
-smtp_user: "your-email@gmail.com"
-smtp_password: "your-app-password"  # Gmail app password
-smtp_from: "your-email@gmail.com"
-smtp_to: "your-email@gmail.com"
-```
-
-**2. Redeploy configuration**:
-```bash
-export PROXMOX_BACKUP_AGE_PUBLIC_KEY='age19c...'
-./scripts/backup/run_proxmox_backup.sh
-```
-
-**3. Verify configuration deployed**:
-```bash
-ssh root@192.168.1.112 'grep -A 3 "Email Notifications" /etc/proxmox-backup.conf'
-```
-
-Expected output:
-```
-# Optional: Email Notifications
-NOTIFY_ON_SUCCESS=false
-SMTP_HOST="smtp.gmail.com"
-EMAIL_FROM="proxmox-backup@homelab.local"
-EMAIL_TO="admin@example.com"
-```
-
-### Notification Types
-
-**Failure Notifications** (always sent if SMTP configured):
-- **Trigger**: Any backup failure (exit code > 0)
-- **Content**: 
-  - Timestamp and hostname
-  - Exit code and failure type
-  - Specific error details
-  - Recent log entries (last 10 lines)
-  - Recommended actions
-- **Subject**: `[Proxmox] ⚠️ Backup FAILED - 20251223-120000`
-
-**Success Notifications** (optional):
-- **Trigger**: Successful backup completion
-- **Enabled**: Set `proxmox_backup_notify_on_success: true`
-- **Content**:
-  - Timestamp and hostname
-  - Archive size and file count
-  - Verification status
-  - Next scheduled backup
-- **Subject**: `[Proxmox] Backup completed successfully - 20251223-120000`
-
-### Failure Types Detected
-
-The notification system categorizes failures for faster troubleshooting:
-
-| Failure Type | Exit Code | Description | Common Causes |
-|--------------|-----------|-------------|---------------|
-| `collection` | 2-4 | Config collection failed | /etc/pve access issues, permission denied |
-| `compression` | 5 | Compression failed | Disk full, corrupt files |
-| `encryption` | 6 | Encryption failed | Invalid age public key |
-| `mount` | 7 | NFS mount failed | Network issue, NFS export misconfigured |
-| `disk_full` | 8 | Insufficient space | NAS storage full |
-| `transfer` | 9 | Copy to NAS failed | Network timeout, NAS unavailable |
-| `verification` | 10 | Backup verification failed | Corrupted archive, bad encryption |
-
-### Testing Email Notifications
-
-**Test mail delivery**:
-```bash
-# On Proxmox host
-ssh root@192.168.1.112
-echo "Test email from Proxmox backup system" | mail -s "[Test] Proxmox Backup" your-email@example.com
-```
-
-**Simulate backup failure** (trigger failure notification):
-```bash
-# Temporarily break NFS mount to test failure notification
-ssh root@192.168.1.112
-systemctl stop proxmox-backup.timer
-umount /mnt/nas-backup
-/usr/local/sbin/proxmox-config-backup
-# Check email for failure notification
-# Restore mount: mount -t nfs 192.168.1.109:/volume1/homelab_backups /mnt/nas-backup
-systemctl start proxmox-backup.timer
-```
-
-**Test success notification** (if enabled):
-```bash
-# Enable success notifications temporarily
-ssh root@192.168.1.112
-sed -i 's/NOTIFY_ON_SUCCESS=false/NOTIFY_ON_SUCCESS=true/' /etc/proxmox-backup.conf
-/usr/local/sbin/proxmox-config-backup
-# Check email for success notification
-# Revert: sed -i 's/NOTIFY_ON_SUCCESS=true/NOTIFY_ON_SUCCESS=false/' /etc/proxmox-backup.conf
-```
-
-### Troubleshooting
-
-**No emails received**:
-1. Check mail command: `which mail` (should return `/usr/bin/mail`)
-2. Test mail directly: `echo "test" | mail -s "test" your@email.com`
-3. Check mail logs: `journalctl -u postfix -n 50` or `tail -f /var/log/mail.log`
-4. Verify SMTP config: `cat /etc/msmtprc` (if using msmtp)
-5. Check backup logs: `journalctl -u proxmox-backup.service | grep -i email`
-
-**Email sent but not received**:
-1. Check spam folder
-2. Verify email address: `grep EMAIL_TO /etc/proxmox-backup.conf`
-3. Check mail queue: `mailq` (should be empty)
-4. Test with different recipient
-
-**Success emails not sent**:
-1. Verify enabled: `grep NOTIFY_ON_SUCCESS /etc/proxmox-backup.conf` (should be `true`)
-2. Check that backup succeeded: `journalctl -u proxmox-backup.service -n 20`
-3. Success notifications only sent if SMTP is fully configured
-
-**Email formatting issues**:
-- Email body uses plain text with newlines
-- Subject includes timestamp for threading
-- No HTML formatting (mail command limitation)
-
----
-
 ## Support
 
 For issues or questions:
@@ -923,6 +737,6 @@ For issues or questions:
 - Test NFS mount manually
 - Validate age key in Bitwarden
 
-**Last Updated**: 2025-12-22  
+**Last Updated**: 2025-12-28  
 **Feature**: 013-proxmox-config-backup  
 **Architecture**: Choice 3, Option A (bash script runtime)

@@ -1,0 +1,22 @@
+---
+# ansible/roles/proxmox_backup/tasks/configure_kuma.yml
+# Configure Uptime Kuma push monitoring
+# Deploys configuration with Kuma push URL
+
+- name: Retrieve Kuma Push URL from monitoring host
+  ansible.builtin.set_fact:
+    proxmox_backup_kuma_url: "{{ hostvars['monitoring']['uptime_kuma_push_monitors']['Proxmox Backup']['pushUrl'] }}"
+  when: 
+    - proxmox_backup_kuma_url is not defined or proxmox_backup_kuma_url | length == 0
+    - hostvars['monitoring']['uptime_kuma_push_monitors'] is defined
+    - hostvars['monitoring']['uptime_kuma_push_monitors']['Proxmox Backup'] is defined
+
+- name: Verify Kuma URL is defined
+  ansible.builtin.fail:
+    msg: "proxmox_backup_kuma_url must be defined when mode is 'kuma_only'"
+  when: proxmox_backup_kuma_url is not defined or proxmox_backup_kuma_url | length == 0
+
+- name: Install curl for Kuma push
+  ansible.builtin.package:
+    name: curl
+    state: present

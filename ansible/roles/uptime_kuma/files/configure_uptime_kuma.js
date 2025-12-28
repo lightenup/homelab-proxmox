@@ -14,6 +14,7 @@ const path = require('path');
 // Configuration from command line arguments or environment
 const config = {
   url: process.env.UPTIME_KUMA_URL || 'http://localhost:3001',
+  publicUrl: process.env.UPTIME_KUMA_PUBLIC_URL || process.env.UPTIME_KUMA_URL || 'http://localhost:3001',
   adminUsername: process.env.ADMIN_USERNAME || process.argv[2],
   adminPassword: process.env.ADMIN_PASSWORD || process.argv[3],
   configFile: process.env.CONFIG_FILE || process.argv[4],
@@ -255,16 +256,33 @@ async function configureUptimeKuma() {
       
       // Add monitors that don't exist yet
       for (const monitor of monitoringConfig.monitors) {
+        let shouldCreate = true;
+
         if (existingNames.has(monitor.name)) {
-          console.log(`  - ${monitor.name}: already exists (skipping)`);
-          continue;
+          const existing = Object.values(existingMonitors).find(m => m.name === monitor.name);
+          
+          // Check if it's a broken push monitor (missing token)
+          if (monitor.type === 'push' && !existing.pushToken) {
+            console.log(`  - ${monitor.name}: exists but missing pushToken, deleting to recreate...`);
+            try {
+              await emitAsync('deleteMonitor', existing.id);
+              console.log(`  ✓ ${monitor.name}: deleted`);
+            } catch (error) {
+              console.log(`  ⚠ ${monitor.name}: delete failed (${error.message})`);
+              shouldCreate = false; // Don't try to create if delete failed
+            }
+          } else {
+            console.log(`  - ${monitor.name}: already exists (skipping)`);
+            shouldCreate = false;
+          }
         }
         
-        try {
-          const monitorConfig = {
+        if (shouldCreate) {
+          try {
+            const monitorConfig = {
             type: monitor.type || 'http',
             name: monitor.name,
-            url: monitor.url,
+            url: monitor.url || '',
             interval: monitor.interval || 60,
             retryInterval: monitor.retryInterval || 60,
             resendInterval: 0,
@@ -287,6 +305,18 @@ async function configureUptimeKuma() {
             active: true,
           };
 
+          // For Push monitors, generate a token if not provided
+          if (monitorConfig.type === 'push') {
+             // Generate a random 10-char token
+             const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+             let token = '';
+             for (let i = 0; i < 10; i++) {
+                 token += chars.charAt(Math.floor(Math.random() * chars.length));
+             }
+             monitorConfig.pushToken = token;
+             console.log(`  ℹ ${monitor.name}: Generated client-side push token: ${token}`);
+          }
+
           const response = await emitAsync('add', monitorConfig);
           if (response && response.ok) {
             console.log(`  ✓ ${monitor.name}: created`);
@@ -296,6 +326,57 @@ async function configureUptimeKuma() {
         } catch (error) {
           console.log(`  ⚠ ${monitor.name}: error (${error.message})`);
         }
+      }
+    }
+
+      // Refresh monitor list to get tokens for all monitors (including new ones)
+      console.log('Refreshing monitor list to retrieve tokens...');
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Timeout waiting for monitorList event')), 10000);
+        
+        socket.once('monitorList', (data) => {
+          clearTimeout(timeout);
+          existingMonitors = data || {};
+          resolve();
+        });
+        
+        socket.emit('getMonitorList', (response) => {
+          if (!response || !response.ok) {
+            clearTimeout(timeout);
+            reject(new Error('Failed to get monitor list'));
+          }
+        });
+      });
+
+      console.log(`DEBUG: Refreshed monitors: ${Object.keys(existingMonitors).length}`);
+      
+      const backupMonitor = Object.values(existingMonitors).find(m => m.name === 'Proxmox Backup');
+      if (backupMonitor) {
+        console.log(`DEBUG: Proxmox Backup monitor found. Type: ${backupMonitor.type}, PushToken: ${backupMonitor.pushToken}`);
+      } else {
+        console.log('DEBUG: Proxmox Backup monitor NOT found in refreshed list');
+      }
+
+      // Collect Push URLs
+      const pushMonitors = {};
+      for (const monitor of monitoringConfig.monitors) {
+        if (monitor.type === 'push') {
+          // Find the monitor in the updated list
+          const foundMonitor = Object.values(existingMonitors).find(m => m.name === monitor.name);
+          if (foundMonitor && foundMonitor.pushToken) {
+            pushMonitors[monitor.name] = {
+              pushToken: foundMonitor.pushToken,
+              pushUrl: `${config.publicUrl.replace(/\/$/, '')}/api/push/${foundMonitor.pushToken}`
+            };
+          }
+        }
+      }
+
+      // Output Push URLs as JSON for Ansible to capture
+      if (Object.keys(pushMonitors).length > 0) {
+        console.log('__PUSH_MONITORS_JSON__');
+        console.log(JSON.stringify(pushMonitors));
+        console.log('__END_PUSH_MONITORS_JSON__');
       }
     }
 

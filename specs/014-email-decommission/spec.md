@@ -131,6 +131,13 @@ As a homelab operator, after running email-disabled for weeks without issues, I 
 - **FR-031**: Verification MUST confirm mail binaries removed after uninstall (`which mail` returns empty)
 - **FR-032**: Verification MUST test failure path (break NAS, run backup, confirm Kuma detects failure)
 
+**Monitoring Automation (US4)**:
+
+- **FR-033**: Ansible MUST automate the creation of the Uptime Kuma Push Monitor for Proxmox Backup
+- **FR-034**: Ansible MUST retrieve the Push URL (or token) from the created monitor
+- **FR-035**: Ansible MUST automatically configure the `proxmox_backup` role with the retrieved Push URL (no manual copy-paste)
+- **FR-036**: The automation MUST be idempotent (don't create duplicate monitors)
+
 ### Key Entities
 
 - **Email Mode State Machine**: `proxmox_backup_email_mode` variable controls notification behavior with four states:

@@ -1,0 +1,17 @@
+---
+# ansible/roles/proxmox_backup/tasks/disable_email.yml
+# Safely disable host email notifications
+# Stops Postfix and removes SMTP configuration
+
+- name: Stop and disable Postfix service
+  ansible.builtin.service:
+    name: postfix
+    state: stopped
+    enabled: false
+  ignore_errors: true
+
+- name: Remove Gmail relay configuration from main.cf
+  ansible.builtin.blockinfile:
+    path: /etc/postfix/main.cf
+    state: absent
+    marker: "# {mark} ANSIBLE MANAGED BLOCK"
