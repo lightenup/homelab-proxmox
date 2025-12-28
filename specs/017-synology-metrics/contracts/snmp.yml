@@ -1,0 +1,53 @@
+# SNMP Exporter module configuration for Synology NAS (SNMPv3)
+# This contract defines SNMPv3 auth parameters and OIDs for Feature 017
+# Referenced by: T014 (Create snmp.yml)
+
+auths:
+  synology_v3:
+    version: 3
+    security_level: authPriv
+    username: "{{ snmp_username }}"  # Ansible variable from secrets.yml
+    auth_protocol: MD5
+    auth_password: "{{ snmp_auth_password }}"
+    priv_protocol: AES
+    priv_password: "{{ snmp_priv_password }}"
+
+modules:
+  synology:
+    walk:
+      # System info
+      - 1.3.6.1.2.1.1.1  # sysDescr
+      - 1.3.6.1.2.1.1.3  # sysUpTime
+      
+      # Storage (volumes)
+      - 1.3.6.1.2.1.25.2.3.1.3  # hrStorageDescr
+      - 1.3.6.1.2.1.25.2.3.1.4  # hrStorageAllocationUnits
+      - 1.3.6.1.2.1.25.2.3.1.5  # hrStorageSize
+      - 1.3.6.1.2.1.25.2.3.1.6  # hrStorageUsed
+      
+      # CPU & Memory
+      - 1.3.6.1.4.1.2021.11  # UCD-SNMP-MIB CPU
+      - 1.3.6.1.4.1.2021.4   # UCD-SNMP-MIB Memory
+      
+      # Network interfaces
+      - 1.3.6.1.2.1.2.2.1.2   # ifDescr
+      - 1.3.6.1.2.1.2.2.1.10  # ifInOctets
+      - 1.3.6.1.2.1.2.2.1.16  # ifOutOctets
+      - 1.3.6.1.2.1.2.2.1.8   # ifOperStatus
+      
+      # Disk status (Synology-specific MIB - best-effort per FR-008)
+      # Note: OID availability depends on DSM version; validate with T006b
+      - 1.3.6.1.4.1.6574.2.1.1.2  # diskModel
+      - 1.3.6.1.4.1.6574.2.1.1.5  # diskStatus
+      - 1.3.6.1.4.1.6574.2.1.1.6  # diskTemperature
+    
+    auth:
+      synology_v3
+    
+    lookups:
+      - source_indexes: [hrStorageIndex]
+        lookup: hrStorageDescr
+        drop_source_indexes: true
+      - source_indexes: [ifIndex]
+        lookup: ifDescr
+        drop_source_indexes: true

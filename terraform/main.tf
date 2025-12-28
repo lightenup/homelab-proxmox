@@ -84,8 +84,8 @@ module "monitoring_lxc" {
   storage_pool = var.storage_pool
 
   cores   = 2
-  memory  = 2048
-  disk_gb = 10
+  memory  = 4096
+  disk_gb = 32
 
   bridge          = var.services_bridge
   ip              = var.service_ips["monitoring"]

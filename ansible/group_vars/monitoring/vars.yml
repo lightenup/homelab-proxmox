@@ -1,0 +1,64 @@
+---
+# Monitoring Stack Configuration
+# Feature: 017-synology-metrics
+# Purpose: Default configuration for Prometheus, Grafana, SNMP Exporter, Alertmanager
+
+# Service versions
+prometheus_version: "v3.8.1"  # Upgraded from v2.48.0 (2024-12-28)
+grafana_version: "12.3.1"  # Upgraded from 10.2.0 (2024-12-28)
+telegraf_version: "1.37.0"  # Upgraded from 1.28 (2024-12-28) - Stable SNMP abstraction layer
+alertmanager_version: "v0.30.0"  # Upgraded from v0.26.0 (2024-12-28)
+
+# Monitoring LXC
+monitoring_ip: "192.168.1.214"
+monitoring_hostname: "monitoring"
+
+# Synology NAS targets
+synology_nas_ip: "192.168.1.109"
+synology_nas_hostname: "nas.local"
+
+# Prometheus configuration
+prometheus_scrape_interval: "30s"
+prometheus_scrape_timeout: "10s"
+prometheus_retention_time: "15d"
+prometheus_port: 9090
+
+# Grafana configuration
+grafana_port: 3000
+grafana_domain: "monitoring.local"
+grafana_datasource_name: "Prometheus"
+grafana_admin_user: "admin"
+
+# Telegraf configuration
+telegraf_port: 9273
+snmp_security_level: "authPriv"
+
+# Alertmanager configuration
+alertmanager_port: 9093
+alertmanager_group_wait: "30s"
+alertmanager_group_interval: "5m"
+alertmanager_repeat_interval: "4h"
+smtp_require_tls: true
+
+# Backup configuration
+backup_retention_days: 30
+backup_schedule_hour: 3
+backup_schedule_minute: 0
+backup_path: "/mnt/nas/backups/monitoring"
+
+# NFS mount configuration
+monitoring_nfs_enabled: false  # Disable until NFS share is configured on Synology
+nfs_server: "{{ synology_nas_ip }}"
+nfs_export_path: "/volume1/backups"
+nfs_mount_point: "/mnt/nas/backups"
+nfs_mount_options: "defaults,_netdev,rw,hard,intr,timeo=600,retrans=2"
+backup_subdir: "monitoring"
+
+# Docker compose paths
+monitoring_base_path: "/opt/monitoring"
+compose_file_path: "{{ monitoring_base_path }}/docker-compose.yml"
+prometheus_config_path: "{{ monitoring_base_path }}/prometheus"
+grafana_provisioning_path: "{{ monitoring_base_path }}/grafana/provisioning"
+grafana_dashboards_path: "{{ monitoring_base_path }}/grafana/dashboards"
+snmp_config_path: "{{ monitoring_base_path }}/snmp"
+alertmanager_config_path: "{{ monitoring_base_path }}/alertmanager"

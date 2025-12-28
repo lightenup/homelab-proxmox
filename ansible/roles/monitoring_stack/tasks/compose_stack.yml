@@ -1,0 +1,48 @@
+---
+# Deploy Docker Compose stack and configuration files
+# Feature: 017-synology-metrics
+
+- name: Deploy Docker Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ compose_file_path }}"
+    mode: '0644'
+  notify: Restart monitoring stack
+
+- name: Deploy Prometheus configuration
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ prometheus_config_path }}/prometheus.yml"
+    mode: '0644'
+  notify: Restart monitoring stack
+
+- name: Deploy Prometheus alert rules
+  ansible.builtin.copy:
+    src: prometheus/alerts.yml
+    dest: "{{ prometheus_config_path }}/alerts.yml"
+    mode: '0644'
+  notify: Restart monitoring stack
+
+- name: Deploy Telegraf configuration
+  ansible.builtin.template:
+    src: telegraf.conf.j2
+    dest: "{{ telegraf_config_path }}/telegraf.conf"
+    mode: '0644'
+  no_log: true  # Contains SNMP credentials
+  notify: Restart monitoring stack
+
+- name: Deploy Alertmanager configuration
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ alertmanager_config_path }}/alertmanager.yml"
+    mode: '0644'
+  no_log: true  # Contains SMTP credentials
+  notify: Restart monitoring stack
+
+- name: Start monitoring stack
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ monitoring_base_path }}"
+  register: docker_compose_result
+  changed_when: "'Created' in docker_compose_result.stdout or 'Started' in docker_compose_result.stdout"
+

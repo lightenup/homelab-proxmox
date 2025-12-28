@@ -1,0 +1,30 @@
+---
+# Deploy mDNS/Avahi service announcements for monitoring services
+# Feature: 017-synology-metrics
+
+- name: Deploy Grafana Avahi service file
+  ansible.builtin.template:
+    src: avahi-grafana.service.j2
+    dest: /etc/avahi/services/grafana.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart avahi-daemon
+
+- name: Deploy Prometheus Avahi service file
+  ansible.builtin.template:
+    src: avahi-prometheus.service.j2
+    dest: /etc/avahi/services/prometheus.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart avahi-daemon
+
+- name: Deploy Alertmanager Avahi service file
+  ansible.builtin.template:
+    src: avahi-alertmanager.service.j2
+    dest: /etc/avahi/services/alertmanager.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart avahi-daemon

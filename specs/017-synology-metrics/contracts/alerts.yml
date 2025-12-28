@@ -1,0 +1,43 @@
+# Prometheus alert rules for Synology NAS monitoring
+# This contract defines the 3 required alert rules for Feature 017
+# Referenced by: T019 (Configure alert rules)
+
+groups:
+  - name: synology_alerts
+    interval: 30s
+    rules:
+      # FR-003: Storage capacity monitoring
+      - alert: SynologyVolumeHighUsage
+        expr: |
+          100 * (1 - (snmp_synology_volume_available_bytes / snmp_synology_volume_size_bytes)) > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "Synology volume {{ $labels.volume }} usage high"
+          description: "Volume {{ $labels.volume }} is at {{ $value | humanize }}% capacity (threshold: 85%)"
+      
+      # FR-005: NAS availability monitoring
+      - alert: SynologyNASDown
+        expr: |
+          up{job="synology-snmp"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: availability
+        annotations:
+          summary: "Synology NAS unreachable"
+          description: "SNMP scrape target {{ $labels.instance }} has been down for more than 2 minutes"
+      
+      # FR-008: Disk SMART status (best-effort: dependent on DSM exposing SMART OIDs)
+      - alert: SynologyDiskSMARTWarning
+        expr: |
+          snmp_synology_disk_status{status!~"Normal|Good"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: disk_health
+        annotations:
+          summary: "Synology disk {{ $labels.disk }} health issue"
+          description: "Disk {{ $labels.disk }} reports abnormal SMART status (value: {{ $value }})"
