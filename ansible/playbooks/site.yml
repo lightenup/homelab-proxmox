@@ -1,14 +1,26 @@
 ---
+# Main orchestration playbook for homelab infrastructure
+# Executes all playbooks in correct order with proper dependencies
+
 - name: Configure Proxmox Host
   import_playbook: host_proxmox.yml
+  # Purpose: Configure Proxmox VE host (mounts, networking, security)
+  # Dependencies: None (must run first)
 
 - name: Configure Services
   import_playbook: services.yml
+  # Purpose: Deploy application services (Immich, AdGuard, Home Assistant)
+  # Dependencies: Proxmox host configured, LXCs provisioned via Terraform
 
 - name: Configure Monitoring
   import_playbook: monitoring.yml
+  # Purpose: Deploy observability stack (Prometheus, Grafana, SNMP Exporter, Alertmanager)
+  # Dependencies: Monitoring LXC provisioned via Terraform, Synology SNMPv3 configured
+  # Feature: 017-synology-metrics
   tags: monitoring
 
 - name: Deploy Proxmox Configuration Backup
   import_playbook: backup_proxmox.yml
+  # Purpose: Backup Proxmox host configuration to NAS
+  # Dependencies: NAS accessible via network
   tags: backup

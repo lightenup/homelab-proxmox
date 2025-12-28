@@ -8,3 +8,9 @@
     name: docker
     state: started
     enabled: true
+
+- name: Install Python Docker SDK
+  ansible.builtin.apt:
+    name: python3-docker
+    state: present
+    update_cache: yes

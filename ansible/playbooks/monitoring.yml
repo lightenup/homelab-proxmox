@@ -6,15 +6,14 @@
   pre_tasks:
     - name: Load vault variables explicitly
       include_vars:
-        file: "{{ playbook_dir }}/../host_vars/monitoring/vault.yml"
+        file: "{{ playbook_dir }}/../group_vars/monitoring/vault.yml"
       no_log: true
     
     - name: Load host variables explicitly
       include_vars:
-        file: "{{ playbook_dir }}/../host_vars/monitoring/vars.yml"
+        file: "{{ playbook_dir }}/../group_vars/monitoring/vars.yml"
   
   roles:
     - lxc_base
     - mdns_base
     - monitoring_stack
-    - uptime_kuma

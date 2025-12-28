@@ -1,11 +1,57 @@
 ---
-# Uptime Kuma container configuration
-uptime_kuma_version: "1"
-uptime_kuma_port: 3001
-uptime_kuma_data_dir: "/opt/monitoring/data"
+# Monitoring Stack Default Configuration
+# Feature: 017-synology-metrics
+# Purpose: Version pins, ports, paths for Prometheus, Grafana, SNMP Exporter, Alertmanager
 
-# Docker configuration
+# Service versions (pinned per plan.md)
+prometheus_version: "v2.48.0"
+grafana_version: "10.2.0"
+telegraf_version: "1.28"
+alertmanager_version: "v0.26.0"
+
+# Monitoring LXC
+monitoring_ip: "192.168.1.214"
+monitoring_hostname: "monitoring"
+
+# Synology NAS targets
+synology_nas_ip: "192.168.1.109"
+synology_nas_hostname: "nas.local"
+
+# Prometheus configuration
+prometheus_scrape_interval: "30s"
+prometheus_scrape_timeout: "10s"
+prometheus_retention_time: "15d"
+prometheus_port: 9090
+
+# Grafana configuration
+grafana_port: 3000
+grafana_domain: "monitoring.local"
+grafana_datasource_name: "Prometheus"
+
+# Telegraf configuration
+telegraf_port: 9273
+
+# Alertmanager configuration
+alertmanager_port: 9093
+alertmanager_group_wait: "30s"
+alertmanager_group_interval: "5m"
+alertmanager_repeat_interval: "4h"
+
+# Backup configuration
+backup_retention_days: 30
+backup_schedule_hour: 3
+backup_schedule_minute: 0
+backup_path: "/mnt/nas/backups/monitoring"
+
+# Docker compose paths
 monitoring_install_dir: "/opt/monitoring"
+compose_file_path: "{{ monitoring_install_dir }}/docker-compose.yml"
+prometheus_config_path: "{{ monitoring_install_dir }}/prometheus"
+grafana_provisioning_path: "{{ monitoring_install_dir }}/grafana/provisioning"
+grafana_dashboards_path: "{{ monitoring_install_dir }}/grafana/dashboards"
+telegraf_config_path: "{{ monitoring_install_dir }}/telegraf"
+alertmanager_config_path: "{{ monitoring_install_dir }}/alertmanager"
 
 # Timezone
 timezone: "Europe/Copenhagen"
+

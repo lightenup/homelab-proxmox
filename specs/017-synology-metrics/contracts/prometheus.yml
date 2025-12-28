@@ -1,0 +1,21 @@
+# Prometheus scrape configuration for Synology NAS (SNMPv3)
+# This contract defines the minimal scrape job for Feature 017
+# Referenced by: T015 (Create prometheus.yml)
+
+scrape_configs:
+  - job_name: 'synology-snmp'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    static_configs:
+      - targets:
+          - 192.168.1.200  # Synology NAS IP (from plan.md)
+    metrics_path: /snmp
+    params:
+      module: [synology]  # SNMP exporter module name
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9116  # SNMP exporter service address

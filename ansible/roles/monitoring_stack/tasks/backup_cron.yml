@@ -1,0 +1,21 @@
+---
+# Configure backup cron job for Prometheus TSDB and Grafana volumes
+# Feature: 017-synology-metrics
+# Purpose: Daily automated backups with 30-day retention (US5)
+
+- name: Deploy backup script
+  ansible.builtin.template:
+    src: backup-monitoring.sh.j2
+    dest: /usr/local/sbin/backup-monitoring.sh
+    mode: '0750'
+    owner: root
+    group: root
+
+- name: Create backup cron job
+  ansible.builtin.cron:
+    name: "Backup monitoring stack"
+    minute: "{{ backup_schedule_minute }}"
+    hour: "{{ backup_schedule_hour }}"
+    job: "/usr/local/sbin/backup-monitoring.sh >> /var/log/monitoring-backup.log 2>&1"
+    user: root
+    state: present

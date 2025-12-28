@@ -1,0 +1,300 @@
+{
+  "title": "Synology NAS Health",
+  "uid": "synology-nas-health",
+  "version": 2,
+  "description": "Core metrics dashboard for Synology NAS monitoring via Telegraf SNMP",
+  "tags": ["synology", "nas", "snmp", "telegraf"],
+  "timezone": "browser",
+  "schemaVersion": 27,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Memory Usage",
+      "description": "RAM usage percentage",
+      "targets": [
+        {
+          "expr": "100 * (1 - (snmp_memAvailReal / snmp_memTotalReal))",
+          "legendFormat": "Memory Used %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 85, "color": "red"}
+            ]
+          },
+          "max": 100,
+          "decimals": 1
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Disk Temperature",
+      "description": "Primary disk temperature",
+      "targets": [
+        {
+          "expr": "snmp_disk1Temp",
+          "legendFormat": "Disk 1 Temp",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "blue"},
+              {"value": 40, "color": "green"},
+              {"value": 50, "color": "yellow"},
+              {"value": 60, "color": "red"}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Disk Status",
+      "description": "Disk health status (1=Normal)",
+      "targets": [
+        {
+          "expr": "snmp_disk1Status",
+          "legendFormat": "Disk 1",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 1, "color": "green"},
+              {"value": 2, "color": "red"}
+            ]
+          },
+          "mappings": [
+            {"type": 1, "options": {"1": {"text": "Normal", "color": "green"}}},
+            {"type": 1, "options": {"2": {"text": "Initialized", "color": "yellow"}}},
+            {"type": 1, "options": {"3": {"text": "Not Initialized", "color": "orange"}}},
+            {"type": 1, "options": {"4": {"text": "System Partition Failed", "color": "red"}}},
+            {"type": 1, "options": {"5": {"text": "Crashed", "color": "red"}}}
+          ]
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "RAID Status",
+      "description": "RAID array health status (1=Normal)",
+      "targets": [
+        {
+          "expr": "snmp_raid1Status",
+          "legendFormat": "RAID 1",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 1, "color": "green"},
+              {"value": 2, "color": "yellow"},
+              {"value": 11, "color": "red"}
+            ]
+          },
+          "mappings": [
+            {"type": 1, "options": {"1": {"text": "Normal", "color": "green"}}},
+            {"type": 1, "options": {"2": {"text": "Repairing", "color": "yellow"}}},
+            {"type": 1, "options": {"3": {"text": "Migrating", "color": "yellow"}}},
+            {"type": 1, "options": {"4": {"text": "Expanding", "color": "yellow"}}},
+            {"type": 1, "options": {"5": {"text": "Deleting", "color": "orange"}}},
+            {"type": 1, "options": {"6": {"text": "Creating", "color": "yellow"}}},
+            {"type": 1, "options": {"7": {"text": "RAID Syncing", "color": "yellow"}}},
+            {"type": 1, "options": {"8": {"text": "RAID Parity Checking", "color": "yellow"}}},
+            {"type": 1, "options": {"9": {"text": "RAID Assembling", "color": "yellow"}}},
+            {"type": 1, "options": {"10": {"text": "Canceling", "color": "orange"}}},
+            {"type": 1, "options": {"11": {"text": "Degraded", "color": "red"}}},
+            {"type": 1, "options": {"12": {"text": "Crashed", "color": "red"}}}
+          ]
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "id": 5,
+      "type": "graph",
+      "title": "CPU Usage",
+      "description": "CPU time by type (user, system, idle)",
+      "targets": [
+        {
+          "expr": "rate(snmp_ssCpuRawUser[5m])",
+          "legendFormat": "User CPU",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(snmp_ssCpuRawSystem[5m])",
+          "legendFormat": "System CPU",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(snmp_ssCpuRawIdle[5m])",
+          "legendFormat": "Idle CPU",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
+      "yaxes": [
+        {"format": "percentunit", "label": "CPU %"},
+        {"format": "short"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}
+    },
+    {
+      "id": 6,
+      "type": "graph",
+      "title": "Memory Details",
+      "description": "Memory usage breakdown",
+      "targets": [
+        {
+          "expr": "snmp_memTotalReal",
+          "legendFormat": "Total Memory",
+          "refId": "A"
+        },
+        {
+          "expr": "snmp_memAvailReal",
+          "legendFormat": "Available Memory",
+          "refId": "B"
+        },
+        {
+          "expr": "snmp_memBuffer",
+          "legendFormat": "Buffer",
+          "refId": "C"
+        },
+        {
+          "expr": "snmp_memCached",
+          "legendFormat": "Cached",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "deckbytes"
+        }
+      },
+      "yaxes": [
+        {"format": "deckbytes", "label": "Memory (KB)"},
+        {"format": "short"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}
+    }
+  ]
+}
+          "legendFormat": "{{disk}}",
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "expr": "snmp_synology_disk_temperature_celsius",
+          "legendFormat": "{{disk}}",
+          "refId": "B",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Temperature"},
+            "properties": [{"id": "unit", "value": "celsius"}]
+          }
+        ]
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "id": 3,
+      "type": "graph",
+      "title": "CPU & Memory Usage",
+      "description": "NAS CPU and RAM utilization over time",
+      "targets": [
+        {
+          "expr": "snmp_synology_cpu_usage_percent",
+          "legendFormat": "CPU",
+          "refId": "A"
+        },
+        {
+          "expr": "100 * (snmp_synology_memory_used_bytes / snmp_synology_memory_total_bytes)",
+          "legendFormat": "Memory",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percent",
+          "min": 0,
+          "max": 100
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "id": 4,
+      "type": "graph",
+      "title": "Network Throughput",
+      "description": "Network interface traffic (bytes in/out)",
+      "targets": [
+        {
+          "expr": "rate(snmp_synology_network_rx_bytes[5m])",
+          "legendFormat": "{{interface}} RX",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(snmp_synology_network_tx_bytes[5m])",
+          "legendFormat": "{{interface}} TX",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "Bps",
+          "min": 0
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

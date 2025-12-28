@@ -1,0 +1,40 @@
+# Alertmanager configuration for Synology NAS alerts
+# This contract defines SMTP routing for email notifications
+# Referenced by: T020 (Configure Alertmanager SMTP)
+
+global:
+  smtp_smarthost: '{{ smtp_server }}:{{ smtp_port }}'  # Ansible variables from secrets.yml
+  smtp_from: '{{ smtp_from_address }}'
+  smtp_auth_username: '{{ smtp_username }}'
+  smtp_auth_password: '{{ smtp_password }}'
+  smtp_require_tls: true
+
+route:
+  receiver: 'email-default'
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: 'email-default'
+    email_configs:
+      - to: '{{ alert_email_recipient }}'  # Ansible variable from secrets.yml
+        headers:
+          Subject: '[Homelab Alert] {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>{{ .GroupLabels.alertname }}</h2>
+          <p><strong>Severity:</strong> {{ .GroupLabels.severity }}</p>
+          <ul>
+          {{ range .Alerts }}
+            <li>{{ .Annotations.summary }}<br/>{{ .Annotations.description }}</li>
+          {{ end }}
+          </ul>
+
+inhibit_rules:
+  # Inhibit disk alerts if NAS is down
+  - source_match:
+      alertname: 'SynologyNASDown'
+    target_match_re:
+      alertname: 'Synology.*'
+    equal: ['instance']

@@ -1,0 +1,130 @@
+{
+  "title": "Synology NAS Health",
+  "uid": "synology-nas-health",
+  "version": 1,
+  "description": "Core metrics dashboard for Synology NAS monitoring via SNMP (4-6 panels per spec clarifications)",
+  "tags": ["synology", "nas", "snmp"],
+  "timezone": "browser",
+  "schemaVersion": 27,
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "gauge",
+      "title": "Storage Capacity",
+      "description": "Volume usage percentage (per-volume)",
+      "targets": [
+        {
+          "expr": "100 * (1 - (snmp_synology_volume_available_bytes / snmp_synology_volume_size_bytes))",
+          "legendFormat": "{{volume}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 85, "color": "red"}
+            ]
+          },
+          "max": 100
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Disk Health Status",
+      "description": "Physical disk status and temperature",
+      "targets": [
+        {
+          "expr": "snmp_synology_disk_status",
+          "legendFormat": "{{disk}}",
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "expr": "snmp_synology_disk_temperature_celsius",
+          "legendFormat": "{{disk}}",
+          "refId": "B",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Temperature"},
+            "properties": [{"id": "unit", "value": "celsius"}]
+          }
+        ]
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "id": 3,
+      "type": "graph",
+      "title": "CPU & Memory Usage",
+      "description": "NAS CPU and RAM utilization over time",
+      "targets": [
+        {
+          "expr": "snmp_synology_cpu_usage_percent",
+          "legendFormat": "CPU",
+          "refId": "A"
+        },
+        {
+          "expr": "100 * (snmp_synology_memory_used_bytes / snmp_synology_memory_total_bytes)",
+          "legendFormat": "Memory",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percent",
+          "min": 0,
+          "max": 100
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "id": 4,
+      "type": "graph",
+      "title": "Network Throughput",
+      "description": "Network interface traffic (bytes in/out)",
+      "targets": [
+        {
+          "expr": "rate(snmp_synology_network_rx_bytes[5m])",
+          "legendFormat": "{{interface}} RX",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(snmp_synology_network_tx_bytes[5m])",
+          "legendFormat": "{{interface}} TX",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "Bps",
+          "min": 0
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

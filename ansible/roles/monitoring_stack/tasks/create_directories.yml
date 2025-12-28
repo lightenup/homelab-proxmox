@@ -1,12 +1,52 @@
 ---
+# Create directory structure for monitoring stack
+# Feature: 017-synology-metrics
+
 - name: Create monitoring install directory
   ansible.builtin.file:
     path: "{{ monitoring_install_dir }}"
     state: directory
     mode: '0755'
 
-- name: Create Uptime Kuma data directory
+- name: Create Prometheus config directory
   ansible.builtin.file:
-    path: "{{ uptime_kuma_data_dir }}"
+    path: "{{ prometheus_config_path }}"
     state: directory
     mode: '0755'
+
+- name: Create Grafana provisioning directory
+  ansible.builtin.file:
+    path: "{{ grafana_provisioning_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Create Grafana datasources directory
+  ansible.builtin.file:
+    path: "{{ grafana_provisioning_path }}/datasources"
+    state: directory
+    mode: '0755'
+
+- name: Create Grafana dashboard provider directory
+  ansible.builtin.file:
+    path: "{{ grafana_provisioning_path }}/dashboards"
+    state: directory
+    mode: '0755'
+
+- name: Create Grafana dashboards directory
+  ansible.builtin.file:
+    path: "{{ grafana_dashboards_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Create Telegraf config directory
+  ansible.builtin.file:
+    path: "{{ telegraf_config_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Create Alertmanager config directory
+  ansible.builtin.file:
+    path: "{{ alertmanager_config_path }}"
+    state: directory
+    mode: '0755'
+

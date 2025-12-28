@@ -1,0 +1,22 @@
+---
+# Provision Grafana datasources and dashboards
+# Feature: 017-synology-metrics
+# Purpose: Auto-provision Prometheus datasource and Synology dashboard (zero clickops per US3)
+
+- name: Deploy Prometheus datasource provisioning
+  ansible.builtin.copy:
+    src: grafana/provisioning/datasources/prometheus.yml
+    dest: "{{ grafana_provisioning_path }}/datasources/prometheus.yml"
+    mode: '0644'
+
+- name: Deploy dashboard provider configuration
+  ansible.builtin.copy:
+    src: grafana/provisioning/dashboards/default.yml
+    dest: "{{ grafana_provisioning_path }}/dashboards/default.yml"
+    mode: '0644'
+
+- name: Deploy Synology NAS dashboard
+  ansible.builtin.copy:
+    src: grafana/dashboards/synology-nas.json
+    dest: "{{ grafana_dashboards_path }}/synology-nas.json"
+    mode: '0644'
