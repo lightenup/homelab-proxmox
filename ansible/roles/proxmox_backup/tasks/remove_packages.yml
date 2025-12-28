@@ -1,0 +1,40 @@
+---
+# ansible/roles/proxmox_backup/tasks/remove_packages.yml
+# Remove email-related packages
+# Only runs in 'removed' mode
+
+- name: Confirm uninstallation
+  ansible.builtin.fail:
+    msg: "Safety Check Failed: Set 'proxmox_backup_uninstall_confirmed: true' to proceed with package removal."
+  when: not proxmox_backup_uninstall_confirmed | bool
+
+- name: Remove Postfix and related packages
+  ansible.builtin.apt:
+    name:
+      - postfix
+      - libsasl2-modules
+      - mailutils
+    state: absent
+    purge: true
+  register: apt_remove
+
+- name: Autoremove unused dependencies
+  ansible.builtin.apt:
+    autoremove: true
+    purge: true
+
+- name: Cleanup /etc/postfix directory
+  ansible.builtin.file:
+    path: /etc/postfix
+    state: absent
+
+- name: Cleanup /etc/msmtprc
+  ansible.builtin.file:
+    path: /etc/msmtprc
+    state: absent
+
+- name: Verify binary removal
+  ansible.builtin.shell: which mail || true
+  register: mail_binary_check
+  changed_when: false
+  failed_when: mail_binary_check.stdout != ""

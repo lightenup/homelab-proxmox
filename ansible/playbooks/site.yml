@@ -2,13 +2,13 @@
 - name: Configure Proxmox Host
   import_playbook: host_proxmox.yml
 
-- name: Deploy Proxmox Configuration Backup
-  import_playbook: backup_proxmox.yml
-  tags: backup
-
 - name: Configure Services
   import_playbook: services.yml
 
 - name: Configure Monitoring
   import_playbook: monitoring.yml
   tags: monitoring
+
+- name: Deploy Proxmox Configuration Backup
+  import_playbook: backup_proxmox.yml
+  tags: backup

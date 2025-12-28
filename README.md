@@ -81,6 +81,7 @@ ansible-playbook playbooks/site.yml
 - `bootstrap.yml` - Initial setup of LXC containers (run after Terraform provision)
 - `services.yml` - Configure LXC services (Immich, AdGuard, Home Assistant, reverse proxy)
 - `host_proxmox.yml` - Configure Proxmox host-specific settings
+- `backup_proxmox.yml` - Deploy Proxmox configuration backup system
 - `tailscale.yml` - Configure Tailscale subnet router for remote access
 - `verify_tailscale.yml` - Verify Tailscale configuration (diagnostics)
 - `update_monthly.yml` - Monthly security updates with orchestrated reboots

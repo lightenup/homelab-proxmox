@@ -1,0 +1,20 @@
+---
+# ansible/roles/proxmox_backup/tasks/discovery.yml
+# Discovery phase for email decommissioning
+# Checks for installed packages, active services, and potential conflicts
+
+- name: Gather package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Check if backup script exists
+  ansible.builtin.stat:
+    path: /usr/local/bin/proxmox-backup.sh
+  register: backup_script_stat
+
+- name: Debug current state
+  ansible.builtin.debug:
+    msg:
+      - "Email Mode: {{ proxmox_backup_email_mode }}"
+      - "Postfix Installed: {{ 'postfix' in ansible_facts.packages }}"
+      - "Backup Script Present: {{ backup_script_stat.stat.exists }}"

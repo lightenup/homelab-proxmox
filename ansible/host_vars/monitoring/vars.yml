@@ -18,6 +18,9 @@ monitoring_targets:
     type: "http"
     interval: 60
     ignoreTls: false
+  - name: "Proxmox Backup"
+    type: "push"
+    interval: 90000 # 25 hours (daily backup)
 
 # Uptime Kuma API configuration
 uptime_kuma_api_url: "http://localhost:3001"

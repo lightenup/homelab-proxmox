@@ -18,13 +18,26 @@ proxmox_backup_enabled: true
 proxmox_backup_schedule: "daily"
 proxmox_backup_time: "02:00"
 
+# Uptime Kuma Push URL (Feature 014)
+# proxmox_backup_kuma_url: "https://kuma.example.com/api/push/..."
+
+
 # NAS Configuration
 proxmox_backup_nas_host: "192.168.1.109"
 proxmox_backup_nas_path: "/volume1/homelab_backups/proxmox"
 
 # Encryption (keys stored in Bitwarden, deploy via environment variables)
-proxmox_backup_age_public_key: "{{ lookup('env', 'PROXMOX_BACKUP_AGE_PUBLIC_KEY') }}"
-# proxmox_backup_age_private_key: defined in vault or deployment script
+proxmox_backup_age_public_key: "age16k8yyazx2eyr9f630k2rnp88672695g3mzs50h22pg8l55ygealqajamuk"
+proxmox_backup_age_private_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          39663833643530633435656635316238633034363362616436663331336534613237376234623765
+          6439303636653039623364333930646636346230373837360a323736613464343964623062653532
+          32323734316136373532363035386661366266363536343131643431303439373039333130313264
+          3837616264333666610a616531656432306339366465393437373236326238633632643237623964
+          36353364663635663064393335656666353364376436353465303364613338376532313266326431
+          65326563636533633331643065386164346531303266396632386234313430636136333966356366
+          63663834326438663261623466646363336532336334353634313335323337386230353531303234
+          62343233653037663038
 
 # Enable IaC artifact backup
 # IaC artifact backup (Phase 4) - Disabled until GitHub auth configured
