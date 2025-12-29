@@ -1,0 +1,34 @@
+---
+- name: Check Tailscale status
+  ansible.builtin.command: tailscale status
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+
+- name: Authenticate Tailscale
+  block:
+    - name: Check if auth key is provided
+      ansible.builtin.assert:
+        that:
+          - tailscale_auth_key is defined
+          - tailscale_auth_key | length > 0
+        fail_msg: "Tailscale not authenticated. Run 'tailscale up' manually or provide 'tailscale_auth_key' in vault."
+
+    - name: Run tailscale up
+      ansible.builtin.command: >
+        tailscale up
+        --auth-key={{ tailscale_auth_key }}
+        --advertise-routes={{ tailscale_subnet_routes }}
+        {{ '--advertise-tags=' + tailscale_tags | join(',') if tailscale_tags else '' }}
+  when: tailscale_status.rc != 0
+
+- name: Ensure Tailscale Configuration (Routes/Tags)
+  ansible.builtin.command: >
+    tailscale up
+    --advertise-routes={{ tailscale_subnet_routes }}
+    {{ '--advertise-tags=' + tailscale_tags | join(',') if tailscale_tags else '' }}
+    --reset
+  when: 
+    - tailscale_status.rc == 0
+    - tailscale_subnet_routes is defined
+  changed_when: true # We assume this changes state, or we could check prefs first

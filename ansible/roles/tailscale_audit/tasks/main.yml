@@ -1,0 +1,91 @@
+---
+- name: Get Tailscale Access Token
+  ansible.builtin.uri:
+    url: https://api.tailscale.com/api/v2/oauth/token
+    method: POST
+    user: "{{ tailscale_oauth_client_id }}"
+    password: "{{ tailscale_oauth_client_secret }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      grant_type: client_credentials
+  register: ts_token_response
+  no_log: true
+
+- name: Set Access Token fact
+  ansible.builtin.set_fact:
+    ts_access_token: "{{ ts_token_response.json.access_token }}"
+  no_log: true
+
+- name: Fetch Tailnet Devices
+  ansible.builtin.uri:
+    url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet_name | default('-') }}/devices"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ ts_access_token }}"
+  register: ts_devices_response
+
+- name: Find current host in devices list
+  ansible.builtin.set_fact:
+    tailscale_device_info: "{{ ts_devices_response.json.devices | selectattr('hostname', 'equalto', ansible_hostname) | first | default({}) }}"
+
+- name: Debug Device Info
+  ansible.builtin.debug:
+    var: tailscale_device_info
+    verbosity: 1
+
+- name: Assert Node Status
+  ansible.builtin.assert:
+    that:
+      - tailscale_device_info is defined
+      - tailscale_device_info | length > 0
+      - tailscale_device_info.clientVersion is defined
+    fail_msg: "Device {{ inventory_hostname }} not found in Tailnet."
+
+- name: Fetch Device Details
+  ansible.builtin.uri:
+    url: "https://api.tailscale.com/api/v2/device/{{ tailscale_device_info.id }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ ts_access_token }}"
+  register: ts_device_details_response
+  when: tailscale_device_info.id is defined
+
+- name: Update Device Info with Details
+  ansible.builtin.set_fact:
+    tailscale_device_info: "{{ ts_device_details_response.json }}"
+  when: tailscale_device_info.id is defined
+
+- name: Debug Detailed Device Info
+  ansible.builtin.debug:
+    var: tailscale_device_info
+    verbosity: 1
+
+- name: Assert Node Online (Last Seen)
+  ansible.builtin.assert:
+    that:
+      - tailscale_device_info.lastSeen is defined
+    fail_msg: "Device {{ inventory_hostname }} has no lastSeen timestamp."
+
+- name: Get Local Tailscale Status
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_local_status_json
+  changed_when: false
+
+- name: Parse Local Tailscale Status
+  ansible.builtin.set_fact:
+    tailscale_local_status: "{{ tailscale_local_status_json.stdout | from_json }}"
+
+- name: Assert Advertised Routes (Local)
+  ansible.builtin.assert:
+    that:
+      - tailscale_subnet_routes in (tailscale_local_status.Self.PrimaryRoutes | default([]))
+    fail_msg: "Route {{ tailscale_subnet_routes }} is not advertised locally by {{ inventory_hostname }}."
+
+
+- name: Assert Tags
+  ansible.builtin.assert:
+    that:
+      - item in (tailscale_device_info.tags | default([]))
+    fail_msg: "Tag {{ item }} is missing on {{ inventory_hostname }}."
+  loop: "{{ tailscale_tags }}"

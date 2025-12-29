@@ -1,53 +1,30 @@
-# Tasks: Remote Access Baseline (Tailscale + ACLs)
+# Tasks: Tailscale IaC Max + API Audit
 
-**Feature**: Remote Access Baseline (Tailscale + ACLs)
-**Status**: Planned
+**Feature**: 008c-tailscale-iac-max
+**Status**: In Progress
 
-## Phase 1: Setup
-*Goal: Define configuration and documentation standards.*
+## Phase 1: Setup & Discovery
+- [x] T001 Create directory structure for roles (`tailscale_router`, `tailscale_audit`, `tailscale_acl`)
+- [x] T002 Configure `group_vars` (split `vars.yml` and `vault.yml`)
+- [x] T003 Create `scripts/tailscale/test_api_access.sh` for API verification
 
-- [x] T001 Create `docs/tailscale-acl.example.json` with Default Deny policy and `tag:proxmox` example
-- [x] T002 Update `ansible/group_vars/proxmox_hosts.yml` with `tailscale_auth_key` and `tailscale_advertise_routes` variables
+## Phase 2: Host-Side IaC
+- [x] T004 Implement `tailscale_router` role (install, sysctl, auth, verify)
+- [x] T005 Implement `tailscale_router` tasks for manual auth fallback
 
-## Phase 2: Foundational (Ansible Role)
-*Goal: Create the reusable Ansible role for Tailscale host configuration.*
+## Phase 3: Tailnet Drift Audit
+- [x] T006 Implement `tailscale_audit` role (API-based drift detection)
 
-- [x] T003 Create directory structure for `ansible/roles/tailscale_host/tasks`
-- [x] T004 Implement package installation in `ansible/roles/tailscale_host/tasks/main.yml` (add repo, install `tailscale`)
-- [x] T005 Implement service configuration in `ansible/roles/tailscale_host/tasks/main.yml` (enable/start service)
-- [x] T006 Implement `tailscale up` logic in `ansible/roles/tailscale_host/tasks/main.yml` using `tailscale_auth_key`, `tailscale_advertise_routes`, `--advertise-tags=tag:proxmox`, and `--ssh=false`
+## Phase 4: ACL Source of Truth
+- [x] T007 Create `docs/tailscale/policy.hujson`
+- [x] T008 Create `docs/runbooks/tailscale-acl.md`
 
-## Phase 3: User Story 1 - Remote Admin Access
-*Goal: Enable remote access to Proxmox host.*
+## Phase 5: Safe Automated Configuration
+- [x] T009 Implement `tailscale_acl` role (Commit-Confirm logic)
+- [x] T010 Create `ansible/playbooks/tailscale.yml`
 
-- [x] T007 [US1] Add `tailscale_host` role to `ansible/playbooks/host_proxmox.yml`
-- [x] T008 [US1] Verify `ansible/group_vars/proxmox_hosts.yml` is correctly configured for the `pve` host
-
-## Phase 4: User Story 2 - Remote Service Access
-*Goal: Ensure subnet routing is configured for accessing LXCs.*
-
-- [x] T009 [US2] Verify `tailscale_advertise_routes` in `ansible/group_vars/proxmox_hosts.yml` includes `192.168.1.0/24`
-
-## Phase 5: User Story 3 - Access Control Enforcement
-*Goal: Define secure access policies.*
-
-- [x] T010 [US3] Finalize `docs/tailscale-acl.example.json` with specific rules for `tag:proxmox` (allow port 8006, 22 from Admin)
-
-## Phase 6: Polish
-*Goal: Documentation and cleanup.*
-
-- [x] T011 Update `docs/network-layout.md` to include Tailscale Subnet Router details
-- [x] T012 Document validation procedure (smoke test) in `docs/operations.md`
-
-## Dependencies
-
-- **US1** depends on **Phase 2** (Role creation).
-- **US2** depends on **US1** (Host must be online to route).
-- **US3** depends on **US1** (Need host online to test ACLs).
-
-## Implementation Strategy
-
-1.  **Setup**: Define the "contract" (variables and ACLs).
-2.  **Role**: Build the logic to install and configure Tailscale.
-3.  **Deploy**: Apply to the host and verify connectivity.
-4.  **Secure**: Apply ACLs to lock it down.
+## Phase 6: Verification & Polish
+- [x] T011 Update `docs/runbooks/tailscale-setup.md`
+- [x] T012 Add "Mobile Verification Checklist" to runbook
+- [x] T013 Run full idempotency test (Syntax Check)
+- [x] T014 Final commit and push
