@@ -1,0 +1,5 @@
+healthcheck_path: "/api2/json/version"
+healthcheck_port: 8006
+healthcheck_scheme: "https"
+healthcheck_verify_ssl: false
+healthcheck_expect_status: 401

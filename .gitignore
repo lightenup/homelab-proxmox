@@ -29,3 +29,6 @@ scripts/dr/drill-reports/
 .vscode/
 *.tfplan
 ansible/roles/geerlingguy.docker
+
+# Healthcheck Artifacts - Feature 018a
+artifacts/healthcheck/
