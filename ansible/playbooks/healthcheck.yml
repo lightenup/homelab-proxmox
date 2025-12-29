@@ -1,0 +1,25 @@
+---
+- name: Run Service Health Checks
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    profile: "lan"
+  
+  tasks:
+    - name: Execute healthcheck script
+      command: "scripts/healthcheck/run.sh --profile {{ profile }}"
+      args:
+        chdir: "{{ playbook_dir }}/../.."
+      register: healthcheck_result
+      ignore_errors: true
+      changed_when: false
+
+    - name: Display healthcheck output
+      debug:
+        msg: "{{ healthcheck_result.stdout_lines }}"
+
+    - name: Fail if healthcheck failed
+      fail:
+        msg: "Healthchecks failed!"
+      when: healthcheck_result.rc != 0

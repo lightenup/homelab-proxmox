@@ -1,0 +1,3 @@
+healthcheck_path: "/manifest.json"
+healthcheck_port: 8123
+healthcheck_expect_status: 200
