@@ -1,0 +1,14 @@
+---
+- name: Configure Service Health Automation
+  hosts: monitoring
+  become: yes
+  
+  pre_tasks:
+    - name: Load monitoring secrets (SMTP)
+      include_vars:
+        file: "{{ playbook_dir }}/../host_vars/monitoring/vault.yml"
+      no_log: true
+      ignore_errors: true
+
+  roles:
+    - role: ../roles/healthcheck_automation

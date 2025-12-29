@@ -1,0 +1,10 @@
+[Unit]
+Description=Homelab Service Healthchecks
+After=network.target
+
+[Service]
+Type=oneshot
+User={{ healthcheck_user }}
+Group={{ healthcheck_group }}
+ExecStart={{ healthcheck_script_path }} --profile lan --inventory {{ healthcheck_inventory_path }}
+WorkingDirectory={{ healthcheck_install_dir }}

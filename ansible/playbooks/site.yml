@@ -24,3 +24,10 @@
   # Purpose: Backup Proxmox host configuration to NAS
   # Dependencies: NAS accessible via network
   tags: backup
+
+- name: Configure Service Health Automation
+  import_playbook: healthcheck_automation.yml
+  # Purpose: Schedule automated healthchecks and drift detection
+  # Dependencies: Localhost (Controller)
+  tags: healthcheck
+

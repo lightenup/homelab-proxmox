@@ -1,0 +1,9 @@
+---
+healthcheck_enforced_groups: ['services']
+healthcheck_schedule: "*-*-* *:00:00" # Hourly
+healthcheck_user: "ansible"
+healthcheck_group: "ansible"
+healthcheck_install_dir: "/opt/healthcheck"
+healthcheck_script_path: "{{ healthcheck_install_dir }}/scripts/healthcheck/run.sh"
+healthcheck_env_path: "{{ healthcheck_install_dir }}/scripts/healthcheck/.env"
+healthcheck_inventory_path: "{{ healthcheck_install_dir }}/inventory.json"

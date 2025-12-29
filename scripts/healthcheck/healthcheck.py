@@ -7,12 +7,24 @@ import concurrent.futures
 import urllib.request
 import urllib.error
 import ssl
+import os
+import smtplib
+from email.message import EmailMessage
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-def get_inventory() -> Dict[str, Any]:
+def get_inventory(inventory_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Execute ansible-inventory --list and return the JSON output.
+    Get inventory from file or by executing ansible-inventory.
     """
+    if inventory_path:
+        try:
+            with open(inventory_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error reading inventory file {inventory_path}: {e}", file=sys.stderr)
+            sys.exit(1)
+
     try:
         # Run ansible-inventory from the ansible directory to ensure host_vars are picked up correctly
         cmd = ["ansible-inventory", "-i", "inventories/generated/hosts.yml", "-i", "inventories/static/hosts.yml", "--list"]
@@ -111,16 +123,158 @@ def perform_check(hostname: str, host_vars: Dict[str, Any], profile: str) -> Dic
         result["details"] = f"Error: {str(e)}"
         return result
 
+def load_previous_history() -> Dict[str, str]:
+    """
+    Load the previous run's results to determine state changes.
+    Returns a dict mapping hostname -> status (PASS/FAIL).
+    """
+    history_path = "artifacts/healthcheck/history/latest.json"
+    if not os.path.exists(history_path):
+        return {}
+    
+    try:
+        with open(history_path, 'r') as f:
+            data = json.load(f)
+            # Handle both list of results and wrapped structure if we change it later
+            if isinstance(data, list):
+                return {r["hostname"]: r["status"] for r in data}
+            return {}
+    except Exception as e:
+        print(f"Warning: Could not load history: {e}", file=sys.stderr)
+        return {}
+
+def send_email_notification(current_results: List[Dict[str, Any]], previous_states: Dict[str, str], coverage_failures: List[str]):
+    """
+    Send email notification if state changed from Success -> Failure or if coverage gaps exist.
+    """
+    smtp_host = os.environ.get("SMTP_HOST")
+    if not smtp_host:
+        return
+
+    smtp_port = int(os.environ.get("SMTP_PORT", 25))
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_pass = os.environ.get("SMTP_PASS")
+    smtp_from = os.environ.get("SMTP_FROM", "healthcheck@homelab.local")
+    smtp_to = os.environ.get("SMTP_TO")
+
+    if not smtp_to:
+        print("Warning: SMTP_HOST set but SMTP_TO missing. Skipping email.", file=sys.stderr)
+        return
+
+    failures = []
+    
+    # Check for service regressions (Success -> Failure)
+    for r in current_results:
+        hostname = r["hostname"]
+        status = r["status"]
+        prev_status = previous_states.get(hostname, "PASS") # Default to PASS so we don't alert on first run unless it fails? 
+        # Actually, if it's a new host and it fails, we probably want to know.
+        # But spec says "State change only (Success -> Failure)".
+        # If prev is unknown, maybe we shouldn't alert? Or maybe we should?
+        # Let's stick to: Alert if Current is FAIL and (Prev was PASS or Unknown).
+        # Wait, "Success -> Failure" implies we knew it was Success.
+        # But if I deploy a new broken service, I want to know.
+        # Let's alert if Status is FAIL.
+        # Wait, the requirement is "State change only (Success -> Failure) ... prevents alert fatigue from repeated failures".
+        # So if it was FAIL last time and is FAIL this time -> NO Alert.
+        # If it was PASS last time and is FAIL this time -> Alert.
+        # If it is New and FAIL -> Alert (treat missing history as PASS for the purpose of "it wasn't failing before").
+        
+        if status != "PASS" and prev_status == "PASS":
+            failures.append(f"Service Regression: {hostname} ({r['details']})")
+
+    # Check for coverage gaps (Always alert)
+    for host in coverage_failures:
+        failures.append(f"Coverage Gap: {host} (Missing healthcheck_path)")
+
+    if not failures:
+        return
+
+    # Hooks for future integrations
+    # notify_failure(failures) 
+
+    msg = EmailMessage()
+    msg.set_content("\n".join(failures))
+    msg["Subject"] = f"Healthcheck Alert: {len(failures)} Issues Detected"
+    msg["From"] = smtp_from
+    msg["To"] = smtp_to
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            if smtp_user and smtp_pass:
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        print(f"Sent email notification to {smtp_to}")
+    except Exception as e:
+        print(f"Error sending email: {e}", file=sys.stderr)
+
+def check_coverage(inventory: Dict[str, Any]) -> List[str]:
+    """
+    Check if hosts in enforced groups have healthcheck_path defined.
+    Returns list of missing hosts.
+    """
+    missing_hosts = []
+    
+    # Get enforced groups from 'all' vars or default
+    # Note: ansible-inventory --list puts group vars in the group dict or _meta
+    # We might need to look up 'all' group vars.
+    # Usually inventory['all']['vars']
+    
+    enforced_groups = ["services"] # Default
+    if "all" in inventory and "vars" in inventory["all"]:
+        enforced_groups = inventory["all"]["vars"].get("healthcheck_enforced_groups", enforced_groups)
+    
+    # Also check _meta hostvars for 'all' group vars if not in inventory['all']['vars']?
+    # Ansible JSON format can vary. Let's assume standard.
+    
+    hostvars = inventory.get("_meta", {}).get("hostvars", {})
+    
+    # Generate baseline.json artifact (FR-008)
+    baseline = {
+        "timestamp": datetime.now().isoformat(),
+        "targets": []
+    }
+
+    for group in enforced_groups:
+        if group not in inventory:
+            continue
+            
+        hosts = inventory[group].get("hosts", [])
+        for hostname in hosts:
+            hv = hostvars.get(hostname, {})
+            if "healthcheck_path" not in hv:
+                missing_hosts.append(hostname)
+            else:
+                baseline["targets"].append({
+                    "hostname": hostname,
+                    "url": f"{hv.get('healthcheck_scheme','http')}://{hv.get('ansible_host')}:{hv.get('healthcheck_port',80)}{hv.get('healthcheck_path')}"
+                })
+
+    # Save baseline artifact
+    os.makedirs("artifacts/healthcheck", exist_ok=True)
+    with open("artifacts/healthcheck/baseline.json", "w") as f:
+        json.dump(baseline, f, indent=2)
+
+    return missing_hosts
+
 def main():
     parser = argparse.ArgumentParser(description="Service Health Regression Checks")
     parser.add_argument("--profile", choices=["lan", "tailscale"], default="lan", help="Network profile to use")
     parser.add_argument("--json", action="store_true", help="Output JSON report to stdout")
     parser.add_argument("--output-json", help="Save JSON report to file")
     parser.add_argument("--filter", help="Filter hosts by name (substring)")
+    parser.add_argument("--no-notify", action="store_true", help="Disable email notifications")
+    parser.add_argument("--inventory", help="Path to JSON inventory file")
     args = parser.parse_args()
 
-    inventory = get_inventory()
+    inventory = get_inventory(args.inventory)
     
+    # Run coverage check
+    coverage_failures = check_coverage(inventory)
+    if coverage_failures:
+        print(f"Coverage Gaps Found: {', '.join(coverage_failures)}", file=sys.stderr)
+
     hosts_to_check = []
     if "_meta" in inventory and "hostvars" in inventory["_meta"]:
         all_hosts = inventory["_meta"]["hostvars"]
@@ -133,20 +287,17 @@ def main():
         print("Invalid inventory format: missing _meta.hostvars", file=sys.stderr)
         sys.exit(1)
 
-    if not hosts_to_check:
-        print("No hosts found with 'healthcheck_path' defined.")
-        sys.exit(0)
-
     results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_host = {
-            executor.submit(perform_check, h, resolve_host_vars(inventory, h), args.profile): h 
-            for h in hosts_to_check
-        }
-        for future in concurrent.futures.as_completed(future_to_host):
-            results.append(future.result())
+    if hosts_to_check:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_host = {
+                executor.submit(perform_check, h, resolve_host_vars(inventory, h), args.profile): h 
+                for h in hosts_to_check
+            }
+            for future in concurrent.futures.as_completed(future_to_host):
+                results.append(future.result())
 
-    results.sort(key=lambda x: x["hostname"])
+        results.sort(key=lambda x: x["hostname"])
 
     if args.output_json:
         try:
@@ -155,6 +306,12 @@ def main():
         except IOError as e:
             print(f"Error writing JSON output to {args.output_json}: {e}", file=sys.stderr)
 
+    # Notifications
+    if not args.no_notify:
+        previous_history = load_previous_history()
+        send_email_notification(results, previous_history, coverage_failures)
+
+    # Output
     if args.json:
         print(json.dumps(results, indent=2))
     else:
@@ -164,8 +321,14 @@ def main():
             status_color = "\033[92m" if r["status"] == "PASS" else "\033[91m"
             reset_color = "\033[0m"
             print(f"{r['hostname']:<20} {status_color}{r['status']:<10}{reset_color} {r['target_ip'] or 'N/A':<15} {r['details']}")
+        
+        if coverage_failures:
+            print("-" * 80)
+            print(f"COVERAGE GAPS: {len(coverage_failures)}")
+            for h in coverage_failures:
+                print(f"{h:<20} \033[91mMISSING\033[0m   N/A             Missing healthcheck_path")
 
-    if any(r["status"] != "PASS" for r in results):
+    if any(r["status"] != "PASS" for r in results) or coverage_failures:
         sys.exit(1)
 
 if __name__ == "__main__":
