@@ -1,77 +1,16 @@
 ---
-# T014: Main task orchestration for tailscale_router role
-# Purpose: Execute all configuration tasks in proper sequence
-
 - name: Install Tailscale
   ansible.builtin.import_tasks: install.yml
-  tags:
-    - install
-    - tailscale
+  tags: [install, tailscale]
 
-- name: Ensure Tailscale service is running
-  ansible.builtin.import_tasks: service.yml
-  tags:
-    - install
-    - configure
-    - tailscale
+- name: Configure Sysctl
+  ansible.builtin.import_tasks: sysctl.yml
+  tags: [configure, tailscale]
 
-- name: Check Tailscale authentication
-  ansible.builtin.import_tasks: check_auth.yml
-  tags:
-    - configure
-    - tailscale
+- name: Authenticate
+  ansible.builtin.import_tasks: auth.yml
+  tags: [configure, tailscale]
 
-- name: Authenticate Tailscale if needed
-  ansible.builtin.import_tasks: authenticate.yml
-  tags:
-    - configure
-    - tailscale
-
-- name: Configure IP forwarding
-  ansible.builtin.import_tasks: ip_forwarding.yml
-  tags:
-    - configure
-    - tailscale
-
-- name: Configure subnet routes
-  ansible.builtin.import_tasks: subnet_routes.yml
-  tags:
-    - configure
-    - tailscale
-
-# T023: Verification tasks (optional, run with --tags verify)
-- name: Verify Tailscale status
-  ansible.builtin.import_tasks: verify_tailscale_status.yml
-  tags:
-    - verify
-    - never
-
-- name: Verify Tailscale IP
-  ansible.builtin.import_tasks: verify_tailscale_ip.yml
-  tags:
-    - verify
-    - never
-
-- name: Verify advertised routes
-  ansible.builtin.import_tasks: verify_routes.yml
-  tags:
-    - verify
-    - never
-
-- name: Verify IPv4 forwarding
-  ansible.builtin.import_tasks: verify_ipv4_forwarding.yml
-  tags:
-    - verify
-    - never
-
-- name: Verify IPv6 forwarding
-  ansible.builtin.import_tasks: verify_ipv6_forwarding.yml
-  tags:
-    - verify
-    - never
-
-- name: Verify IP forwarding persistence
-  ansible.builtin.import_tasks: verify_persistence.yml
-  tags:
-    - verify
-    - never
+- name: Verify
+  ansible.builtin.import_tasks: verify.yml
+  tags: [verify, tailscale]

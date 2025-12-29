@@ -1,0 +1,44 @@
+// docs/tailscale/policy.hujson
+// This file is the Source of Truth for Tailscale ACLs.
+// Format: HuJSON (JSON with comments).
+//
+// ⚠️ CRITICAL: GitHub Identity Format
+// Use "login@github" (e.g., "octocat@github"), NOT email addresses.
+// Using emails for GitHub users will result in "Access Denied".
+
+{
+  // Define groups for easier management
+  "groups": {
+    "group:admins": ["lightenup@github"],
+    "group:users": ["lightenup@github"]
+  },
+
+  // Define access control lists
+  "acls": [
+    // Allow admins access to everything
+    {
+      "action": "accept",
+      "src": ["group:admins"],
+      "dst": ["*:*"]
+    },
+    // Allow users access to specific tags
+    {
+      "action": "accept",
+      "src": ["group:users"],
+      "dst": ["tag:proxmox:8006"]
+    }
+  ],
+
+  // Define tag owners
+  "tagOwners": {
+    "tag:proxmox": ["group:admins"]
+  },
+
+  // Define auto-approvers for routes
+  "autoApprovers": {
+    // Auto-approve subnet routes advertised by devices with tag:proxmox
+    "routes": {
+      "192.168.1.0/24": ["tag:proxmox"]
+    }
+  }
+}

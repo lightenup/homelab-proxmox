@@ -1,0 +1,118 @@
+---
+- name: Check Safe Mode
+  ansible.builtin.fail:
+    msg: "Safe mode is disabled. Set tailscale_safe_mode=true to run ACL automation."
+  when: not tailscale_safe_mode | default(false) | bool
+  delegate_to: localhost
+  run_once: true
+
+- name: Get Tailscale Access Token
+  ansible.builtin.uri:
+    url: https://api.tailscale.com/api/v2/oauth/token
+    method: POST
+    user: "{{ tailscale_oauth_client_id }}"
+    password: "{{ tailscale_oauth_client_secret }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      grant_type: client_credentials
+  register: ts_token_response
+  no_log: true
+  delegate_to: localhost
+  run_once: true
+
+- name: Set Access Token fact
+  ansible.builtin.set_fact:
+    ts_access_token: "{{ ts_token_response.json.access_token }}"
+  no_log: true
+  delegate_to: localhost
+  run_once: true
+
+- name: Fetch Current ACL (Backup)
+  ansible.builtin.uri:
+    url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet_name | default('-') }}/acl"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ ts_access_token }}"
+      Accept: "application/hujson"
+    return_content: true
+  register: current_acl_response
+  delegate_to: localhost
+  run_once: true
+
+- name: Save Backup ACL
+  ansible.builtin.copy:
+    content: "{{ current_acl_response.content }}"
+    dest: "/tmp/tailscale_acl_backup_{{ '%Y%m%dT%H%M%S' | strftime }}.hujson"
+  delegate_to: localhost
+  run_once: true
+
+- name: Read New Policy
+  ansible.builtin.set_fact:
+    new_policy_content: "{{ lookup('file', playbook_dir ~ '/../../docs/tailscale/policy.hujson') }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Validate Policy (Dry Run)
+  ansible.builtin.uri:
+    url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet_name | default('-') }}/acl/validate"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ ts_access_token }}"
+    body_format: json
+    body: "{{ new_policy_content }}"
+    status_code: 200
+  register: validation_result
+  delegate_to: localhost
+  run_once: true
+
+- name: Apply New Policy with Rollback
+  block:
+    - name: Push New Policy
+      ansible.builtin.uri:
+        url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet_name | default('-') }}/acl"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ts_access_token }}"
+          Content-Type: "application/hujson"
+        body: "{{ new_policy_content }}"
+        status_code: 200
+      delegate_to: localhost
+      run_once: true
+
+    - name: Wait for Propagation
+      ansible.builtin.wait_for:
+        timeout: 10
+      delegate_to: localhost
+      run_once: true
+
+    - name: Verify Connectivity (Controller to API)
+      ansible.builtin.uri:
+        url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet_name | default('-') }}/acl"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ ts_access_token }}"
+      register: verify_response
+      retries: 3
+      delay: 2
+      delegate_to: localhost
+      run_once: true
+
+  rescue:
+    - name: ROLLBACK - Restore Backup ACL
+      ansible.builtin.uri:
+        url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet_name | default('-') }}/acl"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ts_access_token }}"
+          Content-Type: "application/hujson"
+        body: "{{ current_acl_response.content }}"
+        status_code: 200
+      delegate_to: localhost
+      run_once: true
+      
+    - name: Fail after Rollback
+      ansible.builtin.fail:
+        msg: "ACL application failed or caused connectivity loss. Rolled back to previous state."
+      delegate_to: localhost
+      run_once: true

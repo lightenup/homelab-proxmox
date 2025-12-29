@@ -10,8 +10,9 @@ tailscale_auth_key: !vault |
           37636439376564353530383633646236316236386165393235613235363562643435636363323534
           35376532343337376164383464353766643937653130333564616562643638653832363566663730
           333733356437376136346665333839306436
-tailscale_advertise_routes: "192.168.1.0/24"
-tailscale_advertise_tags: "tag:proxmox"
+tailscale_subnet_routes: "192.168.1.0/24"
+tailscale_tags:
+  - "tag:proxmox"
 
 # Proxmox Configuration Backup (Feature 013)
 proxmox_backup_enabled: true

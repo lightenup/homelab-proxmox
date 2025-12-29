@@ -1,16 +1,6 @@
 ---
-# T006: Install Tailscale package
-# Purpose: Ensure Tailscale is installed on the Proxmox host
-
-- name: Check if Tailscale is already installed
-  ansible.builtin.command: dpkg -l tailscale
-  register: tailscale_installed
-  changed_when: false
-  failed_when: false
-
-- name: Install Tailscale package
+- name: Ensure Tailscale is installed
   ansible.builtin.apt:
     name: tailscale
     state: present
-    update_cache: yes
-  when: tailscale_installed.rc != 0
+

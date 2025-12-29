@@ -1,13 +1,3 @@
 ---
-# T004: Default variables for tailscale_router role
-# Purpose: Configure subnet route and optional authentication
-
-# Subnet to advertise through Tailscale
-# This is the local LAN network that remote devices can access
-tailscale_subnet_route: "192.168.1.0/24"
-
-# Optional: Tailscale authentication key for non-interactive setup
-# DO NOT commit this value to the repository!
-# Provide via ansible-vault (group_vars/proxmox_hosts/vault.yml) or --extra-vars
-# If omitted and Tailscale is not authenticated, playbook will fail with instructions
-# tailscale_auth_key: ""  # Leave commented - set via vault or CLI only
+tailscale_subnet_routes: "192.168.1.0/24"
+tailscale_tags: []
