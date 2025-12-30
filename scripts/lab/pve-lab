@@ -158,6 +158,118 @@ check_safety() {
     return 0
 }
 
+# Helper: Check Host Requirements (Nested KVM)
+check_host_requirements() {
+    local tier2_mode=$1
+    
+    if [[ "$tier2_mode" == "plus" ]]; then
+        log_info "Performing Tier 2 Plus Preflight Checks..."
+        
+        # 1. Host Check (Intel or AMD)
+        local nested_val_intel
+        local nested_val_amd
+        
+        nested_val_intel=$(pve_exec "cat /sys/module/kvm_intel/parameters/nested 2>/dev/null || echo 'N'")
+        nested_val_amd=$(pve_exec "cat /sys/module/kvm_amd/parameters/nested 2>/dev/null || echo 'N'")
+        
+        if [[ "$nested_val_intel" == "Y" || "$nested_val_intel" == "1" ]]; then
+             log_info "  Host Nested KVM (Intel): OK"
+        elif [[ "$nested_val_amd" == "Y" || "$nested_val_amd" == "1" ]]; then
+             log_info "  Host Nested KVM (AMD): OK"
+        else
+            log_error "Host Nested KVM check failed."
+            log_error "  Intel: $nested_val_intel"
+            log_error "  AMD:   $nested_val_amd"
+            log_error "Please enable nested virtualization on the host ($PROXMOX_HOST)."
+            return 1
+        fi
+        
+        # 2. Guest Check
+        if ! ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "test -e /dev/kvm"; then
+            log_error "Guest /dev/kvm check failed. Nested virtualization not passed to Lab VM."
+            return 1
+        fi
+        log_info "  Guest /dev/kvm: OK"
+    fi
+    return 0
+}
+
+# Helper: Check Network Requirements
+check_network_requirements() {
+    log_info "Checking Network Requirements..."
+    
+    # Check FQDN resolution (from Lab VM)
+    # Using 'getent hosts' or 'host' or 'ping'
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "getent hosts deb.debian.org >/dev/null"; then
+        log_error "DNS Resolution failed on Lab VM (deb.debian.org)."
+        return 1
+    fi
+    log_info "  DNS Resolution: OK"
+
+    # Check Internet Connectivity
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "curl -I -s --connect-timeout 5 https://deb.debian.org >/dev/null"; then
+        log_error "Internet Connectivity failed on Lab VM."
+        return 1
+    fi
+    log_info "  Internet Connectivity: OK"
+    
+    return 0
+}
+
+# Helper: Collect Artifacts
+collect_artifacts() {
+    local run_id=$1
+    local artifact_dir="artifacts/019-lab/$run_id"
+    
+    log_info "Collecting artifacts for run $run_id..."
+    
+    # Create subdirectories
+    mkdir -p "$artifact_dir/logs" "$artifact_dir/config"
+    
+    # Commands to run on Lab VM
+    # We use a single SSH connection to run multiple commands if possible, or just loop.
+    # Since we need to fetch files back, we'll generate them on the VM first.
+    
+    local remote_cmds="
+        pveversion -v > /tmp/pveversion.txt 2>&1;
+        pvesh version > /tmp/pvesh_version.txt 2>&1;
+        apt-cache policy > /tmp/apt_policy.txt 2>&1;
+        systemctl status --no-pager > /tmp/systemctl_status.txt 2>&1;
+        journalctl -n 1000 --no-pager > /tmp/journal.log 2>&1;
+    "
+    
+    if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "$remote_cmds"; then
+        # Fetch files
+        # Using scp with ProxyJump
+        scp -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.txt" "$artifact_dir/config/" 2>/dev/null || log_warn "Failed to fetch config artifacts"
+        scp -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.log" "$artifact_dir/logs/" 2>/dev/null || log_warn "Failed to fetch log artifacts"
+    else
+        log_warn "Failed to execute artifact collection commands on Lab VM."
+    fi
+    
+    log_info "Artifacts collected in $artifact_dir"
+}
+
+# Helper: Rotate Artifacts
+rotate_artifacts() {
+    local max_keep=5
+    local artifact_base="artifacts/019-lab"
+    
+    log_info "Rotating artifacts (keeping last $max_keep)..."
+    
+    # List directories starting with lab-, sort by name (timestamp), skip last N
+    # We use ls -1d to list one per line
+    local dirs_to_remove
+    dirs_to_remove=$(ls -1d "$artifact_base"/lab-* 2>/dev/null | sort | head -n -"$max_keep")
+    
+    if [[ -n "$dirs_to_remove" ]]; then
+        for dir in $dirs_to_remove; do
+            log_info "Removing old artifact: $dir"
+            rm -rf "$dir"
+        done
+    fi
+}
+
 cmd_status() {
     log_info "Checking status of Lab Environment..."
     local vmids
@@ -314,6 +426,11 @@ cmd_test() {
 
     # Tier 1: Convergence
     log_info "Tier 1: Convergence"
+    
+    if ! check_network_requirements; then
+        return 1
+    fi
+
     log_info "Running Lab Bootstrap Playbook..."
     
     if log_cmd_exec ansible-playbook ansible/playbooks/lab_bootstrap.yml -i ansible/inventories/lab/hosts.yml; then
@@ -328,25 +445,8 @@ cmd_test() {
         log_info "Tier 2: PVE Install & Verification (Mode: $tier2_mode)"
         
         # Tier 2 Plus Preflight Checks (FR-016)
-        if [[ "$tier2_mode" == "plus" ]]; then
-            log_info "Performing Tier 2 Plus Preflight Checks..."
-            
-            # 1. Host Check
-            local nested_val
-            nested_val=$(pve_exec "cat /sys/module/kvm_intel/parameters/nested 2>/dev/null || echo 'N'")
-            if [[ "$nested_val" != "Y" && "$nested_val" != "1" ]]; then
-                log_error "Host Nested KVM check failed. /sys/module/kvm_intel/parameters/nested = '$nested_val'"
-                log_error "Please enable nested virtualization on the host ($PROXMOX_HOST)."
-                return 1
-            fi
-            log_info "  Host Nested KVM: OK"
-            
-            # 2. Guest Check
-            if ! ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "test -e /dev/kvm"; then
-                log_error "Guest /dev/kvm check failed. Nested virtualization not passed to Lab VM."
-                return 1
-            fi
-            log_info "  Guest /dev/kvm: OK"
+        if ! check_host_requirements "$tier2_mode"; then
+            return 1
         fi
         
         # Run Tier 2 Playbook
@@ -423,6 +523,9 @@ cmd_run() {
         log_error "Setup failed."
     fi
     
+    # Collect Artifacts (FR-011)
+    collect_artifacts "$run_id"
+    
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
@@ -442,6 +545,9 @@ JSON
     
     log_info "Run completed with status: $status"
     
+    # Rotate Artifacts (FR-012)
+    rotate_artifacts
+    
     if [[ "$status" != "SUCCESS" ]]; then
         exit 1
     fi
@@ -449,10 +555,18 @@ JSON
 
 usage() {
     echo "Usage: $0 {up|down|destroy|status|test|run}"
-    echo "  run options:"
-    echo "    --tier <1|2>        (default: 1)"
-    echo "    --tier2-mode <mode> (default: min)"
-    echo "    --keep              (default: false)"
+    echo ""
+    echo "Commands:"
+    echo "  up       - Provision a new Lab VM (manual mode)"
+    echo "  down     - Destroy all Lab VMs"
+    echo "  status   - Check status of Lab VMs"
+    echo "  test     - Run tests against existing Lab VM"
+    echo "  run      - Full workflow: destroy -> up -> test -> destroy"
+    echo ""
+    echo "Run Options:"
+    echo "  --tier <1|2>          Target tier level (default: 1)"
+    echo "  --tier2-mode <mode>   Tier 2 verification mode: 'min' or 'plus' (default: min)"
+    echo "  --keep                Keep VM after run (don't destroy on exit)"
     exit 1
 }
 

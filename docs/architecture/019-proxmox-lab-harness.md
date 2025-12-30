@@ -54,6 +54,9 @@ All lab resources must be identifiable by **ALL** of the following:
 3.  **Test**:
     - **Tier 0**: Runs local static analysis (`terraform fmt`, `ansible-playbook --syntax-check`).
     - **Tier 1**: Runs Ansible playbook `ansible/playbooks/lab_bootstrap.yml` against `10.99.0.10`.
+    - **Tier 2**: Runs Ansible playbook `ansible/playbooks/lab_tier2_pve.yml` (if `--tier 2` specified).
+        - Validates PVE installation, hardening, and idempotency.
+        - Performs enhanced preflight checks (Nested KVM, Network).
     - Verifies success.
 
 4.  **Destroy**:
@@ -61,6 +64,14 @@ All lab resources must be identifiable by **ALL** of the following:
     - **Safety Check**: Verifies VMID is in range AND has ALL Identity Markers (Name + ManagedBy + RunId).
     - Stops VM.
     - Destroys VM.
+
+## Artifacts
+
+The harness collects diagnostic data after every run (success or failure) to `artifacts/019-lab/<runid>/`.
+
+- **Config**: `pveversion`, `pvesh version`, `apt-cache policy`, `systemctl status`.
+- **Logs**: `journalctl` (last 1000 lines).
+- **Rotation**: Automatically keeps only the last 5 run directories.
 
 ## Host Setup Prerequisites
 
