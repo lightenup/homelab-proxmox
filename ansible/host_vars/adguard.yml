@@ -1,0 +1,7 @@
+---
+# Healthcheck Configuration (Feature 018b)
+healthcheck_path: "/"
+healthcheck_port: 80
+healthcheck_scheme: "http"
+healthcheck_enabled: false
+healthcheck_reason: "Service not yet installed"

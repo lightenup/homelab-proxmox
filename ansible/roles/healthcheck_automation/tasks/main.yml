@@ -1,0 +1,80 @@
+---
+- name: Generate inventory JSON locally
+  delegate_to: localhost
+  become: false
+  command: "ansible-inventory -i inventories/generated/hosts.yml -i inventories/static/hosts.yml --list"
+  args:
+    chdir: "{{ playbook_dir }}/.."
+  register: inventory_json
+  changed_when: false
+
+- name: Create install directory
+  file:
+    path: "{{ healthcheck_install_dir }}"
+    state: directory
+    owner: "{{ healthcheck_user }}"
+    group: "{{ healthcheck_group }}"
+    mode: '0755'
+
+- name: Create scripts directory
+  file:
+    path: "{{ healthcheck_install_dir }}/scripts/healthcheck"
+    state: directory
+    owner: "{{ healthcheck_user }}"
+    group: "{{ healthcheck_group }}"
+    mode: '0755'
+
+- name: Copy healthcheck scripts
+  copy:
+    src: "{{ playbook_dir }}/../../scripts/healthcheck/{{ item }}"
+    dest: "{{ healthcheck_install_dir }}/scripts/healthcheck/{{ item }}"
+    owner: "{{ healthcheck_user }}"
+    group: "{{ healthcheck_group }}"
+    mode: '0755'
+  loop:
+    - healthcheck.py
+    - run.sh
+
+- name: Copy inventory JSON
+  copy:
+    content: "{{ inventory_json.stdout }}"
+    dest: "{{ healthcheck_inventory_path }}"
+    owner: "{{ healthcheck_user }}"
+    group: "{{ healthcheck_group }}"
+    mode: '0644'
+
+- name: Create healthcheck .env file
+  copy:
+    dest: "{{ healthcheck_env_path }}"
+    mode: '0600'
+    owner: "{{ healthcheck_user }}"
+    group: "{{ healthcheck_group }}"
+    content: |
+      SMTP_HOST={{ smtp_host | default('') }}
+      SMTP_PORT={{ smtp_port | default('25') }}
+      SMTP_USER={{ smtp_user | default('') }}
+      SMTP_PASS={{ smtp_pass | default('') }}
+      SMTP_FROM={{ smtp_from | default('healthcheck@homelab.local') }}
+      SMTP_TO={{ smtp_to | default('') }}
+  no_log: true
+
+- name: Install healthcheck service
+  template:
+    src: healthcheck.service.j2
+    dest: /etc/systemd/system/healthcheck.service
+    mode: '0644'
+  notify: reload systemd
+
+- name: Install healthcheck timer
+  template:
+    src: healthcheck.timer.j2
+    dest: /etc/systemd/system/healthcheck.timer
+    mode: '0644'
+  notify: reload systemd
+
+- name: Enable and start healthcheck timer
+  systemd:
+    name: healthcheck.timer
+    state: started
+    enabled: yes
+    daemon_reload: yes
