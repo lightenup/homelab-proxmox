@@ -7,3 +7,4 @@ healthcheck_install_dir: "/opt/healthcheck"
 healthcheck_script_path: "{{ healthcheck_install_dir }}/scripts/healthcheck/run.sh"
 healthcheck_env_path: "{{ healthcheck_install_dir }}/scripts/healthcheck/.env"
 healthcheck_inventory_path: "{{ healthcheck_install_dir }}/inventory.json"
+healthcheck_alert_on_gap: false

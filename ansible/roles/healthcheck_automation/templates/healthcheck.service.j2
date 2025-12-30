@@ -6,5 +6,5 @@ After=network.target
 Type=oneshot
 User={{ healthcheck_user }}
 Group={{ healthcheck_group }}
-ExecStart={{ healthcheck_script_path }} --profile lan --inventory {{ healthcheck_inventory_path }}
+ExecStart={{ healthcheck_script_path }} --profile lan --inventory {{ healthcheck_inventory_path }}{% if healthcheck_alert_on_gap %} --alert-on-gap{% endif %}
 WorkingDirectory={{ healthcheck_install_dir }}

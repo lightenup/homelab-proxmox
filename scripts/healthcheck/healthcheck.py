@@ -49,6 +49,16 @@ def get_target_ip(host_vars: Dict[str, Any], profile: str) -> Optional[str]:
         return host_vars.get("ansible_host")
 
 def perform_check(hostname: str, host_vars: Dict[str, Any], profile: str) -> Dict[str, Any]:
+    # Check if healthcheck is enabled
+    if not host_vars.get("healthcheck_enabled", True):
+        return {
+            "hostname": hostname,
+            "target_ip": get_target_ip(host_vars, profile),
+            "status": "SKIP",
+            "details": f"Disabled: {host_vars.get('healthcheck_reason', 'No reason provided')}",
+            "url": "N/A"
+        }
+
     path = host_vars.get("healthcheck_path")
     port = host_vars.get("healthcheck_port", 80)
     scheme = host_vars.get("healthcheck_scheme", "http")
@@ -143,9 +153,9 @@ def load_previous_history() -> Dict[str, str]:
         print(f"Warning: Could not load history: {e}", file=sys.stderr)
         return {}
 
-def send_email_notification(current_results: List[Dict[str, Any]], previous_states: Dict[str, str], coverage_failures: List[str]):
+def send_email_notification(current_results: List[Dict[str, Any]], previous_states: Dict[str, str], coverage_failures: List[str], alert_on_gap: bool = False):
     """
-    Send email notification if state changed from Success -> Failure or if coverage gaps exist.
+    Send email notification if state changed from Success -> Failure or if coverage gaps exist (and alerting enabled).
     """
     smtp_host = os.environ.get("SMTP_HOST")
     if not smtp_host:
@@ -167,25 +177,19 @@ def send_email_notification(current_results: List[Dict[str, Any]], previous_stat
     for r in current_results:
         hostname = r["hostname"]
         status = r["status"]
+        
+        if status == "SKIP":
+            continue
+
         prev_status = previous_states.get(hostname, "PASS") # Default to PASS so we don't alert on first run unless it fails? 
-        # Actually, if it's a new host and it fails, we probably want to know.
-        # But spec says "State change only (Success -> Failure)".
-        # If prev is unknown, maybe we shouldn't alert? Or maybe we should?
-        # Let's stick to: Alert if Current is FAIL and (Prev was PASS or Unknown).
-        # Wait, "Success -> Failure" implies we knew it was Success.
-        # But if I deploy a new broken service, I want to know.
-        # Let's alert if Status is FAIL.
-        # Wait, the requirement is "State change only (Success -> Failure) ... prevents alert fatigue from repeated failures".
-        # So if it was FAIL last time and is FAIL this time -> NO Alert.
-        # If it was PASS last time and is FAIL this time -> Alert.
-        # If it is New and FAIL -> Alert (treat missing history as PASS for the purpose of "it wasn't failing before").
         
         if status != "PASS" and prev_status == "PASS":
             failures.append(f"Service Regression: {hostname} ({r['details']})")
 
-    # Check for coverage gaps (Always alert)
-    for host in coverage_failures:
-        failures.append(f"Coverage Gap: {host} (Missing healthcheck_path)")
+    # Check for coverage gaps (Alert only if configured)
+    if alert_on_gap:
+        for host in coverage_failures:
+            failures.append(f"Coverage Gap: {host} (Missing healthcheck_path)")
 
     if not failures:
         return
@@ -265,6 +269,7 @@ def main():
     parser.add_argument("--output-json", help="Save JSON report to file")
     parser.add_argument("--filter", help="Filter hosts by name (substring)")
     parser.add_argument("--no-notify", action="store_true", help="Disable email notifications")
+    parser.add_argument("--alert-on-gap", action="store_true", help="Enable email alerts for coverage gaps")
     parser.add_argument("--inventory", help="Path to JSON inventory file")
     args = parser.parse_args()
 
@@ -309,7 +314,7 @@ def main():
     # Notifications
     if not args.no_notify:
         previous_history = load_previous_history()
-        send_email_notification(results, previous_history, coverage_failures)
+        send_email_notification(results, previous_history, coverage_failures, args.alert_on_gap)
 
     # Output
     if args.json:
@@ -318,7 +323,7 @@ def main():
         print(f"{'HOSTNAME':<20} {'STATUS':<10} {'IP':<15} {'DETAILS'}")
         print("-" * 80)
         for r in results:
-            status_color = "\033[92m" if r["status"] == "PASS" else "\033[91m"
+            status_color = "\033[92m" if r["status"] == "PASS" else ("\033[93m" if r["status"] == "SKIP" else "\033[91m")
             reset_color = "\033[0m"
             print(f"{r['hostname']:<20} {status_color}{r['status']:<10}{reset_color} {r['target_ip'] or 'N/A':<15} {r['details']}")
         
@@ -328,7 +333,10 @@ def main():
             for h in coverage_failures:
                 print(f"{h:<20} \033[91mMISSING\033[0m   N/A             Missing healthcheck_path")
 
-    if any(r["status"] != "PASS" for r in results) or coverage_failures:
+    # Exit 1 only if there are actual failures (not SKIPs) or if coverage gaps exist (and we care about them?)
+    # Spec says: "Ensure SKIP does not count towards non-zero exit code."
+    # We should probably still exit 1 on FAIL.
+    if any(r["status"] == "FAIL" for r in results) or coverage_failures:
         sys.exit(1)
 
 if __name__ == "__main__":
