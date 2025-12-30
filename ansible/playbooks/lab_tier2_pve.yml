@@ -56,6 +56,30 @@
       changed_when: false
 
     # -------------------------------------------------------------------------
+    # Pre-Configuration
+    # -------------------------------------------------------------------------
+    - name: Configure needrestart to automatic
+      lineinfile:
+        path: /etc/needrestart/needrestart.conf
+        regexp: '^\$nrconf{restart}'
+        line: '$nrconf{restart} = "a";'
+        create: true
+
+    - name: Preseed postfix (main_mailer_type)
+      debconf:
+        name: postfix
+        question: postfix/main_mailer_type
+        value: 'Local only'
+        vtype: select
+
+    - name: Preseed postfix (mailname)
+      debconf:
+        name: postfix
+        question: postfix/mailname
+        value: "{{ inventory_hostname }}.lab.local"
+        vtype: string
+
+    # -------------------------------------------------------------------------
     # Repo Setup
     # -------------------------------------------------------------------------
     - name: Install Prerequisites
@@ -66,10 +90,16 @@
           - gnupg
         state: present
         update_cache: true
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      retries: 3
+      delay: 10
+      register: apt_res
+      until: apt_res is success
 
-    - name: Copy Proxmox Key
-      copy:
-        src: files/proxmox-release-trixie.gpg
+    - name: Download Proxmox Key
+      get_url:
+        url: "{{ pve_key_url }}"
         dest: "{{ pve_keyring_path }}"
         mode: '0644'
 
@@ -83,6 +113,12 @@
       file:
         path: /etc/apt/sources.list.d/pve-enterprise.list
         state: absent
+
+    - name: Validate Repository Availability
+      command: apt-cache policy
+      register: apt_policy
+      changed_when: false
+      failed_when: "'pve-no-subscription' not in apt_policy.stdout"
 
     # -------------------------------------------------------------------------
     # Install
@@ -101,16 +137,6 @@
         value: "false"
         vtype: boolean
 
-    - name: Preseed Postfix
-      debconf:
-        name: postfix
-        question: "{{ item.question }}"
-        value: "{{ item.value }}"
-        vtype: "{{ item.vtype }}"
-      loop:
-        - { question: 'postfix/main_mailer_type', value: 'Local only', vtype: 'select' }
-        - { question: 'postfix/mailname', value: '{{ inventory_hostname }}', vtype: 'string' }
-
     - name: Install Proxmox VE and Dependencies
       apt:
         name:
@@ -121,6 +147,10 @@
         update_cache: true
       environment:
         DEBIAN_FRONTEND: noninteractive
+      retries: 3
+      delay: 10
+      register: apt_res
+      until: apt_res is success
 
     # -------------------------------------------------------------------------
     # Validation
