@@ -5,6 +5,7 @@ set -e
 LAB_VMID_START=9000
 LAB_VMID_END=9099
 LAB_TEMPLATE_VMID=${LAB_TEMPLATE_VMID:-9001}
+LAB_TEMPLATE_VMID_TIER2=${LAB_TEMPLATE_VMID_TIER2:-9002}
 LAB_IP="10.99.0.10"
 LAB_GATEWAY="10.99.0.1"
 LAB_BRIDGE="vmbr99"
@@ -184,6 +185,14 @@ cmd_status() {
 
 cmd_up() {
     local run_id=${1:-"manual-$(date +%H%M%S)"}
+    local tier=${2:-1}
+    
+    # Select Template based on Tier
+    local template_id=$LAB_TEMPLATE_VMID
+    if [[ "$tier" -ge 2 ]]; then
+        template_id=$LAB_TEMPLATE_VMID_TIER2
+        log_info "Tier $tier selected. Using Template ID: $template_id"
+    fi
     
     # 1. Verify Prod Host Reachability & IP
     log_info "Verifying Production Host Network..."
@@ -193,8 +202,8 @@ cmd_up() {
     fi
 
     # 1b. Verify Template Exists
-    if ! vm_exists "$LAB_TEMPLATE_VMID"; then
-        log_error "Template VM $LAB_TEMPLATE_VMID does not exist on host."
+    if ! vm_exists "$template_id"; then
+        log_error "Template VM $template_id does not exist on host."
         return 1
     fi
 
@@ -216,13 +225,21 @@ cmd_up() {
     log_info "Allocated VMID: $vmid"
 
     # 4. Clone
-    log_info "Cloning template $LAB_TEMPLATE_VMID to $vmid..."
-    log_cmd_exec pve_exec "qm clone $LAB_TEMPLATE_VMID $vmid --name lab-pve-$vmid --full 1"
+    log_info "Cloning template $template_id to $vmid..."
+    log_cmd_exec pve_exec "qm clone $template_id $vmid --name lab-pve-$vmid --full 1"
     
     # 5. Configure
     log_info "Configuring VM..."
     local tags="$IDENTITY_TAG_KEY=$IDENTITY_TAG_VAL,RunId=$run_id"
-    log_cmd_exec pve_exec "qm set $vmid --description '$tags' --ipconfig0 ip=$LAB_IP/24,gw=$LAB_GATEWAY --net0 virtio,bridge=$LAB_BRIDGE"
+    
+    local resource_args=""
+    if [[ "$tier" -ge 2 ]]; then
+        # Enforce Resource Floor (FR-008)
+        log_info "Enforcing Tier 2 Resource Floor (4GB RAM, 2 vCPU)..."
+        resource_args="--memory 4096 --cores 2"
+    fi
+    
+    log_cmd_exec pve_exec "qm set $vmid --description '$tags' --ipconfig0 ip=$LAB_IP/24,gw=$LAB_GATEWAY --net0 virtio,bridge=$LAB_BRIDGE $resource_args"
     
     # 6. Start
     log_info "Starting VM..."
@@ -271,7 +288,10 @@ cmd_destroy() {
 }
 
 cmd_test() {
-    log_info "Running tests..."
+    local tier=${1:-1}
+    local tier2_mode=${2:-"min"}
+
+    log_info "Running tests (Tier: $tier)..."
     
     # Tier 0: Static Checks
     log_info "Tier 0: Static Checks"
@@ -302,9 +322,60 @@ cmd_test() {
         log_error "Tier 1 Convergence failed."
         return 1
     fi
+
+    # Tier 2: PVE Install & Verification
+    if [[ "$tier" -ge 2 ]]; then
+        log_info "Tier 2: PVE Install & Verification (Mode: $tier2_mode)"
+        
+        # Tier 2 Plus Preflight Checks (FR-016)
+        if [[ "$tier2_mode" == "plus" ]]; then
+            log_info "Performing Tier 2 Plus Preflight Checks..."
+            
+            # 1. Host Check
+            local nested_val
+            nested_val=$(pve_exec "cat /sys/module/kvm_intel/parameters/nested 2>/dev/null || echo 'N'")
+            if [[ "$nested_val" != "Y" && "$nested_val" != "1" ]]; then
+                log_error "Host Nested KVM check failed. /sys/module/kvm_intel/parameters/nested = '$nested_val'"
+                log_error "Please enable nested virtualization on the host ($PROXMOX_HOST)."
+                return 1
+            fi
+            log_info "  Host Nested KVM: OK"
+            
+            # 2. Guest Check
+            if ! ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "test -e /dev/kvm"; then
+                log_error "Guest /dev/kvm check failed. Nested virtualization not passed to Lab VM."
+                return 1
+            fi
+            log_info "  Guest /dev/kvm: OK"
+        fi
+        
+        # Run Tier 2 Playbook
+        if log_cmd_exec ansible-playbook ansible/playbooks/lab_tier2_pve.yml -i ansible/inventories/lab/hosts.yml --extra-vars "tier2_mode=$tier2_mode"; then
+             log_info "Tier 2 passed."
+        else
+             log_error "Tier 2 failed."
+             return 1
+        fi
+    fi
 }
 
 cmd_run() {
+    # Defaults
+    local tier=1
+    local tier2_mode="min"
+    local keep_vm=false
+    
+    # Parse args
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --tier) tier="$2"; shift ;;
+            --tier2-mode) tier2_mode="$2"; shift ;;
+            --keep) keep_vm=true ;;
+            *) log_error "Unknown argument: $1"; exit 1 ;;
+        esac
+        shift
+    done
+
     # Locking (flock)
     exec 200>"$LOCK_FILE"
     if ! flock -n 200; then
@@ -327,6 +398,7 @@ cmd_run() {
     
     log_info "Starting Lab Run: $run_id"
     log_info "Artifacts: $artifact_dir"
+    log_info "Configuration: Tier=$tier, Mode=$tier2_mode, Keep=$keep_vm"
     
     local start_time=$(date +%s)
     local status="FAILED"
@@ -334,11 +406,15 @@ cmd_run() {
     # Ensure clean state
     cmd_destroy
     
-    # Trap to ensure destroy runs
-    trap "cmd_destroy" EXIT
+    # Trap to ensure destroy runs (unless keep_vm is set)
+    if [[ "$keep_vm" == "true" ]]; then
+        trap "log_info 'Keeping VM as requested (--keep).'" EXIT
+    else
+        trap "cmd_destroy" EXIT
+    fi
     
-    if cmd_up "$run_id"; then
-        if cmd_test; then
+    if cmd_up "$run_id" "$tier"; then
+        if cmd_test "$tier" "$tier2_mode"; then
             status="SUCCESS"
         else
             log_error "Tests failed."
@@ -355,6 +431,9 @@ cmd_run() {
 {
   "run_id": "$run_id",
   "status": "$status",
+  "tier": $tier,
+  "tier2_mode": "$tier2_mode",
+  "keep_vm": $keep_vm,
   "start_time": "$start_time",
   "end_time": "$end_time",
   "duration_seconds": $duration
@@ -370,6 +449,10 @@ JSON
 
 usage() {
     echo "Usage: $0 {up|down|destroy|status|test|run}"
+    echo "  run options:"
+    echo "    --tier <1|2>        (default: 1)"
+    echo "    --tier2-mode <mode> (default: min)"
+    echo "    --keep              (default: false)"
     exit 1
 }
 
@@ -382,6 +465,9 @@ case "$1" in
     down|destroy) cmd_destroy ;;
     status) cmd_status ;;
     test) cmd_test ;;
-    run) cmd_run ;;
+    run) 
+        shift
+        cmd_run "$@" 
+        ;;
     *) usage ;;
 esac

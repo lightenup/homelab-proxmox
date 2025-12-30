@@ -1,0 +1,187 @@
+---
+- name: Lab Tier 2 - Proxmox VE Install & Verification
+  hosts: lab
+  become: true
+  vars:
+    pve_repository_url: "http://download.proxmox.com/debian/pve"
+    pve_dist: "trixie"
+    # Trixie key not yet available, trying Bookworm key as fallback/placeholder
+    pve_key_url: "http://download.proxmox.com/debian/proxmox-release-bookworm.gpg"
+    pve_keyring_path: "/usr/share/keyrings/proxmox-release-trixie.gpg"
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Setup Hostname & Hosts
+    # -------------------------------------------------------------------------
+    - name: Set hostname to inventory hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Ensure hostname in /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: "^{{ ansible_default_ipv4.address }}.*{{ inventory_hostname }}"
+        line: "{{ ansible_default_ipv4.address }} {{ inventory_hostname }}.lab.local {{ inventory_hostname }} pvelocalhost"
+        state: present
+
+    # -------------------------------------------------------------------------
+    # Guards
+    # -------------------------------------------------------------------------
+    - name: Guard - Check Inventory
+      assert:
+        that:
+          - lab_inventory is defined
+          - lab_inventory == true
+        fail_msg: "This playbook must only be run against the lab inventory."
+
+    - name: Guard - Check Hostname Pattern
+      assert:
+        that:
+          - inventory_hostname is match('^lab-pve-.*')
+        fail_msg: "Hostname {{ inventory_hostname }} does not match lab pattern."
+
+    - name: Guard - Check OS
+      assert:
+        that:
+          - ansible_facts['distribution'] == 'Debian'
+          - ansible_facts['distribution_major_version'] == '13'
+        fail_msg: "Target OS must be Debian 13 (Trixie). Found {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_major_version'] }}."
+
+    - name: Guard - Check Hostname Resolution (hostname -f)
+      command: hostname -f
+      changed_when: false
+
+    - name: Guard - Check Hostname Resolution (Ping)
+      command: ping -c 1 {{ inventory_hostname }}
+      changed_when: false
+
+    # -------------------------------------------------------------------------
+    # Repo Setup
+    # -------------------------------------------------------------------------
+    - name: Install Prerequisites
+      apt:
+        name:
+          - wget
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+
+    - name: Copy Proxmox Key
+      copy:
+        src: files/proxmox-release-trixie.gpg
+        dest: "{{ pve_keyring_path }}"
+        mode: '0644'
+
+    - name: Add Proxmox Repository
+      apt_repository:
+        repo: "deb [signed-by={{ pve_keyring_path }}] {{ pve_repository_url }} {{ pve_dist }} pve-no-subscription"
+        filename: pve-install-repo
+        state: present
+
+    - name: Remove Enterprise Repository
+      file:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+        state: absent
+
+    # -------------------------------------------------------------------------
+    # Install
+    # -------------------------------------------------------------------------
+    - name: Preseed grub-pc (install_devices)
+      debconf:
+        name: grub-pc
+        question: grub-pc/install_devices
+        value: /dev/sda
+        vtype: multiselect
+
+    - name: Preseed grub-pc (install_devices_empty)
+      debconf:
+        name: grub-pc
+        question: grub-pc/install_devices_empty
+        value: "false"
+        vtype: boolean
+
+    - name: Preseed Postfix
+      debconf:
+        name: postfix
+        question: "{{ item.question }}"
+        value: "{{ item.value }}"
+        vtype: "{{ item.vtype }}"
+      loop:
+        - { question: 'postfix/main_mailer_type', value: 'Local only', vtype: 'select' }
+        - { question: 'postfix/mailname', value: '{{ inventory_hostname }}', vtype: 'string' }
+
+    - name: Install Proxmox VE and Dependencies
+      apt:
+        name:
+          - proxmox-ve
+          - postfix
+          - open-iscsi
+        state: present
+        update_cache: true
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+    - name: Verify Services
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - pveproxy
+        - pvedaemon
+        - pve-cluster
+
+    - name: Verify /etc/pve Mountpoint
+      command: mountpoint -q /etc/pve
+      changed_when: false
+
+    - name: Verify API (pvesh)
+      command: pvesh get /version --output-format json
+      register: api_check
+      changed_when: false
+
+    - name: Capture PVE Version
+      command: pveversion
+      register: pve_version_out
+      changed_when: false
+
+    - name: Display PVE Version
+      debug:
+        var: pve_version_out.stdout_lines
+
+    # -------------------------------------------------------------------------
+    # Tier 2 Plus: Nested VM Smoke Test
+    # -------------------------------------------------------------------------
+    - name: Tier 2 Plus - Nested VM Smoke Test
+      block:
+        - name: Create Nested VM
+          command: >
+            qm create 100
+            --name nested-smoke
+            --memory 512
+            --net0 virtio,bridge=vmbr0
+            --scsihw virtio-scsi-pci
+
+        - name: Start Nested VM
+          command: qm start 100
+
+        - name: Wait for Running State
+          command: qm status 100
+          register: vm_status
+          until: "'running' in vm_status.stdout"
+          retries: 10
+          delay: 2
+
+        - name: Stop Nested VM
+          command: qm stop 100
+          ignore_errors: true
+
+        - name: Destroy Nested VM
+          command: qm destroy 100
+
+      when: tier2_mode is defined and tier2_mode == 'plus'
+
