@@ -1,0 +1,389 @@
+#!/bin/bash
+set -e
+
+# Configuration
+LAB_VMID_START=9000
+LAB_VMID_END=9099
+LAB_TEMPLATE_VMID=${LAB_TEMPLATE_VMID:-9001}
+LAB_IP="10.99.0.10"
+LAB_GATEWAY="10.99.0.1"
+LAB_BRIDGE="vmbr99"
+IDENTITY_TAG_KEY="ManagedBy"
+IDENTITY_TAG_VAL="019a"
+PROXMOX_HOST="192.168.1.112" # Hostname or IP in SSH config
+SSH_USER="root"
+LOCK_FILE="artifacts/019-lab/.lock"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Global Artifact Dir (set in cmd_run)
+ARTIFACT_DIR=""
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Ensure artifacts dir exists
+mkdir -p artifacts/019-lab
+
+# Helper: Get timestamp in milliseconds
+get_ms_timestamp() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import time; print(int(time.time() * 1000))'
+    else
+        # Fallback to seconds * 1000
+        echo $(($(date +%s) * 1000))
+    fi
+}
+
+# Helper: Log command execution
+log_cmd_exec() {
+    local cmd="$*"
+    local start_ts=$(get_ms_timestamp)
+    local exit_code=0
+    
+    # Run command
+    eval "$cmd" || exit_code=$?
+    
+    local end_ts=$(get_ms_timestamp)
+    local duration=$((end_ts - start_ts))
+    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    
+    # Log to jsonl if ARTIFACT_DIR is set
+    if [[ -n "$ARTIFACT_DIR" ]]; then
+        # Simple JSON construction (escaping quotes in cmd is minimal here, be careful)
+        # For bash, proper JSON escaping is hard without jq. We'll do basic escaping.
+        local safe_cmd=${cmd//\"/\\\"}
+        echo "{\"timestamp\": \"$timestamp\", \"command\": \"$safe_cmd\", \"exit_code\": $exit_code, \"duration_ms\": $duration}" >> "$ARTIFACT_DIR/commands.jsonl"
+    fi
+    
+    return $exit_code
+}
+
+# Helper: Run command on Proxmox host
+pve_exec() {
+    # We don't log every pve_exec to jsonl to avoid noise, or maybe we do?
+    # Let's log it.
+    # But pve_exec is often used in subshells $(pve_exec ...), which makes logging hard (stdout pollution).
+    # So we ONLY log if NOT in a subshell context where stdout is captured.
+    # Actually, for simplicity, we won't wrap pve_exec in log_cmd_exec when used for data retrieval.
+    # We will wrap "Action" commands.
+    ssh -o BatchMode=yes -o ConnectTimeout=5 "$SSH_USER@$PROXMOX_HOST" "$@"
+}
+
+# Helper: Check if VM exists
+vm_exists() {
+    local vmid=$1
+    pve_exec "qm status $vmid" >/dev/null 2>&1
+}
+
+# Helper: Get VM Status
+vm_status() {
+    local vmid=$1
+    pve_exec "qm status $vmid" | awk '{print $2}'
+}
+
+# Helper: Find next free VMID
+get_free_vmid() {
+    local vmid
+    # Get list of all VMIDs once to avoid spamming SSH
+    local existing_vmids
+    existing_vmids=$(pve_exec "qm list" | awk '{print $1}' | grep -E "^[0-9]+$")
+    
+    for ((vmid=LAB_VMID_START; vmid<=LAB_VMID_END; vmid++)); do
+        if ! echo "$existing_vmids" | grep -q "^$vmid$"; then
+            echo "$vmid"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Helper: Find existing Lab VMs (Safety Checked)
+find_lab_vms() {
+    local vmid
+    local found_vmids=""
+    # Optimization: Get all VMs in range first
+    local range_vmids
+    range_vmids=$(pve_exec "qm list" | awk -v start="$LAB_VMID_START" -v end="$LAB_VMID_END" '$1 >= start && $1 <= end {print $1}')
+    
+    for vmid in $range_vmids; do
+        if check_safety "$vmid" "quiet"; then
+            found_vmids="$found_vmids $vmid"
+        fi
+    done
+    echo "$found_vmids"
+}
+
+# Safety Guardrail
+check_safety() {
+    local vmid=$1
+    local mode=$2 # "quiet" to suppress logs
+    
+    # Check 1: Range
+    if [[ "$vmid" -lt "$LAB_VMID_START" ]] || [[ "$vmid" -gt "$LAB_VMID_END" ]]; then
+        [[ "$mode" != "quiet" ]] && log_error "Safety Violation: VMID $vmid is outside lab range ($LAB_VMID_START-$LAB_VMID_END)"
+        return 1
+    fi
+
+    # Check 2: Identity
+    local config
+    config=$(pve_exec "qm config $vmid" 2>/dev/null || true)
+    
+    # Must have ManagedBy tag
+    if [[ "$config" != *"$IDENTITY_TAG_KEY=$IDENTITY_TAG_VAL"* ]]; then
+        [[ "$mode" != "quiet" ]] && log_error "Safety Violation: VMID $vmid missing tag '$IDENTITY_TAG_KEY=$IDENTITY_TAG_VAL'"
+        return 1
+    fi
+    
+    # Must have RunId tag (any value)
+    if [[ "$config" != *"RunId="* ]]; then
+        [[ "$mode" != "quiet" ]] && log_error "Safety Violation: VMID $vmid missing 'RunId' tag"
+        return 1
+    fi
+    
+    # Must have Name prefix
+    local name
+    name=$(echo "$config" | grep "^name:" | awk '{print $2}')
+    if [[ "$name" != "lab-pve-"* ]]; then
+        [[ "$mode" != "quiet" ]] && log_error "Safety Violation: VMID $vmid name '$name' does not start with 'lab-pve-'"
+        return 1
+    fi
+    
+    return 0
+}
+
+cmd_status() {
+    log_info "Checking status of Lab Environment..."
+    local vmids
+    vmids=$(find_lab_vms)
+    
+    if [[ -z "$vmids" ]]; then
+        log_info "No active Lab VMs found."
+        return 0
+    fi
+    
+    for vmid in $vmids; do
+        local state=$(vm_status "$vmid")
+        log_info "Found Lab VM: $vmid ($state)"
+        if [[ "$state" == "running" ]]; then
+            log_info "  IP Address: $LAB_IP (Static)"
+            # Check reachability
+            if ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "echo ready" >/dev/null 2>&1; then
+                log_info "  SSH Reachable: YES"
+            else
+                log_warn "  SSH Reachable: NO"
+            fi
+        fi
+    done
+}
+
+cmd_up() {
+    local run_id=${1:-"manual-$(date +%H%M%S)"}
+    
+    # 1. Verify Prod Host Reachability & IP
+    log_info "Verifying Production Host Network..."
+    if ! pve_exec "ip addr show $LAB_BRIDGE | grep -q '$LAB_GATEWAY'"; then
+        log_error "Production host does not have IP $LAB_GATEWAY on $LAB_BRIDGE. Aborting."
+        return 1
+    fi
+
+    # 1b. Verify Template Exists
+    if ! vm_exists "$LAB_TEMPLATE_VMID"; then
+        log_error "Template VM $LAB_TEMPLATE_VMID does not exist on host."
+        return 1
+    fi
+
+    # 2. Check for existing VMs
+    local existing_vmids
+    existing_vmids=$(find_lab_vms)
+    if [[ -n "$existing_vmids" ]]; then
+        log_error "Existing Lab VMs found: $existing_vmids. Please destroy them first."
+        return 1
+    fi
+
+    # 3. Allocate VMID
+    local vmid
+    vmid=$(get_free_vmid)
+    if [[ -z "$vmid" ]]; then
+        log_error "No free VMIDs in range $LAB_VMID_START-$LAB_VMID_END."
+        return 1
+    fi
+    log_info "Allocated VMID: $vmid"
+
+    # 4. Clone
+    log_info "Cloning template $LAB_TEMPLATE_VMID to $vmid..."
+    log_cmd_exec pve_exec "qm clone $LAB_TEMPLATE_VMID $vmid --name lab-pve-$vmid --full 1"
+    
+    # 5. Configure
+    log_info "Configuring VM..."
+    local tags="$IDENTITY_TAG_KEY=$IDENTITY_TAG_VAL,RunId=$run_id"
+    log_cmd_exec pve_exec "qm set $vmid --description '$tags' --ipconfig0 ip=$LAB_IP/24,gw=$LAB_GATEWAY --net0 virtio,bridge=$LAB_BRIDGE"
+    
+    # 6. Start
+    log_info "Starting VM..."
+    log_cmd_exec pve_exec "qm start $vmid"
+    
+    # 7. Wait for SSH
+    log_info "Waiting for SSH at $LAB_IP..."
+    for i in {1..60}; do
+        if ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "echo ready" >/dev/null 2>&1; then
+            log_info "SSH is ready!"
+            return 0
+        fi
+        sleep 2
+        echo -n "."
+    done
+    
+    log_error "Timeout waiting for SSH."
+    return 1
+}
+
+cmd_destroy() {
+    log_info "Scanning for Lab VMs to destroy..."
+    local vmids
+    vmids=$(find_lab_vms)
+    
+    if [[ -z "$vmids" ]]; then
+        log_info "No Lab VMs found to destroy."
+        return 0
+    fi
+    
+    for vmid in $vmids; do
+        log_info "Processing VM $vmid..."
+        if ! check_safety "$vmid"; then
+            log_error "Safety check failed for $vmid. Skipping."
+            continue
+        fi
+        
+        log_info "Stopping VM $vmid..."
+        log_cmd_exec pve_exec "qm stop $vmid" 2>/dev/null || true
+        sleep 2
+        
+        log_info "Removing VM $vmid..."
+        log_cmd_exec pve_exec "qm destroy $vmid"
+        log_info "VM $vmid destroyed."
+    done
+}
+
+cmd_test() {
+    log_info "Running tests..."
+    
+    # Tier 0: Static Checks
+    log_info "Tier 0: Static Checks"
+    
+    log_info "Running Terraform fmt check..."
+    if log_cmd_exec terraform fmt -check -recursive terraform/; then
+        log_info "Terraform fmt passed."
+    else
+        log_error "Terraform fmt failed."
+        return 1
+    fi
+    
+    log_info "Running Ansible syntax check..."
+    if log_cmd_exec ansible-playbook ansible/playbooks/lab_bootstrap.yml -i ansible/inventories/lab/hosts.yml --syntax-check; then
+        log_info "Ansible syntax check passed."
+    else
+        log_error "Ansible syntax check failed."
+        return 1
+    fi
+
+    # Tier 1: Convergence
+    log_info "Tier 1: Convergence"
+    log_info "Running Lab Bootstrap Playbook..."
+    
+    if log_cmd_exec ansible-playbook ansible/playbooks/lab_bootstrap.yml -i ansible/inventories/lab/hosts.yml; then
+        log_info "Tier 1 Convergence passed."
+    else
+        log_error "Tier 1 Convergence failed."
+        return 1
+    fi
+}
+
+cmd_run() {
+    # Locking (Portable mkdir)
+    local lock_dir="${LOCK_FILE}.d"
+    if ! mkdir "$lock_dir" 2>/dev/null; then
+        log_error "Another instance is running (Lock: $lock_dir). Aborting."
+        exit 1
+    fi
+    
+    local run_id="lab-$(date +%Y%m%d-%H%M%S)"
+    local artifact_dir="artifacts/019-lab/$run_id"
+    local summary_file="$artifact_dir/summary.json"
+    local log_file="$artifact_dir/run.log"
+    
+    mkdir -p "$artifact_dir"
+    
+    # Set Global ARTIFACT_DIR for logging
+    export ARTIFACT_DIR="$artifact_dir"
+    
+    # Redirect output to log file and stdout
+    exec > >(tee -a "$log_file") 2>&1
+    
+    log_info "Starting Lab Run: $run_id"
+    log_info "Artifacts: $artifact_dir"
+    
+    local start_time=$(date +%s)
+    local status="FAILED"
+    
+    # Ensure clean state
+    cmd_destroy
+    
+    # Trap to ensure destroy runs AND lock is released
+    trap "cmd_destroy; rm -rf \"$lock_dir\" 2>/dev/null || true" EXIT
+    
+    if cmd_up "$run_id"; then
+        if cmd_test; then
+            status="SUCCESS"
+        else
+            log_error "Tests failed."
+        fi
+    else
+        log_error "Setup failed."
+    fi
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    # Generate Summary
+    cat <<JSON > "$summary_file"
+{
+  "run_id": "$run_id",
+  "status": "$status",
+  "start_time": "$start_time",
+  "end_time": "$end_time",
+  "duration_seconds": $duration
+}
+JSON
+    
+    log_info "Run completed with status: $status"
+    
+    if [[ "$status" != "SUCCESS" ]]; then
+        exit 1
+    fi
+    
+    # Trap will handle destroy on exit
+}
+
+usage() {
+    echo "Usage: $0 {up|down|destroy|status|test|run}"
+    exit 1
+}
+
+case "$1" in
+    up) 
+        # Manual up needs lock too? Maybe not strictly, but safer.
+        # For now, only 'run' enforces strict lock, but 'up' should probably check it.
+        cmd_up 
+        ;;
+    down|destroy) cmd_destroy ;;
+    status) cmd_status ;;
+    test) cmd_test ;;
+    run) cmd_run ;;
+    *) usage ;;
+esac
