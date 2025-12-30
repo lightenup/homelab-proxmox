@@ -1,0 +1,26 @@
+---
+- name: Lab Bootstrap (Tier 1 Convergence)
+  hosts: lab
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Ensure basic packages are installed
+      apt:
+        name:
+          - curl
+          - git
+          - htop
+          - vim
+        state: present
+        update_cache: true
+
+    - name: Verify hostname
+      assert:
+        that:
+          - ansible_facts['hostname'] is match('lab-pve-.*')
+        fail_msg: "Hostname mismatch! Expected lab-pve-*, got {{ ansible_facts['hostname'] }}"
+
+    - name: Print success message
+      debug:
+        msg: "Lab Bootstrap Completed Successfully on {{ inventory_hostname }}"

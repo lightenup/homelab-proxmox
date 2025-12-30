@@ -1,0 +1,85 @@
+---
+- name: Setup Proxmox Lab Harness Prerequisites
+  hosts: proxmox_hosts
+  become: true
+  vars:
+    lab_bridge: vmbr99
+    lab_subnet: 10.99.0.1/24
+    lab_template_vmid: 9001
+    lab_template_name: tpl-pve-lab-base
+    debian_image_url: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+    debian_image_name: debian-12-genericcloud-amd64.qcow2
+    # Change this if your storage is named differently (e.g., local-zfs)
+    storage_pool: local-lvm
+
+  tasks:
+    # 1. Network Bridge
+    - name: Ensure vmbr99 exists in /etc/network/interfaces
+      blockinfile:
+        path: /etc/network/interfaces
+        marker: "# {mark} ANSIBLE MANAGED BLOCK: LAB NETWORK"
+        block: |
+          auto {{ lab_bridge }}
+          iface {{ lab_bridge }} inet static
+              address {{ lab_subnet }}
+              bridge-ports none
+              bridge-stp off
+              bridge-fd 0
+              post-up   echo 1 > /proc/sys/net/ipv4/ip_forward
+              post-up   iptables -t nat -A POSTROUTING -s '10.99.0.0/24' -o vmbr0 -j MASQUERADE
+              post-down iptables -t nat -D POSTROUTING -s '10.99.0.0/24' -o vmbr0 -j MASQUERADE
+              comment Proxmox Lab Network
+      notify: Reload Networking
+
+    # 2. Template Creation
+    - name: Check if template exists
+      command: qm status {{ lab_template_vmid }}
+      register: template_status
+      failed_when: false
+      changed_when: false
+
+    - name: Create Lab Template
+      when: template_status.rc != 0
+      block:
+        - name: Download Debian 12 Cloud Image
+          get_url:
+            url: "{{ debian_image_url }}"
+            dest: "/tmp/{{ debian_image_name }}"
+
+        - name: Create VM
+          command: >
+            qm create {{ lab_template_vmid }}
+            --name {{ lab_template_name }}
+            --memory 2048
+            --net0 virtio,bridge={{ lab_bridge }}
+            --scsihw virtio-scsi-pci
+
+        - name: Import Disk
+          command: >
+            qm importdisk {{ lab_template_vmid }} /tmp/{{ debian_image_name }} {{ storage_pool }}
+
+        - name: Attach Disk
+          command: >
+            qm set {{ lab_template_vmid }} --scsi0 {{ storage_pool }}:vm-{{ lab_template_vmid }}-disk-0
+
+        - name: Configure Cloud-Init
+          command: >
+            qm set {{ lab_template_vmid }}
+            --ide2 {{ storage_pool }}:cloudinit
+            --boot c --bootdisk scsi0
+            --serial0 socket --vga serial0
+            --ciuser ansible
+            --sshkeys /root/.ssh/authorized_keys
+            --ipconfig0 ip=dhcp
+
+        - name: Convert to Template
+          command: qm template {{ lab_template_vmid }}
+
+        - name: Cleanup Image
+          file:
+            path: "/tmp/{{ debian_image_name }}"
+            state: absent
+
+  handlers:
+    - name: Reload Networking
+      command: ifreload -a

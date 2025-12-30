@@ -36,3 +36,4 @@ ansible/roles/geerlingguy.docker
 
 # Healthcheck Artifacts - Feature 018a
 artifacts/healthcheck/
+artifacts/019-lab/
