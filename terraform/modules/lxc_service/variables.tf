@@ -47,12 +47,12 @@ variable "gateway" {
 variable "mountpoints" {
   description = "List of mount points for the container"
   type = list(object({
-    mp     = string
-    size   = string
-    slot   = number
-    key    = string
+    mp      = string
+    size    = string
+    slot    = number
+    key     = string
     storage = string
-    volume = string
+    volume  = string
   }))
   default = []
 }

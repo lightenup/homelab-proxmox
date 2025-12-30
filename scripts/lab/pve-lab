@@ -305,10 +305,10 @@ cmd_test() {
 }
 
 cmd_run() {
-    # Locking (Portable mkdir)
-    local lock_dir="${LOCK_FILE}.d"
-    if ! mkdir "$lock_dir" 2>/dev/null; then
-        log_error "Another instance is running (Lock: $lock_dir). Aborting."
+    # Locking (flock)
+    exec 200>"$LOCK_FILE"
+    if ! flock -n 200; then
+        log_error "Another instance is running (Lock: $LOCK_FILE). Aborting."
         exit 1
     fi
     
@@ -334,8 +334,8 @@ cmd_run() {
     # Ensure clean state
     cmd_destroy
     
-    # Trap to ensure destroy runs AND lock is released
-    trap "cmd_destroy; rm -rf \"$lock_dir\" 2>/dev/null || true" EXIT
+    # Trap to ensure destroy runs
+    trap "cmd_destroy" EXIT
     
     if cmd_up "$run_id"; then
         if cmd_test; then
@@ -366,8 +366,6 @@ JSON
     if [[ "$status" != "SUCCESS" ]]; then
         exit 1
     fi
-    
-    # Trap will handle destroy on exit
 }
 
 usage() {
