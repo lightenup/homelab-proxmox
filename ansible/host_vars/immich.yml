@@ -1,3 +1,6 @@
-healthcheck_path: "/api/server/ping"
-healthcheck_port: 2283
+healthcheck_url:
+  scheme: http
+  port: 2283
+  path: /api/server/ping
+healthcheck_profile: both
 healthcheck_expect_json: '{"res":"pong"}'
