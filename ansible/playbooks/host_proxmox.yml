@@ -2,6 +2,14 @@
 - name: Configure Proxmox host
   hosts: proxmox_hosts
   become: true
+  pre_tasks:
+    - name: Validate Healthcheck Configuration
+      assert:
+        that:
+          - healthcheck_url is not defined or (healthcheck_url.scheme is defined and healthcheck_url.port is defined and healthcheck_url.path is defined)
+          - healthcheck_profile is not defined or healthcheck_profile in ['lan', 'tailscale', 'both', 'none']
+          - (healthcheck_profile is not defined or healthcheck_profile != 'none') or (healthcheck_verification_command is defined)
+        fail_msg: "Invalid healthcheck configuration. See docs/operations/golden-paths-service-lifecycle.md"
   roles:
     - proxmox_host
     - tailscale_host

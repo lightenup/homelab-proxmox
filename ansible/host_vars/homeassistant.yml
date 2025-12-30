@@ -1,5 +1,8 @@
-healthcheck_path: "/manifest.json"
-healthcheck_port: 8123
+healthcheck_url:
+  scheme: http
+  port: 8123
+  path: /manifest.json
+healthcheck_profile: both
 healthcheck_expect_status: 200
 healthcheck_enabled: false
 healthcheck_reason: "Service not yet installed"

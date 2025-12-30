@@ -1,0 +1,31 @@
+# Service Metadata Template
+# Copy this to ansible/host_vars/<service_name>.yml
+
+# --- Required Metadata ---
+service_name: "example-service"
+service_role: "app" # app, infra, monitoring, proxy
+healthcheck_enabled: true
+healthcheck_profile: "lan" # lan, tailscale, both, none
+
+# --- Healthcheck Configuration (Required if profile != none) ---
+healthcheck_url:
+  scheme: "http"
+  port: 8080
+  path: "/health"
+
+# --- Verification Command (Required if profile == none) ---
+# healthcheck_verification_command: "systemctl is-active example-service"
+
+# --- Optional Settings ---
+healthcheck_expect_status: 200
+# healthcheck_expect_body_contains: "OK"
+# healthcheck_reason: "Maintenance" # Required if enabled is false
+
+# --- Proxy Configuration ---
+expose_via_proxy: true
+proxy_hostname: "example.homelab.local"
+
+# --- Operational Data ---
+service_owner: "admin"
+service_data_paths:
+  - "/mnt/data/example"

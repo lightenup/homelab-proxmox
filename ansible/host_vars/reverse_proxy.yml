@@ -1,3 +1,6 @@
-healthcheck_path: "/"
-healthcheck_port: 80
+healthcheck_url:
+  scheme: http
+  port: 80
+  path: /
+healthcheck_profile: both
 healthcheck_expect_status: 200

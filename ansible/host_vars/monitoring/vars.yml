@@ -32,6 +32,8 @@ uptime_kuma_api_max_retries: 24
 alert_down_threshold: 2  # minutes
 
 # Healthcheck Configuration (Feature 018b)
-healthcheck_path: "/api/health"
-healthcheck_port: 3000
-healthcheck_scheme: "http"
+healthcheck_url:
+  scheme: http
+  port: 3000
+  path: /api/health
+healthcheck_profile: both
