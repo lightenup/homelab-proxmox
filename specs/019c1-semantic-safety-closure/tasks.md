@@ -20,15 +20,15 @@
 
 **Purpose**: Create directory structure, shared libraries, and JSON schemas
 
-- [ ] T001 Create lib/ directory structure at scripts/lab/lib/
-- [ ] T002 [P] Create profiles.d/ directory at scripts/lab/profiles.d/
-- [ ] T003 [P] Copy JSON schemas from specs/019c1-semantic-safety-closure/contracts/ to scripts/lab/contracts/
-- [ ] T004 [P] Create lib/checks.sh with check recording functions
-- [ ] T005 [P] Create lib/jsonl.sh with JSONL event emission to stderr
-- [ ] T006 [P] Create lib/provenance.sh with git/version capture functions
-- [ ] T007 [P] Create lib/evidence.sh with evidence pack management functions
-- [ ] T008 Create scripts/lab/guardrails.sh as negative test harness
-- [ ] T008a [P] Create lib/cleanup.sh stub for cleanup check functions (used in Phase 5)
+- [X] T001 Create lib/ directory structure at scripts/lab/lib/
+- [X] T002 [P] Create profiles.d/ directory at scripts/lab/profiles.d/
+- [X] T003 [P] Copy JSON schemas from specs/019c1-semantic-safety-closure/contracts/ to scripts/lab/contracts/
+- [X] T004 [P] Create lib/checks.sh with check recording functions
+- [X] T005 [P] Create lib/jsonl.sh with JSONL event emission to stderr
+- [X] T006 [P] Create lib/provenance.sh with git/version capture functions
+- [X] T007 [P] Create lib/evidence.sh with evidence pack management functions
+- [X] T008 Create scripts/lab/guardrails.sh as negative test harness
+- [X] T008a [P] Create lib/cleanup.sh stub for cleanup check functions (used in Phase 5)
 
 ---
 
