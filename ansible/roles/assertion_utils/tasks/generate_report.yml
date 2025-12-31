@@ -17,7 +17,7 @@
           'profile_id': profile_id | default('default'),
           'phase': phase | default('unknown'),
           'timestamp': ansible_date_time.iso8601,
-          'assertions': assertion_results | default([])
+          'assertions': assertion_results | default([]) | map('combine', {'source': 'ansible'}) | list
         } | to_nice_json
       }}
     dest: "{{ evidence_dir }}/reports/assertions.{{ phase | default('unknown') }}.json"

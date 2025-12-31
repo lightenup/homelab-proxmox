@@ -39,3 +39,38 @@ We have migrated from email notifications to Uptime Kuma Push monitoring.
 -   **Runbook**: [Proxmox Backup Email Decommissioning](operations/backups-proxmox-config-email-decommission.md)
 -   **Current Mode**: `kuma_only` (Email disabled, Kuma active)
 -   **Configuration**: `ansible/group_vars/proxmox_hosts/vars.yml`
+
+## Evidence Governance
+
+The lab suite produces evidence packs for every run. These packs are validated against a strict schema and catalog.
+
+### Verification
+
+To verify an evidence pack against the catalog and schema:
+
+```bash
+scripts/lab/pve-lab verify-evidence artifacts/019-lab/lab-YYYYMMDD-HHMMSS
+```
+
+This checks:
+- **Structure**: JSON schema compliance.
+- **Catalog**: All checks must be defined in `scripts/lab/checks.d/catalog.json`.
+- **Integrity**: All referenced evidence files must exist.
+
+### Comparison (Diff)
+
+To compare two evidence packs (e.g., to check for regressions or drift):
+
+```bash
+scripts/lab/pve-lab diff-evidence artifacts/019-lab/run-A artifacts/019-lab/run-B
+```
+
+### Catalog Maintenance
+
+The Check Catalog is the Single Source of Truth (SSOT) for all checks.
+Location: `scripts/lab/checks.d/catalog.json`
+
+To add a new check:
+1.  Add the check definition to `catalog.json`.
+2.  Ensure the `check_id` is unique.
+3.  Run `scripts/lab/ci-verify.sh` to validate the catalog.

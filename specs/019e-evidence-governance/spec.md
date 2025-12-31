@@ -89,15 +89,15 @@ As a lab operator, I want to compare two Evidence Packs for the same profile so 
 - **FR-002c**: Verifier MUST assert `summary.profile_id` exists and matches `provenance.profile_id` and `checks.profile_id` (if present). Fail with `EVID-003`.
 - **FR-003**: Evidence verifier MUST validate that every `evidence_ref` path exists relative to the pack root.
 - **FR-003a**: Evidence refs MUST be relative paths (no absolute paths, no `..` segments). Fail with `REF-001` if rule violated.
-- **FR-003b**: If a check is `PASS`, all referenced evidence files MUST exist. If a check is `FAIL`, missing evidence MUST fail verification unless explicitly allowed via an `allow_missing_evidence: true` flag on that check entry (default false). Use error codes `REF-002` (missing) and `REF-003` (disallowed missing).
+- **FR-003b**: If a check is `PASS`, all referenced evidence files MUST exist. If a check is `FAIL`, missing evidence MUST fail verification unless explicitly allowed via `allow_missing_evidence: true` in the **Check Catalog** entry for that ID (default false). Use error codes `REF-002` (missing) and `REF-003` (disallowed missing).
 - **FR-004**: Evidence verifier MUST validate check_id uniqueness across the final `checks.json`.
 - **FR-004a**: Duplicate check_id MUST fail verification with `DEDUP-001` (blocker).
 - **FR-004b**: check_id matching MUST be case-sensitive; catalog IDs are canonical.
 
 ### Check Catalog Governance
 
-- **FR-005**: Repo MUST include a Check Catalog SSOT (`scripts/lab/checks.d/catalog.json`) defining: `check_id`, `title`, `owner`, `phase`, `severity`.
-- **FR-005a**: Each catalog entry MUST include: `check_id`, `title`, `owner`, `phase`, `severity`. Optional: `deprecated: true|false`, `replaced_by` (string), `notes`. Verifier MUST fail on unknown fields only if `strict_catalog=true` (default true in CI).
+- **FR-005**: Repo MUST include a Check Catalog SSOT (`scripts/lab/checks.d/catalog.json`) structured as a dictionary keyed by `check_id`.
+- **FR-005a**: Each catalog entry MUST include: `title`, `owner`, `phase`, `severity`. Optional: `deprecated: true|false`, `replaced_by` (string), `notes`, `allow_missing_evidence: true|false`. Verifier MUST fail on unknown fields only if `strict_catalog=true` (controlled via CLI arg `--strict-catalog`, default true).
 - **FR-006**: Verifier MUST fail if any emitted check_id is missing from the catalog.
 - **FR-006a**: Deprecated check_ids MUST NOT appear in new evidence packs unless `allow_deprecated_checks=true` flag is set in `summary.json` (default false). Fail with `CAT-004`.
 - **FR-007**: Verifier MUST enforce ownership: `ansible` checks must come from assertion reports; `harness` checks from harness execution.

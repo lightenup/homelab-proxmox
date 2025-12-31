@@ -64,6 +64,7 @@ EOF
     # Write manifest
     cat > "${evidence_dir}/evidence_manifest.json" <<EOF
 {
+  "contract_version": "1.0.0",
   "manifest_schema_version": "$manifest_schema_version",
   "artifacts": $artifacts_json
 }

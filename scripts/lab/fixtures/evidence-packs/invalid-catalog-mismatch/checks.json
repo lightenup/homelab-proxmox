@@ -1,0 +1,11 @@
+[
+  {
+    "check_id": "UNKNOWN-001",
+    "title": "Unknown check",
+    "severity": "blocker",
+    "source": "harness",
+    "expected": "PASS",
+    "result": "PASS",
+    "evidence_refs": []
+  }
+]

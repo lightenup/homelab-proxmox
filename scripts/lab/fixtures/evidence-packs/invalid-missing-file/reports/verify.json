@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "errors": [
+    {
+      "code": "STRUCT-001",
+      "message": "Missing required files: checks.json",
+      "remediation": "Ensure evidence pack contains all required files"
+    }
+  ],
+  "warnings": [],
+  "contract_version": "1.0.0",
+  "verifier_version": "1.0.0",
+  "timestamp": "2025-12-31T14:51:33.038168"
+}
