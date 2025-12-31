@@ -7,6 +7,9 @@ set -euo pipefail
 # Global array to accumulate checks
 declare -a CHECKS_ARRAY=()
 
+# Global array to track seen check IDs (for deduplication)
+declare -a SEEN_CHECK_IDS=()
+
 # Check recorder function - records a check result
 # Usage: record_check check_id title severity expected result reason [evidence_refs...]
 record_check() {
@@ -18,6 +21,43 @@ record_check() {
     local reason="$6"
     shift 6
     local evidence_refs=("$@")
+
+    # DEDUP LOGIC: Check for duplicates (unless it's the dedup check itself)
+    if [[ "$check_id" != "SUITE-DEDUP-001" ]]; then
+        local is_duplicate=false
+        for seen_id in "${SEEN_CHECK_IDS[@]:-}"; do
+            if [[ "$seen_id" == "$check_id" ]]; then
+                is_duplicate=true
+                break
+            fi
+        done
+
+        if [[ "$is_duplicate" == "true" ]]; then
+            # Check if we already emitted the dedup error
+            local dedup_emitted=false
+            for s in "${SEEN_CHECK_IDS[@]:-}"; do
+                if [[ "$s" == "SUITE-DEDUP-001" ]]; then
+                    dedup_emitted=true
+                    break
+                fi
+            done
+
+            if [[ "$dedup_emitted" == "false" ]]; then
+                # Recursive call to record the blocker
+                record_check "SUITE-DEDUP-001" \
+                    "Duplicate Check ID Detected" \
+                    "blocker" \
+                    "PASS" \
+                    "FAIL" \
+                    "Check ID '$check_id' was emitted multiple times. First collision detected." \
+                    "collision_id:$check_id"
+            fi
+            # Do not record the duplicate check
+            return 0
+        fi
+        # Mark as seen
+        SEEN_CHECK_IDS+=("$check_id")
+    fi
     
     local timestamp
     timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
