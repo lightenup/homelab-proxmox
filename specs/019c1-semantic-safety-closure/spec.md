@@ -38,11 +38,11 @@ A named validation intent that declares:
 - `hypervisor-nested-workload` (formerly "tier2-plus"): Control plane + nested VM/LXC validation
 
 **Properties**:
-- `profile_id`: Stable identifier (kebab-case)
+- `profile_id`: Stable identifier (kebab-case) - **PRIMARY SEMANTIC KEY**
 - `display_name`: Human-readable name
-- `tier`: Numeric tier (maps to legacy tier concept)
-- `mode`: Mode within tier (maps to legacy tier2_mode)
-- `safety_level`: `standard` | `strict`
+- `safety_level`: `standard` | `strict` - **PRIMARY SEMANTIC KEY**
+- `tier`: Numeric tier (legacy-derived field for backward compatibility, not primary semantics)
+- `mode`: Mode within tier (legacy-derived field for backward compatibility, not primary semantics)
 - `expected_duration_minutes`: Target execution time (informational)
 - `prerequisites`: Host capability checks
 - `checks`: List of check_ids this profile expects to run
@@ -52,7 +52,7 @@ A named validation intent that declares:
 A stable validation unit with consistent structure:
 
 **Properties**:
-- `check_id`: Stable, versioned identifier (e.g., `PVE-001`, `GUARD-001`, `CLEANUP-001`)
+- `check_id`: Stable identifier (e.g., `PVE-001`, `GUARD-001`, `CLEANUP-001`)
 - `title`: Human-readable description
 - `severity`: `blocker` | `high` | `medium` | `low`
 - `expected`: `PASS` | `FAIL` (supports negative tests)
@@ -76,8 +76,8 @@ A stable validation unit with consistent structure:
 A structured directory per run containing:
 
 **Required Files**:
-- `evidence_manifest.json`: Inventory of all artifacts
-- `checks.json`: Canonical checklist results
+- `evidence_manifest.json`: Inventory of all artifacts (includes `manifest_schema_version` for evolution tracking)
+- `checks.json`: Canonical checklist results (includes `checks_schema_version` for evolution tracking)
 - `provenance.json`: Run context (inputs, versions, commit)
 - `summary.json`: High-level run results (references other files)
 - Raw logs and outputs (existing structure)
@@ -85,7 +85,8 @@ A structured directory per run containing:
 **Structured Event Stream**:
 - Real-time JSONL events emitted to stderr during execution
 - Events include: check_start, check_complete, phase_start, phase_complete, error
-- Captured to `logs/commands.jsonl` in evidence pack for replay/analysis
+- Captured to `logs/events.jsonl` in evidence pack for replay/analysis
+- Note: `logs/commands.jsonl` (if present) is reserved for command execution timing records from earlier features
 
 **Directory Structure**:
 ```
@@ -95,9 +96,11 @@ artifacts/019-lab/<runid>/
 ├── provenance.json
 ├── summary.json
 ├── logs/
-│   ├── bootstrap.log
-│   ├── tier2.log
-│   └── commands.jsonl       # JSONL event stream
+│   ├── run.log              # Main execution log
+│   ├── bootstrap.log        # Bootstrap phase output
+│   ├── tier2.log            # Tier2 phase output
+│   ├── events.jsonl         # Real-time progress events (NEW)
+│   └── commands.jsonl       # Command timing records (existing, if present)
 └── reports/
     ├── validation.json
     ├── pveversion.txt
@@ -192,20 +195,37 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 1. **Given** legacy command `pve-lab run --tier 2`, **When** executed, **Then** it maps to profile `hypervisor-control-plane` and logs this in summary.json
 2. **Given** legacy command `pve-lab run --tier 2 --tier2-mode plus`, **When** executed, **Then** it maps to profile `hypervisor-nested-workload`
 3. **Given** any legacy command, **When** reviewing console output, **Then** a deprecation notice shows the equivalent profile-based command
-4. **Given** documentation, **When** reviewing harness usage, **Then** profiles are documented as the primary interface with legacy flags as aliasesexecuting remaining checks to maximize diagnostic information, unless the failed check has severity `blocker`, in which case suite aborts immediately.
-- **What happens when negative test doesn't fail as expected (expected FAIL, got PASS)?** This is an ERROR condition indicating a safety hole. Check marked ERROR, suite aborts immediately regardless of severity
+4. **Given** documentation, **When** reviewing harness usage, **Then** profiles are documented as the primary interface with legacy flags as aliases
+
 ---
 
 ### Edge Cases
 
-- **What happens when a check produces unexpected result (expected PASS, got FAIL)?** Check is marked as FAIL and reason explains the discrepancy. Suite continues unless severity is `blocker`.
-- **What happens when negative test doesn't fail as expected (expected FAIL, got PASS)?** This is an ERROR condition indicating a safety hole. Check marked ERROR, suite aborts, reason explains guardrail breach.
+- **What happens when a check produces unexpected result (expected PASS, got FAIL)?** Check is marked as FAIL and reason explains the discrepancy. Suite continues executing remaining checks to maximize diagnostic information, unless the failed check has severity `blocker`, in which case suite aborts immediately.
+- **What happens when negative test doesn't fail as expected (expected FAIL, got PASS)?** This is an ERROR condition indicating a safety hole. Check marked ERROR, suite aborts immediately regardless of severity, reason explains guardrail breach.
 - **What happens when evidence artifact is missing?** Check referencing it is marked SKIP or ERROR depending on severity, reason explains missing artifact.
 - **What happens when suite is interrupted (Ctrl+C, kill)?** Evidence pack marked incomplete, cleanup checks marked SKIP with reason "interrupted", partial evidence retained for debugging.
 - **What happens when running suite against wrong environment (prod)?** Preflight checks detect non-lab environment, suite aborts before any operations, check `ENV-001` fails with clear explanation.
 - **What happens when a check becomes obsolete?** The check ID is retired and removed from active profiles, but the ID remains reserved and must not be reused. Historical evidence packs referencing the obsolete check remain valid for their time period.
 
 
+
+## Suite Execution Semantics *(canonical rules)*
+
+### Abort vs Continue Behavior
+
+**Default**: Suite continues executing all checks to maximize diagnostic information.
+
+**Abort conditions** (suite stops immediately):
+1. Any check with `severity: blocker` and `result: FAIL`
+2. Negative test with unexpected success: `expected: FAIL` but `result: PASS` → marked as `ERROR` and suite aborts (indicates safety hole)
+
+**Continue conditions** (suite proceeds to next check):
+- Checks with `severity` lower than `blocker` that fail → recorded as FAIL, execution continues
+- Checks that SKIP → recorded, execution continues
+- Negative tests that fail as expected → recorded as PASS (guardrail worked), execution continues
+
+---
 
 ## Requirements *(mandatory)*
 
@@ -229,7 +249,7 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 - **FR-010**: System MUST support negative tests with `expected: FAIL`
 - **FR-011**: System MUST distinguish between expected failures (negative tests) and unexpected failures
 - **FR-012**: Console output MUST display compact checklist summary showing check titles and results
-- **FR-013**: Checks with severity `blocker` that fail MUST abort the suite immediately
+- **FR-013**: Suite execution MUST follow abort/continue semantics defined in "Suite Execution Semantics" section
 
 #### Evidence Pack System
 - **FR-014**: Every suite run MUST create an evidence pack directory at `artifacts/019-lab/<runid>/`
@@ -244,22 +264,22 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 - **FR-019a**: Suite MUST emit structured JSONL events to stderr during execution for real-time monitoring
 - **FR-019b**: Event types MUST include: `check_start`, `check_complete`, `phase_start`, `phase_complete`, `error`, `warning`
 - **FR-019c**: Each JSONL event MUST include: `timestamp` (ISO 8601), `event_type`, `runid`, and event-specific data
-- **FR-019d**: JSONL event stream MUST be captured to `logs/commands.jsonl` in evidence pack
+- **FR-019d**: JSONL event stream MUST be captured to `logs/events.jsonl` in evidence pack
 - **FR-019e**: Stdout MUST remain reserved for human-readable summary output; structured events use stderr only
 
 #### Negative Tests (Guardrail Proof)
 - **FR-020**: Suite MUST include check `GUARD-001` that attempts tier2 playbook without `lab_inventory=true` and expects failure
-- **FR-021**: Suite MUST include check `GUARD-002` that attempts to target non-lab hostname pattern and expects failure
-- **FR-022**: Suite MUST include check `GUARD-003` that attempts to destroy VM missing identity markers and expects failure
-- **FR-023**: All negative tests MUST execute in isolated manner that cannot impact production
+- **FR-021**: Suite MUST include check `GUARD-002` that attempts to target non-lab hostname pattern and expects failure. Implementation: Generate temporary inventory file `artifacts/<runid>/tmp/inventory_bad_hostname.yml` with host named `not-lab-pve-01` pointing to lab VM IP, then attempt playbook execution with this inventory to prove hostname guard blocks it.
+- **FR-022**: Suite MUST include check `GUARD-003` that proves destroy command would reject VM missing identity markers. Implementation: Use dry-run validation or feed synthetic `qm config` output to safety-check parser to prove refusal without creating/destroying actual VMs.
+- **FR-023**: All negative tests MUST execute in isolated manner that cannot impact production (use validation-only modes, temporary inventories, or synthetic inputs)
 - **FR-024**: If negative test produces unexpected success, system MUST mark as ERROR and abort suite
 
 #### Cleanup Proof
 - **FR-025**: Suite MUST include check `CLEANUP-001` that verifies no VMs in 9000-9099 range with lab markers remain after run
-- **FR-026**: Suite MUST include check `CLEANUP-002` that verifies no active locks remain after run
+- **FR-026**: Suite MUST include check `CLEANUP-002` that verifies no processes hold locks after run. Note: Lock files may exist; requirement is that no process actively holds the lock (verify with `flock -n` test or equivalent).
 - **FR-027**: When `--keep` flag is used, cleanup checks MUST be marked SKIP with reason "kept by operator"
-- **FR-028**: Cleanup checks MUST reference evidence artifacts (VM inventory, lock status) in their evidence_refs
-
+- **FR-028**: Cleanup checks MUST reference evidence artifacts (VM inventory, lock status probe results) in their evidence_refs- **FR-028a**: All `evidence_refs` in checks MUST use paths relative to evidence pack root (e.g., "reports/systemctl-status.txt", not absolute paths)
+- **FR-028b**: Every file referenced in any check's `evidence_refs` MUST be listed in `evidence_manifest.json`
 #### Assertions and Error Messages
 - **FR-029**: All Ansible guards MUST use `assert` module with clear `fail_msg` and `success_msg`
 - **FR-030**: All harness preflight checks MUST print check_id, title, and clear failure reason on abort
@@ -335,9 +355,9 @@ This catalog defines the initial set of checks. New checks may be added followin
 - **WORK-004**: Service reachability from lab VM to nested LXC verified
 
 ### Guardrail Checks (Negative Tests)
-- **GUARD-001**: Tier2 playbook rejects execution without lab_inventory=true (expected FAIL)
-- **GUARD-002**: Playbook rejects non-lab hostname pattern (expected FAIL)
-- **GUARD-003**: Destroy command rejects VM missing identity markers (expected FAIL)
+- **GUARD-001**: Tier2 playbook rejects execution without lab_inventory=true (expected FAIL) - Implementation: override via `-e lab_inventory=false`
+- **GUARD-002**: Playbook rejects non-lab hostname pattern (expected FAIL) - Implementation: temporary inventory with non-lab hostname
+- **GUARD-003**: Destroy safety check would reject VM missing identity markers (expected FAIL) - Implementation: dry-run validation with synthetic config
 
 ### Cleanup Checks
 - **CLEANUP-001**: No lab VMs remain in range after run
@@ -413,7 +433,7 @@ This catalog defines the initial set of checks. New checks may be added followin
 - `artifacts/019-lab/<runid>/evidence_manifest.json`
 - `artifacts/019-lab/<runid>/provenance.json`
 - Updated `artifacts/019-lab/<runid>/summary.json` schema
-- `artifacts/019-lab/<runid>/logs/commands.jsonl` (captured JSONL event stream)
+- `artifacts/019-lab/<runid>/logs/events.jsonl` (real-time progress events)
 
 ### Documentation
 - Updated `docs/architecture/019-proxmox-lab-harness.md` with:
