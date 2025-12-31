@@ -1,0 +1,27 @@
+---
+- name: Ensure validation directory exists
+  file:
+    path: /var/lib/validation
+    state: directory
+    mode: '0755'
+
+- name: Check PVE Cluster Service
+  systemd:
+    name: pve-cluster
+  register: pve_cluster_status
+  ignore_errors: true
+
+- name: Check KVM Module
+  stat:
+    path: /dev/kvm
+  register: kvm_device
+
+- name: Generate Validation Report
+  copy:
+    dest: /var/lib/validation/checks.json
+    content: |
+      {
+        "pve_cluster_active": {{ pve_cluster_status.status.ActiveState == 'active' | bool | lower }},
+        "kvm_present": {{ kvm_device.stat.exists | bool | lower }},
+        "timestamp": "{{ ansible_date_time.iso8601 }}"
+      }

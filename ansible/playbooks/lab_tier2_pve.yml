@@ -97,10 +97,16 @@
       register: apt_res
       until: apt_res is success
 
-    - name: Download Proxmox Key
-      get_url:
-        url: "{{ pve_key_url }}"
-        dest: "{{ pve_keyring_path }}"
+    - name: Download Proxmox Key (from Keyserver)
+      shell: |
+        gpg --keyserver keyserver.ubuntu.com --recv-keys 24B30F06ECC1836A4E5EFECBA7BCD1420BFE778E
+        gpg --export 24B30F06ECC1836A4E5EFECBA7BCD1420BFE778E > {{ pve_keyring_path }}
+      args:
+        creates: "{{ pve_keyring_path }}"
+
+    - name: Ensure Keyring Permissions
+      file:
+        path: "{{ pve_keyring_path }}"
         mode: '0644'
 
     - name: Add Proxmox Repository
@@ -152,6 +158,113 @@
       register: apt_res
       until: apt_res is success
 
+    - name: Purge Cloud-Init to prevent network interference
+      apt:
+        name: cloud-init
+        state: absent
+        purge: true
+
+    - name: Remove Netplan configuration
+      file:
+        path: /etc/netplan
+        state: absent
+
+    - name: Disable systemd-networkd
+      systemd:
+        name: systemd-networkd
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Ensure /etc/network/interfaces.d is empty
+      file:
+        path: /etc/network/interfaces.d
+        state: absent
+
+    - name: Recreate /etc/network/interfaces.d
+      file:
+        path: /etc/network/interfaces.d
+        state: directory
+        mode: '0755'
+
+    - name: Ensure ifupdown2 is installed
+      apt:
+        name: ifupdown2
+        state: present
+
+    - name: Ensure networking service is enabled
+      systemd:
+        name: networking
+        enabled: true
+
+    - name: Configure vmbr0 Bridge
+      copy:
+        dest: /etc/network/interfaces
+        content: |
+          auto lo
+          iface lo inet loopback
+
+          auto {{ ansible_default_ipv4.interface }}
+          iface {{ ansible_default_ipv4.interface }} inet manual
+
+          auto vmbr0
+          iface vmbr0 inet static
+              address {{ ansible_default_ipv4.address }}
+              netmask {{ ansible_default_ipv4.netmask }}
+              gateway {{ ansible_default_ipv4.gateway }}
+              bridge-ports {{ ansible_default_ipv4.interface }}
+              bridge-stp off
+              bridge-fd 0
+              dns-nameservers 1.1.1.1 8.8.8.8
+      register: net_config
+
+    - name: Apply Network Configuration (Restart Networking)
+      service:
+        name: networking
+        state: restarted
+      async: 60
+      poll: 0
+      register: restart_networking
+
+    - name: Wait for connectivity
+      wait_for_connection:
+        delay: 5
+        timeout: 60
+
+    - name: Ensure /etc/resolv.conf is valid
+      copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 1.1.1.1
+          nameserver 8.8.8.8
+
+    - name: Debug Network State (IP)
+      command: ip a
+      register: ip_a_out
+      ignore_errors: true
+
+    - name: Display Network State (IP)
+      debug:
+        var: ip_a_out.stdout_lines
+
+    - name: Debug Network Interfaces File
+      command: cat /etc/network/interfaces
+      register: interfaces_out
+      ignore_errors: true
+
+    - name: Display Network Interfaces File
+      debug:
+        var: interfaces_out.stdout_lines
+
+    - name: Debug Networking Service
+      command: systemctl status networking
+      register: networking_status
+      ignore_errors: true
+
+    - name: Display Networking Service Status
+      debug:
+        var: networking_status.stdout_lines
+
     # -------------------------------------------------------------------------
     # Validation
     # -------------------------------------------------------------------------
@@ -184,14 +297,15 @@
         var: pve_version_out.stdout_lines
 
     # -------------------------------------------------------------------------
-    # Tier 2 Plus: Nested VM Smoke Test
+    # Tier 2 Plus: Nested Workload (VM + LXC)
     # -------------------------------------------------------------------------
-    - name: Tier 2 Plus - Nested VM Smoke Test
+    - name: Tier 2 Plus - Nested Workload
       block:
-        - name: Create Nested VM
+        # 1. Nested VM (KVM Smoke Test)
+        - name: Create Nested VM (KVM Check)
           command: >
             qm create 100
-            --name nested-smoke
+            --name nested-kvm
             --memory 512
             --net0 virtio,bridge=vmbr0
             --scsihw virtio-scsi-pci
@@ -199,19 +313,162 @@
         - name: Start Nested VM
           command: qm start 100
 
-        - name: Wait for Running State
+        - name: Wait for VM Running State
           command: qm status 100
           register: vm_status
           until: "'running' in vm_status.stdout"
           retries: 10
           delay: 2
 
-        - name: Stop Nested VM
-          command: qm stop 100
+        # 2. Nested LXC (Service Check)
+        - name: Check Storage Config
+          command: "cat /etc/pve/storage.cfg"
+          register: storage_cfg
+          ignore_errors: true
+
+        - name: Debug Storage Config
+          debug:
+            var: storage_cfg.stdout_lines
+
+        - name: Ensure storage.cfg exists
+          shell: |
+            cat <<EOF > /etc/pve/storage.cfg
+            dir: local
+                path /var/lib/vz
+                content iso,vztmpl,backup,rootdir
+
+            lvmthin: local-lvm
+                thinpool data
+                vgname pve
+                content rootdir,images
+            EOF
+          when: storage_cfg.rc != 0
+
+        - name: Update LXC Templates
+          command: pveam update
+          changed_when: false
+
+        - name: Check Storage Status
+          command: "pvesm status"
+          register: storage_status
+          ignore_errors: true
+
+        - name: Debug Storage Status
+          debug:
+            var: storage_status.stdout_lines
+
+        - name: Find Latest Debian 12 Template
+          shell: pveam available --section system | grep debian-12-standard | sort -V | tail -n1 | awk '{print $2}'
+          register: debian_tmpl
+          changed_when: false
+
+        - name: Debug Template Name
+          debug:
+            var: debian_tmpl.stdout
+
+        - name: Download Template
+          command: "pveam download local {{ debian_tmpl.stdout }}"
+          register: pveam_download_result
+          ignore_errors: true
+
+        - name: Debug Download Result
+          debug:
+            var: pveam_download_result
+
+        - name: Ensure Template Directory Exists
+          file:
+            path: /var/lib/vz/template/cache
+            state: directory
+
+        - name: Fallback Download Template
+          get_url:
+            url: "http://download.proxmox.com/images/system/{{ debian_tmpl.stdout }}"
+            dest: "/var/lib/vz/template/cache/{{ debian_tmpl.stdout }}"
+            mode: '0644'
+          when: debian_tmpl.stdout != ""
+
+        - name: List Template Cache
+          command: "ls -la /var/lib/vz/template/cache/"
+          register: template_cache_list
+
+        - name: Debug Template Cache
+          debug:
+            var: template_cache_list.stdout_lines
+
+        - name: Create Nested LXC
+          command: >
+            pct create 101 /var/lib/vz/template/cache/{{ debian_tmpl.stdout }}
+            --hostname nested-lxc
+            --memory 512
+            --net0 name=eth0,bridge=vmbr0,ip=10.99.0.11/24,gw=10.99.0.1
+            --storage local
+            --unprivileged 1
+            --features nesting=1
+            --force
+
+        - name: Start Nested LXC
+          command: pct start 101
+
+        - name: Wait for LXC Running
+          command: pct status 101
+          register: lxc_status
+          until: "'running' in lxc_status.stdout"
+          retries: 10
+          delay: 2
+
+        - name: Wait for LXC Network
+          pause:
+            seconds: 5
+
+        - name: Install Python in LXC
+          command: pct exec 101 -- bash -c "apt-get update && apt-get install -y python3"
+          register: lxc_install
+          retries: 3
+          delay: 5
+          until: lxc_install is success
+
+        - name: Start Mini-Service in LXC
+          command: pct exec 101 -- bash -c "nohup python3 -m http.server 8080 >/dev/null 2>&1 &"
+          async: 10
+          poll: 0
+
+        - name: Verify Connectivity from Lab VM
+          command: nc -z -w 5 10.99.0.11 8080
+          register: net_check
+          retries: 5
+          delay: 2
+          until: net_check is success
+
+        # Cleanup
+        - name: Destroy Nested LXC
+          command: pct destroy 101 --force
           ignore_errors: true
 
         - name: Destroy Nested VM
           command: qm destroy 100
+          ignore_errors: true
 
       when: tier2_mode is defined and tier2_mode == 'plus'
+      always:
+        # Ensure cleanup happens even if tests fail
+        - name: Cleanup Nested LXC (Always)
+          shell: |
+            pct stop 101 || true
+            pct destroy 101 --force || true
+          ignore_errors: true
+          when: tier2_mode is defined and tier2_mode == 'plus'
+        
+        - name: Cleanup Nested VM (Always)
+          shell: |
+            qm stop 100 || true
+            qm destroy 100 || true
+          ignore_errors: true
+          when: tier2_mode is defined and tier2_mode == 'plus'
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+    - name: Run Validation Role
+      include_role:
+        name: validation
 

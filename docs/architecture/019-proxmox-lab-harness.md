@@ -65,13 +65,43 @@ All lab resources must be identifiable by **ALL** of the following:
     - Stops VM.
     - Destroys VM.
 
-## Artifacts
+## Validation Profiles
 
-The harness collects diagnostic data after every run (success or failure) to `artifacts/019-lab/<runid>/`.
+The harness supports named profiles to define the scope and fidelity of a test run.
 
-- **Config**: `pveversion`, `pvesh version`, `apt-cache policy`, `systemctl status`.
-- **Logs**: `journalctl` (last 1000 lines).
-- **Rotation**: Automatically keeps only the last 5 run directories.
+| Profile | Description | Equivalent Legacy Tier |
+| :--- | :--- | :--- |
+| **bootstrap** | Basic connectivity and Ansible convergence. Verifies that the base OS can be managed. | Tier 1 |
+| **hypervisor-control-plane** | Installs and verifies the PVE control plane on Debian 13. Includes hardening and API checks. | Tier 2 (Min) |
+| **hypervisor-nested-workload** | Control plane + Nested VM + Nested LXC. Verifies KVM module and network bridging for workloads. | Tier 2 (Plus) |
+
+## Evidence Packs
+
+The harness generates a structured Evidence Pack for every run in `artifacts/019-lab/<runid>/`.
+
+### Structure
+- `evidence_manifest.json`: Metadata about the run (Profile, Timestamp, Status).
+- `logs/`: System logs (`journalctl`, `syslog`).
+- `config/`: Configuration dumps (`pveversion`, `apt policy`).
+- `validation/`: Structured validation results (`checks.json`).
+
+### Retention Policy
+The system automatically retains the last **5** Evidence Packs. Older packs are deleted to save space.
+
+## Confidence Suite
+
+The **Confidence Suite** (`pve-lab suite`) is a meta-test that verifies the harness itself. It executes:
+1.  **Safety Suite**: Negative tests to verify guardrails (e.g., blocking unsafe VMIDs).
+2.  **Bootstrap Profile**: Verifies basic harness function.
+3.  **Control Plane Profile**: Verifies complex Ansible roles.
+4.  **Nested Workload Profile**: Verifies deep system capabilities (KVM/LXC).
+
+## Future Roadmap: Tier 3 (Rebuild Fidelity)
+
+**Tier 3** represents the highest level of fidelity: **Rebuild from ISO/IPXE**.
+- **Goal**: Verify that the entire stack can be rebuilt from scratch without relying on a pre-baked cloud image.
+- **Mechanism**: The harness would spawn a VM that PXE boots from a local OPNsense/IPXE server, installs Debian via preseed, and then runs the PVE installer.
+- **Status**: Deferred. Current focus is on Tier 2 (Cloud Image based).
 
 ## Host Setup Prerequisites
 
