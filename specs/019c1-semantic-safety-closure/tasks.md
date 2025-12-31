@@ -56,21 +56,21 @@
 
 **Implementation Tasks**:
 
-- [ ] T016 [US1] Define Profile data structure as bash-sourceable .profile file format in scripts/lab/profiles.d/ (per research.md decision)
-- [ ] T017 [US1] Create profile definition scripts/lab/profiles.d/hypervisor-control-plane.profile
-- [ ] T018 [US1] Create profile definition scripts/lab/profiles.d/hypervisor-nested-workload.profile
-- [ ] T019 [US1] Add profile loader function to lib/checks.sh (load_profile, validate fields)
-- [ ] T020 [US1] Add `pve-lab suite <profile>` command to scripts/lab/pve-lab (load profile, execute phases)
+- [X] T016 [US1] Define Profile data structure as bash-sourceable .profile file format in scripts/lab/profiles.d/ (per research.md decision)
+- [X] T017 [US1] Create profile definition scripts/lab/profiles.d/hypervisor-control-plane.profile
+- [X] T018 [US1] Create profile definition scripts/lab/profiles.d/hypervisor-nested-workload.profile
+- [X] T019 [US1] Add profile loader function to lib/checks.sh (load_profile, validate fields) [DONE IN PHASE 1]
+- [X] T020 [US1] Add `pve-lab suite <profile>` command to scripts/lab/pve-lab (load profile, execute phases)
 - [ ] T021 [US1] Instrument ansible/playbooks/lab_bootstrap.yml to emit check records for PVE-001 through PVE-005
 - [ ] T022 [US1] Instrument ansible/playbooks/lab_tier2_pve.yml to emit check records for NET-001 through NET-004
 - [ ] T023 [US1] Add validation role instrumentation to emit NEST-001 through NEST-004 checks
 - [ ] T024 [US1] Add workload validation to emit WORK-001 through WORK-004 checks
-- [ ] T025 [US1] Implement checks.json serializer in lib/checks.sh (serialize_checks with checks_schema_version)
-- [ ] T026 [US1] Add console check summary formatter to scripts/lab/pve-lab (print compact checklist <2 lines per check)
-- [ ] T027 [US1] Generate checks.json at suite completion in scripts/lab/pve-lab
-- [ ] T028 [US1] Update summary.json generation to include profile reference in scripts/lab/pve-lab
-- [ ] T029 [US1] Emit JSONL check_start and check_complete events during execution
-- [ ] T030 [US1] Emit JSONL phase_start and phase_complete events during suite execution
+- [X] T025 [US1] Implement checks.json serializer in lib/checks.sh (serialize_checks with checks_schema_version) [DONE IN PHASE 1]
+- [X] T026 [US1] Add console check summary formatter to scripts/lab/pve-lab (print compact checklist <2 lines per check)
+- [X] T027 [US1] Generate checks.json at suite completion in scripts/lab/pve-lab
+- [X] T028 [US1] Update summary.json generation to include profile reference in scripts/lab/pve-lab
+- [X] T029 [US1] Emit JSONL check_start and check_complete events during execution
+- [X] T030 [US1] Emit JSONL phase_start and phase_complete events during suite execution
 
 ---
 

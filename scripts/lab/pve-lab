@@ -153,6 +153,61 @@ should_abort_suite() {
     return 0
 }
 
+# Console check summary formatter (019c1)
+# Prints compact checklist (<2 lines per check)
+print_check_summary() {
+    echo ""
+    echo "=== Check Summary ==="
+    echo ""
+    
+    local total=0
+    local passed=0
+    local failed=0
+    local skipped=0
+    
+    # Parse CHECKS_ARRAY and print each check
+    for check_json in "${CHECKS_ARRAY[@]}"; do
+        total=$((total + 1))
+        
+        # Extract fields from JSON (using jq if available, otherwise basic parsing)
+        local check_id result title
+        if command -v jq &>/dev/null; then
+            check_id=$(echo "$check_json" | jq -r '.check_id')
+            result=$(echo "$check_json" | jq -r '.result')
+            title=$(echo "$check_json" | jq -r '.title')
+        else
+            # Basic grep parsing
+            check_id=$(echo "$check_json" | grep -o '"check_id"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"/\1/')
+            result=$(echo "$check_json" | grep -o '"result"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"/\1/')
+            title=$(echo "$check_json" | grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"/\1/')
+        fi
+        
+        # Count by result
+        case "$result" in
+            PASS) passed=$((passed + 1)) ;;
+            FAIL) failed=$((failed + 1)) ;;
+            SKIP) skipped=$((skipped + 1)) ;;
+        esac
+        
+        # Format result with color
+        local result_display
+        case "$result" in
+            PASS) result_display="${GREEN}✓ PASS${NC}" ;;
+            FAIL) result_display="${RED}✗ FAIL${NC}" ;;
+            SKIP) result_display="${YELLOW}○ SKIP${NC}" ;;
+            ERROR) result_display="${RED}✗ ERROR${NC}" ;;
+            *) result_display="? $result" ;;
+        esac
+        
+        # Print check (single line: check_id result title)
+        printf "%-12s %b  %s\n" "$check_id" "$result_display" "$title"
+    done
+    
+    echo ""
+    echo "Total: $total | Passed: $passed | Failed: $failed | Skipped: $skipped"
+    echo ""
+}
+
 # --- Feature 019c: Confidence Suite ---
 
 # Profile Definitions
@@ -758,13 +813,18 @@ cmd_run() {
         exit 1
     fi
     
-    local run_id="lab-$(date +%Y%m%d-%H%M%S)"
+    # 019c1: Create evidence pack with new runid format
+    local run_id
+    run_id="$(create_evidence_pack "artifacts/019-lab")"
     
-    # Initialize Evidence Pack
+    # Legacy: Also set EVIDENCE_ROOT for backward compatibility
     evidence_init "$run_id" "${profile:-custom}"
     local artifact_dir="$EVIDENCE_ROOT"
     local summary_file="$artifact_dir/summary.json"
     local log_file="$artifact_dir/run.log"
+    
+    # 019c1: Initialize JSONL events
+    init_jsonl_events "$artifact_dir/logs/events.jsonl"
     
     # Set Global ARTIFACT_DIR for logging
     export ARTIFACT_DIR="$artifact_dir"
@@ -793,8 +853,13 @@ cmd_run() {
     
     log_info "=== Preflight Checks Complete ==="
     
+    # 019c1: Emit phase event
+    emit_phase_start "$run_id" "destroy-cleanup"
+    
     # Ensure clean state
     cmd_destroy
+    
+    emit_phase_complete "$run_id" "destroy-cleanup"
     
     # Validate Safety Profile (FR-019c)
     if ! validate_safety_profile; then
@@ -809,14 +874,25 @@ cmd_run() {
         trap "cmd_destroy" EXIT
     fi
     
+    # 019c1: Emit phase event for provisioning
+    emit_phase_start "$run_id" "vm-provision"
+    
     if cmd_up "$run_id" "$tier"; then
+        emit_phase_complete "$run_id" "vm-provision"
+        
+        # 019c1: Emit phase event for testing
+        emit_phase_start "$run_id" "validation"
+        
         if cmd_test "$tier" "$tier2_mode"; then
             status="SUCCESS"
         else
             log_error "Tests failed."
         fi
+        
+        emit_phase_complete "$run_id" "validation"
     else
         log_error "Setup failed."
+        emit_error "$run_id" "VM provisioning failed"
     fi
     
     # Collect Artifacts (FR-011)
@@ -825,18 +901,30 @@ cmd_run() {
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
-    # Generate Summary
+    # 019c1: Generate checks.json
+    local checks_file="$artifact_dir/checks.json"
+    serialize_checks "$checks_file"
+    log_info "Generated checks.json: $checks_file"
+    
+    # 019c1: Print console check summary
+    print_check_summary
+    
+    # Generate Summary (019c1: updated with profile reference)
     cat <<JSON > "$summary_file"
 {
   "run_id": "$run_id",
   "status": "$status",
   "profile": "${profile:-custom}",
+  "profile_id": "${PROFILE_ID:-unknown}",
   "tier": $tier,
   "tier2_mode": "$tier2_mode",
   "keep_vm": $keep_vm,
   "start_time": "$start_time",
   "end_time": "$end_time",
-  "duration_seconds": $duration
+  "duration_seconds": $duration,
+  "checks_file": "checks.json",
+  "provenance_file": "provenance.json",
+  "evidence_manifest_file": "evidence_manifest.json"
 }
 JSON
     
@@ -944,8 +1032,36 @@ cmd_confidence_suite() {
     log_info "Confidence Suite Completed Successfully."
 }
 
+# 019c1: New suite command with profile-based execution
+cmd_suite() {
+    local profile_name="$1"
+    
+    if [[ -z "$profile_name" ]]; then
+        log_error "Usage: $0 suite <profile-name>"
+        log_error "Available profiles:"
+        log_error "  - hypervisor-control-plane"
+        log_error "  - hypervisor-nested-workload"
+        exit 1
+    fi
+    
+    # Load profile
+    export PROFILES_DIR="${SCRIPT_DIR}/profiles.d"
+    if ! load_profile "$profile_name"; then
+        log_error "Failed to load profile: $profile_name"
+        exit 1
+    fi
+    
+    log_info "=== Suite Execution: $PROFILE_ID ==="
+    log_info "Display Name: $DISPLAY_NAME"
+    log_info "Safety Level: $SAFETY_LEVEL"
+    log_info "Expected Duration: ${EXPECTED_DURATION_MINUTES} minutes"
+    
+    # Execute using cmd_run with --profile flag
+    cmd_run --profile "$profile_name" "$@"
+}
+
 usage() {
-    echo "Usage: $0 {up|down|destroy|status|test|run|safety|suite}"
+    echo "Usage: $0 {up|down|destroy|status|test|run|safety|confidence|suite}"
     echo ""
     echo "Commands:"
     echo "  up       - Provision a new Lab VM (manual mode)"
@@ -954,12 +1070,17 @@ usage() {
     echo "  test     - Run tests against existing Lab VM"
     echo "  run      - Full workflow: destroy -> up -> test -> destroy"
     echo "  safety   - Run Safety Suite (Negative Tests)"
-    echo "  suite    - Run Confidence Suite (Safety + All Profiles)"
+    echo "  confidence - Run Confidence Suite (Safety + All Profiles)"
+    echo "  suite <profile> - Run specific profile suite (019c1 primary interface)"
+    echo ""
+    echo "Suite Profiles (019c1):"
+    echo "  hypervisor-control-plane   - PVE install + API verification"
+    echo "  hypervisor-nested-workload - Full validation with nested VMs"
     echo ""
     echo "Run Options:"
     echo "  --profile <name>      Profile to run (bootstrap, hypervisor-control-plane, hypervisor-nested-workload)"
-    echo "  --tier <1|2>          Target tier level (legacy)"
-    echo "  --tier2-mode <mode>   Tier 2 verification mode (legacy)"
+    echo "  --tier <1|2>          Target tier level (DEPRECATED - use --profile)"
+    echo "  --tier2-mode <mode>   Tier 2 verification mode (DEPRECATED - use --profile)"
     echo "  --keep                Keep VM after run (don't destroy on exit)"
     exit 1
 }
@@ -978,6 +1099,10 @@ case "$1" in
         cmd_run "$@" 
         ;;
     safety) cmd_safety_suite ;;
-    suite) cmd_confidence_suite ;;
+    confidence) cmd_confidence_suite ;;
+    suite)
+        shift
+        cmd_suite "$@"
+        ;;
     *) usage ;;
 esac
