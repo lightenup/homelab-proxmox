@@ -153,13 +153,13 @@
 - [ ] T058 [P] Update ansible/playbooks/lab_bootstrap.yml assertions to use assert module with fail_msg/success_msg - **DEFERRED** (Ansible playbook updates)
 - [ ] T059 [P] Update ansible/playbooks/lab_tier2_pve.yml assertions to use assert module with fail_msg/success_msg - **DEFERRED** (Ansible playbook updates)
 - [X] T060 [P] Add clear error messages with remediation hints to all harness preflight checks in scripts/lab/pve-lab
-- [ ] T061 [P] Update docs/architecture/019-proxmox-lab-harness.md with Profile definitions and examples - **DEFERRED** (documentation)
-- [ ] T062 [P] Add Check catalog with sample outputs to docs/architecture/019-proxmox-lab-harness.md - **DEFERRED** (documentation)
-- [ ] T063 [P] Add Evidence pack structure with sample files to docs/architecture/019-proxmox-lab-harness.md - **DEFERRED** (documentation)
-- [ ] T064 [P] Add migration guide from legacy flags to profiles in docs/architecture/019-proxmox-lab-harness.md - **DEFERRED** (documentation)
-- [ ] T065 [P] Create example console output showing check summary in docs/architecture/019-proxmox-lab-harness.md - **DEFERRED** (documentation)
-- [ ] T066 [P] Create example JSON artifacts with annotations in docs/architecture/019-proxmox-lab-harness.md - **DEFERRED** (documentation)
-- [ ] T067 [P] Replace all "tier2-min", "tier2-plus", "bundle" references with Profile/Evidence Pack terminology - **DEFERRED** (grep/replace across all docs)
+- [X] T061 [P] Update docs/architecture/019-proxmox-lab-harness.md with Profile definitions and examples
+- [X] T062 [P] Add Check catalog with sample outputs to docs/architecture/019-proxmox-lab-harness.md
+- [X] T063 [P] Add Evidence pack structure with sample files to docs/architecture/019-proxmox-lab-harness.md
+- [X] T064 [P] Add migration guide from legacy flags to profiles in docs/architecture/019-proxmox-lab-harness.md
+- [X] T065 [P] Create example console output showing check summary in docs/architecture/019-proxmox-lab-harness.md
+- [X] T066 [P] Create example JSON artifacts with annotations in docs/architecture/019-proxmox-lab-harness.md
+- [X] T067 [P] Replace all "tier2-min", "tier2-plus", "bundle" references with Profile/Evidence Pack terminology
 - [ ] T068 Add performance logging to lib/provenance.sh (detect slow execution, log factors like disk/network) - **DEFERRED** (future enhancement)
 
 ---

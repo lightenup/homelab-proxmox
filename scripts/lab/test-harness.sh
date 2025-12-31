@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-019c1.sh - Test harness for 019c1 implementation
+# test-harness.sh - Comprehensive test suite for Lab Harness implementation
 # Tests all major components without requiring actual Proxmox environment
 
 set -euo pipefail
