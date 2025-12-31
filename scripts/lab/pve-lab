@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Ensure Ansible uses the correct configuration (including vault password)
+export ANSIBLE_CONFIG="ansible/ansible.cfg"
+
 # Configuration
 LAB_VMID_START=9000
 LAB_VMID_END=9099
@@ -14,6 +17,7 @@ IDENTITY_TAG_VAL="019a"
 PROXMOX_HOST="192.168.1.112" # Hostname or IP in SSH config
 SSH_USER="root"
 LOCK_FILE="artifacts/019-lab/.lock"
+SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 # Colors
 RED='\033[0;31m'
@@ -27,6 +31,74 @@ ARTIFACT_DIR=""
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# --- Feature 019c: Confidence Suite ---
+
+# Profile Definitions
+# Usage: parse_profile "profile_name"
+# Sets: PROFILE_TIER, PROFILE_MODE, PROFILE_SAFETY
+parse_profile() {
+    local profile=$1
+    case "$profile" in
+        "bootstrap")
+            PROFILE_TIER=1
+            PROFILE_MODE="min"
+            PROFILE_SAFETY="standard"
+            ;;
+        "hypervisor-control-plane")
+            PROFILE_TIER=2
+            PROFILE_MODE="min"
+            PROFILE_SAFETY="standard"
+            ;;
+        "hypervisor-nested-workload")
+            PROFILE_TIER=2
+            PROFILE_MODE="plus"
+            PROFILE_SAFETY="strict"
+            ;;
+        *)
+            log_error "Unknown profile: $profile"
+            return 1
+            ;;
+    esac
+    log_info "Profile Selected: $profile (Tier=$PROFILE_TIER, Mode=$PROFILE_MODE, Safety=$PROFILE_SAFETY)"
+}
+
+# Evidence Pack Functions
+EVIDENCE_ROOT=""
+
+evidence_init() {
+    local run_id=$1
+    local profile=$2
+    EVIDENCE_ROOT="artifacts/019-lab/$run_id"
+    
+    mkdir -p "$EVIDENCE_ROOT"/{logs,config,validation}
+    
+    # Initialize Manifest
+    cat <<JSON > "$EVIDENCE_ROOT/evidence_manifest.json"
+{
+  "run_id": "$run_id",
+  "profile": "$profile",
+  "timestamp_start": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "artifacts": [],
+  "validation_results": {}
+}
+JSON
+    log_info "Evidence Pack initialized at $EVIDENCE_ROOT"
+}
+
+evidence_finalize() {
+    local status=$1
+    local end_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    
+    # Create a final status file to complement the manifest
+    cat <<JSON > "$EVIDENCE_ROOT/status.json"
+{
+  "status": "$status",
+  "timestamp_end": "$end_time"
+}
+JSON
+    log_info "Evidence Pack finalized. Status: $status"
+}
 
 # Ensure artifacts dir exists
 mkdir -p artifacts/019-lab
@@ -73,7 +145,7 @@ pve_exec() {
     # So we ONLY log if NOT in a subshell context where stdout is captured.
     # Actually, for simplicity, we won't wrap pve_exec in log_cmd_exec when used for data retrieval.
     # We will wrap "Action" commands.
-    ssh -o BatchMode=yes -o ConnectTimeout=5 "$SSH_USER@$PROXMOX_HOST" "$@"
+    ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "$@"
 }
 
 # Helper: Check if VM exists
@@ -131,6 +203,11 @@ check_safety() {
         return 1
     fi
 
+    # Check 1b: Ignore Templates
+    if [[ "$vmid" == "$LAB_TEMPLATE_VMID" ]] || [[ "$vmid" == "$LAB_TEMPLATE_VMID_TIER2" ]]; then
+        return 1
+    fi
+
     # Check 2: Identity
     local config
     config=$(pve_exec "qm config $vmid" 2>/dev/null || true)
@@ -156,6 +233,54 @@ check_safety() {
     fi
     
     return 0
+}
+
+# Environment Safety Validation
+validate_safety_profile() {
+    local level=${PROFILE_SAFETY:-standard}
+    log_info "Validating Safety Profile: $level"
+    
+    # Standard checks are mostly per-VM and enforced during operations.
+    # Here we check environment-wide safety.
+    
+    if [[ "$level" == "strict" ]]; then
+        log_info "Performing Strict Safety Checks..."
+        
+        # 1. Check for orphaned Lab VMs (VMs in range but missing tags)
+        # We get all VMs in range, then check if they pass check_safety.
+        # If check_safety fails, it means it's an invalid/orphaned VM in our reserved range.
+        local all_vmids_in_range
+        all_vmids_in_range=$(pve_exec "qm list" | awk -v start="$LAB_VMID_START" -v end="$LAB_VMID_END" '$1 >= start && $1 <= end {print $1}')
+        
+        for vmid in $all_vmids_in_range; do
+            # Ignore Templates
+            if [[ "$vmid" == "$LAB_TEMPLATE_VMID" ]] || [[ "$vmid" == "$LAB_TEMPLATE_VMID_TIER2" ]]; then
+                continue
+            fi
+
+            if ! check_safety "$vmid" "quiet"; then
+                log_error "Strict Safety Violation: Orphaned or Invalid VM found in Lab Range: $vmid"
+                log_error "Please investigate and remove manually."
+                return 1
+            fi
+        done
+        
+        # 2. Check Host Resources (Simple check: ensure enough RAM)
+        # Assume we need at least 8GB free for a strict run
+        local free_mem_mb
+        free_mem_mb=$(pve_exec "free -m | awk '/^Mem:/{print \$7}'")
+        # Handle case where pve_exec fails or returns empty
+        if [[ -z "$free_mem_mb" ]]; then
+             log_warn "Could not determine host memory. Skipping resource check."
+        elif [[ "$free_mem_mb" -lt 8192 ]]; then
+             log_error "Strict Safety Violation: Insufficient Host Memory ($free_mem_mb MB < 8192 MB)"
+             return 1
+        else
+             log_info "  Host Memory: OK ($free_mem_mb MB free)"
+        fi
+        
+        log_info "Strict Safety Checks Passed."
+    fi
 }
 
 # Helper: Check Host Requirements (Nested KVM)
@@ -185,7 +310,7 @@ check_host_requirements() {
         fi
         
         # 2. Guest Check
-        if ! ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "test -e /dev/kvm"; then
+        if ! ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "test -e /dev/kvm"; then
             log_error "Guest /dev/kvm check failed. Nested virtualization not passed to Lab VM."
             return 1
         fi
@@ -200,14 +325,14 @@ check_network_requirements() {
     
     # Check FQDN resolution (from Lab VM)
     # Using 'getent hosts' or 'host' or 'ping'
-    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "getent hosts deb.debian.org >/dev/null"; then
+    if ! ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "getent hosts deb.debian.org >/dev/null"; then
         log_error "DNS Resolution failed on Lab VM (deb.debian.org)."
         return 1
     fi
     log_info "  DNS Resolution: OK"
 
     # Check Internet Connectivity
-    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "curl -I -s --connect-timeout 5 https://deb.debian.org >/dev/null"; then
+    if ! ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "curl -I -s --connect-timeout 5 https://deb.debian.org >/dev/null"; then
         log_error "Internet Connectivity failed on Lab VM."
         return 1
     fi
@@ -219,7 +344,7 @@ check_network_requirements() {
 # Helper: Collect Artifacts
 collect_artifacts() {
     local run_id=$1
-    local artifact_dir="artifacts/019-lab/$run_id"
+    local artifact_dir="${EVIDENCE_ROOT:-artifacts/019-lab/$run_id}"
     
     log_info "Collecting artifacts for run $run_id..."
     
@@ -238,11 +363,21 @@ collect_artifacts() {
         journalctl -n 1000 --no-pager > /tmp/journal.log 2>&1;
     "
     
-    if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "$remote_cmds"; then
+    if ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "$remote_cmds"; then
         # Fetch files
         # Using scp with ProxyJump
-        scp -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.txt" "$artifact_dir/config/" 2>/dev/null || log_warn "Failed to fetch config artifacts"
-        scp -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.log" "$artifact_dir/logs/" 2>/dev/null || log_warn "Failed to fetch log artifacts"
+        scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.txt" "$artifact_dir/config/" 2>/dev/null || log_warn "Failed to fetch config artifacts"
+        scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.log" "$artifact_dir/logs/" 2>/dev/null || log_warn "Failed to fetch log artifacts"
+        
+        # Fetch Validation Report
+        scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/var/lib/validation/checks.json" "$artifact_dir/validation/" 2>/dev/null || log_warn "Failed to fetch validation report"
+        
+        # Register artifacts in manifest (if function exists)
+        if command -v evidence_add_artifact >/dev/null; then
+             for f in "$artifact_dir/config"/*.txt; do evidence_add_artifact "config" "$f" "Config Dump"; done
+             for f in "$artifact_dir/logs"/*.log; do evidence_add_artifact "log" "$f" "System Log"; done
+             for f in "$artifact_dir/validation"/*.json; do evidence_add_artifact "report" "$f" "Validation Report"; done
+        fi
     else
         log_warn "Failed to execute artifact collection commands on Lab VM."
     fi
@@ -250,21 +385,28 @@ collect_artifacts() {
     log_info "Artifacts collected in $artifact_dir"
 }
 
-# Helper: Rotate Artifacts
-rotate_artifacts() {
-    local max_keep=5
+# Helper: Evidence Retention Policy (FR-003)
+enforce_evidence_retention() {
+    local max_keep=${1:-5}
     local artifact_base="artifacts/019-lab"
     
-    log_info "Rotating artifacts (keeping last $max_keep)..."
+    log_info "Enforcing Evidence Retention Policy (Keep Last $max_keep)..."
     
-    # List directories starting with lab-, sort by name (timestamp), skip last N
-    # We use ls -1d to list one per line
-    local dirs_to_remove
-    dirs_to_remove=$(ls -1d "$artifact_base"/lab-* 2>/dev/null | sort | head -n -"$max_keep")
+    # List directories starting with lab-, sort by name (timestamp)
+    local dirs
+    dirs=$(ls -1d "$artifact_base"/lab-* 2>/dev/null | sort)
     
-    if [[ -n "$dirs_to_remove" ]]; then
+    # Count total
+    local total
+    total=$(echo "$dirs" | wc -l | tr -d ' ')
+    
+    if [[ "$total" -gt "$max_keep" ]]; then
+        local to_delete=$((total - max_keep))
+        local dirs_to_remove
+        dirs_to_remove=$(echo "$dirs" | head -n "$to_delete")
+        
         for dir in $dirs_to_remove; do
-            log_info "Removing old artifact: $dir"
+            log_info "Removing old evidence pack: $dir"
             rm -rf "$dir"
         done
     fi
@@ -286,7 +428,7 @@ cmd_status() {
         if [[ "$state" == "running" ]]; then
             log_info "  IP Address: $LAB_IP (Static)"
             # Check reachability
-            if ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "echo ready" >/dev/null 2>&1; then
+            if ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "echo ready" >/dev/null 2>&1; then
                 log_info "  SSH Reachable: YES"
             else
                 log_warn "  SSH Reachable: NO"
@@ -347,8 +489,8 @@ cmd_up() {
     local resource_args=""
     if [[ "$tier" -ge 2 ]]; then
         # Enforce Resource Floor (FR-008)
-        log_info "Enforcing Tier 2 Resource Floor (4GB RAM, 2 vCPU)..."
-        resource_args="--memory 4096 --cores 2"
+        log_info "Enforcing Tier 2 Resource Floor (4GB RAM, 2 vCPU, CPU=host)..."
+        resource_args="--memory 4096 --cores 2 --cpu host"
     fi
     
     log_cmd_exec pve_exec "qm set $vmid --description '$tags' --ipconfig0 ip=$LAB_IP/24,gw=$LAB_GATEWAY --net0 virtio,bridge=$LAB_BRIDGE $resource_args"
@@ -360,7 +502,7 @@ cmd_up() {
     # 7. Wait for SSH
     log_info "Waiting for SSH at $LAB_IP..."
     for i in {1..60}; do
-        if ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=no -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "echo ready" >/dev/null 2>&1; then
+        if ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "echo ready" >/dev/null 2>&1; then
             log_info "SSH is ready!"
             return 0
         fi
@@ -464,10 +606,12 @@ cmd_run() {
     local tier=1
     local tier2_mode="min"
     local keep_vm=false
+    local profile=""
     
     # Parse args
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --profile) profile="$2"; shift ;;
             --tier) tier="$2"; shift ;;
             --tier2-mode) tier2_mode="$2"; shift ;;
             --keep) keep_vm=true ;;
@@ -475,6 +619,16 @@ cmd_run() {
         esac
         shift
     done
+
+    # Apply Profile if set
+    if [[ -n "$profile" ]]; then
+        if ! parse_profile "$profile"; then
+            exit 1
+        fi
+        tier=$PROFILE_TIER
+        tier2_mode=$PROFILE_MODE
+        # Safety level will be used later
+    fi
 
     # Locking (flock)
     exec 200>"$LOCK_FILE"
@@ -484,11 +638,12 @@ cmd_run() {
     fi
     
     local run_id="lab-$(date +%Y%m%d-%H%M%S)"
-    local artifact_dir="artifacts/019-lab/$run_id"
+    
+    # Initialize Evidence Pack
+    evidence_init "$run_id" "${profile:-custom}"
+    local artifact_dir="$EVIDENCE_ROOT"
     local summary_file="$artifact_dir/summary.json"
     local log_file="$artifact_dir/run.log"
-    
-    mkdir -p "$artifact_dir"
     
     # Set Global ARTIFACT_DIR for logging
     export ARTIFACT_DIR="$artifact_dir"
@@ -498,13 +653,19 @@ cmd_run() {
     
     log_info "Starting Lab Run: $run_id"
     log_info "Artifacts: $artifact_dir"
-    log_info "Configuration: Tier=$tier, Mode=$tier2_mode, Keep=$keep_vm"
+    log_info "Configuration: Tier=$tier, Mode=$tier2_mode, Keep=$keep_vm, Profile=${profile:-custom}"
     
     local start_time=$(date +%s)
     local status="FAILED"
     
     # Ensure clean state
     cmd_destroy
+    
+    # Validate Safety Profile (FR-019c)
+    if ! validate_safety_profile; then
+        log_error "Safety Validation Failed. Aborting."
+        exit 1
+    fi
     
     # Trap to ensure destroy runs (unless keep_vm is set)
     if [[ "$keep_vm" == "true" ]]; then
@@ -534,6 +695,7 @@ cmd_run() {
 {
   "run_id": "$run_id",
   "status": "$status",
+  "profile": "${profile:-custom}",
   "tier": $tier,
   "tier2_mode": "$tier2_mode",
   "keep_vm": $keep_vm,
@@ -545,16 +707,110 @@ JSON
     
     log_info "Run completed with status: $status"
     
-    # Rotate Artifacts (FR-012)
-    rotate_artifacts
+    # Finalize Evidence
+    evidence_finalize "$status"
+    
+    # Finalize Evidence
+    evidence_finalize "$status"
+    
+    # Enforce Retention (FR-003)
+    enforce_evidence_retention 5
     
     if [[ "$status" != "SUCCESS" ]]; then
         exit 1
     fi
 }
 
+cmd_safety_suite() {
+    log_info "Running Safety Suite (Negative Tests)..."
+    
+    # Run in subshell to isolate mock
+    (
+        # Mock pve_exec
+        pve_exec() {
+            local cmd="$*"
+            # Mock qm config
+            if [[ "$cmd" == "qm config 9999" ]]; then
+                echo "name: prod-vm-9999" # Missing tags
+            elif [[ "$cmd" == "qm config 9010" ]]; then
+                echo "name: lab-pve-9010"
+                echo "ManagedBy=019a"
+                echo "RunId=test"
+            else
+                # Default fail for others
+                return 1
+            fi
+        }
+        
+        # Test 1: Check Safety on Prod VM (Should Fail)
+        if check_safety 9999 "quiet"; then
+            log_error "[FAIL] Safety Check passed for Prod VM (9999)"
+            exit 1
+        else
+            log_info "[PASS] Safety Check blocked Prod VM (9999)"
+        fi
+        
+        # Test 2: Check Safety on Valid Lab VM (Should Pass)
+        if check_safety 9010 "quiet"; then
+            log_info "[PASS] Safety Check allowed Lab VM (9010)"
+        else
+            log_error "[FAIL] Safety Check blocked Valid Lab VM (9010)"
+            exit 1
+        fi
+        
+        # Test 3: Check Safety on Out of Range (Should Fail)
+        if check_safety 8000 "quiet"; then
+             log_error "[FAIL] Safety Check passed for Out of Range (8000)"
+             exit 1
+        else
+             log_info "[PASS] Safety Check blocked Out of Range (8000)"
+        fi
+    )
+    
+    if [[ $? -eq 0 ]]; then
+        log_info "Safety Suite Passed."
+        return 0
+    else
+        log_error "Safety Suite Failed."
+        return 1
+    fi
+}
+
+cmd_confidence_suite() {
+    log_info "Running Confidence Suite (Full Validation)..."
+    
+    # 1. Safety Suite
+    if ! cmd_safety_suite; then
+        log_error "Confidence Suite Failed at Safety Step."
+        exit 1
+    fi
+    
+    # 2. Bootstrap Profile
+    log_info "Confidence Suite: Running Bootstrap Profile..."
+    if ! cmd_run --profile bootstrap; then
+        log_error "Confidence Suite Failed at Bootstrap Profile."
+        exit 1
+    fi
+    
+    # 3. Control Plane Profile
+    log_info "Confidence Suite: Running Hypervisor Control Plane Profile..."
+    if ! cmd_run --profile hypervisor-control-plane; then
+        log_error "Confidence Suite Failed at Control Plane Profile."
+        exit 1
+    fi
+    
+    # 4. Nested Workload Profile
+    log_info "Confidence Suite: Running Hypervisor Nested Workload Profile..."
+    if ! cmd_run --profile hypervisor-nested-workload; then
+        log_error "Confidence Suite Failed at Nested Workload Profile."
+        exit 1
+    fi
+    
+    log_info "Confidence Suite Completed Successfully."
+}
+
 usage() {
-    echo "Usage: $0 {up|down|destroy|status|test|run}"
+    echo "Usage: $0 {up|down|destroy|status|test|run|safety|suite}"
     echo ""
     echo "Commands:"
     echo "  up       - Provision a new Lab VM (manual mode)"
@@ -562,10 +818,13 @@ usage() {
     echo "  status   - Check status of Lab VMs"
     echo "  test     - Run tests against existing Lab VM"
     echo "  run      - Full workflow: destroy -> up -> test -> destroy"
+    echo "  safety   - Run Safety Suite (Negative Tests)"
+    echo "  suite    - Run Confidence Suite (Safety + All Profiles)"
     echo ""
     echo "Run Options:"
-    echo "  --tier <1|2>          Target tier level (default: 1)"
-    echo "  --tier2-mode <mode>   Tier 2 verification mode: 'min' or 'plus' (default: min)"
+    echo "  --profile <name>      Profile to run (bootstrap, hypervisor-control-plane, hypervisor-nested-workload)"
+    echo "  --tier <1|2>          Target tier level (legacy)"
+    echo "  --tier2-mode <mode>   Tier 2 verification mode (legacy)"
     echo "  --keep                Keep VM after run (don't destroy on exit)"
     exit 1
 }
@@ -583,5 +842,7 @@ case "$1" in
         shift
         cmd_run "$@" 
         ;;
+    safety) cmd_safety_suite ;;
+    suite) cmd_confidence_suite ;;
     *) usage ;;
 esac
