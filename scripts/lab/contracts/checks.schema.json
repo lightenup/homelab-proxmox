@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/checks.schema.json",
+  "title": "Checks Collection",
+  "description": "Array of all checks executed in a suite run with metadata",
+  "type": "object",
+  "required": [
+    "runid",
+    "profile",
+    "checks_count",
+    "passed_count",
+    "failed_count",
+    "skipped_count",
+    "error_count",
+    "checks"
+  ],
+  "properties": {
+    "runid": {
+      "type": "string",
+      "pattern": "^lab-[0-9]{8}-[0-9]{6}$",
+      "description": "Evidence pack identifier (lab-YYYYMMDD-HHMMSS)",
+      "examples": ["lab-20251231-123456"]
+    },
+    "profile": {
+      "type": "string",
+      "description": "Profile ID that was executed",
+      "examples": ["hypervisor-nested-workload", "hypervisor-control-plane"]
+    },
+    "checks_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of checks executed"
+    },
+    "passed_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Checks with result=PASS"
+    },
+    "failed_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Checks with unexpected failures (result=FAIL where expected=PASS)"
+    },
+    "skipped_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Checks with result=SKIP"
+    },
+    "error_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Checks with result=ERROR (indicates system issues)"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "check.schema.json"
+      },
+      "description": "Array of check objects"
+    }
+  }
+}

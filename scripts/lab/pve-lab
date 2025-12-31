@@ -4,6 +4,22 @@ set -e
 # Ensure Ansible uses the correct configuration (including vault password)
 export ANSIBLE_CONFIG="ansible/ansible.cfg"
 
+# Get script directory for sourcing libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
+
+# Source 019c1 libraries
+# shellcheck source=lib/checks.sh
+source "${LIB_DIR}/checks.sh"
+# shellcheck source=lib/jsonl.sh
+source "${LIB_DIR}/jsonl.sh"
+# shellcheck source=lib/provenance.sh
+source "${LIB_DIR}/provenance.sh"
+# shellcheck source=lib/evidence.sh
+source "${LIB_DIR}/evidence.sh"
+# shellcheck source=lib/cleanup.sh
+source "${LIB_DIR}/cleanup.sh"
+
 # Configuration
 LAB_VMID_START=9000
 LAB_VMID_END=9099
@@ -19,6 +35,9 @@ SSH_USER="root"
 LOCK_FILE="artifacts/019-lab/.lock"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
+# Suite execution control (019c1)
+SUITE_ABORT_REQUESTED=false
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -31,6 +50,165 @@ ARTIFACT_DIR=""
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# --- Feature 019c1: Preflight Environment Checks ---
+
+# ENV-001: Verify lab environment via hostname pattern
+check_env_001() {
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    
+    log_info "Running ENV-001: Verify lab environment (hostname pattern)"
+    
+    # Check hostname contains 'lab' or is in test environment
+    local hostname
+    hostname="$(ssh $SSH_OPTS "$ssh_target" "hostname")"
+    
+    if [[ "$hostname" =~ lab ]]; then
+        log_info "  ENV-001 PASS: Hostname '$hostname' contains 'lab'"
+        record_check "ENV-001" \
+            "Target is lab environment (not production)" \
+            "blocker" \
+            "PASS" \
+            "PASS" \
+            "Hostname pattern check passed: $hostname"
+        return 0
+    else
+        log_error "  ENV-001 FAIL: Hostname '$hostname' does not contain 'lab'"
+        log_error "  This appears to be a production environment!"
+        log_error "  Lab harness should only run against lab/test systems"
+        log_error "  → REMEDIATION: Set hostname with 'lab' in name (e.g., 'hostnamectl set-hostname lab-pve-01')"
+        record_check "ENV-001" \
+            "Target is lab environment (not production)" \
+            "blocker" \
+            "PASS" \
+            "FAIL" \
+            "Hostname pattern check failed: $hostname (expected 'lab' in hostname)"
+        return 1
+    fi
+}
+
+# ENV-002: Verify required resources available
+check_env_002() {
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    
+    log_info "Running ENV-002: Verify required resources (memory, CPU, storage)"
+    
+    # Check memory (require at least 8GB free)
+    local free_mem_mb
+    free_mem_mb="$(ssh $SSH_OPTS "$ssh_target" "free -m | awk '/^Mem:/{print \$7}'")"
+    
+    if [[ -z "$free_mem_mb" ]]; then
+        log_warn "  Could not determine host memory"
+        record_check "ENV-002" \
+            "Required resources available (memory, CPU)" \
+            "high" \
+            "PASS" \
+            "SKIP" \
+            "Could not determine host memory"
+        return 0
+    fi
+    
+    if [[ "$free_mem_mb" -lt 8192 ]]; then
+        log_error "  ENV-002 FAIL: Insufficient memory ($free_mem_mb MB < 8192 MB)"
+        log_error "  → REMEDIATION: Free up memory by stopping services or increasing host RAM"
+        record_check "ENV-002" \
+            "Required resources available (memory, CPU)" \
+            "high" \
+            "PASS" \
+            "FAIL" \
+            "Insufficient host memory: ${free_mem_mb}MB free (need 8192MB)"
+        return 1
+    else
+        log_info "  ENV-002 PASS: Sufficient memory ($free_mem_mb MB)"
+        record_check "ENV-002" \
+            "Required resources available (memory, CPU)" \
+            "high" \
+            "PASS" \
+            "PASS" \
+            "Host resources OK: ${free_mem_mb}MB free"
+        return 0
+    fi
+}
+
+# Suite execution semantics: Check if suite should abort
+# Returns: 0 if should continue, 1 if should abort
+should_abort_suite() {
+    local check_id="$1"
+    local severity="$2"
+    local expected="$3"
+    local result="$4"
+    
+    # Abort condition 1: Blocker severity check failed
+    if [[ "$severity" == "blocker" && "$result" == "FAIL" ]]; then
+        log_error "ABORT: Blocker check $check_id failed"
+        SUITE_ABORT_REQUESTED=true
+        return 1
+    fi
+    
+    # Abort condition 2: Negative test with unexpected success (safety hole)
+    if [[ "$expected" == "FAIL" && "$result" == "PASS" ]]; then
+        log_error "ABORT: Negative test $check_id unexpectedly passed (safety hole detected)"
+        SUITE_ABORT_REQUESTED=true
+        return 1
+    fi
+    
+    return 0
+}
+
+# Console check summary formatter (019c1)
+# Prints compact checklist (<2 lines per check)
+print_check_summary() {
+    echo ""
+    echo "=== Check Summary ==="
+    echo ""
+    
+    local total=0
+    local passed=0
+    local failed=0
+    local skipped=0
+    
+    # Parse CHECKS_ARRAY and print each check
+    for check_json in "${CHECKS_ARRAY[@]}"; do
+        total=$((total + 1))
+        
+        # Extract fields from JSON (using jq if available, otherwise basic parsing)
+        local check_id result title
+        if command -v jq &>/dev/null; then
+            check_id=$(echo "$check_json" | jq -r '.check_id')
+            result=$(echo "$check_json" | jq -r '.result')
+            title=$(echo "$check_json" | jq -r '.title')
+        else
+            # Basic grep parsing
+            check_id=$(echo "$check_json" | grep -o '"check_id"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"/\1/')
+            result=$(echo "$check_json" | grep -o '"result"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"/\1/')
+            title=$(echo "$check_json" | grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"/\1/')
+        fi
+        
+        # Count by result
+        case "$result" in
+            PASS) passed=$((passed + 1)) ;;
+            FAIL) failed=$((failed + 1)) ;;
+            SKIP) skipped=$((skipped + 1)) ;;
+        esac
+        
+        # Format result with color
+        local result_display
+        case "$result" in
+            PASS) result_display="${GREEN}✓ PASS${NC}" ;;
+            FAIL) result_display="${RED}✗ FAIL${NC}" ;;
+            SKIP) result_display="${YELLOW}○ SKIP${NC}" ;;
+            ERROR) result_display="${RED}✗ ERROR${NC}" ;;
+            *) result_display="? $result" ;;
+        esac
+        
+        # Print check (single line: check_id result title)
+        printf "%-12s %b  %s\n" "$check_id" "$result_display" "$title"
+    done
+    
+    echo ""
+    echo "Total: $total | Passed: $passed | Failed: $failed | Skipped: $skipped"
+    echo ""
+}
 
 # --- Feature 019c: Confidence Suite ---
 
@@ -591,8 +769,13 @@ cmd_test() {
             return 1
         fi
         
+        # Export environment for Ansible check recording
+        export HARNESS_LIB_DIR="${LIB_DIR}"
+        export EVIDENCE_DIR="${artifact_dir}"
+        export RUNID="${run_id}"
+        
         # Run Tier 2 Playbook
-        if log_cmd_exec ansible-playbook ansible/playbooks/lab_tier2_pve.yml -i ansible/inventories/lab/hosts.yml --extra-vars "tier2_mode=$tier2_mode"; then
+        if log_cmd_exec ansible-playbook ansible/playbooks/lab_tier2_pve.yml -i ansible/inventories/lab/hosts.yml --extra-vars "tier2_mode=$tier2_mode evidence_dir=$EVIDENCE_DIR runid=$RUNID"; then
              log_info "Tier 2 passed."
         else
              log_error "Tier 2 failed."
@@ -620,6 +803,28 @@ cmd_run() {
         shift
     done
 
+    # 019c1 Phase 7: Legacy-to-Profile Mapping (T052, T053, T054)
+    local legacy_mode_used=false
+    
+    # T053: Map legacy flags to profiles if --profile not explicitly set
+    if [[ -z "$profile" ]]; then
+        if [[ "$tier" == "2" ]]; then
+            legacy_mode_used=true
+            if [[ "$tier2_mode" == "plus" ]]; then
+                profile="hypervisor-nested-workload"
+            else
+                profile="hypervisor-control-plane"
+            fi
+        fi
+    fi
+    
+    # T054: Emit deprecation warning for legacy flags
+    if [[ "$legacy_mode_used" == "true" ]]; then
+        log_warn "⚠️  DEPRECATION NOTICE: --tier and --tier2-mode flags are deprecated"
+        log_warn "   Please use: pve-lab suite $profile"
+        log_warn ""
+    fi
+
     # Apply Profile if set
     if [[ -n "$profile" ]]; then
         if ! parse_profile "$profile"; then
@@ -637,13 +842,18 @@ cmd_run() {
         exit 1
     fi
     
-    local run_id="lab-$(date +%Y%m%d-%H%M%S)"
+    # 019c1: Create evidence pack with new runid format
+    local run_id
+    run_id="$(create_evidence_pack "artifacts/019-lab")"
     
-    # Initialize Evidence Pack
+    # Legacy: Also set EVIDENCE_ROOT for backward compatibility
     evidence_init "$run_id" "${profile:-custom}"
     local artifact_dir="$EVIDENCE_ROOT"
     local summary_file="$artifact_dir/summary.json"
     local log_file="$artifact_dir/run.log"
+    
+    # 019c1: Initialize JSONL events
+    init_jsonl_events "$artifact_dir/logs/events.jsonl"
     
     # Set Global ARTIFACT_DIR for logging
     export ARTIFACT_DIR="$artifact_dir"
@@ -655,11 +865,49 @@ cmd_run() {
     log_info "Artifacts: $artifact_dir"
     log_info "Configuration: Tier=$tier, Mode=$tier2_mode, Keep=$keep_vm, Profile=${profile:-custom}"
     
+    # 019c1 Phase 6: Generate provenance.json (T050)
+    log_info "=== Capturing Provenance ==="
+    
+    # T047: Check and warn if git working tree is dirty
+    check_git_dirty "$SCRIPT_DIR/.."
+    
+    # T045-T049: Generate complete provenance file
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    generate_provenance \
+        "$artifact_dir/provenance.json" \
+        "${profile:-custom}" \
+        "$ssh_target" \
+        "tier=$tier" \
+        "mode=$tier2_mode" \
+        "keep=$keep_vm" \
+        "run_id=$run_id"
+    
+    log_info "Provenance captured: provenance.json"
+    
     local start_time=$(date +%s)
     local status="FAILED"
     
+    # --- 019c1: Preflight Environment Checks (ENV-001, ENV-002) ---
+    log_info "=== Preflight Environment Checks ==="
+    
+    if ! check_env_001; then
+        log_error "ENV-001 failed: Not a lab environment. Aborting."
+        exit 1
+    fi
+    
+    if ! check_env_002; then
+        log_warn "ENV-002 failed: Insufficient resources. Continuing with caution..."
+    fi
+    
+    log_info "=== Preflight Checks Complete ==="
+    
+    # 019c1: Emit phase event
+    emit_phase_start "$run_id" "destroy-cleanup"
+    
     # Ensure clean state
     cmd_destroy
+    
+    emit_phase_complete "$run_id" "destroy-cleanup"
     
     # Validate Safety Profile (FR-019c)
     if ! validate_safety_profile; then
@@ -674,14 +922,136 @@ cmd_run() {
         trap "cmd_destroy" EXIT
     fi
     
+    # 019c1: Emit phase event for provisioning
+    emit_phase_start "$run_id" "vm-provision"
+    
     if cmd_up "$run_id" "$tier"; then
+        emit_phase_complete "$run_id" "vm-provision"
+        
+        # 019c1: Emit phase event for testing
+        emit_phase_start "$run_id" "validation"
+        
         if cmd_test "$tier" "$tier2_mode"; then
             status="SUCCESS"
         else
             log_error "Tests failed."
         fi
+        
+        emit_phase_complete "$run_id" "validation"
+        
+        # 019c1: Run guardrail checks (negative tests) - Phase 4 US2
+        emit_phase_start "$run_id" "guardrails"
+        log_info "Running guardrail checks (negative tests)..."
+        
+        if bash "${SCRIPT_DIR}/guardrails.sh" "$artifact_dir" "$run_id"; then
+            log_info "Guardrail checks passed (all guards working)"
+        else
+            local guard_rc=$?
+            if [[ $guard_rc -eq 2 ]]; then
+                # Safety hole detected (negative test unexpectedly passed)
+                log_error "CRITICAL: Safety hole detected in guardrail checks!"
+                log_error "Suite aborting due to guardrail breach."
+                emit_error "$run_id" "Guardrail safety hole detected - negative test unexpectedly passed"
+                status="FAILED"
+                # Check for any PASS results where FAIL was expected
+                for check_json in "${CHECKS_ARRAY[@]}"; do
+                    if echo "$check_json" | grep -q '"expected":"FAIL"' && echo "$check_json" | grep -q '"result":"PASS"'; then
+                        local check_id=$(echo "$check_json" | grep -oP '"check_id":"\K[^"]+' || echo "UNKNOWN")
+                        log_error "Check $check_id: Expected FAIL but got PASS (SAFETY HOLE)"
+                    fi
+                done
+                # Mark suite as aborted
+                SUITE_ABORT_REQUESTED=1
+            else
+                log_warn "Some guardrail checks could not be executed (non-critical)"
+            fi
+        fi
+        
+        emit_phase_complete "$run_id" "guardrails"
+        
+        # Abort if safety hole detected
+        if [[ "${SUITE_ABORT_REQUESTED:-0}" -eq 1 ]]; then
+            log_error "Suite aborted due to safety hole in guardrail checks"
+            status="ABORTED"
+        fi
+        
+        # 019c1: Run cleanup verification checks - Phase 5 US3
+        if [[ "${SUITE_ABORT_REQUESTED:-0}" -ne 1 ]]; then
+            emit_phase_start "$run_id" "cleanup-verification"
+            log_info "Running cleanup verification checks..."
+            
+            if [[ "$keep_vm" == "true" ]]; then
+                # T043: --keep flag handler - skip cleanup checks with reason
+                log_info "CLEANUP-001: SKIP (VM kept by operator)"
+                record_check "CLEANUP-001" \
+                    "No lab VMs remain in range after run" \
+                    "medium" \
+                    "PASS" \
+                    "SKIP" \
+                    "VM kept by operator (--keep flag)" \
+                    "reports/vm_inventory.json"
+                
+                log_info "CLEANUP-002: SKIP (VM kept by operator)"
+                record_check "CLEANUP-002" \
+                    "No active locks remain after run" \
+                    "medium" \
+                    "PASS" \
+                    "SKIP" \
+                    "VM kept by operator (--keep flag)" \
+                    "reports/lock_status.json"
+            else
+                # T038-T044: Run cleanup verification checks
+                local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+                local lock_dir="artifacts/019-lab"
+                
+                # CLEANUP-001: Verify no lab VMs remain
+                log_info "CLEANUP-001: Checking for remaining lab VMs..."
+                if check_no_lab_vms "$ssh_target" "$artifact_dir"; then
+                    record_check "CLEANUP-001" \
+                        "No lab VMs remain in range after run" \
+                        "medium" \
+                        "PASS" \
+                        "PASS" \
+                        "No VMs found in range 9000-9099" \
+                        "reports/vm_inventory.json"
+                else
+                    record_check "CLEANUP-001" \
+                        "No lab VMs remain in range after run" \
+                        "medium" \
+                        "PASS" \
+                        "FAIL" \
+                        "Lab VMs still present after cleanup" \
+                        "reports/vm_inventory.json"
+                    log_warn "CLEANUP-001 failed: VMs still present (non-critical)"
+                fi
+                
+                # CLEANUP-002: Verify no active locks remain
+                log_info "CLEANUP-002: Checking for active locks..."
+                if check_no_active_locks "$lock_dir" "$artifact_dir"; then
+                    record_check "CLEANUP-002" \
+                        "No active locks remain after run" \
+                        "medium" \
+                        "PASS" \
+                        "PASS" \
+                        "No processes hold locks" \
+                        "reports/lock_status.json"
+                else
+                    record_check "CLEANUP-002" \
+                        "No active locks remain after run" \
+                        "medium" \
+                        "PASS" \
+                        "FAIL" \
+                        "Active locks detected after cleanup" \
+                        "reports/lock_status.json"
+                    log_warn "CLEANUP-002 failed: Active locks remain (non-critical)"
+                fi
+            fi
+            
+            emit_phase_complete "$run_id" "cleanup-verification"
+        fi
     else
         log_error "Setup failed."
+        emit_error "$run_id" "VM provisioning failed"
     fi
     
     # Collect Artifacts (FR-011)
@@ -690,18 +1060,30 @@ cmd_run() {
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
-    # Generate Summary
+    # 019c1: Generate checks.json
+    local checks_file="$artifact_dir/checks.json"
+    serialize_checks "$checks_file"
+    log_info "Generated checks.json: $checks_file"
+    
+    # 019c1: Print console check summary
+    print_check_summary
+    
+    # Generate Summary (019c1: updated with profile reference)
     cat <<JSON > "$summary_file"
 {
   "run_id": "$run_id",
   "status": "$status",
   "profile": "${profile:-custom}",
+  "profile_id": "${PROFILE_ID:-unknown}",
   "tier": $tier,
   "tier2_mode": "$tier2_mode",
   "keep_vm": $keep_vm,
   "start_time": "$start_time",
   "end_time": "$end_time",
-  "duration_seconds": $duration
+  "duration_seconds": $duration,
+  "checks_file": "checks.json",
+  "provenance_file": "provenance.json",
+  "evidence_manifest_file": "evidence_manifest.json"
 }
 JSON
     
@@ -809,8 +1191,36 @@ cmd_confidence_suite() {
     log_info "Confidence Suite Completed Successfully."
 }
 
+# 019c1: New suite command with profile-based execution
+cmd_suite() {
+    local profile_name="$1"
+    
+    if [[ -z "$profile_name" ]]; then
+        log_error "Usage: $0 suite <profile-name>"
+        log_error "Available profiles:"
+        log_error "  - hypervisor-control-plane"
+        log_error "  - hypervisor-nested-workload"
+        exit 1
+    fi
+    
+    # Load profile
+    export PROFILES_DIR="${SCRIPT_DIR}/profiles.d"
+    if ! load_profile "$profile_name"; then
+        log_error "Failed to load profile: $profile_name"
+        exit 1
+    fi
+    
+    log_info "=== Suite Execution: $PROFILE_ID ==="
+    log_info "Display Name: $DISPLAY_NAME"
+    log_info "Safety Level: $SAFETY_LEVEL"
+    log_info "Expected Duration: ${EXPECTED_DURATION_MINUTES} minutes"
+    
+    # Execute using cmd_run with --profile flag
+    cmd_run --profile "$profile_name" "$@"
+}
+
 usage() {
-    echo "Usage: $0 {up|down|destroy|status|test|run|safety|suite}"
+    echo "Usage: $0 {up|down|destroy|status|test|run|safety|confidence|suite}"
     echo ""
     echo "Commands:"
     echo "  up       - Provision a new Lab VM (manual mode)"
@@ -819,12 +1229,17 @@ usage() {
     echo "  test     - Run tests against existing Lab VM"
     echo "  run      - Full workflow: destroy -> up -> test -> destroy"
     echo "  safety   - Run Safety Suite (Negative Tests)"
-    echo "  suite    - Run Confidence Suite (Safety + All Profiles)"
+    echo "  confidence - Run Confidence Suite (Safety + All Profiles)"
+    echo "  suite <profile> - Run specific profile suite (019c1 primary interface)"
+    echo ""
+    echo "Suite Profiles (019c1):"
+    echo "  hypervisor-control-plane   - PVE install + API verification"
+    echo "  hypervisor-nested-workload - Full validation with nested VMs"
     echo ""
     echo "Run Options:"
     echo "  --profile <name>      Profile to run (bootstrap, hypervisor-control-plane, hypervisor-nested-workload)"
-    echo "  --tier <1|2>          Target tier level (legacy)"
-    echo "  --tier2-mode <mode>   Tier 2 verification mode (legacy)"
+    echo "  --tier <1|2>          Target tier level (DEPRECATED - use --profile)"
+    echo "  --tier2-mode <mode>   Tier 2 verification mode (DEPRECATED - use --profile)"
     echo "  --keep                Keep VM after run (don't destroy on exit)"
     exit 1
 }
@@ -843,6 +1258,10 @@ case "$1" in
         cmd_run "$@" 
         ;;
     safety) cmd_safety_suite ;;
-    suite) cmd_confidence_suite ;;
+    confidence) cmd_confidence_suite ;;
+    suite)
+        shift
+        cmd_suite "$@"
+        ;;
     *) usage ;;
 esac

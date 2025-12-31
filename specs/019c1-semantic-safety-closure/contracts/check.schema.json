@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/check.schema.json",
+  "title": "Check",
+  "description": "Stable validation unit with consistent pass/fail semantics and evidence linkage",
+  "type": "object",
+  "required": [
+    "check_id",
+    "title",
+    "severity",
+    "expected",
+    "result",
+    "reason",
+    "timestamp"
+  ],
+  "properties": {
+    "check_id": {
+      "type": "string",
+      "pattern": "^[A-Z]+-[0-9]{3}$",
+      "description": "Stable, immutable identifier (e.g., PVE-001, GUARD-003)",
+      "examples": ["PVE-001", "NET-002", "GUARD-001"]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 100,
+      "description": "Human-readable description of what this check validates"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["blocker", "high", "medium", "low"],
+      "description": "Failure impact level. Blocker failures abort suite immediately."
+    },
+    "expected": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"],
+      "description": "Expected outcome. FAIL indicates negative test (guardrail validation)."
+    },
+    "result": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "SKIP", "ERROR"],
+      "description": "Actual outcome. ERROR indicates unexpected behavior (e.g., negative test passed)."
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Explanation of result - why check passed/failed/skipped"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Relative path from evidence pack root"
+      },
+      "maxItems": 10,
+      "description": "Paths to artifacts supporting this check result"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp (UTC) when check completed"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3600000,
+      "description": "Execution time in milliseconds"
+    }
+  },
+  "examples": [
+    {
+      "check_id": "PVE-002",
+      "title": "PVE services running (pveproxy, pvedaemon, pve-cluster)",
+      "severity": "high",
+      "expected": "PASS",
+      "result": "PASS",
+      "reason": "All services active and running",
+      "evidence_refs": ["reports/systemctl-status.txt"],
+      "timestamp": "2025-12-31T12:34:56Z",
+      "duration_ms": 234
+    },
+    {
+      "check_id": "GUARD-001",
+      "title": "Tier2 playbook rejects execution without lab_inventory=true",
+      "severity": "blocker",
+      "expected": "FAIL",
+      "result": "FAIL",
+      "reason": "Playbook correctly aborted with assertion: lab_inventory must be true",
+      "evidence_refs": ["logs/guard-001-attempt.log"],
+      "timestamp": "2025-12-31T12:35:23Z",
+      "duration_ms": 145
+    }
+  ]
+}

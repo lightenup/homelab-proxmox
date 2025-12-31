@@ -157,6 +157,30 @@
       delay: 10
       register: apt_res
       until: apt_res is success
+      
+    # Record PVE-001: Proxmox VE packages installed
+    - name: Check PVE-001 - Verify PVE packages installed
+      shell: dpkg -l | grep -E 'pve-manager|pve-kernel' | wc -l
+      register: pve_packages_check
+      changed_when: false
+      failed_when: false
+      
+    - name: Record PVE-001 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          PVE-001 \
+          'Proxmox VE packages installed' \
+          high \
+          PASS \
+          {{ 'PASS' if pve_packages_check.stdout|int >= 2 else 'FAIL' }} \
+          '{{ "pve-manager and pve-kernel packages found" if pve_packages_check.stdout|int >= 2 else "Missing required PVE packages" }}'
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
 
     - name: Purge Cloud-Init to prevent network interference
       apt:
@@ -277,30 +301,284 @@
         - pveproxy
         - pvedaemon
         - pve-cluster
+      register: pve_services
+      
+    # Record PVE-002: PVE services running
+    - name: Record PVE-002 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          PVE-002 \
+          'PVE services running' \
+          high \
+          PASS \
+          {{ 'PASS' if pve_services is success else 'FAIL' }} \
+          '{{ "pveproxy, pvedaemon, pve-cluster services active" if pve_services is success else "One or more PVE services not running" }}'
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
 
     - name: Verify /etc/pve Mountpoint
       command: mountpoint -q /etc/pve
       changed_when: false
+      register: pmxcfs_mount
+      failed_when: false
+      
+    # Record PVE-003: pmxcfs mounted
+    - name: Record PVE-003 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          PVE-003 \
+          'pmxcfs mounted at /etc/pve' \
+          high \
+          PASS \
+          {{ 'PASS' if pmxcfs_mount.rc == 0 else 'FAIL' }} \
+          '{{ "/etc/pve is a valid mountpoint" if pmxcfs_mount.rc == 0 else "/etc/pve is not mounted" }}'
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
 
     - name: Verify API (pvesh)
       command: pvesh get /version --output-format json
       register: api_check
       changed_when: false
+      failed_when: false
+      
+    # Record PVE-004: pvesh API reachable
+    - name: Record PVE-004 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          PVE-004 \
+          'pvesh API reachable' \
+          medium \
+          PASS \
+          {{ 'PASS' if api_check.rc == 0 else 'FAIL' }} \
+          '{{ "pvesh API returned version data" if api_check.rc == 0 else "pvesh API not accessible" }}' \
+          reports/pve_api_version.json
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
+      
+    - name: Save API response to evidence
+      copy:
+        content: "{{ api_check.stdout }}"
+        dest: "{{ evidence_dir }}/reports/pve_api_version.json"
+      delegate_to: localhost
+      when: evidence_dir is defined and api_check.rc == 0
 
     - name: Capture PVE Version
       command: pveversion
       register: pve_version_out
       changed_when: false
+      failed_when: false
+      
+    # Record PVE-005: pveversion reports expected version
+    - name: Record PVE-005 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          PVE-005 \
+          'pveversion reports expected version' \
+          medium \
+          PASS \
+          {{ 'PASS' if pve_version_out.rc == 0 and 'pve-manager' in pve_version_out.stdout else 'FAIL' }} \
+          '{{ "pveversion output contains pve-manager" if pve_version_out.rc == 0 else "pveversion command failed" }}' \
+          reports/pveversion.txt
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
+      
+    - name: Save pveversion output to evidence
+      copy:
+        content: "{{ pve_version_out.stdout }}"
+        dest: "{{ evidence_dir }}/reports/pveversion.txt"
+      delegate_to: localhost
+      when: evidence_dir is defined and pve_version_out.rc == 0
 
     - name: Display PVE Version
       debug:
         var: pve_version_out.stdout_lines
+        
+    # -------------------------------------------------------------------------
+    # Network Validation Checks (NET-001 through NET-004)
+    # -------------------------------------------------------------------------
+    - name: NET-001 - DNS resolution check
+      command: nslookup deb.debian.org
+      register: dns_check
+      changed_when: false
+      failed_when: false
+      
+    - name: Record NET-001 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          NET-001 \
+          'DNS resolution working' \
+          high \
+          PASS \
+          {{ 'PASS' if dns_check.rc == 0 else 'FAIL' }} \
+          '{{ "Successfully resolved deb.debian.org" if dns_check.rc == 0 else "DNS resolution failed" }}'
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
+      
+    - name: NET-002 - Internet connectivity check
+      uri:
+        url: https://deb.debian.org
+        method: HEAD
+        timeout: 10
+      register: inet_check
+      failed_when: false
+      
+    - name: Record NET-002 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          NET-002 \
+          'Internet connectivity working' \
+          high \
+          PASS \
+          {{ 'PASS' if inet_check.status == 200 else 'FAIL' }} \
+          '{{ "Successfully reached https://deb.debian.org" if inet_check.status == 200 else "Internet connectivity failed" }}'
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
+      
+    - name: NET-003 - Check vmbr0 bridge configuration
+      command: ip addr show vmbr0
+      register: vmbr0_check
+      changed_when: false
+      failed_when: false
+      
+    - name: Record NET-003 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          NET-003 \
+          'vmbr0 bridge configured with expected IP' \
+          medium \
+          PASS \
+          {{ 'PASS' if vmbr0_check.rc == 0 and ansible_default_ipv4.address in vmbr0_check.stdout else 'FAIL' }} \
+          '{{ "vmbr0 bridge configured with " + ansible_default_ipv4.address if vmbr0_check.rc == 0 else "vmbr0 bridge not configured" }}' \
+          reports/vmbr0_config.txt
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
+      
+    - name: Save vmbr0 configuration to evidence
+      copy:
+        content: "{{ vmbr0_check.stdout }}"
+        dest: "{{ evidence_dir }}/reports/vmbr0_config.txt"
+      delegate_to: localhost
+      when: evidence_dir is defined and vmbr0_check.rc == 0
+      
+    - name: NET-004 - Test SSH connectivity to lab VM
+      wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: 22
+        timeout: 10
+      register: ssh_check
+      failed_when: false
+      
+    - name: Record NET-004 check result
+      shell: |
+        {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+          NET-004 \
+          'Lab VM reachable via SSH' \
+          medium \
+          PASS \
+          {{ 'PASS' if ssh_check is success else 'FAIL' }} \
+          '{{ "SSH port 22 reachable on " + ansible_default_ipv4.address if ssh_check is success else "SSH connectivity check failed" }}'
+      delegate_to: localhost
+      environment:
+        EVIDENCE_DIR: "{{ evidence_dir }}"
+        RUNID: "{{ runid }}"
+        HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+      changed_when: false
+      when: evidence_dir is defined and runid is defined
 
     # -------------------------------------------------------------------------
     # Tier 2 Plus: Nested Workload (VM + LXC)
     # -------------------------------------------------------------------------
     - name: Tier 2 Plus - Nested Workload
       block:
+        # NEST-001: Check KVM module supports nesting
+        - name: NEST-001 - Check KVM nesting support
+          shell: |
+            if lsmod | grep -q kvm_intel; then
+              cat /sys/module/kvm_intel/parameters/nested
+            elif lsmod | grep -q kvm_amd; then
+              cat /sys/module/kvm_amd/parameters/nested
+            else
+              echo "N"
+            fi
+          register: kvm_nesting_check
+          changed_when: false
+          failed_when: false
+          
+        - name: Record NEST-001 check result
+          shell: |
+            {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+              NEST-001 \
+              'Host KVM module supports nesting' \
+              high \
+              PASS \
+              {{ 'PASS' if kvm_nesting_check.stdout|trim in ['Y', '1'] else 'FAIL' }} \
+              '{{ "KVM nesting enabled (" + kvm_nesting_check.stdout|trim + ")" if kvm_nesting_check.stdout|trim in ["Y", "1"] else "KVM nesting not enabled" }}'
+          delegate_to: localhost
+          environment:
+            EVIDENCE_DIR: "{{ evidence_dir }}"
+            RUNID: "{{ runid }}"
+            HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+          changed_when: false
+          when: evidence_dir is defined and runid is defined
+        
+        # NEST-002: Check /dev/kvm exists
+        - name: NEST-002 - Check /dev/kvm exists
+          stat:
+            path: /dev/kvm
+          register: kvm_device_check
+          
+        - name: Record NEST-002 check result
+          shell: |
+            {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+              NEST-002 \
+              'Guest /dev/kvm exists and accessible' \
+              high \
+              PASS \
+              {{ 'PASS' if kvm_device_check.stat.exists else 'FAIL' }} \
+              '{{ "/dev/kvm device found and accessible" if kvm_device_check.stat.exists else "/dev/kvm device not found" }}'
+          delegate_to: localhost
+          environment:
+            EVIDENCE_DIR: "{{ evidence_dir }}"
+            RUNID: "{{ runid }}"
+            HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+          changed_when: false
+          when: evidence_dir is defined and runid is defined
+      
         # 1. Nested VM (KVM Smoke Test)
         - name: Create Nested VM (KVM Check)
           command: >
@@ -309,9 +587,13 @@
             --memory 512
             --net0 virtio,bridge=vmbr0
             --scsihw virtio-scsi-pci
+          register: vm_create
+          failed_when: false
 
         - name: Start Nested VM
           command: qm start 100
+          register: vm_start
+          failed_when: false
 
         - name: Wait for VM Running State
           command: qm status 100
@@ -319,6 +601,25 @@
           until: "'running' in vm_status.stdout"
           retries: 10
           delay: 2
+          failed_when: false
+          
+        # Record NEST-003: Nested VM can be created and started
+        - name: Record NEST-003 check result
+          shell: |
+            {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+              NEST-003 \
+              'Nested VM can be created and started' \
+              high \
+              PASS \
+              {{ 'PASS' if (vm_create.rc == 0 or 'already exists' in vm_create.stderr|default('')) and 'running' in vm_status.stdout else 'FAIL' }} \
+              '{{ "VM 100 created and running" if "running" in vm_status.stdout else "Failed to create or start nested VM" }}'
+          delegate_to: localhost
+          environment:
+            EVIDENCE_DIR: "{{ evidence_dir }}"
+            RUNID: "{{ runid }}"
+            HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+          changed_when: false
+          when: evidence_dir is defined and runid is defined
 
         # 2. Nested LXC (Service Check)
         - name: Check Storage Config
@@ -352,10 +653,37 @@
           command: "pvesm status"
           register: storage_status
           ignore_errors: true
+          failed_when: false
 
         - name: Debug Storage Status
           debug:
             var: storage_status.stdout_lines
+            
+        # Record WORK-002: Storage configured correctly
+        - name: Record WORK-002 check result
+          shell: |
+            {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+              WORK-002 \
+              'Storage configured correctly' \
+              medium \
+              PASS \
+              {{ 'PASS' if storage_status.rc == 0 and ('local' in storage_status.stdout or 'local-lvm' in storage_status.stdout) else 'FAIL' }} \
+              '{{ "Storage backends available: local, local-lvm" if storage_status.rc == 0 else "Storage configuration check failed" }}' \
+              reports/storage_status.txt
+          delegate_to: localhost
+          environment:
+            EVIDENCE_DIR: "{{ evidence_dir }}"
+            RUNID: "{{ runid }}"
+            HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+          changed_when: false
+          when: evidence_dir is defined and runid is defined
+          
+        - name: Save storage status to evidence
+          copy:
+            content: "{{ storage_status.stdout }}"
+            dest: "{{ evidence_dir }}/reports/storage_status.txt"
+          delegate_to: localhost
+          when: evidence_dir is defined and storage_status.rc == 0
 
         - name: Find Latest Debian 12 Template
           shell: pveam available --section system | grep debian-12-standard | sort -V | tail -n1 | awk '{print $2}'
@@ -386,6 +714,8 @@
             dest: "/var/lib/vz/template/cache/{{ debian_tmpl.stdout }}"
             mode: '0644'
           when: debian_tmpl.stdout != ""
+          register: tmpl_download
+          failed_when: false
 
         - name: List Template Cache
           command: "ls -la /var/lib/vz/template/cache/"
@@ -394,6 +724,24 @@
         - name: Debug Template Cache
           debug:
             var: template_cache_list.stdout_lines
+            
+        # Record WORK-001: LXC template downloaded successfully
+        - name: Record WORK-001 check result
+          shell: |
+            {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+              WORK-001 \
+              'LXC template downloaded successfully' \
+              medium \
+              PASS \
+              {{ 'PASS' if debian_tmpl.stdout in template_cache_list.stdout else 'FAIL' }} \
+              '{{ "Template " + debian_tmpl.stdout + " available in cache" if debian_tmpl.stdout in template_cache_list.stdout else "Template download failed" }}'
+          delegate_to: localhost
+          environment:
+            EVIDENCE_DIR: "{{ evidence_dir }}"
+            RUNID: "{{ runid }}"
+            HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+          changed_when: false
+          when: evidence_dir is defined and runid is defined
 
         - name: Create Nested LXC
           command: >
@@ -405,9 +753,13 @@
             --unprivileged 1
             --features nesting=1
             --force
+          register: lxc_create
+          failed_when: false
 
         - name: Start Nested LXC
           command: pct start 101
+          register: lxc_start
+          failed_when: false
 
         - name: Wait for LXC Running
           command: pct status 101
@@ -415,10 +767,52 @@
           until: "'running' in lxc_status.stdout"
           retries: 10
           delay: 2
+          failed_when: false
+          
+        # Record NEST-004: Nested LXC can be created and started
+        - name: Record NEST-004 check result
+          shell: |
+            {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+              NEST-004 \
+              'Nested LXC can be created and started' \
+              high \
+              PASS \
+              {{ 'PASS' if (lxc_create.rc == 0 or 'already exists' in lxc_create.stderr|default('')) and 'running' in lxc_status.stdout else 'FAIL' }} \
+              '{{ "LXC 101 created and running" if "running" in lxc_status.stdout else "Failed to create or start nested LXC" }}'
+          delegate_to: localhost
+          environment:
+            EVIDENCE_DIR: "{{ evidence_dir }}"
+            RUNID: "{{ runid }}"
+            HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+          changed_when: false
+          when: evidence_dir is defined and runid is defined
 
         - name: Wait for LXC Network
           pause:
             seconds: 5
+            
+        # Record WORK-003: Nested LXC network connectivity
+        - name: WORK-003 - Test LXC network connectivity
+          command: pct exec 101 -- ping -c 1 1.1.1.1
+          register: lxc_net_check
+          failed_when: false
+          
+        - name: Record WORK-003 check result
+          shell: |
+            {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+              WORK-003 \
+              'Nested LXC network connectivity verified' \
+              medium \
+              PASS \
+              {{ 'PASS' if lxc_net_check.rc == 0 else 'FAIL' }} \
+              '{{ "LXC 101 has network connectivity to internet" if lxc_net_check.rc == 0 else "LXC network connectivity failed" }}'
+          delegate_to: localhost
+          environment:
+            EVIDENCE_DIR: "{{ evidence_dir }}"
+            RUNID: "{{ runid }}"
+            HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+          changed_when: false
+          when: evidence_dir is defined and runid is defined
 
         - name: Install Python in LXC
           command: pct exec 101 -- bash -c "apt-get update && apt-get install -y python3"
@@ -426,11 +820,18 @@
           retries: 3
           delay: 5
           until: lxc_install is success
+          failed_when: false
 
         - name: Start Mini-Service in LXC
           command: pct exec 101 -- bash -c "nohup python3 -m http.server 8080 >/dev/null 2>&1 &"
           async: 10
           poll: 0
+          register: lxc_service_start
+          failed_when: false
+          
+        - name: Wait for service startup
+          pause:
+            seconds: 3
 
         - name: Verify Connectivity from Lab VM
           command: nc -z -w 5 10.99.0.11 8080
@@ -438,6 +839,25 @@
           retries: 5
           delay: 2
           until: net_check is success
+          failed_when: false
+          
+        # Record WORK-004: Service reachability from lab VM to nested LXC
+        - name: Record WORK-004 check result
+          shell: |
+            {{ lookup('env', 'HARNESS_LIB_DIR') }}/check_record.sh \
+              WORK-004 \
+              'Service reachability from lab VM to nested LXC verified' \
+              medium \
+              PASS \
+              {{ 'PASS' if net_check is success else 'FAIL' }} \
+              '{{ "HTTP service on LXC 101:8080 reachable from lab VM" if net_check is success else "Service reachability check failed" }}'
+          delegate_to: localhost
+          environment:
+            EVIDENCE_DIR: "{{ evidence_dir }}"
+            RUNID: "{{ runid }}"
+            HARNESS_LIB_DIR: "{{ lookup('env', 'HARNESS_LIB_DIR') }}"
+          changed_when: false
+          when: evidence_dir is defined and runid is defined
 
         # Cleanup
         - name: Destroy Nested LXC

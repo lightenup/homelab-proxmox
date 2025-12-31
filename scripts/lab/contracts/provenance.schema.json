@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/provenance.schema.json",
+  "title": "Provenance",
+  "description": "Immutable context capturing environment, versions, and parameters of suite run",
+  "type": "object",
+  "required": [
+    "runid",
+    "timestamp",
+    "controller",
+    "target",
+    "profile",
+    "parameters"
+  ],
+  "properties": {
+    "runid": {
+      "type": "string",
+      "pattern": "^lab-[0-9]{8}-[0-9]{6}$",
+      "description": "Evidence pack identifier"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when run started (UTC)"
+    },
+    "controller": {
+      "type": "object",
+      "required": [
+        "os",
+        "bash_version",
+        "ansible_version",
+        "jq_version",
+        "git_commit",
+        "git_branch",
+        "git_dirty"
+      ],
+      "properties": {
+        "os": {
+          "type": "string",
+          "description": "Controller operating system and version"
+        },
+        "bash_version": {
+          "type": "string",
+          "description": "Bash version"
+        },
+        "ansible_version": {
+          "type": "string",
+          "description": "Ansible version"
+        },
+        "jq_version": {
+          "type": "string",
+          "description": "jq version"
+        },
+        "git_commit": {
+          "type": "string",
+          "description": "Git commit SHA of harness repository"
+        },
+        "git_branch": {
+          "type": "string",
+          "description": "Git branch name"
+        },
+        "git_dirty": {
+          "type": "boolean",
+          "description": "Whether working tree had uncommitted changes"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "hostname",
+        "pveversion",
+        "kernel",
+        "distro",
+        "architecture"
+      ],
+      "properties": {
+        "hostname": {
+          "type": "string",
+          "description": "Target hostname"
+        },
+        "pveversion": {
+          "type": "string",
+          "description": "Proxmox VE version string"
+        },
+        "kernel": {
+          "type": "string",
+          "description": "Linux kernel version"
+        },
+        "distro": {
+          "type": "string",
+          "description": "Distribution name and version"
+        },
+        "architecture": {
+          "type": "string",
+          "description": "CPU architecture"
+        }
+      }
+    },
+    "profile": {
+      "type": "string",
+      "description": "Profile ID executed"
+    },
+    "parameters": {
+      "type": "object",
+      "required": [
+        "command",
+        "keep"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Full command invoked"
+        },
+        "keep": {
+          "type": "boolean",
+          "description": "Whether --keep flag was used"
+        },
+        "extra_args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional arguments passed"
+        }
+      }
+    }
+  }
+}

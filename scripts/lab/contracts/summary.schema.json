@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/summary.schema.json",
+  "title": "Summary",
+  "description": "High-level suite run results (enhanced from existing format)",
+  "type": "object",
+  "required": [
+    "runid",
+    "profile",
+    "status",
+    "start_time",
+    "end_time",
+    "duration_seconds",
+    "tier",
+    "checks_summary",
+    "artifacts",
+    "references"
+  ],
+  "properties": {
+    "runid": {
+      "type": "string",
+      "pattern": "^lab-[0-9]{8}-[0-9]{6}$",
+      "description": "Evidence pack identifier"
+    },
+    "profile": {
+      "type": "string",
+      "description": "Profile ID executed"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["SUCCESS", "FAILURE", "INTERRUPTED"],
+      "description": "Overall suite outcome"
+    },
+    "start_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when suite started"
+    },
+    "end_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when suite completed/interrupted"
+    },
+    "duration_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total execution time in seconds"
+    },
+    "tier": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9,
+      "description": "Legacy tier number (for backward compatibility)"
+    },
+    "tier2_mode": {
+      "type": "string",
+      "enum": ["min", "plus", "custom"],
+      "description": "Legacy mode (for backward compatibility, optional)"
+    },
+    "checks_summary": {
+      "type": "object",
+      "required": ["total", "passed", "failed", "skipped", "errors"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of key artifact paths"
+    },
+    "references": {
+      "type": "object",
+      "required": ["checks", "provenance", "evidence_manifest", "event_stream"],
+      "properties": {
+        "checks": {"type": "string", "description": "Path to checks.json"},
+        "provenance": {"type": "string", "description": "Path to provenance.json"},
+        "evidence_manifest": {"type": "string", "description": "Path to evidence_manifest.json"},
+        "event_stream": {"type": "string", "description": "Path to commands.jsonl"}
+      }
+    }
+  }
+}
