@@ -12,6 +12,8 @@
 - Setup/Foundational/Polish phases: NO story label
 - User Story phases: MUST have story label
 
+**Note on Legacy Files**: Feature 019c1 creates `logs/events.jsonl` for real-time progress events. If `logs/commands.jsonl` exists in evidence packs, it's a legacy artifact from 019a/b (command timing records), not created by 019c1.
+
 ---
 
 ## Phase 1: Setup (Project Initialization)
@@ -26,6 +28,7 @@
 - [ ] T006 [P] Create lib/provenance.sh with git/version capture functions
 - [ ] T007 [P] Create lib/evidence.sh with evidence pack management functions
 - [ ] T008 Create scripts/lab/guardrails.sh as negative test harness
+- [ ] T008a [P] Create lib/cleanup.sh stub for cleanup check functions (used in Phase 5)
 
 ---
 
@@ -40,6 +43,8 @@
 - [ ] T013 Implement evidence manifest generator in lib/evidence.sh (generate_manifest with schema version)
 - [ ] T014 Add suite execution semantics to scripts/lab/pve-lab (abort on blocker FAIL or negative test ERROR)
 - [ ] T015 Update scripts/lab/pve-lab to source lib/*.sh files
+- [ ] T015a Add ENV-001 preflight check to scripts/lab/pve-lab (verify lab environment via hostname pattern before suite execution)
+- [ ] T015b Add ENV-002 preflight check to scripts/lab/pve-lab (verify required resources available: memory, CPU, storage)
 
 ---
 
@@ -51,7 +56,7 @@
 
 **Implementation Tasks**:
 
-- [ ] T016 [US1] Define Profile data structure in lib/checks.sh (bash associative array or sourced .profile file)
+- [ ] T016 [US1] Define Profile data structure as bash-sourceable .profile file format in scripts/lab/profiles.d/ (per research.md decision)
 - [ ] T017 [US1] Create profile definition scripts/lab/profiles.d/hypervisor-control-plane.profile
 - [ ] T018 [US1] Create profile definition scripts/lab/profiles.d/hypervisor-nested-workload.profile
 - [ ] T019 [US1] Add profile loader function to lib/checks.sh (load_profile, validate fields)
@@ -79,6 +84,7 @@
 
 - [ ] T031 [US2] Implement GUARD-001 in scripts/lab/guardrails.sh (tier2 playbook with lab_inventory=false, expect FAIL)
 - [ ] T032 [US2] Implement GUARD-002 in scripts/lab/guardrails.sh (generate temp inventory artifacts/<runid>/tmp/inventory_bad_hostname.yml with non-lab hostname, expect FAIL)
+- [ ] T032a [US2] Clean up tmp/ directory after negative tests complete in scripts/lab/guardrails.sh (ephemeral, not included in evidence pack)
 - [ ] T033 [US2] Implement GUARD-003 in scripts/lab/guardrails.sh (dry-run destroy validation with synthetic qm config, expect FAIL)
 - [ ] T034 [US2] Add expected vs actual result validator in lib/checks.sh (validate_negative_test)
 - [ ] T035 [US2] Add ERROR condition handler for guardrail breaches in scripts/lab/pve-lab (unexpected PASS → ERROR + abort)
@@ -143,7 +149,7 @@
 
 **Purpose**: Documentation, error messages, schema validation, and terminology updates
 
-- [ ] T057 [P] Add schema validation to lib/evidence.sh (validate checks.json, provenance.json, evidence_manifest.json against contracts/)
+- [ ] T057 [P] Add schema validation to lib/evidence.sh (validate checks.json, provenance.json, evidence_manifest.json against contracts/ using ajv-cli or python jsonschema)
 - [ ] T058 [P] Update ansible/playbooks/lab_bootstrap.yml assertions to use assert module with fail_msg/success_msg
 - [ ] T059 [P] Update ansible/playbooks/lab_tier2_pve.yml assertions to use assert module with fail_msg/success_msg
 - [ ] T060 [P] Add clear error messages with remediation hints to all harness preflight checks in scripts/lab/pve-lab
@@ -163,9 +169,9 @@
 ### Dependency Graph (User Story Completion Order)
 
 ```
-Phase 1: Setup (T001-T008)
+Phase 1: Setup (T001-T008a)
   ↓
-Phase 2: Foundational (T009-T015)
+Phase 2: Foundational (T009-T015b)
   ↓
 Phase 3: US1 (T016-T030) ← MUST complete first (provides core profile + check infrastructure)
   ↓
@@ -204,7 +210,7 @@ Phase 8: Polish (T057-T068) ← Final
 **Why**: Provides core value - profile-driven execution with machine-readable evidence
 
 ### Incremental Delivery Order
-1. **Phase 1+2**: Setup + Foundational (T001-T015) - Required infrastructure
+1. **Phase 1+2**: Setup + Foundational (T001-T015b) - Required infrastructure
 2. **Phase 3**: User Story 1 (T016-T030) - MVP: Profile-based suite execution with checks.json
 3. **Phase 4**: User Story 2 (T031-T037) - Safety proof via negative tests
 4. **Phase 5**: User Story 3 (T038-T044) - Cleanup verification
@@ -223,11 +229,11 @@ Phase 8: Polish (T057-T068) ← Final
 
 ## Task Count Summary
 
-- **Total Tasks**: 68
-- **Phase 1 (Setup)**: 8 tasks
-- **Phase 2 (Foundational)**: 7 tasks
+- **Total Tasks**: 72
+- **Phase 1 (Setup)**: 9 tasks (T001-T008a)
+- **Phase 2 (Foundational)**: 9 tasks (T009-T015b)
 - **Phase 3 (US1 - P1)**: 15 tasks
-- **Phase 4 (US2 - P2)**: 7 tasks
+- **Phase 4 (US2 - P2)**: 8 tasks (T031-T037)
 - **Phase 5 (US3 - P2)**: 7 tasks
 - **Phase 6 (US4 - P3)**: 7 tasks
 - **Phase 7 (US5 - P3)**: 5 tasks
@@ -240,7 +246,7 @@ Phase 8: Polish (T057-T068) ← Final
 ## Format Validation
 
 ✅ All tasks follow checklist format: `- [ ] [TaskID] [P?] [Story?] Description with file path`  
-✅ Task IDs sequential (T001-T068)  
+✅ Task IDs sequential (T001-T068, plus T008a, T015a, T015b, T032a for inserted tasks)  
 ✅ Story labels present for US phases ([US1]-[US5])  
 ✅ No story labels for Setup/Foundational/Polish  
 ✅ File paths specified in descriptions  
@@ -251,8 +257,8 @@ Phase 8: Polish (T057-T068) ← Final
 ## Next Steps
 
 1. Review this task breakdown with stakeholders
-2. Begin implementation with Phase 1 (T001-T008)
-3. Complete Foundational phase (T009-T015) before user stories
+2. Begin implementation with Phase 1 (T001-T008a)
+3. Complete Foundational phase (T009-T015b) before user stories
 4. Deliver MVP (Phase 3: US1) first
 5. Implement remaining user stories incrementally
 6. Complete with Polish phase
