@@ -20,7 +20,8 @@ Establish first-class semantic concepts (Profiles, Checks, Evidence Packs) for t
   - Non-destructive to production (all negative tests isolated)
   - No external dependencies (no cloud services, dashboards)
   - Backward compatible with existing `--tier`/`--tier2-mode` flags
-  - Check IDs immutable (allocate new IDs for behavior changes)
+  - Check IDs immutable (allocate new IDs for behavior changes, not versioned)
+  - Artifact schemas versioned via checks_schema_version and manifest_schema_version fields
 **Scale/Scope**: 
   - 2 initial profiles (hypervisor-control-plane, hypervisor-nested-workload)
   - 24+ checks across 6 namespaces
@@ -98,14 +99,16 @@ docs/architecture/
 
 artifacts/019-lab/
 └── lab-YYYYMMDD-HHMMSS/       # Evidence pack structure (generated per run)
-    ├── checks.json            # NEW: Canonical check results
-    ├── evidence_manifest.json # NEW: Artifact inventory
+    ├── checks.json            # NEW: Canonical check results (includes checks_schema_version)
+    ├── evidence_manifest.json # NEW: Artifact inventory (includes manifest_schema_version)
     ├── provenance.json        # NEW: Run context
     ├── summary.json           # MODIFIED: Add profile reference
     ├── logs/
-    │   ├── bootstrap.log
-    │   ├── tier2.log
-    │   └── commands.jsonl     # NEW: JSONL event stream capture
+    │   ├── run.log            # Main execution log
+    │   ├── bootstrap.log      # Bootstrap phase output
+    │   ├── tier2.log          # Tier2 phase output
+    │   ├── events.jsonl       # NEW: Real-time progress events
+    │   └── commands.jsonl     # Command timing records (existing, if present)
     └── reports/
         ├── validation.json
         ├── pveversion.txt
@@ -122,8 +125,8 @@ artifacts/019-lab/
 
 **Research Tasks**:
 1. **Bash JSON generation patterns**: Determine strategy for emitting valid JSON from bash (heredoc, jq, printf)
-2. **JSONL emission to stderr**: Establish pattern for non-blocking structured logging while preserving stdout for summaries
-3. **Negative test isolation**: Design safe execution pattern for guardrail tests (dry-run mode, mock targets, validation-only checks)
+2. **JSONL emission to stderr**: Establish pattern for non-blocking structured logging while preserving stdout for summaries. Note: Progress events go to logs/events.jsonl, command timing (if present) to logs/commands.jsonl
+3. **Negative test isolation**: Design safe execution pattern for guardrail tests (GUARD-002: temporary inventory with bad hostname; GUARD-003: dry-run validation with synthetic config; no real unsafe VM creation)
 4. **Git provenance capture**: Determine commands for detecting dirty working tree, capturing commit SHA, branch name
 5. **Ansible check instrumentation**: Identify pattern for emitting check records from playbook tasks without disrupting idempotency
 6. **Check ID allocation strategy**: Define numbering scheme within namespaces (PVE-001 to PVE-099, etc.)
@@ -149,22 +152,33 @@ artifacts/019-lab/
 **Entities to Define**:
 
 1. **Profile**
-   - Fields: profile_id, display_name, tier, mode, safety_level, expected_duration_minutes, prerequisites, checks
+   - Fields: profile_id (PRIMARY KEY), display_name, safety_level (PRIMARY KEY), tier (legacy-derived), mode (legacy-derived), expected_duration_minutes, prerequisites, checks
    - Relationships: Profile → [Check IDs]
    - Validation rules: profile_id kebab-case, checks array non-empty
    - State transitions: N/A (declarative)
+   - Note: tier/mode are backward compatibility fields; profile_id and safety_level are primary semantics
 
 2. **Check**
-   - Fields: check_id, title, severity, expected, result, reason, evidence_refs, timestamp
-   - Relationships: Check → [Evidence Artifacts]
+   - Fields: check_id (immutable), title, severity, expected, result, reason, evidence_refs (relative paths from evidence pack root), timestamp, duration_ms
+   - Relationships: Check → [Evidence Artifacts] (all evidence_refs must be in evidence_manifest.json)
    - Validation rules: check_id matches namespace pattern, result in [PASS, FAIL, SKIP, ERROR]
    - State transitions: (not started) → (executing) → (complete with result)
+   - Abort behavior: See "Suite Execution Semantics" section in spec (blocker failures and negative test unexpected passes abort)
 
 3. **Evidence Pack**
    - Fields: runid, profile, start_time, end_time, status, artifact_count
    - Relationships: Evidence Pack → [Artifacts], Evidence Pack → Profile
-   - Directory structure as defined in spec
+   - Directory structure as defined in spec (logs/events.jsonl for progress events)
+   - Schema versioning: checks.json includes checks_schema_version, evidence_manifest.json includes manifest_schema_version
    - State transitions: (created) → (collecting) → (finalized) / (interrupted)
+
+3a. **Checks Collection** (checks.json structure)
+   - Fields: runid, profile, checks_schema_version, counts{total, pass, fail, skip, error}, checks[]
+   - Schema evolution tracking via checks_schema_version field
+
+3b. **Evidence Manifest** (evidence_manifest.json structure)
+   - Fields: runid, manifest_schema_version, generated_at, artifacts[]
+   - Schema evolution tracking via manifest_schema_version field
 
 4. **Provenance**
    - Fields: controller{os, bash_version, ansible_version, git_commit, git_dirty}, target{pveversion, kernel, distro}, profile, parameters
@@ -196,10 +210,11 @@ Each schema includes:
 **Content**:
 1. **Profile-based execution**: `pve-lab suite hypervisor-nested-workload`
 2. **Evidence examination**: `cat artifacts/019-lab/lab-20251231-123456/checks.json | jq`
-3. **Real-time monitoring**: `pve-lab suite hypervisor-nested-workload 2>&1 | grep '"event_type"'`
+3. **Real-time monitoring**: `tail -f artifacts/019-lab/lab-20251231-123456/logs/events.jsonl | jq`
 4. **Legacy compatibility**: `pve-lab run --tier 2 --tier2-mode plus` (with deprecation warning)
 5. **Comparing runs**: `jq -s '.[0].checks - .[1].checks' run1/checks.json run2/checks.json`
 6. **Provenance inspection**: `jq '.controller.git_commit, .target.pveversion' provenance.json`
+7. **Evidence refs validation**: All paths in check.evidence_refs are relative (e.g., "reports/systemctl-status.txt")
 
 Include sample outputs showing:
 - Console checklist format
@@ -247,20 +262,24 @@ This ensures Copilot can reference these concepts in future interactions.
 
 4. **Negative Tests**
    - Create guardrails.sh with safe execution harness
-   - Implement GUARD-001, GUARD-002, GUARD-003
+   - Implement GUARD-001 (override lab_inventory=false)
+   - Implement GUARD-002 (temporary inventory with non-lab hostname)
+   - Implement GUARD-003 (dry-run validation with synthetic qm config, no real VM creation)
    - Add expected vs actual result validation
-   - Add ERROR condition for guardrail breaches
+   - Add ERROR condition for guardrail breaches (unexpected PASS aborts)
 
 5. **Cleanup Proof**
-   - Implement CLEANUP-001 (VM inventory check)
-   - Implement CLEANUP-002 (lock status check)
-   - Handle --keep flag in cleanup logic
+   - Implement CLEANUP-001 (VM inventory check: no VMs in 9000-9099 range with lab markers)
+   - Implement CLEANUP-002 (lock status check: no processes hold locks, verified with flock -n or equivalent)
+   - Handle --keep flag in cleanup logic (mark SKIP with reason)
+   - Ensure all evidence_refs use relative paths and are listed in evidence_manifest.json
 
 6. **Artifacts & Provenance**
-   - Generate provenance.json (git, versions, env)
-   - Generate evidence_manifest.json
-   - Update summary.json schema
-   - Capture commands.jsonl
+   - Generate provenance.json (git commit, git dirty status, versions, env)
+   - Generate evidence_manifest.json with manifest_schema_version
+   - Update summary.json schema to include profile reference
+   - Capture events.jsonl (real-time progress events to stderr → logs/events.jsonl)
+   - Add checks_schema_version to checks.json
 
 7. **Legacy Compatibility**
    - Map --tier/--tier2-mode to profiles
