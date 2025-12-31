@@ -24,6 +24,9 @@ record_check_from_ansible() {
     shift 6
     local evidence_refs=("$@")
     
+    # Force source to ansible for this bridge
+    export CURRENT_SOURCE="ansible"
+
     # Record check using harness library
     record_check "$check_id" "$title" "$severity" "$expected" "$result" "$reason" "${evidence_refs[@]}"
     

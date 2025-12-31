@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "errors": [
+    {
+      "code": "CAT-005",
+      "message": "Title mismatch for ENV-001",
+      "remediation": "Expected: 'Target is lab environment (not production)', Got: 'Wrong Title Here'. Update emitter to match catalog."
+    }
+  ],
+  "warnings": [],
+  "contract_version": "1.0.0",
+  "verifier_version": "1.0.0",
+  "timestamp": "2025-12-31T18:08:19.849678"
+}

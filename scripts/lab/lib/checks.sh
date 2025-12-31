@@ -62,6 +62,10 @@ record_check() {
     local timestamp
     timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     
+    # Get context from environment or defaults
+    local source="${CURRENT_SOURCE:-harness}"
+    local phase="${CURRENT_PHASE:-unknown}"
+
     # Build JSON object for this check
     local check_json
     check_json=$(cat <<EOF
@@ -69,7 +73,8 @@ record_check() {
   "check_id": "$check_id",
   "title": "$title",
   "severity": "$severity",
-  "source": "harness",
+  "source": "$source",
+  "phase": "$phase",
   "expected": "$expected",
   "result": "$result",
   "reason": "$reason",

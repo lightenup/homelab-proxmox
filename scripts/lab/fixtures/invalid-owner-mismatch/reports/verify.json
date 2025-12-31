@@ -1,0 +1,19 @@
+{
+  "status": "FAIL",
+  "errors": [
+    {
+      "code": "OWN-003",
+      "message": "Owner mismatch for GUARD-001: catalog says 'ansible' but source is 'harness'",
+      "remediation": "Fix source in emitter or owner in catalog"
+    },
+    {
+      "code": "OWN-004",
+      "message": "Ansible check GUARD-001 missing assertion report ref",
+      "remediation": "Ensure ansible checks reference reports/assertions.<phase>.json"
+    }
+  ],
+  "warnings": [],
+  "contract_version": "1.0.0",
+  "verifier_version": "1.0.0",
+  "timestamp": "2025-12-31T18:08:24.753640"
+}

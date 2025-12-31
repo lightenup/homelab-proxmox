@@ -1,11 +1,15 @@
-[
-  {
-    "check_id": "ENV-001",
-    "title": "Verify lab environment (hostname pattern)",
-    "severity": "blocker",
-    "source": "harness",
-    "expected": "PASS",
-    "result": "PASS",
-    "evidence_refs": ["logs/events.jsonl"]
-  }
-]
+{
+  "checks_schema_version": "1.0.0",
+  "checks": [
+    {
+      "check_id": "ENV-001",
+      "title": "Verify lab environment (hostname pattern)",
+      "phase": "bootstrap",
+      "severity": "blocker",
+      "source": "harness",
+      "expected": "PASS",
+      "result": "PASS",
+      "evidence_refs": ["logs/events.jsonl"]
+    }
+  ]
+}
