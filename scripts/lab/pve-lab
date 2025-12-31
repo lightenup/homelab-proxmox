@@ -767,8 +767,13 @@ cmd_test() {
             return 1
         fi
         
+        # Export environment for Ansible check recording
+        export HARNESS_LIB_DIR="${LIB_DIR}"
+        export EVIDENCE_DIR="${artifact_dir}"
+        export RUNID="${run_id}"
+        
         # Run Tier 2 Playbook
-        if log_cmd_exec ansible-playbook ansible/playbooks/lab_tier2_pve.yml -i ansible/inventories/lab/hosts.yml --extra-vars "tier2_mode=$tier2_mode"; then
+        if log_cmd_exec ansible-playbook ansible/playbooks/lab_tier2_pve.yml -i ansible/inventories/lab/hosts.yml --extra-vars "tier2_mode=$tier2_mode evidence_dir=$EVIDENCE_DIR runid=$RUNID"; then
              log_info "Tier 2 passed."
         else
              log_error "Tier 2 failed."
