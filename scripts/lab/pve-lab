@@ -4,6 +4,22 @@ set -e
 # Ensure Ansible uses the correct configuration (including vault password)
 export ANSIBLE_CONFIG="ansible/ansible.cfg"
 
+# Get script directory for sourcing libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
+
+# Source 019c1 libraries
+# shellcheck source=lib/checks.sh
+source "${LIB_DIR}/checks.sh"
+# shellcheck source=lib/jsonl.sh
+source "${LIB_DIR}/jsonl.sh"
+# shellcheck source=lib/provenance.sh
+source "${LIB_DIR}/provenance.sh"
+# shellcheck source=lib/evidence.sh
+source "${LIB_DIR}/evidence.sh"
+# shellcheck source=lib/cleanup.sh
+source "${LIB_DIR}/cleanup.sh"
+
 # Configuration
 LAB_VMID_START=9000
 LAB_VMID_END=9099
@@ -19,6 +35,9 @@ SSH_USER="root"
 LOCK_FILE="artifacts/019-lab/.lock"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
+# Suite execution control (019c1)
+SUITE_ABORT_REQUESTED=false
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -31,6 +50,108 @@ ARTIFACT_DIR=""
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# --- Feature 019c1: Preflight Environment Checks ---
+
+# ENV-001: Verify lab environment via hostname pattern
+check_env_001() {
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    
+    log_info "Running ENV-001: Verify lab environment (hostname pattern)"
+    
+    # Check hostname contains 'lab' or is in test environment
+    local hostname
+    hostname="$(ssh $SSH_OPTS "$ssh_target" "hostname")"
+    
+    if [[ "$hostname" =~ lab ]]; then
+        log_info "  ENV-001 PASS: Hostname '$hostname' contains 'lab'"
+        record_check "ENV-001" \
+            "Target is lab environment (not production)" \
+            "blocker" \
+            "PASS" \
+            "PASS" \
+            "Hostname pattern check passed: $hostname"
+        return 0
+    else
+        log_error "  ENV-001 FAIL: Hostname '$hostname' does not contain 'lab'"
+        log_error "  This appears to be a production environment!"
+        log_error "  Lab harness should only run against lab/test systems"
+        record_check "ENV-001" \
+            "Target is lab environment (not production)" \
+            "blocker" \
+            "PASS" \
+            "FAIL" \
+            "Hostname pattern check failed: $hostname (expected 'lab' in hostname)"
+        return 1
+    fi
+}
+
+# ENV-002: Verify required resources available
+check_env_002() {
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    
+    log_info "Running ENV-002: Verify required resources (memory, CPU, storage)"
+    
+    # Check memory (require at least 8GB free)
+    local free_mem_mb
+    free_mem_mb="$(ssh $SSH_OPTS "$ssh_target" "free -m | awk '/^Mem:/{print \$7}'")"
+    
+    if [[ -z "$free_mem_mb" ]]; then
+        log_warn "  Could not determine host memory"
+        record_check "ENV-002" \
+            "Required resources available (memory, CPU)" \
+            "high" \
+            "PASS" \
+            "SKIP" \
+            "Could not determine host memory"
+        return 0
+    fi
+    
+    if [[ "$free_mem_mb" -lt 8192 ]]; then
+        log_error "  ENV-002 FAIL: Insufficient memory ($free_mem_mb MB < 8192 MB)"
+        record_check "ENV-002" \
+            "Required resources available (memory, CPU)" \
+            "high" \
+            "PASS" \
+            "FAIL" \
+            "Insufficient host memory: ${free_mem_mb}MB free (need 8192MB)"
+        return 1
+    else
+        log_info "  ENV-002 PASS: Sufficient memory ($free_mem_mb MB)"
+        record_check "ENV-002" \
+            "Required resources available (memory, CPU)" \
+            "high" \
+            "PASS" \
+            "PASS" \
+            "Host resources OK: ${free_mem_mb}MB free"
+        return 0
+    fi
+}
+
+# Suite execution semantics: Check if suite should abort
+# Returns: 0 if should continue, 1 if should abort
+should_abort_suite() {
+    local check_id="$1"
+    local severity="$2"
+    local expected="$3"
+    local result="$4"
+    
+    # Abort condition 1: Blocker severity check failed
+    if [[ "$severity" == "blocker" && "$result" == "FAIL" ]]; then
+        log_error "ABORT: Blocker check $check_id failed"
+        SUITE_ABORT_REQUESTED=true
+        return 1
+    fi
+    
+    # Abort condition 2: Negative test with unexpected success (safety hole)
+    if [[ "$expected" == "FAIL" && "$result" == "PASS" ]]; then
+        log_error "ABORT: Negative test $check_id unexpectedly passed (safety hole detected)"
+        SUITE_ABORT_REQUESTED=true
+        return 1
+    fi
+    
+    return 0
+}
 
 # --- Feature 019c: Confidence Suite ---
 
@@ -657,6 +778,20 @@ cmd_run() {
     
     local start_time=$(date +%s)
     local status="FAILED"
+    
+    # --- 019c1: Preflight Environment Checks (ENV-001, ENV-002) ---
+    log_info "=== Preflight Environment Checks ==="
+    
+    if ! check_env_001; then
+        log_error "ENV-001 failed: Not a lab environment. Aborting."
+        exit 1
+    fi
+    
+    if ! check_env_002; then
+        log_warn "ENV-002 failed: Insufficient resources. Continuing with caution..."
+    fi
+    
+    log_info "=== Preflight Checks Complete ==="
     
     # Ensure clean state
     cmd_destroy

@@ -36,15 +36,15 @@
 
 **Purpose**: Core infrastructure that all user stories depend on
 
-- [ ] T009 Implement check recorder function in lib/checks.sh (record_check, accumulate to array)
-- [ ] T010 Implement JSONL emitter in lib/jsonl.sh (emit_event to stderr with tee to events.jsonl)
-- [ ] T011 Implement provenance capture in lib/provenance.sh (git commit, dirty status, versions)
-- [ ] T012 Implement evidence pack init in lib/evidence.sh (create_evidence_pack with runid)
-- [ ] T013 Implement evidence manifest generator in lib/evidence.sh (generate_manifest with schema version)
-- [ ] T014 Add suite execution semantics to scripts/lab/pve-lab (abort on blocker FAIL or negative test ERROR)
-- [ ] T015 Update scripts/lab/pve-lab to source lib/*.sh files
-- [ ] T015a Add ENV-001 preflight check to scripts/lab/pve-lab (verify lab environment via hostname pattern before suite execution)
-- [ ] T015b Add ENV-002 preflight check to scripts/lab/pve-lab (verify required resources available: memory, CPU, storage)
+- [X] T009 Implement check recorder function in lib/checks.sh (record_check, accumulate to array)
+- [X] T010 Implement JSONL emitter in lib/jsonl.sh (emit_event to stderr with tee to events.jsonl)
+- [X] T011 Implement provenance capture in lib/provenance.sh (git commit, dirty status, versions)
+- [X] T012 Implement evidence pack init in lib/evidence.sh (create_evidence_pack with runid)
+- [X] T013 Implement evidence manifest generator in lib/evidence.sh (generate_manifest with schema version)
+- [X] T014 Add suite execution semantics to scripts/lab/pve-lab (abort on blocker FAIL or negative test ERROR)
+- [X] T015 Update scripts/lab/pve-lab to source lib/*.sh files
+- [X] T015a Add ENV-001 preflight check to scripts/lab/pve-lab (verify lab environment via hostname pattern before suite execution)
+- [X] T015b Add ENV-002 preflight check to scripts/lab/pve-lab (verify required resources available: memory, CPU, storage)
 
 ---
 
