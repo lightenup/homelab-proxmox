@@ -119,13 +119,13 @@
 
 **Implementation Tasks**:
 
-- [ ] T045 [US4] Implement controller environment capture in lib/provenance.sh (os, bash version, ansible version)
-- [ ] T046 [US4] Implement git status capture in lib/provenance.sh (commit SHA, branch, dirty status)
-- [ ] T047 [US4] Add git dirty warning emitter in scripts/lab/pve-lab (warn if git working tree dirty but allow execution)
-- [ ] T048 [US4] Implement target environment capture in lib/provenance.sh (pveversion, kernel, distro via SSH)
-- [ ] T049 [US4] Implement parameters capture in lib/provenance.sh (selected profile, --keep flag, etc.)
-- [ ] T050 [US4] Generate provenance.json at suite start in scripts/lab/pve-lab
-- [ ] T051 [US4] Add provenance reference to summary.json
+- [X] T045 [US4] Implement controller environment capture in lib/provenance.sh (os, bash version, ansible version) - DONE IN PHASE 1
+- [X] T046 [US4] Implement git status capture in lib/provenance.sh (commit SHA, branch, dirty status) - DONE IN PHASE 1
+- [X] T047 [US4] Add git dirty warning emitter in scripts/lab/pve-lab (warn if git working tree dirty but allow execution)
+- [X] T048 [US4] Implement target environment capture in lib/provenance.sh (pveversion, kernel, distro via SSH) - DONE IN PHASE 1
+- [X] T049 [US4] Implement parameters capture in lib/provenance.sh (selected profile, --keep flag, etc.) - DONE IN PHASE 1
+- [X] T050 [US4] Generate provenance.json at suite start in scripts/lab/pve-lab
+- [X] T051 [US4] Add provenance reference to summary.json - ALREADY IN summary.json template
 
 ---
 

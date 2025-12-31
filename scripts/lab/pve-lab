@@ -841,6 +841,25 @@ cmd_run() {
     log_info "Artifacts: $artifact_dir"
     log_info "Configuration: Tier=$tier, Mode=$tier2_mode, Keep=$keep_vm, Profile=${profile:-custom}"
     
+    # 019c1 Phase 6: Generate provenance.json (T050)
+    log_info "=== Capturing Provenance ==="
+    
+    # T047: Check and warn if git working tree is dirty
+    check_git_dirty "$SCRIPT_DIR/.."
+    
+    # T045-T049: Generate complete provenance file
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    generate_provenance \
+        "$artifact_dir/provenance.json" \
+        "${profile:-custom}" \
+        "$ssh_target" \
+        "tier=$tier" \
+        "mode=$tier2_mode" \
+        "keep=$keep_vm" \
+        "run_id=$run_id"
+    
+    log_info "Provenance captured: provenance.json"
+    
     local start_time=$(date +%s)
     local status="FAILED"
     
