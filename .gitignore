@@ -12,6 +12,7 @@ __pycache__/
 
 # Ansible
 ansible/inventories/generated/
+ansible/playbooks/artifacts/
 *.retry
 
 # T005 [CONSTITUTION COMPLIANCE] - Secrets protection (Principle II)

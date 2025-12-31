@@ -28,15 +28,39 @@
     # NET-001: DNS Resolution
     - name: "[NET-001] Verify DNS resolution"
       block:
-        - name: "Check DNS resolution"
-          ansible.builtin.command: getent hosts deb.debian.org
+        - name: "Check DNS resolution (getent with Python fallback)"
+          ansible.builtin.shell: |
+            if command -v getent >/dev/null 2>&1; then
+              getent hosts deb.debian.org
+            else
+              python3 -c "import socket; print(socket.getaddrinfo('deb.debian.org', 80)[0][4][0])"
+            fi
           register: dns_check
           ignore_errors: true
+          changed_when: false
+
+        - name: "Ensure evidence directory exists"
+          ansible.builtin.file:
+            path: "{{ evidence_dir }}/reports/net"
+            state: directory
+            mode: '0755'
+          delegate_to: localhost
+          become: false
+          when: evidence_dir is defined
+
+        - name: "Save NET-001 evidence"
+          ansible.builtin.copy:
+            content: "STDOUT:\n{{ dns_check.stdout }}\n\nSTDERR:\n{{ dns_check.stderr }}"
+            dest: "{{ evidence_dir }}/reports/net/NET-001-dns.txt"
+          delegate_to: localhost
+          become: false
+          when: evidence_dir is defined
 
         - name: "Assert DNS resolution success"
           ansible.builtin.assert:
             that:
               - dns_check.rc == 0
+              - dns_check.stdout | length > 0
             fail_msg: "[NET-001] DNS resolution failed. Remediation: Check /etc/resolv.conf."
             success_msg: "[NET-001] DNS resolution OK."
       always:
@@ -45,9 +69,10 @@
             assertion_results: "{{ assertion_results + [{
               'check_id': 'NET-001',
               'title': 'Verify DNS resolution',
-              'result': (dns_check.rc == 0) | ternary('PASS', 'FAIL'),
-              'reason': dns_check.stderr | default('DNS lookup failed'),
-              'remediation': 'Check /etc/resolv.conf'
+              'result': (dns_check.rc == 0 and dns_check.stdout | length > 0) | ternary('PASS', 'FAIL'),
+              'reason': (dns_check.rc == 0) | ternary('DNS resolution successful', 'DNS lookup failed: ' + dns_check.stderr),
+              'remediation': 'Check /etc/resolv.conf',
+              'evidence_refs': ['reports/net/NET-001-dns.txt']
             }] }}"
 
     # NET-002: Internet Connectivity
