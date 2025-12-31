@@ -392,6 +392,7 @@
             content: "{{ api_check.stdout }}"
             dest: "{{ evidence_dir }}/reports/pve_api_version.json"
           delegate_to: localhost
+          become: false
           when: evidence_dir is defined and api_check.rc == 0
       rescue:
         - name: Handle PVE-004 failure
@@ -426,6 +427,7 @@
             content: "{{ pve_version_out.stdout }}"
             dest: "{{ evidence_dir }}/reports/pveversion.txt"
           delegate_to: localhost
+          become: false
           when: evidence_dir is defined and pve_version_out.rc == 0
       rescue:
         - name: Handle PVE-005 failure
@@ -444,10 +446,10 @@
     # -------------------------------------------------------------------------
     # Network Validation Checks (NET-001 through NET-004)
     # -------------------------------------------------------------------------
-    - name: NET-001 - DNS resolution check
+    - name: NET-005 - DNS resolution check
       block:
         - name: Check DNS resolution
-          command: nslookup deb.debian.org
+          shell: getent hosts deb.debian.org
           register: dns_check
           changed_when: false
           
@@ -457,20 +459,20 @@
               - dns_check.rc == 0
             fail_msg: "DNS resolution failed for deb.debian.org"
       rescue:
-        - name: Handle NET-001 failure
+        - name: Handle NET-005 failure
           debug:
-            msg: "NET-001 failed: {{ ansible_failed_result.msg | default('Assertion failed') }}"
+            msg: "NET-005 failed: {{ ansible_failed_result.msg | default('Assertion failed') }}"
       always:
-        - name: Record NET-001 result
+        - name: Record NET-005 result
           set_fact:
             assertion_results: "{{ assertion_results + [{
-              'id': 'NET-001',
+              'id': 'NET-005',
               'status': 'PASS' if (dns_check.rc == 0) else 'FAIL',
               'description': 'DNS resolution working',
               'details': 'Successfully resolved deb.debian.org' if (dns_check.rc == 0) else 'DNS resolution failed'
             }] }}"
 
-    - name: NET-002 - Internet connectivity check
+    - name: NET-006 - Internet connectivity check
       block:
         - name: Check Internet connectivity
           uri:
@@ -485,14 +487,14 @@
               - inet_check.status == 200
             fail_msg: "Failed to reach https://deb.debian.org"
       rescue:
-        - name: Handle NET-002 failure
+        - name: Handle NET-006 failure
           debug:
-            msg: "NET-002 failed: {{ ansible_failed_result.msg | default('Assertion failed') }}"
+            msg: "NET-006 failed: {{ ansible_failed_result.msg | default('Assertion failed') }}"
       always:
-        - name: Record NET-002 result
+        - name: Record NET-006 result
           set_fact:
             assertion_results: "{{ assertion_results + [{
-              'id': 'NET-002',
+              'id': 'NET-006',
               'status': 'PASS' if (inet_check.status == 200) else 'FAIL',
               'description': 'Internet connectivity working',
               'details': 'Successfully reached https://deb.debian.org' if (inet_check.status == 200) else 'Internet connectivity failed'
@@ -517,6 +519,7 @@
             content: "{{ vmbr0_check.stdout }}"
             dest: "{{ evidence_dir }}/reports/vmbr0_config.txt"
           delegate_to: localhost
+          become: false
           when: evidence_dir is defined and vmbr0_check.rc == 0
       rescue:
         - name: Handle NET-003 failure
@@ -674,21 +677,55 @@
 
         # 2. Nested LXC (Network Check)
         - name: Download LXC Template
-          command: pveam download local debian-12-standard_12.7-1_amd64.tar.zst
+          command: pveam download local debian-12-standard_12.12-1_amd64.tar.zst
           args:
-            creates: /var/lib/vz/template/cache/debian-12-standard_12.7-1_amd64.tar.zst
+            creates: /var/lib/vz/template/cache/debian-12-standard_12.12-1_amd64.tar.zst
           register: lxc_download
           failed_when: false
 
-        - name: Create Nested LXC
+        - name: Check if Nested LXC exists
+          command: pct config 101
+          register: lxc_exists
+          failed_when: false
+          changed_when: false
+
+        - name: Create Nested LXC (if missing)
           command: >
-            pct create 101 /var/lib/vz/template/cache/debian-12-standard_12.7-1_amd64.tar.zst
+            pct create 101 /var/lib/vz/template/cache/debian-12-standard_12.12-1_amd64.tar.zst
             --hostname nested-lxc
             --memory 256
             --net0 name=eth0,bridge=vmbr0,ip=dhcp
-            --features nesting=1
+            --features nesting=1,keyctl=1
+          when: lxc_exists.rc != 0
           register: lxc_create
-          failed_when: false
+
+        - name: Ensure Nested LXC features (idempotency)
+          command: pct set 101 --features nesting=1,keyctl=1
+          when: lxc_exists.rc == 0
+          register: lxc_update
+
+        - name: Capture LXC Config
+          command: pct config 101
+          register: lxc_config_out
+          changed_when: false
+          ignore_errors: true
+
+        - name: Ensure workload evidence directory exists
+          file:
+            path: "{{ evidence_dir }}/reports/workload"
+            state: directory
+            mode: '0755'
+          delegate_to: localhost
+          become: false
+          when: evidence_dir is defined
+
+        - name: Save LXC Config Evidence
+          copy:
+            content: "{{ lxc_config_out.stdout }}"
+            dest: "{{ evidence_dir }}/reports/workload/CT-101-config.txt"
+          delegate_to: localhost
+          become: false
+          when: evidence_dir is defined
 
         - name: Start Nested LXC
           command: pct start 101
@@ -712,7 +749,41 @@
                   - "'status: running' in lxc_status.stdout"
                 fail_msg: "Nested LXC 101 failed to start"
           rescue:
-            - name: Handle WORK-002 failure
+            - name: Handle WORK-002 failure (Diagnostics)
+              block:
+                - name: Run pct start for logs
+                  command: pct start 101
+                  register: pct_start_diag
+                  ignore_errors: true
+                
+                - name: Get journal
+                  command: journalctl -u pve-container --no-pager -n 500
+                  register: journal_diag
+                  ignore_errors: true
+
+                - name: Get active tasks
+                  command: cat /var/log/pve/tasks/active
+                  register: tasks_diag
+                  ignore_errors: true
+
+                - name: Save WORK-002 Evidence
+                  copy:
+                    content: |
+                      PCT START:
+                      {{ pct_start_diag.stdout }}
+                      {{ pct_start_diag.stderr }}
+                      
+                      JOURNAL:
+                      {{ journal_diag.stdout }}
+                      
+                      TASKS:
+                      {{ tasks_diag.stdout }}
+                    dest: "{{ evidence_dir }}/reports/workload/WORK-002-diagnostics.txt"
+                  delegate_to: localhost
+                  become: false
+                  when: evidence_dir is defined
+
+            - name: Fail WORK-002
               debug:
                 msg: "WORK-002 failed: {{ ansible_failed_result.msg | default('Assertion failed') }}"
           always:
@@ -722,15 +793,16 @@
                   'id': 'WORK-002',
                   'status': 'PASS' if ('status: running' in lxc_status.stdout) else 'FAIL',
                   'description': 'Nested LXC started successfully',
-                  'details': 'Nested LXC 101 is running' if ('status: running' in lxc_status.stdout) else 'Nested LXC failed to start'
+                  'details': 'Nested LXC 101 is running' if ('status: running' in lxc_status.stdout) else 'Nested LXC failed to start',
+                  'evidence_refs': ['reports/workload/CT-101-config.txt'] + (['reports/workload/WORK-002-diagnostics.txt'] if ('status: running' not in lxc_status.stdout) else [])
                 }] }}"
 
         - name: Wait for LXC Network
           pause:
             seconds: 10
 
-        - name: Verify LXC Connectivity
-          command: pct exec 101 -- ping -c 1 8.8.8.8
+        - name: Verify LXC Connectivity (apt-get update)
+          command: pct exec 101 -- apt-get update
           register: lxc_net_check
           failed_when: false
 
@@ -741,19 +813,28 @@
               assert:
                 that:
                   - lxc_net_check.rc == 0
-                fail_msg: "Nested LXC 101 has no internet connectivity"
+                fail_msg: "Nested LXC 101 has no internet connectivity (apt-get update failed)"
           rescue:
             - name: Handle WORK-003 failure
               debug:
                 msg: "WORK-003 failed: {{ ansible_failed_result.msg | default('Assertion failed') }}"
+            
+            - name: Capture WORK-003 failure evidence
+              copy:
+                content: "{{ lxc_net_check.stdout }}\n{{ lxc_net_check.stderr }}"
+                dest: "{{ evidence_dir }}/reports/workload/WORK-003-apt-update.txt"
+              delegate_to: localhost
+              become: false
+              when: evidence_dir is defined
           always:
             - name: Record WORK-003 result
               set_fact:
                 assertion_results: "{{ assertion_results + [{
                   'id': 'WORK-003',
                   'status': 'PASS' if (lxc_net_check.rc == 0) else 'FAIL',
-                  'description': 'Nested LXC network connectivity verified',
-                  'details': 'LXC 101 has network connectivity to internet' if (lxc_net_check.rc == 0) else 'LXC network connectivity failed'
+                  'description': 'Nested LXC network connectivity',
+                  'details': 'apt-get update successful' if (lxc_net_check.rc == 0) else 'apt-get update failed',
+                  'evidence_refs': ['reports/workload/WORK-003-apt-update.txt'] if (lxc_net_check.rc != 0) else []
                 }] }}"
 
         - name: Install Python in LXC
