@@ -3,6 +3,8 @@
 Auto-generated from all feature plans. Last updated: 2025-12-30
 
 ## Active Technologies
+- Bash 5.x (existing `pve-lab` script) + jq (JSON processing), git (provenance capture), existing Ansible playbooks (019c1-semantic-safety-closure)
+- File-based evidence packs in `artifacts/019-lab/<runid>/` (019c1-semantic-safety-closure)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -22,6 +24,7 @@ tests/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 019c1-semantic-safety-closure: Added Bash 5.x (existing `pve-lab` script) + jq (JSON processing), git (provenance capture), existing Ansible playbooks
 
 - 019b-proxmox-lab-harness-tier2: Added Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories
 

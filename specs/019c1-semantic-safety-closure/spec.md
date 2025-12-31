@@ -13,6 +13,16 @@ Harden the Lab Harness Confidence Suite by making **semantics first-class** and 
 
 **Solution**: Establish stable semantic concepts (Profiles, Checks, Evidence Packs) with machine-readable artifacts that prove validation results, safety guardrails, and cleanup.
 
+## Clarifications
+
+### Session 2025-12-31
+
+- Q: When multiple checks fail during a suite run, should execution continue through all checks or stop at the first failure? → A: Continue executing all checks unless a blocker-severity check fails, then abort immediately
+- Q: When capturing provenance data, how should the system handle a dirty working tree (uncommitted changes in the harness git repository)? → A: Record git commit + dirty status indicator, warn in console but allow execution
+- Q: When check IDs are defined in namespaces (PVE-###, NET-###, etc.), should the system support check versioning if behavior changes over time? → A: Check IDs are immutable; if behavior changes, create new check with incremented number
+- Q: What performance target should the suite meet for the `hypervisor-nested-workload` profile execution time (end-to-end including VM provisioning)? → A: 10 minutes maximum
+- Q: Should the suite emit structured logs (JSON Lines format) during execution for real-time monitoring and parsing, or only produce final artifacts at completion? → A: Emit JSONL progress events to stderr during execution, plus final artifacts
+
 ## Core Concepts *(mandatory definitions)*
 
 ### Concept: Profile
@@ -33,6 +43,7 @@ A named validation intent that declares:
 - `tier`: Numeric tier (maps to legacy tier concept)
 - `mode`: Mode within tier (maps to legacy tier2_mode)
 - `safety_level`: `standard` | `strict`
+- `expected_duration_minutes`: Target execution time (informational)
 - `prerequisites`: Host capability checks
 - `checks`: List of check_ids this profile expects to run
 
@@ -58,6 +69,8 @@ A stable validation unit with consistent structure:
 - `GUARD-###`: Safety guardrail checks (negative tests)
 - `CLEANUP-###`: Cleanup verification checks
 
+**Check ID Immutability**: Once assigned, a check_id is permanent and its validation intent must not change. If validation behavior needs to evolve, allocate a new check ID with the next available number in the namespace. This ensures historical evidence packs remain comparable.
+
 ### Concept: Evidence Pack
 
 A structured directory per run containing:
@@ -69,6 +82,11 @@ A structured directory per run containing:
 - `summary.json`: High-level run results (references other files)
 - Raw logs and outputs (existing structure)
 
+**Structured Event Stream**:
+- Real-time JSONL events emitted to stderr during execution
+- Events include: check_start, check_complete, phase_start, phase_complete, error
+- Captured to `logs/commands.jsonl` in evidence pack for replay/analysis
+
 **Directory Structure**:
 ```
 artifacts/019-lab/<runid>/
@@ -79,7 +97,7 @@ artifacts/019-lab/<runid>/
 ├── logs/
 │   ├── bootstrap.log
 │   ├── tier2.log
-│   └── commands.jsonl
+│   └── commands.jsonl       # JSONL event stream
 └── reports/
     ├── validation.json
     ├── pveversion.txt
@@ -105,6 +123,7 @@ As an operator, I run `pve-lab suite hypervisor-nested-workload` and receive:
 2. **Given** a completed suite run, **When** I examine `artifacts/019-lab/<runid>/checks.json`, **Then** all checks have stable `check_id`, `expected`, `result`, and `evidence_refs` fields
 3. **Given** a successful run, **When** I check `summary.json`, **Then** it references `profile: "hypervisor-nested-workload"` and links to `checks.json`
 4. **Given** two runs of the same profile, **When** I compare their `checks.json`, **Then** check_ids are identical and comparable
+5. **Given** a suite run in progress, **When** observing stderr, **Then** structured JSONL events appear in real-time showing check progress
 
 ---
 
@@ -152,8 +171,9 @@ As an operator, I can understand the exact context of any historical run by exam
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed suite run, **When** examining `provenance.json`, **Then** it contains controller OS, bash version, ansible version, and git commit
+1. **Given** a completed suite run, **When** examining `provenance.json`, **Then** it contains controller OS, bash version, ansible version, git commit, and git dirty status (true/false)
 2. **Given** a completed suite run, **When** examining `provenance.json`, **Then** it contains target pveversion, kernel, and Debian version
+3. **Given** a suite run with uncommitted changes in harness repo, **When** execution starts, **Then** console displays warning about dirty git status but execution proceeds
 3. **Given** two runs with different outcomes, **When** comparing provenance files, **Then** I can identify environmental differences that may explain divergent results
 4. **Given** a historical evidence pack, **When** reviewing provenance, **Then** I can reproduce the exact environment and parameters used
 
@@ -172,8 +192,8 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 1. **Given** legacy command `pve-lab run --tier 2`, **When** executed, **Then** it maps to profile `hypervisor-control-plane` and logs this in summary.json
 2. **Given** legacy command `pve-lab run --tier 2 --tier2-mode plus`, **When** executed, **Then** it maps to profile `hypervisor-nested-workload`
 3. **Given** any legacy command, **When** reviewing console output, **Then** a deprecation notice shows the equivalent profile-based command
-4. **Given** documentation, **When** reviewing harness usage, **Then** profiles are documented as the primary interface with legacy flags as aliases
-
+4. **Given** documentation, **When** reviewing harness usage, **Then** profiles are documented as the primary interface with legacy flags as aliasesexecuting remaining checks to maximize diagnostic information, unless the failed check has severity `blocker`, in which case suite aborts immediately.
+- **What happens when negative test doesn't fail as expected (expected FAIL, got PASS)?** This is an ERROR condition indicating a safety hole. Check marked ERROR, suite aborts immediately regardless of severity
 ---
 
 ### Edge Cases
@@ -183,6 +203,7 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 - **What happens when evidence artifact is missing?** Check referencing it is marked SKIP or ERROR depending on severity, reason explains missing artifact.
 - **What happens when suite is interrupted (Ctrl+C, kill)?** Evidence pack marked incomplete, cleanup checks marked SKIP with reason "interrupted", partial evidence retained for debugging.
 - **What happens when running suite against wrong environment (prod)?** Preflight checks detect non-lab environment, suite aborts before any operations, check `ENV-001` fails with clear explanation.
+- **What happens when a check becomes obsolete?** The check ID is retired and removed from active profiles, but the ID remains reserved and must not be reused. Historical evidence packs referencing the obsolete check remain valid for their time period.
 
 
 
@@ -200,8 +221,11 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 
 #### Check System
 - **FR-007**: Every suite run MUST produce `checks.json` with stable check_ids
+- **FR-013a**: Checks with severity lower than `blocker` that fail MUST be recorded but MUST NOT abort the suite; execution continues to maximize diagnostic information
 - **FR-008**: Each check MUST include: check_id, title, severity, expected, result, reason, evidence_refs, timestamp
 - **FR-009**: Check IDs MUST follow namespace convention (PVE-###, NET-###, etc.) and never be reused for different purposes
+- **FR-009a**: Check IDs are immutable; if validation behavior must change, a new check ID MUST be allocated with the next sequential number in the namespace
+- **FR-009b**: When a check becomes obsolete, it MAY be removed from active profiles but its ID MUST NOT be reused
 - **FR-010**: System MUST support negative tests with `expected: FAIL`
 - **FR-011**: System MUST distinguish between expected failures (negative tests) and unexpected failures
 - **FR-012**: Console output MUST display compact checklist summary showing check titles and results
@@ -211,9 +235,17 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 - **FR-014**: Every suite run MUST create an evidence pack directory at `artifacts/019-lab/<runid>/`
 - **FR-015**: Evidence pack MUST include: `evidence_manifest.json`, `checks.json`, `provenance.json`, `summary.json`
 - **FR-016**: `evidence_manifest.json` MUST list all produced artifacts with path, type, producing check_id, and optional sha256
-- **FR-017**: `provenance.json` MUST capture controller info, target info, harness git commit, selected profile, and all parameters
+- **FR-017**: `provenance.json` MUST capture controller info, target info, harness git commit, git dirty status, selected profile, and all parameters
+- **FR-017a**: When git working tree is dirty, system MUST emit console warning about potential reproducibility issues but MUST allow execution to proceed
 - **FR-018**: Evidence pack MUST be generated even if suite fails (partial evidence for debugging)
 - **FR-019**: Evidence pack directory name MUST include timestamp in format `lab-YYYYMMDD-HHMMSS`
+
+#### Structured Event Stream (Observability)
+- **FR-019a**: Suite MUST emit structured JSONL events to stderr during execution for real-time monitoring
+- **FR-019b**: Event types MUST include: `check_start`, `check_complete`, `phase_start`, `phase_complete`, `error`, `warning`
+- **FR-019c**: Each JSONL event MUST include: `timestamp` (ISO 8601), `event_type`, `runid`, and event-specific data
+- **FR-019d**: JSONL event stream MUST be captured to `logs/commands.jsonl` in evidence pack
+- **FR-019e**: Stdout MUST remain reserved for human-readable summary output; structured events use stderr only
 
 #### Negative Tests (Guardrail Proof)
 - **FR-020**: Suite MUST include check `GUARD-001` that attempts tier2 playbook without `lab_inventory=true` and expects failure
@@ -239,6 +271,10 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 - **FR-034**: Term "bundle" MUST be replaced with "Evidence Pack" throughout
 - **FR-035**: All vague references MUST be replaced with specific concept names (Profile, Check, Evidence Pack)
 
+#### Non-Functional Requirements
+- **NFR-001**: Profile `hypervisor-nested-workload` MUST complete end-to-end execution (including VM provisioning, all checks, and cleanup) within 10 minutes under normal conditions
+- **NFR-002**: Performance degradation beyond target SHOULD be logged in provenance with environmental factors (slow disk, network latency) when detectable
+
 ### Key Entities
 
 - **Profile**: Named validation intent with declared prerequisites, steps, and checks
@@ -251,7 +287,7 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
   - Contains: evidence_manifest.json, checks.json, provenance.json, summary.json, logs/, reports/
   
 - **Provenance**: Run context including environment, versions, parameters
-  - Attributes: controller (os, bash_version, ansible_version, git_commit), target (pveversion, kernel, distro), profile, parameters
+  - Attributes: controller (os, bash_version, ansible_version, git_commit, git_dirty), target (pveversion, kernel, distro), profile, parameters
 
 
 
@@ -267,6 +303,7 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 - **SC-006**: Legacy commands (`--tier`, `--tier2-mode`) continue to work and map correctly to profiles
 - **SC-007**: Evidence packs are generated for 100% of runs (including failures and interruptions)
 - **SC-008**: Documentation clearly explains Profiles, Checks, and Evidence Packs with examples of each artifact format
+- **SC-009**: Profile `hypervisor-nested-workload` completes within 10 minutes for 95% of runs under normal lab conditions
 
 ## Check Catalog *(Starter Set)*
 
@@ -376,6 +413,7 @@ This catalog defines the initial set of checks. New checks may be added followin
 - `artifacts/019-lab/<runid>/evidence_manifest.json`
 - `artifacts/019-lab/<runid>/provenance.json`
 - Updated `artifacts/019-lab/<runid>/summary.json` schema
+- `artifacts/019-lab/<runid>/logs/commands.jsonl` (captured JSONL event stream)
 
 ### Documentation
 - Updated `docs/architecture/019-proxmox-lab-harness.md` with:
