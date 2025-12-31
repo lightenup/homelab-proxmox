@@ -1,0 +1,211 @@
+{
+  "ENV-001": {
+    "check_id": "ENV-001",
+    "title": "Target is lab environment (not production)",
+    "owner": "harness",
+    "phase": "bootstrap",
+    "severity": "blocker",
+    "source": "harness"
+  },
+  "ENV-002": {
+    "check_id": "ENV-002",
+    "title": "Required resources available (memory, CPU)",
+    "owner": "harness",
+    "phase": "bootstrap",
+    "severity": "high",
+    "source": "harness"
+  },
+  "CLEANUP-PRE-001": {
+    "check_id": "CLEANUP-PRE-001",
+    "title": "Preflight cleanup check",
+    "owner": "harness",
+    "phase": "bootstrap",
+    "severity": "blocker",
+    "source": "harness"
+  },
+  "CLEANUP-001": {
+    "check_id": "CLEANUP-001",
+    "title": "No lab VMs remain in range after run",
+    "owner": "harness",
+    "phase": "cleanup",
+    "severity": "medium",
+    "source": "harness"
+  },
+  "CLEANUP-002": {
+    "check_id": "CLEANUP-002",
+    "title": "No active locks remain after run",
+    "owner": "harness",
+    "phase": "cleanup",
+    "severity": "medium",
+    "source": "harness"
+  },
+  "GUARD-001": {
+    "check_id": "GUARD-001",
+    "title": "Verify playbook is running against lab inventory",
+    "owner": "ansible",
+    "phase": "bootstrap",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "GUARD-002": {
+    "check_id": "GUARD-002",
+    "title": "Verify hostname matches lab pattern",
+    "owner": "ansible",
+    "phase": "bootstrap",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "GUARD-003": {
+    "check_id": "GUARD-003",
+    "title": "Verify OS is Debian 13",
+    "owner": "ansible",
+    "phase": "bootstrap",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "NET-001": {
+    "check_id": "NET-001",
+    "title": "Verify DNS resolution",
+    "owner": "ansible",
+    "phase": "bootstrap",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "NET-002": {
+    "check_id": "NET-002",
+    "title": "Verify Internet connectivity",
+    "owner": "ansible",
+    "phase": "bootstrap",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "NET-003": {
+    "check_id": "NET-003",
+    "title": "vmbr0 bridge configured with expected IP",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "NET-004": {
+    "check_id": "NET-004",
+    "title": "Lab VM reachable via SSH",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "NET-005": {
+    "check_id": "NET-005",
+    "title": "DNS resolution working",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "NET-006": {
+    "check_id": "NET-006",
+    "title": "Internet connectivity working",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "PVE-001": {
+    "check_id": "PVE-001",
+    "title": "Proxmox VE packages installed",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "PVE-002": {
+    "check_id": "PVE-002",
+    "title": "PVE services running",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "PVE-003": {
+    "check_id": "PVE-003",
+    "title": "pmxcfs mounted at /etc/pve",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "PVE-004": {
+    "check_id": "PVE-004",
+    "title": "pvesh API reachable",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "PVE-005": {
+    "check_id": "PVE-005",
+    "title": "pveversion reports expected version",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "NEST-001": {
+    "check_id": "NEST-001",
+    "title": "Host KVM module supports nesting",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "NEST-002": {
+    "check_id": "NEST-002",
+    "title": "Guest /dev/kvm exists and accessible",
+    "owner": "ansible",
+    "phase": "tier2",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "WORK-001": {
+    "check_id": "WORK-001",
+    "title": "Nested VM (KVM) started successfully",
+    "owner": "ansible",
+    "phase": "workload",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "WORK-002": {
+    "check_id": "WORK-002",
+    "title": "Nested LXC started successfully",
+    "owner": "ansible",
+    "phase": "workload",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "WORK-003": {
+    "check_id": "WORK-003",
+    "title": "Nested LXC network connectivity",
+    "owner": "ansible",
+    "phase": "workload",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "WORK-004": {
+    "check_id": "WORK-004",
+    "title": "Service reachability from lab VM to nested LXC verified",
+    "owner": "ansible",
+    "phase": "workload",
+    "severity": "high",
+    "source": "ansible"
+  },
+  "SUITE-DEDUP-001": {
+    "check_id": "SUITE-DEDUP-001",
+    "title": "Duplicate Check ID Detected",
+    "owner": "harness",
+    "phase": "bootstrap",
+    "severity": "blocker",
+    "source": "harness",
+    "allow_missing_evidence": true
+  }
+}

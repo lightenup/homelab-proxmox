@@ -69,6 +69,7 @@ record_check() {
   "check_id": "$check_id",
   "title": "$title",
   "severity": "$severity",
+  "source": "harness",
   "expected": "$expected",
   "result": "$result",
   "reason": "$reason",

@@ -1212,6 +1212,7 @@ cmd_run() {
     # Generate Summary (019c1: updated with profile reference)
     cat <<JSON > "$summary_file"
 {
+  "contract_version": "1.0.0",
   "run_id": "$run_id",
   "status": "$status",
   "profile": "${profile:-custom}",
@@ -1361,18 +1362,61 @@ cmd_suite() {
     cmd_run --profile "$profile_name" "$@"
 }
 
+# 019e: Verify Evidence Pack
+cmd_verify_evidence() {
+    local pack_path="$1"
+    if [[ -z "$pack_path" ]]; then
+        log_error "Usage: $0 verify-evidence <path/to/evidence/pack>"
+        exit 1
+    fi
+    
+    if [[ ! -d "$pack_path" ]]; then
+        log_error "Evidence pack not found: $pack_path"
+        exit 1
+    fi
+    
+    log_info "Verifying evidence pack: $pack_path"
+    python3 "${SCRIPT_DIR}/verify_evidence.py" "$pack_path"
+}
+
+# 019e: Diff Evidence Packs
+cmd_diff_evidence() {
+    local run_a="$1"
+    local run_b="$2"
+    
+    if [[ -z "$run_a" || -z "$run_b" ]]; then
+        log_error "Usage: $0 diff-evidence <path/to/runA> <path/to/runB>"
+        exit 1
+    fi
+    
+    if [[ ! -d "$run_a" ]]; then
+        log_error "Evidence pack A not found: $run_a"
+        exit 1
+    fi
+    
+    if [[ ! -d "$run_b" ]]; then
+        log_error "Evidence pack B not found: $run_b"
+        exit 1
+    fi
+    
+    log_info "Diffing evidence packs: $run_a vs $run_b"
+    python3 "${SCRIPT_DIR}/diff_evidence.py" "$run_a" "$run_b"
+}
+
 usage() {
-    echo "Usage: $0 {up|down|destroy|status|test|run|safety|confidence|suite}"
+    echo "Usage: $0 {up|down|destroy|status|test|run|safety|confidence|suite|verify-evidence|diff-evidence}"
     echo ""
     echo "Commands:"
-    echo "  up       - Provision a new Lab VM (manual mode)"
-    echo "  down     - Destroy all Lab VMs"
-    echo "  status   - Check status of Lab VMs"
-    echo "  test     - Run tests against existing Lab VM"
-    echo "  run      - Full workflow: destroy -> up -> test -> destroy"
-    echo "  safety   - Run Safety Suite (Negative Tests)"
-    echo "  confidence - Run Confidence Suite (Safety + All Profiles)"
+    echo "  up              - Provision a new Lab VM (manual mode)"
+    echo "  down            - Destroy all Lab VMs"
+    echo "  status          - Check status of Lab VMs"
+    echo "  test            - Run tests against existing Lab VM"
+    echo "  run             - Full workflow: destroy -> up -> test -> destroy"
+    echo "  safety          - Run Safety Suite (Negative Tests)"
+    echo "  confidence      - Run Confidence Suite (Safety + All Profiles)"
     echo "  suite <profile> - Run specific profile suite (019c1 primary interface)"
+    echo "  verify-evidence <path> - Verify an evidence pack (019e)"
+    echo "  diff-evidence <runA> <runB> - Compare two evidence packs (019e)"
     echo ""
     echo "Suite Profiles (019c1):"
     echo "  hypervisor-control-plane   - PVE install + API verification"
@@ -1404,6 +1448,14 @@ case "$1" in
     suite)
         shift
         cmd_suite "$@"
+        ;;
+    verify-evidence)
+        shift
+        cmd_verify_evidence "$@"
+        ;;
+    diff-evidence)
+        shift
+        cmd_diff_evidence "$@"
         ;;
     *) usage ;;
 esac

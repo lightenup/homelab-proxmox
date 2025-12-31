@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "errors": [
+    {
+      "code": "DEDUP-001",
+      "message": "Duplicate check_id found: ENV-001",
+      "remediation": "Ensure check_ids are unique within the pack"
+    }
+  ],
+  "warnings": [],
+  "contract_version": "1.0.0",
+  "verifier_version": "1.0.0",
+  "timestamp": "2025-12-31T14:51:32.989807"
+}

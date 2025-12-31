@@ -1,0 +1,20 @@
+[
+  {
+    "check_id": "ENV-001",
+    "title": "Verify lab environment (hostname pattern)",
+    "severity": "blocker",
+    "source": "harness",
+    "expected": "PASS",
+    "result": "PASS",
+    "evidence_refs": []
+  },
+  {
+    "check_id": "ENV-001",
+    "title": "Duplicate check",
+    "severity": "blocker",
+    "source": "harness",
+    "expected": "PASS",
+    "result": "PASS",
+    "evidence_refs": []
+  }
+]
