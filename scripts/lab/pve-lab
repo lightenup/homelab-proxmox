@@ -76,6 +76,7 @@ check_env_001() {
         log_error "  ENV-001 FAIL: Hostname '$hostname' does not contain 'lab'"
         log_error "  This appears to be a production environment!"
         log_error "  Lab harness should only run against lab/test systems"
+        log_error "  → REMEDIATION: Set hostname with 'lab' in name (e.g., 'hostnamectl set-hostname lab-pve-01')"
         record_check "ENV-001" \
             "Target is lab environment (not production)" \
             "blocker" \
@@ -109,6 +110,7 @@ check_env_002() {
     
     if [[ "$free_mem_mb" -lt 8192 ]]; then
         log_error "  ENV-002 FAIL: Insufficient memory ($free_mem_mb MB < 8192 MB)"
+        log_error "  → REMEDIATION: Free up memory by stopping services or increasing host RAM"
         record_check "ENV-002" \
             "Required resources available (memory, CPU)" \
             "high" \
