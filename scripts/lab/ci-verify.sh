@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
-FIXTURES_DIR="${SCRIPT_DIR}/fixtures/evidence-packs"
+FIXTURES_DIR="${SCRIPT_DIR}/fixtures"
 CATALOG_FILE="${SCRIPT_DIR}/checks.d/catalog.json"
 
 echo "=== CI Verification Gate ==="

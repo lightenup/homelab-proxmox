@@ -12,6 +12,38 @@ class EvidenceDiff:
         self.data_a: Dict[str, Any] = {}
         self.data_b: Dict[str, Any] = {}
         self.diff_report: Dict[str, Any] = {}
+        self.catalog: Dict[str, Any] = {}
+        self.load_catalog()
+
+    def load_catalog(self):
+        # Assume catalog is at scripts/lab/checks.d/catalog.json relative to this script
+        script_dir = Path(__file__).parent
+        catalog_path = script_dir / "checks.d" / "catalog.json"
+        if catalog_path.exists():
+            try:
+                with open(catalog_path, 'r') as f:
+                    self.catalog = json.load(f)
+            except Exception as e:
+                print(f"Warning: Could not load catalog from {catalog_path}: {e}", file=sys.stderr)
+        else:
+            print(f"Warning: Catalog not found at {catalog_path}", file=sys.stderr)
+
+    def get_title(self, check_id: str) -> str:
+        # Try catalog first (SSOT), then fall back to check data if available
+        if check_id in self.catalog:
+            return self.catalog[check_id].get('title', 'Unknown Title')
+        
+        # Fallback to looking in loaded packs
+        # This is a bit inefficient but works for display
+        for data in [self.data_b, self.data_a]:
+            if not data: continue
+            raw_checks = data.get('checks', {})
+            checks_list = raw_checks.get('checks', []) if isinstance(raw_checks, dict) else raw_checks
+            for c in checks_list:
+                if c.get('check_id') == check_id:
+                    return c.get('title', 'Unknown Title')
+        
+        return "Unknown Title"
 
     def load_pack(self, path: Path) -> Optional[Dict[str, Any]]:
         data = {}
@@ -113,19 +145,25 @@ class EvidenceDiff:
         if self.diff_report['status_changes']:
             print("Status Changes:")
             for change in self.diff_report['status_changes']:
-                print(f"  {change['check_id']}: {change['from']} -> {change['to']}")
+                check_id = change['check_id']
+                title = self.get_title(check_id)
+                print(f"  {check_id}: {change['from']} -> {change['to']}  ({title})")
         else:
             print("No status changes.")
             
         if self.diff_report['new_checks']:
             print("\nNew Checks:")
             for check in self.diff_report['new_checks']:
-                print(f"  {check['check_id']} ({check['result']})")
+                check_id = check['check_id']
+                title = self.get_title(check_id)
+                print(f"  {check_id} ({check['result']}) - {title}")
                 
         if self.diff_report['missing_checks']:
             print("\nMissing Checks:")
             for check in self.diff_report['missing_checks']:
-                print(f"  {check['check_id']} ({check['result']})")
+                check_id = check['check_id']
+                title = self.get_title(check_id)
+                print(f"  {check_id} ({check['result']}) - {title}")
 
 def main():
     parser = argparse.ArgumentParser(description="Diff Evidence Packs")

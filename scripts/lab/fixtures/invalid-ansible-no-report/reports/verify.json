@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "errors": [
+    {
+      "code": "OWN-004",
+      "message": "Ansible check GUARD-001 missing assertion report ref",
+      "remediation": "Ensure ansible checks reference reports/assertions.<phase>.json"
+    }
+  ],
+  "warnings": [],
+  "contract_version": "1.0.0",
+  "verifier_version": "1.0.0",
+  "timestamp": "2025-12-31T17:58:23.456873"
+}

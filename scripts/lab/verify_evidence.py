@@ -233,42 +233,67 @@ class EvidenceVerifier:
                 if source not in ["ansible", "harness"]:
                     self.add_error("OWN-003", f"Invalid source '{source}' for {check_id}", "Source must be 'ansible' or 'harness'")
                 
-                # FR-007b: Evidence refs check
+                # FR-007b: Source vs Catalog Owner
+                if catalog_owner == "ansible" and source != "ansible":
+                    self.add_error("OWN-003", f"Owner mismatch for {check_id}: catalog says 'ansible' but source is '{source}'", "Fix source in emitter or owner in catalog")
+                elif catalog_owner == "harness" and source != "harness":
+                    self.add_error("OWN-002", f"Owner mismatch for {check_id}: catalog says 'harness' but source is '{source}'", "Fix source in emitter or owner in catalog")
+
+                # FR-007c: Ansible Provenance Proof
                 evidence_refs = check.get('evidence_refs', [])
-                if source == "ansible":
+                if catalog_owner == "ansible":
                     # Must include assertions report
                     has_report = any("reports/assertions" in ref for ref in evidence_refs)
                     if not has_report:
                         self.add_error(
-                            "OWN-001",
+                            "OWN-004",
                             f"Ansible check {check_id} missing assertion report ref",
                             "Ensure ansible checks reference reports/assertions.<phase>.json"
                         )
-                elif source == "harness":
-                    # Must NOT point to assertion report as primary (this is a bit vague, let's just warn if it does?)
-                    # Spec says "MUST NOT point to assertion reports as the primary source (allowed as supplemental)"
-                    # Hard to enforce "primary", so we skip strict enforcement for now unless we define "primary".
-                    pass
+                    # TODO: Parse assertion report to confirm check_id exists (FR-007c part 2)
+                
+                # FR-007d: Harness Ownership Guard
+                elif catalog_owner == "harness":
+                    # Should not rely on assertion reports
+                    has_report = any("reports/assertions" in ref for ref in evidence_refs)
+                    if has_report:
+                        self.add_error(
+                            "OWN-005",
+                            f"Harness check {check_id} references assertion report",
+                            "Harness checks should not rely on Ansible assertion reports"
+                        )
 
-            # FR-008: Phase
-            # We don't have phase in the check object usually, but we can check if the check belongs to the current phase?
-            # The spec says "Verifier MUST enforce phase constraints from catalog".
-            # This implies we know the phase of the run.
-            run_phase = summary.get('phase') # We might not have phase in summary yet?
-            # summary.json has 'tier', 'tier2_mode'. Not explicit phase like 'bootstrap'.
-            # But assertions report has 'phase'.
-            # If we can't determine run phase, we can't enforce this fully.
-            # However, if the check comes from an assertion report, that report has a phase.
-            # For harness checks, they are emitted during a phase.
-            # If we assume the evidence pack represents a single phase run, we could check summary.
-            # But pve-lab runs multiple phases (bootstrap, tier2, etc).
-            # So a pack might contain checks from multiple phases?
-            # Actually pve-lab seems to run a "suite" which might cover multiple phases.
-            # Let's look at catalog phase.
-            # If a check is "bootstrap" phase, it should probably appear in a bootstrap context.
-            # But without explicit phase in check output, it's hard to validate.
-            # We will skip strict phase validation for now or implement a basic check if possible.
-            pass
+            # FR-005b: Title Strictness
+            title = check.get('title')
+            catalog_title = catalog_entry.get('title')
+            if title and title != catalog_title:
+                self.add_error(
+                    "CAT-005",
+                    f"Title mismatch for {check_id}",
+                    f"Expected: '{catalog_title}', Got: '{title}'. Update emitter to match catalog."
+                )
+
+            # FR-005c: Phase Required
+            phase = check.get('phase')
+            catalog_phase = catalog_entry.get('phase')
+            if not phase:
+                self.add_error("CAT-007", f"Check {check_id} missing phase", "Ensure emitter adds phase field")
+            elif phase != catalog_phase:
+                self.add_error(
+                    "CAT-006",
+                    f"Phase mismatch for {check_id}",
+                    f"Expected: '{catalog_phase}', Got: '{phase}'. Update emitter or catalog."
+                )
+
+            # FR-005d: Severity Handling
+            severity = check.get('severity')
+            catalog_severity = catalog_entry.get('severity')
+            if severity and severity != catalog_severity:
+                self.add_error(
+                    "CAT-008",
+                    f"Severity mismatch for {check_id}",
+                    f"Expected: '{catalog_severity}', Got: '{severity}'. Update emitter or catalog."
+                )
 
     def validate_integrity(self):
         if not self.data.get('checks'):
@@ -308,10 +333,18 @@ class EvidenceVerifier:
             allow_missing = catalog_entry.get('allow_missing_evidence', False)
 
             for ref in evidence_refs:
+                # Handle prefixes (019e1)
+                clean_ref = ref
+                if ref.startswith('file:'):
+                    clean_ref = ref[5:].strip()
+                elif ref.startswith('source:'):
+                    # Metadata ref, skip file check
+                    continue
+
                 # FR-003a: Relative paths
-                if ref.startswith('/') or '..' in ref:
+                if clean_ref.startswith('/') or '..' in clean_ref:
                     # Special case for collision_id (see T001 discussion)
-                    if ref.startswith('collision_id:'):
+                    if clean_ref.startswith('collision_id:'):
                         continue
                         
                     self.add_error(
@@ -321,7 +354,7 @@ class EvidenceVerifier:
                     )
                     continue
 
-                ref_path = self.pack_path / ref
+                ref_path = self.pack_path / clean_ref
                 if not ref_path.exists():
                     # FR-003b: Missing evidence
                     if result == "PASS":

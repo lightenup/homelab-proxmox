@@ -1,0 +1,1 @@
+{"checks_schema_version": "1.0.0", "checks": [{"check_id": "ENV-001", "title": "Target is lab environment (not production)", "severity": "blocker", "source": "harness", "expected": "PASS", "result": "PASS", "reason": "Test", "evidence_refs": [], "timestamp": "2025-01-01T00:00:00Z"}]}

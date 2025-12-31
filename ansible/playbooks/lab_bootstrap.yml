@@ -107,3 +107,5 @@
     - name: Generate Assertion Report
       ansible.builtin.include_role:
         name: assertion_utils
+      vars:
+        phase: "bootstrap"

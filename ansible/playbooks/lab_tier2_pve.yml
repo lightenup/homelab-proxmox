@@ -920,4 +920,4 @@
         name: assertion_utils
         tasks_from: generate_report
       vars:
-        phase: "tier2_pve"
+        phase: "tier2"
