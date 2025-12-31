@@ -895,6 +895,42 @@ cmd_run() {
         fi
         
         emit_phase_complete "$run_id" "validation"
+        
+        # 019c1: Run guardrail checks (negative tests) - Phase 4 US2
+        emit_phase_start "$run_id" "guardrails"
+        log_info "Running guardrail checks (negative tests)..."
+        
+        if bash "${SCRIPT_DIR}/guardrails.sh" "$artifact_dir" "$run_id"; then
+            log_info "Guardrail checks passed (all guards working)"
+        else
+            local guard_rc=$?
+            if [[ $guard_rc -eq 2 ]]; then
+                # Safety hole detected (negative test unexpectedly passed)
+                log_error "CRITICAL: Safety hole detected in guardrail checks!"
+                log_error "Suite aborting due to guardrail breach."
+                emit_error "$run_id" "Guardrail safety hole detected - negative test unexpectedly passed"
+                status="FAILED"
+                # Check for any PASS results where FAIL was expected
+                for check_json in "${CHECKS_ARRAY[@]}"; do
+                    if echo "$check_json" | grep -q '"expected":"FAIL"' && echo "$check_json" | grep -q '"result":"PASS"'; then
+                        local check_id=$(echo "$check_json" | grep -oP '"check_id":"\K[^"]+' || echo "UNKNOWN")
+                        log_error "Check $check_id: Expected FAIL but got PASS (SAFETY HOLE)"
+                    fi
+                done
+                # Mark suite as aborted
+                SUITE_ABORT_REQUESTED=1
+            else
+                log_warn "Some guardrail checks could not be executed (non-critical)"
+            fi
+        fi
+        
+        emit_phase_complete "$run_id" "guardrails"
+        
+        # Abort if safety hole detected
+        if [[ "${SUITE_ABORT_REQUESTED:-0}" -eq 1 ]]; then
+            log_error "Suite aborted due to safety hole in guardrail checks"
+            status="ABORTED"
+        fi
     else
         log_error "Setup failed."
         emit_error "$run_id" "VM provisioning failed"

@@ -82,14 +82,14 @@
 
 **Implementation Tasks**:
 
-- [ ] T031 [US2] Implement GUARD-001 in scripts/lab/guardrails.sh (tier2 playbook with lab_inventory=false, expect FAIL)
-- [ ] T032 [US2] Implement GUARD-002 in scripts/lab/guardrails.sh (generate temp inventory artifacts/<runid>/tmp/inventory_bad_hostname.yml with non-lab hostname, expect FAIL)
-- [ ] T032a [US2] Clean up tmp/ directory after negative tests complete in scripts/lab/guardrails.sh (ephemeral, not included in evidence pack)
-- [ ] T033 [US2] Implement GUARD-003 in scripts/lab/guardrails.sh (dry-run destroy validation with synthetic qm config, expect FAIL)
-- [ ] T034 [US2] Add expected vs actual result validator in lib/checks.sh (validate_negative_test)
-- [ ] T035 [US2] Add ERROR condition handler for guardrail breaches in scripts/lab/pve-lab (unexpected PASS → ERROR + abort)
-- [ ] T036 [US2] Record all guardrail checks with expected=FAIL in checks.json
-- [ ] T037 [US2] Add guardrails phase to profile definitions (call guardrails.sh)
+- [X] T031 [US2] Implement GUARD-001 in scripts/lab/guardrails.sh (tier2 playbook with lab_inventory=false, expect FAIL)
+- [X] T032 [US2] Implement GUARD-002 in scripts/lab/guardrails.sh (generate temp inventory artifacts/<runid>/tmp/inventory_bad_hostname.yml with non-lab hostname, expect FAIL)
+- [X] T032a [US2] Clean up tmp/ directory after negative tests complete in scripts/lab/guardrails.sh (ephemeral, not included in evidence pack)
+- [X] T033 [US2] Implement GUARD-003 in scripts/lab/guardrails.sh (dry-run destroy validation with synthetic qm config, expect FAIL)
+- [X] T034 [US2] Add expected vs actual result validator in lib/checks.sh (validate_negative_test) [DONE IN PHASE 1]
+- [X] T035 [US2] Add ERROR condition handler for guardrail breaches in scripts/lab/pve-lab (unexpected PASS → ERROR + abort)
+- [X] T036 [US2] Record all guardrail checks with expected=FAIL in checks.json
+- [X] T037 [US2] Add guardrails phase to pve-lab suite execution (call guardrails.sh)
 
 ---
 
