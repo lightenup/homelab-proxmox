@@ -130,6 +130,73 @@ check_env_002() {
     fi
 }
 
+# CLEANUP-PRE-001: Preflight check for stale resources
+check_cleanup_pre_001() {
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    local evidence_file="${EVIDENCE_ROOT}/reports/cleanup/preflight-inventory.txt"
+    mkdir -p "$(dirname "$evidence_file")"
+
+    log_info "Running CLEANUP-PRE-001: Preflight check for stale resources"
+
+    # 1. Scan for VMs in range (excluding templates)
+    local stale_vms
+    stale_vms="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= $LAB_VMID_START && \$1 <= $LAB_VMID_END && \$1 != $LAB_TEMPLATE_VMID && \$1 != $LAB_TEMPLATE_VMID_TIER2 {print \$1}'")"
+    
+    # Capture inventory evidence
+    ssh $SSH_OPTS "$ssh_target" "qm list" > "$evidence_file"
+
+    if [[ -z "$stale_vms" ]]; then
+        log_info "  CLEANUP-PRE-001 PASS: No stale resources found"
+        record_check "CLEANUP-PRE-001" \
+            "Preflight cleanup check" \
+            "blocker" \
+            "PASS" \
+            "PASS" \
+            "No stale resources found in range $LAB_VMID_START-$LAB_VMID_END" \
+            "file:reports/cleanup/preflight-inventory.txt"
+        return 0
+    fi
+
+    log_warn "  CLEANUP-PRE-001: Found stale VMs: $(echo "$stale_vms" | tr '\n' ' ')"
+    log_info "  Attempting cleanup..."
+
+    # 2. Attempt cleanup
+    local cleanup_failed=0
+    for vmid in $stale_vms; do
+        log_info "    Destroying stale VM $vmid..."
+        if ! ssh $SSH_OPTS "$ssh_target" "qm stop $vmid --skiplock >/dev/null 2>&1; qm destroy $vmid --purge >/dev/null 2>&1"; then
+            log_error "    Failed to destroy VM $vmid"
+            cleanup_failed=1
+        fi
+    done
+
+    # 3. Verify cleanup
+    local remaining_vms
+    remaining_vms="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= $LAB_VMID_START && \$1 <= $LAB_VMID_END {print \$1}'")"
+
+    if [[ -n "$remaining_vms" ]]; then
+        log_error "  CLEANUP-PRE-001 FAIL: Failed to remove stale resources: $(echo "$remaining_vms" | tr '\n' ' ')"
+        record_check "CLEANUP-PRE-001" \
+            "Preflight cleanup check" \
+            "blocker" \
+            "PASS" \
+            "FAIL" \
+            "Failed to remove stale resources: $(echo "$remaining_vms" | tr '\n' ' ')" \
+            "file:reports/cleanup/preflight-inventory.txt"
+        return 1
+    else
+        log_info "  CLEANUP-PRE-001 PASS: Stale resources found and removed"
+        record_check "CLEANUP-PRE-001" \
+            "Preflight cleanup check" \
+            "blocker" \
+            "PASS" \
+            "PASS" \
+            "Stale resources found and removed: $(echo "$stale_vms" | tr '\n' ' ')" \
+            "file:reports/cleanup/preflight-inventory.txt"
+        return 0
+    fi
+}
+
 # Suite execution semantics: Check if suite should abort
 # Returns: 0 if should continue, 1 if should abort
 should_abort_suite() {
@@ -968,8 +1035,11 @@ cmd_run() {
     # 019c1: Emit phase event
     emit_phase_start "$run_id" "destroy-cleanup"
     
-    # Ensure clean state
-    cmd_destroy
+    # Ensure clean state (CLEANUP-PRE-001)
+    if ! check_cleanup_pre_001; then
+        log_error "CLEANUP-PRE-001 failed: Could not clean up stale resources. Aborting."
+        exit 1
+    fi
     
     emit_phase_complete "$run_id" "destroy-cleanup"
     
@@ -1068,6 +1138,10 @@ cmd_run() {
                 local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
                 local lock_dir="artifacts/019-lab"
                 
+                # Explicitly destroy resources before verification (T003)
+                log_info "Teardown: Destroying lab resources..."
+                cmd_destroy
+
                 # CLEANUP-001: Verify no lab VMs remain
                 log_info "CLEANUP-001: Checking for remaining lab VMs..."
                 if check_no_lab_vms "$ssh_target" "$artifact_dir"; then

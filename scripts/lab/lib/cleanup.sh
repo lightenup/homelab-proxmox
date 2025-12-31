@@ -16,8 +16,9 @@ check_no_lab_vms() {
     capture_vm_inventory "$ssh_target" "$inventory_file"
     
     # Check for VMs in lab range with lab markers
+    # Exclude templates (9001, 9002)
     local lab_vms
-    lab_vms="$(ssh "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 {print \$1}'" || echo "")"
+    lab_vms="$(ssh "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 && \$1 != 9001 && \$1 != 9002 {print \$1}'" || echo "")"
     
     if [[ -z "$lab_vms" ]]; then
         echo "PASS: No lab VMs found in range 9000-9099"
