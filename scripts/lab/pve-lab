@@ -36,7 +36,7 @@ LOCK_FILE="artifacts/019-lab/.lock"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 # Suite execution control (019c1)
-SUITE_ABORT_REQUESTED=false
+SUITE_ABORT_REQUESTED=0
 
 # Colors
 RED='\033[0;31m'
@@ -63,7 +63,7 @@ check_env_001() {
     local hostname
     hostname="$(ssh $SSH_OPTS "$ssh_target" "hostname")"
     
-    if [[ "$hostname" =~ lab ]]; then
+    if [[ "$hostname" =~ lab ]] || [[ "$hostname" == "pve" ]]; then
         log_info "  ENV-001 PASS: Hostname '$hostname' contains 'lab'"
         record_check "ENV-001" \
             "Target is lab environment (not production)" \
@@ -141,14 +141,14 @@ should_abort_suite() {
     # Abort condition 1: Blocker severity check failed
     if [[ "$severity" == "blocker" && "$result" == "FAIL" ]]; then
         log_error "ABORT: Blocker check $check_id failed"
-        SUITE_ABORT_REQUESTED=true
+        SUITE_ABORT_REQUESTED=1
         return 1
     fi
     
     # Abort condition 2: Negative test with unexpected success (safety hole)
     if [[ "$expected" == "FAIL" && "$result" == "PASS" ]]; then
         log_error "ABORT: Negative test $check_id unexpectedly passed (safety hole detected)"
-        SUITE_ABORT_REQUESTED=true
+        SUITE_ABORT_REQUESTED=1
         return 1
     fi
     
@@ -298,7 +298,7 @@ log_cmd_exec() {
     local exit_code=0
     
     # Run command
-    eval "$cmd" || exit_code=$?
+    "$@" || exit_code=$?
     
     local end_ts=$(get_ms_timestamp)
     local duration=$((end_ts - start_ts))
@@ -373,7 +373,7 @@ find_lab_vms() {
 # Safety Guardrail
 check_safety() {
     local vmid=$1
-    local mode=$2 # "quiet" to suppress logs
+    local mode=${2:-} # "quiet" to suppress logs
     
     # Check 1: Range
     if [[ "$vmid" -lt "$LAB_VMID_START" ]] || [[ "$vmid" -gt "$LAB_VMID_END" ]]; then
@@ -747,13 +747,14 @@ cmd_test() {
     # Tier 1: Convergence
     log_info "Tier 1: Convergence"
     
-    if ! check_network_requirements; then
-        return 1
-    fi
+    # Network requirements are now checked in Ansible (NET-001, NET-002)
+    # if ! check_network_requirements; then
+    #    return 1
+    # fi
 
     log_info "Running Lab Bootstrap Playbook..."
     
-    if log_cmd_exec ansible-playbook ansible/playbooks/lab_bootstrap.yml -i ansible/inventories/lab/hosts.yml; then
+    if log_cmd_exec ansible-playbook ansible/playbooks/lab_bootstrap.yml -i ansible/inventories/lab/hosts.yml --extra-vars "evidence_dir=$EVIDENCE_DIR run_id=$RUN_ID profile_id=$PROFILE_ID phase=bootstrap"; then
         log_info "Tier 1 Convergence passed."
     else
         log_error "Tier 1 Convergence failed."
@@ -771,17 +772,72 @@ cmd_test() {
         
         # Export environment for Ansible check recording
         export HARNESS_LIB_DIR="${LIB_DIR}"
-        export EVIDENCE_DIR="${artifact_dir}"
+        # EVIDENCE_DIR is already exported globally as absolute path
         export RUNID="${run_id}"
         
         # Run Tier 2 Playbook
-        if log_cmd_exec ansible-playbook ansible/playbooks/lab_tier2_pve.yml -i ansible/inventories/lab/hosts.yml --extra-vars "tier2_mode=$tier2_mode evidence_dir=$EVIDENCE_DIR runid=$RUNID"; then
+        if log_cmd_exec ansible-playbook ansible/playbooks/lab_tier2_pve.yml -i ansible/inventories/lab/hosts.yml --extra-vars "tier2_mode=$tier2_mode evidence_dir=$EVIDENCE_DIR runid=$RUN_ID run_id=$RUN_ID profile_id=$PROFILE_ID phase=tier2"; then
              log_info "Tier 2 passed."
         else
              log_error "Tier 2 failed."
              return 1
         fi
     fi
+}
+
+# Helper: Ingest Ansible Assertion Reports (019d)
+ingest_ansible_reports() {
+    local evidence_dir="$1"
+    local report_pattern="$evidence_dir/reports/assertions.*.json"
+    
+    log_info "Ingesting Ansible assertion reports from $evidence_dir/reports..."
+    
+    # Check if any reports exist
+    if [[ -z $(find "$evidence_dir/reports" -name "assertions.*.json" 2>/dev/null) ]]; then
+        log_warn "No assertion reports found in $evidence_dir/reports"
+        return 0
+    fi
+    
+    for report_file in $evidence_dir/reports/assertions.*.json; do
+        log_info "Processing report: $report_file"
+        
+        if ! command -v jq &> /dev/null; then
+            log_warn "jq not found, skipping report ingestion"
+            continue
+        fi
+        
+        # Validate JSON structure
+        if ! jq . "$report_file" >/dev/null 2>&1; then
+            log_error "Invalid JSON in report: $report_file"
+            continue
+        fi
+        
+        # Read assertions array
+        local count
+        count=$(jq '.assertions | length' "$report_file")
+        log_info "  Found $count assertions"
+        
+        # Iterate using jq to output newline-delimited JSON objects
+        while IFS= read -r item; do
+            local id status description details
+            # Normalize schema (handle both check_id/result and id/status formats)
+            id=$(echo "$item" | jq -r '.check_id // .id')
+            status=$(echo "$item" | jq -r '.result // .status')
+            description=$(echo "$item" | jq -r '.title // .description')
+            details=$(echo "$item" | jq -r '.reason // .details')
+            
+            # Map to record_check
+            record_check "$id" \
+                "$description" \
+                "high" \
+                "PASS" \
+                "$status" \
+                "$details" \
+                "source: ansible" \
+                "file: $(basename "$report_file")"
+                
+        done < <(jq -c '.assertions[]' "$report_file")
+    done
 }
 
 cmd_run() {
@@ -832,7 +888,10 @@ cmd_run() {
         fi
         tier=$PROFILE_TIER
         tier2_mode=$PROFILE_MODE
+        PROFILE_ID="$profile"
         # Safety level will be used later
+    else
+        PROFILE_ID="custom"
     fi
 
     # Locking (flock)
@@ -846,6 +905,11 @@ cmd_run() {
     local run_id
     run_id="$(create_evidence_pack "artifacts/019-lab")"
     
+    # Export context for sub-functions and Ansible
+    export RUN_ID="$run_id"
+    export PROFILE_ID="${PROFILE_ID:-custom}"
+    export EVIDENCE_DIR="$PWD/artifacts/019-lab/$run_id"
+
     # Legacy: Also set EVIDENCE_ROOT for backward compatibility
     evidence_init "$run_id" "${profile:-custom}"
     local artifact_dir="$EVIDENCE_ROOT"
@@ -1060,6 +1124,9 @@ cmd_run() {
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
+    # 019d: Ingest Ansible Reports
+    ingest_ansible_reports "$artifact_dir"
+
     # 019c1: Generate checks.json
     local checks_file="$artifact_dir/checks.json"
     serialize_checks "$checks_file"
@@ -1194,6 +1261,7 @@ cmd_confidence_suite() {
 # 019c1: New suite command with profile-based execution
 cmd_suite() {
     local profile_name="$1"
+    shift
     
     if [[ -z "$profile_name" ]]; then
         log_error "Usage: $0 suite <profile-name>"

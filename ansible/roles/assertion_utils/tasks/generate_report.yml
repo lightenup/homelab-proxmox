@@ -1,0 +1,26 @@
+---
+- name: "Ensure evidence directory exists"
+  ansible.builtin.file:
+    path: "{{ evidence_dir }}/reports"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  when: evidence_dir is defined
+
+- name: "Generate Assertion Report"
+  ansible.builtin.copy:
+    content: |
+      {{
+        {
+          'run_id': run_id | default('manual'),
+          'profile_id': profile_id | default('default'),
+          'phase': phase | default('unknown'),
+          'timestamp': ansible_date_time.iso8601,
+          'assertions': assertion_results | default([])
+        } | to_nice_json
+      }}
+    dest: "{{ evidence_dir }}/reports/assertions.{{ phase | default('unknown') }}.json"
+  delegate_to: localhost
+  become: false
+  when: evidence_dir is defined
