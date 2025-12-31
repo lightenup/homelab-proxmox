@@ -5,8 +5,12 @@
   gather_facts: true
 
   tasks:
+    - name: Initialize assertion results
+      ansible.builtin.set_fact:
+        assertion_results: []
+
     - name: Ensure basic packages are installed
-      apt:
+      ansible.builtin.apt:
         name:
           - curl
           - git
@@ -16,11 +20,65 @@
         update_cache: true
 
     - name: Verify hostname
-      assert:
+      ansible.builtin.assert:
         that:
           - ansible_facts['hostname'] is match('lab-pve-.*')
         fail_msg: "Hostname mismatch! Expected lab-pve-*, got {{ ansible_facts['hostname'] }}"
 
+    # NET-001: DNS Resolution
+    - name: "[NET-001] Verify DNS resolution"
+      block:
+        - name: "Check DNS resolution"
+          ansible.builtin.command: getent hosts deb.debian.org
+          register: dns_check
+          ignore_errors: true
+
+        - name: "Assert DNS resolution success"
+          ansible.builtin.assert:
+            that:
+              - dns_check.rc == 0
+            fail_msg: "[NET-001] DNS resolution failed. Remediation: Check /etc/resolv.conf."
+            success_msg: "[NET-001] DNS resolution OK."
+      always:
+        - name: "Record NET-001 result"
+          ansible.builtin.set_fact:
+            assertion_results: "{{ assertion_results + [{
+              'check_id': 'NET-001',
+              'title': 'Verify DNS resolution',
+              'result': (dns_check.rc == 0) | ternary('PASS', 'FAIL'),
+              'reason': dns_check.stderr | default('DNS lookup failed'),
+              'remediation': 'Check /etc/resolv.conf'
+            }] }}"
+
+    # NET-002: Internet Connectivity
+    - name: "[NET-002] Verify Internet connectivity"
+      block:
+        - name: "Check Internet connectivity"
+          ansible.builtin.command: curl -I -s --connect-timeout 5 https://deb.debian.org
+          register: internet_check
+          ignore_errors: true
+
+        - name: "Assert Internet connectivity success"
+          ansible.builtin.assert:
+            that:
+              - internet_check.rc == 0
+            fail_msg: "[NET-002] Internet connectivity failed. Remediation: Check gateway and firewall."
+            success_msg: "[NET-002] Internet connectivity OK."
+      always:
+        - name: "Record NET-002 result"
+          ansible.builtin.set_fact:
+            assertion_results: "{{ assertion_results + [{
+              'check_id': 'NET-002',
+              'title': 'Verify Internet connectivity',
+              'result': (internet_check.rc == 0) | ternary('PASS', 'FAIL'),
+              'reason': internet_check.stderr | default('Connection failed'),
+              'remediation': 'Check gateway and firewall'
+            }] }}"
+
     - name: Print success message
-      debug:
+      ansible.builtin.debug:
         msg: "Lab Bootstrap Completed Successfully on {{ inventory_hostname }}"
+
+    - name: Generate Assertion Report
+      ansible.builtin.include_role:
+        name: assertion_utils

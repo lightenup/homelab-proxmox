@@ -32,7 +32,7 @@ record_check() {
   "expected": "$expected",
   "result": "$result",
   "reason": "$reason",
-  "evidence_refs": $(printf '%s\n' "${evidence_refs[@]}" | jq -R . | jq -s .),
+  "evidence_refs": $(printf '%s\n' "${evidence_refs[@]:-}" | jq -R . | jq -s .),
   "timestamp": "$timestamp"
 }
 EOF
