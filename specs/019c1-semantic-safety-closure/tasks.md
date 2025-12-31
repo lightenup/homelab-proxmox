@@ -101,13 +101,13 @@
 
 **Implementation Tasks**:
 
-- [ ] T038 [US3] Implement CLEANUP-001 check in lib/cleanup.sh (verify no VMs in 9000-9099 range with lab markers)
-- [ ] T039 [US3] Implement VM inventory capture in lib/cleanup.sh (qm list → reports/vm_inventory.json)
-- [ ] T040 [US3] Implement CLEANUP-002 check in lib/cleanup.sh (verify no processes hold locks via flock -n test)
-- [ ] T041 [US3] Implement lock status probe in lib/cleanup.sh (capture lock state → reports/lock_status.json)
-- [ ] T042 [US3] Add cleanup phase to scripts/lab/pve-lab (run cleanup checks unless --keep flag)
-- [ ] T043 [US3] Add --keep flag handler in scripts/lab/pve-lab (mark cleanup checks as SKIP with reason)
-- [ ] T044 [US3] Ensure all cleanup check evidence_refs use relative paths and are in evidence_manifest.json
+- [X] T038 [US3] Implement CLEANUP-001 check in lib/cleanup.sh (verify no VMs in 9000-9099 range with lab markers)
+- [X] T039 [US3] Implement VM inventory capture in lib/cleanup.sh (qm list → reports/vm_inventory.json)
+- [X] T040 [US3] Implement CLEANUP-002 check in lib/cleanup.sh (verify no processes hold locks via flock -n test)
+- [X] T041 [US3] Implement lock status probe in lib/cleanup.sh (capture lock state → reports/lock_status.json)
+- [X] T042 [US3] Add cleanup phase to scripts/lab/pve-lab (run cleanup checks unless --keep flag)
+- [X] T043 [US3] Add --keep flag handler in scripts/lab/pve-lab (mark cleanup checks as SKIP with reason)
+- [X] T044 [US3] Ensure all cleanup check evidence_refs use relative paths and are in evidence_manifest.json
 
 ---
 

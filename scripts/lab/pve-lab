@@ -931,6 +931,81 @@ cmd_run() {
             log_error "Suite aborted due to safety hole in guardrail checks"
             status="ABORTED"
         fi
+        
+        # 019c1: Run cleanup verification checks - Phase 5 US3
+        if [[ "${SUITE_ABORT_REQUESTED:-0}" -ne 1 ]]; then
+            emit_phase_start "$run_id" "cleanup-verification"
+            log_info "Running cleanup verification checks..."
+            
+            if [[ "$keep_vm" == "true" ]]; then
+                # T043: --keep flag handler - skip cleanup checks with reason
+                log_info "CLEANUP-001: SKIP (VM kept by operator)"
+                record_check "CLEANUP-001" \
+                    "No lab VMs remain in range after run" \
+                    "medium" \
+                    "PASS" \
+                    "SKIP" \
+                    "VM kept by operator (--keep flag)" \
+                    "reports/vm_inventory.json"
+                
+                log_info "CLEANUP-002: SKIP (VM kept by operator)"
+                record_check "CLEANUP-002" \
+                    "No active locks remain after run" \
+                    "medium" \
+                    "PASS" \
+                    "SKIP" \
+                    "VM kept by operator (--keep flag)" \
+                    "reports/lock_status.json"
+            else
+                # T038-T044: Run cleanup verification checks
+                local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+                local lock_dir="artifacts/019-lab"
+                
+                # CLEANUP-001: Verify no lab VMs remain
+                log_info "CLEANUP-001: Checking for remaining lab VMs..."
+                if check_no_lab_vms "$ssh_target" "$artifact_dir"; then
+                    record_check "CLEANUP-001" \
+                        "No lab VMs remain in range after run" \
+                        "medium" \
+                        "PASS" \
+                        "PASS" \
+                        "No VMs found in range 9000-9099" \
+                        "reports/vm_inventory.json"
+                else
+                    record_check "CLEANUP-001" \
+                        "No lab VMs remain in range after run" \
+                        "medium" \
+                        "PASS" \
+                        "FAIL" \
+                        "Lab VMs still present after cleanup" \
+                        "reports/vm_inventory.json"
+                    log_warn "CLEANUP-001 failed: VMs still present (non-critical)"
+                fi
+                
+                # CLEANUP-002: Verify no active locks remain
+                log_info "CLEANUP-002: Checking for active locks..."
+                if check_no_active_locks "$lock_dir" "$artifact_dir"; then
+                    record_check "CLEANUP-002" \
+                        "No active locks remain after run" \
+                        "medium" \
+                        "PASS" \
+                        "PASS" \
+                        "No processes hold locks" \
+                        "reports/lock_status.json"
+                else
+                    record_check "CLEANUP-002" \
+                        "No active locks remain after run" \
+                        "medium" \
+                        "PASS" \
+                        "FAIL" \
+                        "Active locks detected after cleanup" \
+                        "reports/lock_status.json"
+                    log_warn "CLEANUP-002 failed: Active locks remain (non-critical)"
+                fi
+            fi
+            
+            emit_phase_complete "$run_id" "cleanup-verification"
+        fi
     else
         log_error "Setup failed."
         emit_error "$run_id" "VM provisioning failed"

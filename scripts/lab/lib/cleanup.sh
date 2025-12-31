@@ -62,14 +62,16 @@ check_no_active_locks() {
     
     # Check if any locks are held (using flock -n test)
     local active_locks=0
-    for lock_file in "$lock_dir"/*.lock 2>/dev/null; do
-        if [[ -f "$lock_file" ]]; then
-            # Try to acquire lock non-blocking
-            if ! flock -n "$lock_file" true 2>/dev/null; then
-                active_locks=$((active_locks + 1))
+    if ls "$lock_dir"/*.lock >/dev/null 2>&1; then
+        for lock_file in "$lock_dir"/*.lock; do
+            if [[ -f "$lock_file" ]]; then
+                # Try to acquire lock non-blocking
+                if ! flock -n "$lock_file" true 2>/dev/null; then
+                    active_locks=$((active_locks + 1))
+                fi
             fi
-        fi
-    done
+        done
+    fi
     
     if [[ $active_locks -eq 0 ]]; then
         echo "PASS: No active locks found"
@@ -90,17 +92,29 @@ probe_lock_status() {
     
     # List lock files and their status
     local lock_files=()
-    for lock_file in "$lock_dir"/*.lock 2>/dev/null; do
-        if [[ -f "$lock_file" ]]; then
-            lock_files+=("$(basename "$lock_file")")
-        fi
-    done
+    local lock_pattern="${lock_dir}/*.lock"
+    
+    # Check if any .lock files exist
+    if compgen -G "$lock_pattern" > /dev/null 2>&1; then
+        for lock_file in $lock_pattern; do
+            if [[ -f "$lock_file" ]]; then
+                lock_files+=("$(basename "$lock_file")")
+            fi
+        done
+    fi
     
     # Format as JSON
+    if [[ ${#lock_files[@]} -gt 0 ]]; then
+        local lock_files_json
+        lock_files_json=$(printf '%s\n' "${lock_files[@]}" | jq -R . | jq -s .)
+    else
+        lock_files_json="[]"
+    fi
+    
     cat > "$output_file" <<EOF
 {
   "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-  "lock_files": $(printf '%s\n' "${lock_files[@]}" | jq -R . | jq -s .)
+  "lock_files": ${lock_files_json}
 }
 EOF
 }
