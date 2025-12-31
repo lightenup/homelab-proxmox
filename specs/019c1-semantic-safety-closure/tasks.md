@@ -137,11 +137,11 @@
 
 **Implementation Tasks**:
 
-- [ ] T052 [US5] Add legacy flag parser to scripts/lab/pve-lab (parse --tier and --tier2-mode)
-- [ ] T053 [US5] Implement legacy-to-profile mapper in scripts/lab/pve-lab (tier=2 → hypervisor-control-plane, tier=2 mode=plus → hypervisor-nested-workload)
-- [ ] T054 [US5] Add deprecation warning emitter in scripts/lab/pve-lab (show equivalent profile command)
-- [ ] T055 [US5] Update summary.json to always include profile field (even for legacy commands)
-- [ ] T056 [US5] Ensure legacy commands execute same profiles as modern suite command
+- [X] T052 [US5] Add legacy flag parser to scripts/lab/pve-lab (parse --tier and --tier2-mode) - Already existed
+- [X] T053 [US5] Implement legacy-to-profile mapper in scripts/lab/pve-lab (tier=2 → hypervisor-control-plane, tier=2 mode=plus → hypervisor-nested-workload)
+- [X] T054 [US5] Add deprecation warning emitter in scripts/lab/pve-lab (show equivalent profile command)
+- [X] T055 [US5] Update summary.json to always include profile field (even for legacy commands) - Already includes profile field
+- [X] T056 [US5] Ensure legacy commands execute same profiles as modern suite command - Mapping feeds into same parse_profile() logic
 
 ---
 

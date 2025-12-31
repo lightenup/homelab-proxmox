@@ -801,6 +801,28 @@ cmd_run() {
         shift
     done
 
+    # 019c1 Phase 7: Legacy-to-Profile Mapping (T052, T053, T054)
+    local legacy_mode_used=false
+    
+    # T053: Map legacy flags to profiles if --profile not explicitly set
+    if [[ -z "$profile" ]]; then
+        if [[ "$tier" == "2" ]]; then
+            legacy_mode_used=true
+            if [[ "$tier2_mode" == "plus" ]]; then
+                profile="hypervisor-nested-workload"
+            else
+                profile="hypervisor-control-plane"
+            fi
+        fi
+    fi
+    
+    # T054: Emit deprecation warning for legacy flags
+    if [[ "$legacy_mode_used" == "true" ]]; then
+        log_warn "⚠️  DEPRECATION NOTICE: --tier and --tier2-mode flags are deprecated"
+        log_warn "   Please use: pve-lab suite $profile"
+        log_warn ""
+    fi
+
     # Apply Profile if set
     if [[ -n "$profile" ]]; then
         if ! parse_profile "$profile"; then
