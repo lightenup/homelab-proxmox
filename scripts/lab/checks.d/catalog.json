@@ -207,5 +207,85 @@
     "severity": "blocker",
     "source": "harness",
     "allow_missing_evidence": true
+  },
+  "HOST-001": {
+    "check_id": "HOST-001",
+    "title": "Proxmox host reachable via SSH",
+    "owner": "harness",
+    "phase": "baseline-host",
+    "severity": "blocker",
+    "source": "harness"
+  },
+  "HOST-002": {
+    "check_id": "HOST-002",
+    "title": "Required bridge exists and has expected gateway IP",
+    "owner": "harness",
+    "phase": "baseline-host",
+    "severity": "blocker",
+    "source": "harness"
+  },
+  "HOST-003": {
+    "check_id": "HOST-003",
+    "title": "Required storage backend exists",
+    "owner": "harness",
+    "phase": "baseline-host",
+    "severity": "blocker",
+    "source": "harness"
+  },
+  "HOST-004": {
+    "check_id": "HOST-004",
+    "title": "Host nested virtualization enabled",
+    "owner": "harness",
+    "phase": "baseline-host",
+    "severity": "high",
+    "source": "harness"
+  },
+  "TPL-001": {
+    "check_id": "TPL-001",
+    "title": "Base template exists (VMID 9001)",
+    "owner": "harness",
+    "phase": "baseline-templates",
+    "severity": "blocker",
+    "source": "harness"
+  },
+  "TPL-002": {
+    "check_id": "TPL-002",
+    "title": "Tier2 template exists (VMID 9002)",
+    "owner": "harness",
+    "phase": "baseline-templates",
+    "severity": "blocker",
+    "source": "harness"
+  },
+  "TPL-003": {
+    "check_id": "TPL-003",
+    "title": "Templates are marked as templates",
+    "owner": "harness",
+    "phase": "baseline-templates",
+    "severity": "high",
+    "source": "harness"
+  },
+  "TPL-004": {
+    "check_id": "TPL-004",
+    "title": "Templates have identity markers (ManagedBy tag policy)",
+    "owner": "harness",
+    "phase": "baseline-templates",
+    "severity": "high",
+    "source": "harness"
+  },
+  "TPL-005": {
+    "check_id": "TPL-005",
+    "title": "Templates have cloud-init user and SSH key configured",
+    "owner": "harness",
+    "phase": "baseline-templates",
+    "severity": "high",
+    "source": "harness"
+  },
+  "TPL-006": {
+    "check_id": "TPL-006",
+    "title": "Template metadata conforms to naming policy",
+    "owner": "harness",
+    "phase": "baseline-templates",
+    "severity": "medium",
+    "source": "harness"
   }
 }

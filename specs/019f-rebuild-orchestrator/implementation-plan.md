@@ -2,6 +2,9 @@
 
 **Feature Branch**: `019f-rebuild-orchestrator`
 **Spec**: [spec.md](spec.md)
+**Research**: [research.md](research.md)
+**Data Model**: [data-model.md](data-model.md)
+**Quickstart**: [quickstart.md](quickstart.md)
 
 ## Strategy
 

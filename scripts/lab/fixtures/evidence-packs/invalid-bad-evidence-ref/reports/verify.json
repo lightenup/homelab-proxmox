@@ -2,6 +2,16 @@
   "status": "FAIL",
   "errors": [
     {
+      "code": "CAT-005",
+      "message": "Title mismatch for ENV-001",
+      "remediation": "Expected: 'Target is lab environment (not production)', Got: 'Verify lab environment (hostname pattern)'. Update emitter to match catalog."
+    },
+    {
+      "code": "CAT-007",
+      "message": "Check ENV-001 missing phase",
+      "remediation": "Ensure emitter adds phase field"
+    },
+    {
       "code": "REF-002",
       "message": "Missing evidence 'non-existent.txt' for PASS check ENV-001",
       "remediation": "Ensure all evidence files exist for passing checks"
@@ -10,5 +20,5 @@
   "warnings": [],
   "contract_version": "1.0.0",
   "verifier_version": "1.0.0",
-  "timestamp": "2025-12-31T14:51:32.883593"
+  "timestamp": "2025-12-31T21:09:05.251485"
 }

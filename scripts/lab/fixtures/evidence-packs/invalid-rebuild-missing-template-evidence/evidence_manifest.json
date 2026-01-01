@@ -1,0 +1,31 @@
+{
+  "contract_version": "1.0.0",
+  "manifest_schema_version": "1.0.0",
+  "artifacts": [
+    {
+      "path": "reports/host/HOST-002-bridge.txt",
+      "type": "text/plain",
+      "check_id": "HOST-002"
+    },
+    {
+      "path": "reports/host/HOST-003-storage.txt",
+      "type": "text/plain",
+      "check_id": "HOST-003"
+    },
+    {
+      "path": "reports/host/HOST-004-nested.txt",
+      "type": "text/plain",
+      "check_id": "HOST-004"
+    },
+    {
+      "path": "reports/templates/TPL-001-qm-status-9001.txt",
+      "type": "text/plain",
+      "check_id": "TPL-001"
+    },
+    {
+      "path": "reports/templates/TPL-002-qm-status-9002.txt",
+      "type": "text/plain",
+      "check_id": "TPL-002"
+    }
+  ]
+}

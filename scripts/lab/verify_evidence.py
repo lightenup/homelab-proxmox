@@ -194,7 +194,8 @@ class EvidenceVerifier:
             self.add_error("JSON-003", "checks.json must be a list or object with 'checks' array", "Fix checks.json structure")
             return
 
-        summary = self.data.get('summary', {})
+        # Handle missing/None summary gracefully to avoid AttributeError
+        summary = self.data.get('summary') or {}
         allow_deprecated = summary.get('allow_deprecated_checks', False)
 
         for check in checks:
@@ -388,7 +389,7 @@ class EvidenceVerifier:
         return len(self.errors) == 0
 
     def report(self):
-        summary = self.data.get('summary', {})
+        summary = self.data.get('summary') or {}
         contract_version = summary.get('contract_version', '1.0.0')
         
         report_data = {

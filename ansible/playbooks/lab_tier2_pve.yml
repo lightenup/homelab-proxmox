@@ -25,8 +25,8 @@
     - name: Ensure hostname in /etc/hosts
       lineinfile:
         path: /etc/hosts
-        regexp: "^{{ ansible_default_ipv4.address }}.*{{ inventory_hostname }}"
-        line: "{{ ansible_default_ipv4.address }} {{ inventory_hostname }}.lab.local {{ inventory_hostname }} pvelocalhost"
+        regexp: "^{{ ansible_facts['default_ipv4']['address'] }}.*{{ inventory_hostname }}"
+        line: "{{ ansible_facts['default_ipv4']['address'] }} {{ inventory_hostname }}.lab.local {{ inventory_hostname }} pvelocalhost"
         state: present
 
     # -------------------------------------------------------------------------
@@ -278,15 +278,15 @@
           auto lo
           iface lo inet loopback
 
-          auto {{ ansible_default_ipv4.interface }}
-          iface {{ ansible_default_ipv4.interface }} inet manual
+            auto {{ ansible_facts['default_ipv4']['interface'] }}
+            iface {{ ansible_facts['default_ipv4']['interface'] }} inet manual
 
           auto vmbr0
           iface vmbr0 inet static
-              address {{ ansible_default_ipv4.address }}
-              netmask {{ ansible_default_ipv4.netmask }}
-              gateway {{ ansible_default_ipv4.gateway }}
-              bridge-ports {{ ansible_default_ipv4.interface }}
+              address {{ ansible_facts['default_ipv4']['address'] }}
+              netmask {{ ansible_facts['default_ipv4']['netmask'] }}
+              gateway {{ ansible_facts['default_ipv4']['gateway'] }}
+              bridge-ports {{ ansible_facts['default_ipv4']['interface'] }}
               bridge-stp off
               bridge-fd 0
               dns-nameservers 1.1.1.1 8.8.8.8
@@ -511,8 +511,8 @@
           assert:
             that:
               - vmbr0_check.rc == 0
-              - ansible_default_ipv4.address in vmbr0_check.stdout
-            fail_msg: "vmbr0 not configured or missing IP {{ ansible_default_ipv4.address }}"
+              - ansible_facts['default_ipv4']['address'] in vmbr0_check.stdout
+            fail_msg: "vmbr0 not configured or missing IP {{ ansible_facts['default_ipv4']['address'] }}"
             
         - name: Save vmbr0 configuration to evidence
           copy:
@@ -530,16 +530,17 @@
           set_fact:
             assertion_results: "{{ assertion_results + [{
               'id': 'NET-003',
-              'status': 'PASS' if (vmbr0_check.rc == 0 and ansible_default_ipv4.address in vmbr0_check.stdout) else 'FAIL',
+              'status': 'PASS' if (vmbr0_check.rc == 0 and ansible_facts['default_ipv4']['address'] in vmbr0_check.stdout) else 'FAIL',
               'description': 'vmbr0 bridge configured with expected IP',
-              'details': 'vmbr0 bridge configured with ' + ansible_default_ipv4.address if (vmbr0_check.rc == 0 and ansible_default_ipv4.address in vmbr0_check.stdout) else 'vmbr0 bridge not configured correctly'
+                'details': (vmbr0_check.rc == 0 and ansible_facts['default_ipv4']['address'] in vmbr0_check.stdout)
+                  | ternary('vmbr0 bridge configured with ' ~ ansible_facts['default_ipv4']['address'], 'vmbr0 bridge not configured correctly')
             }] }}"
 
     - name: NET-004 - Test SSH connectivity to lab VM
       block:
         - name: Check SSH port
           wait_for:
-            host: "{{ ansible_default_ipv4.address }}"
+            host: "{{ ansible_facts['default_ipv4']['address'] }}"
             port: 22
             timeout: 10
           register: ssh_check
@@ -548,7 +549,7 @@
           assert:
             that:
               - ssh_check is success
-            fail_msg: "SSH port 22 not reachable on {{ ansible_default_ipv4.address }}"
+            fail_msg: "SSH port 22 not reachable on {{ ansible_facts['default_ipv4']['address'] }}"
       rescue:
         - name: Handle NET-004 failure
           debug:
@@ -560,7 +561,8 @@
               'id': 'NET-004',
               'status': 'PASS' if (ssh_check is success) else 'FAIL',
               'description': 'Lab VM reachable via SSH',
-              'details': 'SSH port 22 reachable on ' + ansible_default_ipv4.address if (ssh_check is success) else 'SSH connectivity check failed'
+                'details': (ssh_check is success)
+                  | ternary('SSH port 22 reachable on ' ~ ansible_facts['default_ipv4']['address'], 'SSH connectivity check failed')
             }] }}"
 
     # -------------------------------------------------------------------------

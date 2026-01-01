@@ -1,0 +1,19 @@
+{
+  "status": "FAIL",
+  "errors": [
+    {
+      "code": "STRUCT-001",
+      "message": "Missing required files: checks.json",
+      "remediation": "Ensure evidence pack contains all required files"
+    },
+    {
+      "code": "EVID-002",
+      "message": "Run ID mismatch: summary.run_id 'valid' != directory name 'invalid-phase-missing'",
+      "remediation": "Rename directory to match run_id or fix summary.json"
+    }
+  ],
+  "warnings": [],
+  "contract_version": "1.0.0",
+  "verifier_version": "1.0.0",
+  "timestamp": "2025-12-31T21:09:05.489780"
+}

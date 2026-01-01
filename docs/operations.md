@@ -74,3 +74,51 @@ To add a new check:
 1.  Add the check definition to `catalog.json`.
 2.  Ensure the `check_id` is unique.
 3.  Run `scripts/lab/ci-verify.sh` to validate the catalog.
+
+## Rebuild Orchestrator (019f)
+
+The `pve-lab rebuild` command validates the host baseline and templates before running the full nested workload suite. This is the recommended way to validate the lab after a host reinstall or major configuration change.
+
+### Usage
+
+```bash
+# Validate only (Dry Run) - Safe by default
+./scripts/lab/pve-lab rebuild
+
+# Validate and Remediate Templates (Apply)
+./scripts/lab/pve-lab rebuild --apply
+
+# Keep Lab VMs after run (for debugging)
+./scripts/lab/pve-lab rebuild --keep
+
+# Run with specific profile
+./scripts/lab/pve-lab rebuild --profile rebuild-hypervisor-nested-workload
+```
+
+### Workflow
+
+1.  **Baseline Host Checks**: Verifies SSH, Bridge, Storage, and Nested Virtualization.
+2.  **Baseline Template Checks**: Verifies Templates (9001, 9002) exist and are correctly configured.
+3.  **Remediation** (if `--apply`): Attempts to fix missing or invalid templates.
+4.  **Suite Execution**: Runs the `hypervisor-nested-workload` suite.
+5.  **Verification**: Auto-verifies the generated evidence pack.
+
+### Outputs
+
+- Evidence pack: `artifacts/019-lab/<runid>/` containing `summary.json`, `provenance.json`, `checks.json`.
+- Baseline evidence: `reports/host/` and `reports/templates/` inside the pack.
+- Logs: `logs/events.jsonl` plus `logs/remediation-templates.log` when `--apply` is used.
+- Verification report: `reports/verify.json` (skipped only with `--no-verify`).
+
+### Operator Runbook
+
+1. Run `./scripts/lab/pve-lab rebuild --dry-run` after any host rebuild or network change.
+2. If template failures occur and it is safe, rerun with `--apply` to remediate templates.
+3. Inspect `reports/verify.json` and baseline evidence paths; keep the pack if passing, or rerun after fixes.
+4. For offline regression checks, run `./scripts/lab/ci-verify.sh` to validate fixtures.
+
+### Interpreting Failures
+
+*   **Baseline Host Failures**: These are usually blockers. Fix the host configuration (network, storage) manually.
+*   **Baseline Template Failures**: Run with `--apply` to attempt auto-remediation.
+*   **Suite Failures**: Check the suite logs and evidence for details.

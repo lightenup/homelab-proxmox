@@ -2,6 +2,26 @@
   "status": "FAIL",
   "errors": [
     {
+      "code": "CAT-005",
+      "message": "Title mismatch for ENV-001",
+      "remediation": "Expected: 'Target is lab environment (not production)', Got: 'Verify lab environment (hostname pattern)'. Update emitter to match catalog."
+    },
+    {
+      "code": "CAT-007",
+      "message": "Check ENV-001 missing phase",
+      "remediation": "Ensure emitter adds phase field"
+    },
+    {
+      "code": "CAT-005",
+      "message": "Title mismatch for ENV-001",
+      "remediation": "Expected: 'Target is lab environment (not production)', Got: 'Duplicate check'. Update emitter to match catalog."
+    },
+    {
+      "code": "CAT-007",
+      "message": "Check ENV-001 missing phase",
+      "remediation": "Ensure emitter adds phase field"
+    },
+    {
       "code": "DEDUP-001",
       "message": "Duplicate check_id found: ENV-001",
       "remediation": "Ensure check_ids are unique within the pack"
@@ -10,5 +30,5 @@
   "warnings": [],
   "contract_version": "1.0.0",
   "verifier_version": "1.0.0",
-  "timestamp": "2025-12-31T14:51:32.989807"
+  "timestamp": "2025-12-31T21:09:05.345947"
 }

@@ -153,7 +153,8 @@ As an operator, after reinstalling Proxmox or reconfiguring networking, I want r
   * bridge: e.g., `vmbr99`
   * gateway: e.g., `10.99.0.1`
 * **FR-013 (HOST-003)**: Rebuild MUST verify required storage backend exists (e.g., `local-lvm` or configured storage).
-* **FR-014 (HOST-004)**: Rebuild MUST verify nested virtualization readiness on the host (Intel or AMD nested enabled) OR explicitly record that this is deferred to suite checks; if deferred, spec MUST say so. (Recommended: baseline check with severity `high` not `blocker`.)
+* **FR-014 (HOST-004)**: Rebuild MUST verify nested virtualization readiness on the host (Intel or AMD nested enabled).
+  * Severity: `high` (non-blocking for basic lab, but required for nested workloads).
 
 ### 4.5 Template Baseline Contract
 
@@ -166,7 +167,7 @@ As an operator, after reinstalling Proxmox or reconfiguring networking, I want r
 
   * `ManagedBy=<val>` (as per harness policy)
 * **FR-018 (TPL-005)**: Rebuild MUST verify cloud-init user and SSH key are configured (e.g., `ciuser ansible`, sshkeys present).
-* **FR-019 (TPL-006)**: Rebuild MUST verify template networking baseline for the lab bridge (or clearly document that lab VM networking is configured at clone time and templates need only cloud-init).
+* **FR-019 (TPL-006)**: Rebuild MUST verify template metadata conforms to naming policy (e.g., name starts with `lab-tpl-` or matches configured template name).
 * **FR-020**: Template baseline checks MUST store evidence under `reports/templates/` and reference it from `checks.json`.
 
 ### 4.6 Remediation (Apply Mode)
@@ -184,7 +185,7 @@ As an operator, after reinstalling Proxmox or reconfiguring networking, I want r
 ### 4.7 Evidence & Self-Verification
 
 * **FR-026**: Rebuild MUST run `verify-evidence` automatically after pack finalization unless `--no-verify`.
-* **FR-027**: Rebuild MUST write verification output into `reports/verify.json` (preferred) or `reports/verify.txt` (allowed only if governance spec permits).
+* **FR-027**: Rebuild MUST write verification output into `reports/verify.json`.
 * **FR-028**: Rebuild MUST record verification result in `summary.json`:
 
   * `summary.verification.status`

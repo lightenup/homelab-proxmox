@@ -1,0 +1,112 @@
+[
+  {
+    "check_id": "HOST-001",
+    "title": "Proxmox host reachable via SSH",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "SSH connection successful",
+    "source": "harness",
+    "phase": "baseline-host",
+    "severity": "blocker",
+    "evidence_refs": []
+  },
+  {
+    "check_id": "HOST-002",
+    "title": "Required bridge exists and has expected gateway IP",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "Bridge vmbr99 has IP 10.99.0.1",
+    "source": "harness",
+    "phase": "baseline-host",
+    "severity": "blocker",
+    "evidence_refs": ["reports/host/HOST-002-bridge.txt"]
+  },
+  {
+    "check_id": "HOST-003",
+    "title": "Required storage backend exists",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "Storage local-lvm found",
+    "source": "harness",
+    "phase": "baseline-host",
+    "severity": "blocker",
+    "evidence_refs": ["reports/host/HOST-003-storage.txt"]
+  },
+  {
+    "check_id": "HOST-004",
+    "title": "Host nested virtualization enabled",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "Nested virtualization enabled (Y)",
+    "source": "harness",
+    "phase": "baseline-host",
+    "severity": "high",
+    "evidence_refs": ["reports/host/HOST-004-nested.txt"]
+  },
+  {
+    "check_id": "TPL-001",
+    "title": "Base template exists (VMID 9001)",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "Template found",
+    "source": "harness",
+    "phase": "baseline-templates",
+    "severity": "blocker",
+    "evidence_refs": ["reports/templates/TPL-001-qm-status-9001.txt"]
+  },
+  {
+    "check_id": "TPL-002",
+    "title": "Tier2 template exists (VMID 9002)",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "Template found",
+    "source": "harness",
+    "phase": "baseline-templates",
+    "severity": "blocker",
+    "evidence_refs": ["reports/templates/TPL-002-qm-status-9002.txt"]
+  },
+  {
+    "check_id": "TPL-003",
+    "title": "Templates are marked as templates",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "All templates marked correctly",
+    "source": "harness",
+    "phase": "baseline-templates",
+    "severity": "high",
+    "evidence_refs": []
+  },
+  {
+    "check_id": "TPL-004",
+    "title": "Templates have identity markers (ManagedBy tag policy)",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "All templates have identity tags",
+    "source": "harness",
+    "phase": "baseline-templates",
+    "severity": "high",
+    "evidence_refs": []
+  },
+  {
+    "check_id": "TPL-005",
+    "title": "Templates have cloud-init user and SSH key configured",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "All templates have cloud-init configured",
+    "source": "harness",
+    "phase": "baseline-templates",
+    "severity": "high",
+    "evidence_refs": []
+  },
+  {
+    "check_id": "TPL-006",
+    "title": "Template metadata conforms to naming policy",
+    "result": "PASS",
+    "expected": "PASS",
+    "reason": "All templates named correctly",
+    "source": "harness",
+    "phase": "baseline-templates",
+    "severity": "medium",
+    "evidence_refs": []
+  }
+]

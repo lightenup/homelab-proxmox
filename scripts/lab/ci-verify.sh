@@ -20,29 +20,27 @@ echo "PASS: Catalog JSON is valid"
 echo "Running Fixtures..."
 FAILED=0
 
-for fixture in "$FIXTURES_DIR"/*; do
-    if [[ ! -d "$fixture" ]]; then
-        continue
-    fi
-    
-    name=$(basename "$fixture")
-    expected_file="$fixture/expected.txt"
+run_test() {
+    local fixture="$1"
+    local name=$(basename "$fixture")
+    local expected_file="$fixture/expected.txt"
     
     if [[ ! -f "$expected_file" ]]; then
-        echo "WARN: Skipping $name (no expected.txt)"
-        continue
+        # echo "WARN: Skipping $name (no expected.txt)"
+        return
     fi
     
+    local expected
     expected=$(cat "$expected_file" | tr -d '[:space:]')
     
     echo -n "Testing $name... "
     
     set +e
     python3 "${SCRIPT_DIR}/verify_evidence.py" "$fixture" >/dev/null 2>&1
-    rc=$?
+    local rc=$?
     set -e
     
-    result="FAIL"
+    local result="FAIL"
     if [[ $rc -eq 0 ]]; then
         result="PASS"
     fi
@@ -57,7 +55,23 @@ for fixture in "$FIXTURES_DIR"/*; do
         echo "FAILED (Expected $expected, got $result)"
         FAILED=1
     fi
+}
+
+# Scan fixtures dir
+for fixture in "$FIXTURES_DIR"/*; do
+    if [[ -d "$fixture" ]]; then
+        run_test "$fixture"
+    fi
 done
+
+# Scan evidence-packs dir
+if [[ -d "$FIXTURES_DIR/evidence-packs" ]]; then
+    for fixture in "$FIXTURES_DIR/evidence-packs"/*; do
+        if [[ -d "$fixture" ]]; then
+            run_test "$fixture"
+        fi
+    done
+fi
 
 if [[ $FAILED -eq 1 ]]; then
     echo "CI Verification Failed"
