@@ -72,9 +72,10 @@ check_feature_branch() {
         return 0
     fi
 
-    if [[ ! "$branch" =~ ^[0-9]{3}- ]]; then
+    # Accept numeric-prefixed feature branches with optional alpha/numeric suffixes before the first dash (e.g., 019f-rebuild, 019b1-hardening)
+    if [[ ! "$branch" =~ ^[0-9]{3}[A-Za-z0-9]*- ]]; then
         echo "ERROR: Not on a feature branch. Current branch: $branch" >&2
-        echo "Feature branches should be named like: 001-feature-name" >&2
+        echo "Feature branches should be named like: 001-feature-name or 019f-feature-name" >&2
         return 1
     fi
 

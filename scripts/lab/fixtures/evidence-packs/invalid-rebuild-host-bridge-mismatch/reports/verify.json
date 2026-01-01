@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "errors": [
+    {
+      "code": "REF-003",
+      "message": "Missing evidence 'reports/host/HOST-002-bridge.txt' for FAIL check HOST-002",
+      "remediation": "Ensure evidence exists or set allow_missing_evidence=true in catalog for HOST-002"
+    }
+  ],
+  "warnings": [],
+  "contract_version": "1.0.0",
+  "verifier_version": "1.0.0",
+  "timestamp": "2025-12-31T21:09:05.537120"
+}

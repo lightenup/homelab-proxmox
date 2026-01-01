@@ -26,6 +26,7 @@ tests/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 019f-rebuild-orchestrator: Added Rebuild Orchestrator (`pve-lab rebuild`), Baseline Checks (`HOST-*`, `TPL-*`), and Offline Fixtures
 - 019e1-evidence-governance-strictness: Added Python 3 (stdlib only: json, pathlib, sys, argparse) + None (Standard Library)
 - 019c1-semantic-safety-closure: Added Bash 5.x (existing `pve-lab` script) + jq (JSON processing), git (provenance capture), existing Ansible playbooks
 

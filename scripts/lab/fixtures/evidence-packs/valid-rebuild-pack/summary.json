@@ -1,0 +1,12 @@
+{
+  "contract_version": "1.0.0",
+  "run_id": "valid-rebuild-pack",
+  "profile_id": "rebuild-hypervisor-nested-workload",
+  "status": "SUCCESS",
+  "start_time": "2025-12-31T12:00:00Z",
+  "end_time": "2025-12-31T12:05:00Z",
+  "duration_seconds": 300,
+  "checks_file": "checks.json",
+  "provenance_file": "provenance.json",
+  "evidence_manifest_file": "evidence_manifest.json"
+}

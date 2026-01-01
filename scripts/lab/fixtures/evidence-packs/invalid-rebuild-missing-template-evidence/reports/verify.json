@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "errors": [
+    {
+      "code": "REF-002",
+      "message": "Missing evidence 'reports/templates/TPL-001-qm-status-9001.txt' for PASS check TPL-001",
+      "remediation": "Ensure all evidence files exist for passing checks"
+    }
+  ],
+  "warnings": [],
+  "contract_version": "1.0.0",
+  "verifier_version": "1.0.0",
+  "timestamp": "2025-12-31T21:09:05.584619"
+}

@@ -1,0 +1,4 @@
+10: vmbr99: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    link/ether bc:24:11:22:33:44 brd ff:ff:ff:ff:ff:ff
+    inet 10.99.0.1/24 scope global vmbr99
+       valid_lft forever preferred_lft forever

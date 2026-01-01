@@ -5,7 +5,7 @@ set -e
 PROXMOX_HOST="192.168.1.112"
 SSH_USER="root"
 VMID=9001
-TEMPLATE_NAME="template-debian-13-tier1"
+TEMPLATE_NAME="lab-tpl-debian-13-tier1"
 IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/daily/latest/debian-13-generic-amd64-daily.qcow2"
 STORAGE="local-lvm" # Adjust if using ZFS (e.g., local-zfs)
 BRIDGE="vmbr99"

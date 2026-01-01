@@ -1,0 +1,2 @@
+ciuser: ansible
+sshkeys: ssh-rsa AAA...valid2

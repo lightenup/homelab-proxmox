@@ -19,6 +19,8 @@ source "${LIB_DIR}/provenance.sh"
 source "${LIB_DIR}/evidence.sh"
 # shellcheck source=lib/cleanup.sh
 source "${LIB_DIR}/cleanup.sh"
+# shellcheck source=lib/rebuild.sh
+source "${LIB_DIR}/rebuild.sh"
 
 # Configuration
 LAB_VMID_START=9000
@@ -172,7 +174,7 @@ check_cleanup_pre_001() {
 
     # 3. Verify cleanup
     local remaining_vms
-    remaining_vms="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= $LAB_VMID_START && \$1 <= $LAB_VMID_END {print \$1}'")"
+    remaining_vms="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= $LAB_VMID_START && \$1 <= $LAB_VMID_END && \$1 != $LAB_TEMPLATE_VMID && \$1 != $LAB_TEMPLATE_VMID_TIER2 {print \$1}'")"
 
     if [[ -n "$remaining_vms" ]]; then
         log_error "  CLEANUP-PRE-001 FAIL: Failed to remove stale resources: $(echo "$remaining_vms" | tr '\n' ' ')"
@@ -856,6 +858,7 @@ cmd_test() {
 ingest_ansible_reports() {
     local evidence_dir="$1"
     local report_pattern="$evidence_dir/reports/assertions.*.json"
+    local catalog_path="$SCRIPT_DIR/checks.d/catalog.json"
     
     log_info "Ingesting Ansible assertion reports from $evidence_dir/reports..."
     
@@ -890,26 +893,37 @@ ingest_ansible_reports() {
 
         # Iterate using jq to output newline-delimited JSON objects
         while IFS= read -r item; do
-            local id status description details
+            local id status description details severity catalog_phase
             # Normalize schema (handle both check_id/result and id/status formats)
             id=$(echo "$item" | jq -r '.check_id // .id')
             status=$(echo "$item" | jq -r '.result // .status')
             description=$(echo "$item" | jq -r '.title // .description')
             details=$(echo "$item" | jq -r '.reason // .details')
+
+            # Pull severity and phase from catalog when available
+            if [[ -f "$catalog_path" ]]; then
+                catalog_phase=$(jq -r --arg id "$id" '.[$id].phase // ""' "$catalog_path" 2>/dev/null || echo "")
+                severity=$(jq -r --arg id "$id" '.[$id].severity // ""' "$catalog_path" 2>/dev/null || echo "")
+            fi
+            [[ -z "$severity" || "$severity" == "null" ]] && severity="high"
+            [[ -z "$catalog_phase" || "$catalog_phase" == "null" ]] && catalog_phase="$report_phase"
             
             # Set context for record_check
             export CURRENT_SOURCE="ansible"
-            export CURRENT_PHASE="$report_phase"
+            export CURRENT_PHASE="$catalog_phase"
+
+            # Evidence: assertion report file relative to pack root
+            local evidence_ref="reports/$(basename "$report_file")"
 
             # Map to record_check
             record_check "$id" \
                 "$description" \
-                "high" \
+                "$severity" \
                 "PASS" \
                 "$status" \
                 "$details" \
                 "source: ansible" \
-                "file: $(basename "$report_file")"
+                "$evidence_ref"
                 
         done < <(jq -c '.assertions[]' "$report_file")
     done
@@ -930,6 +944,7 @@ cmd_run() {
             --tier) tier="$2"; shift ;;
             --tier2-mode) tier2_mode="$2"; shift ;;
             --keep) keep_vm=true ;;
+            --verify) verify_evidence=true ;;
             --no-verify) verify_evidence=false ;;
             *) log_error "Unknown argument: $1"; exit 1 ;;
         esac
@@ -972,30 +987,42 @@ cmd_run() {
     fi
 
     # Map Profile to Catalog Phase (019e1)
+    local profile_phase="unknown"
     case "$PROFILE_ID" in
         "bootstrap")
-            export CURRENT_PHASE="bootstrap"
+            profile_phase="bootstrap"
             ;;
         "hypervisor-control-plane"|"hypervisor-nested-workload")
-            export CURRENT_PHASE="tier2"
+            profile_phase="tier2"
             ;;
         *)
             # Fallback or custom
-            export CURRENT_PHASE="unknown"
+            profile_phase="unknown"
             ;;
     esac
     export CURRENT_SOURCE="harness"
+    # Preflight checks must record under bootstrap phase regardless of profile
+    export CURRENT_PHASE="bootstrap"
 
     # Locking (flock)
     exec 200>"$LOCK_FILE"
-    if ! flock -n 200; then
-        log_error "Another instance is running (Lock: $LOCK_FILE). Aborting."
-        exit 1
+    if [[ "${SKIP_LOCK:-false}" != "true" ]]; then
+        if ! flock -n 200; then
+            log_error "Another instance is running (Lock: $LOCK_FILE). Aborting."
+            exit 1
+        fi
     fi
     
     # 019c1: Create evidence pack with new runid format
     local run_id
-    run_id="$(create_evidence_pack "artifacts/019-lab")"
+    if [[ -n "${RUN_ID:-}" && -n "${ARTIFACT_DIR:-}" ]]; then
+        run_id="$RUN_ID"
+        log_info "Using existing evidence pack: $run_id"
+    else
+        run_id="$(create_evidence_pack "artifacts/019-lab")"
+        export RUN_ID="$run_id"
+        export ARTIFACT_DIR="artifacts/019-lab/${run_id}"
+    fi
     
     # Export context for sub-functions and Ansible
     export RUN_ID="$run_id"
@@ -1067,6 +1094,9 @@ cmd_run() {
     fi
     
     emit_phase_complete "$run_id" "destroy-cleanup"
+
+    # Switch to profile-mapped phase for provisioning/testing that follows
+    export CURRENT_PHASE="$profile_phase"
     
     # Validate Safety Profile (FR-019c)
     if ! validate_safety_profile; then
@@ -1132,6 +1162,11 @@ cmd_run() {
         if [[ "${SUITE_ABORT_REQUESTED:-0}" -eq 1 ]]; then
             log_error "Suite aborted due to safety hole in guardrail checks"
             status="ABORTED"
+        fi
+
+        # Collect artifacts before teardown so SSH still succeeds (avoid "No route to host" post-destroy)
+        if [[ "${SUITE_ABORT_REQUESTED:-0}" -ne 1 ]]; then
+            collect_artifacts "$run_id"
         fi
         
         # 019c1: Run cleanup verification checks - Phase 5 US3
@@ -1219,9 +1254,6 @@ cmd_run() {
         log_error "Setup failed."
         emit_error "$run_id" "VM provisioning failed"
     fi
-    
-    # Collect Artifacts (FR-011)
-    collect_artifacts "$run_id"
     
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
@@ -1470,6 +1502,7 @@ usage() {
     echo "  safety          - Run Safety Suite (Negative Tests)"
     echo "  confidence      - Run Confidence Suite (Safety + All Profiles)"
     echo "  suite <profile> - Run specific profile suite (019c1 primary interface)"
+    echo "  rebuild         - Run Rebuild Orchestrator (Baseline + Suite) (019f)"
     echo "  verify-evidence <path> - Verify an evidence pack (019e)"
     echo "  diff-evidence <runA> <runB> - Compare two evidence packs (019e)"
     echo ""
@@ -1482,6 +1515,8 @@ usage() {
     echo "  --tier <1|2>          Target tier level (DEPRECATED - use --profile)"
     echo "  --tier2-mode <mode>   Tier 2 verification mode (DEPRECATED - use --profile)"
     echo "  --keep                Keep VM after run (don't destroy on exit)"
+    echo "  --verify              Run evidence verification (default)"
+    echo "  --no-verify           Skip evidence verification"
     exit 1
 }
 
@@ -1503,6 +1538,10 @@ case "$1" in
     suite)
         shift
         cmd_suite "$@"
+        ;;
+    rebuild)
+        shift
+        cmd_rebuild "$@"
         ;;
     verify-evidence)
         shift

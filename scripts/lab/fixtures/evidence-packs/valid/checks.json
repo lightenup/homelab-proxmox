@@ -3,7 +3,7 @@
   "checks": [
     {
       "check_id": "ENV-001",
-      "title": "Verify lab environment (hostname pattern)",
+      "title": "Target is lab environment (not production)",
       "phase": "bootstrap",
       "severity": "blocker",
       "source": "harness",
