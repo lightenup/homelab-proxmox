@@ -1,0 +1,28 @@
+name: homelab-ci
+
+on:
+    workflow_dispatch:
+    push:
+        branches: ["main"]
+        paths:
+            - "scripts/**"
+            - "ansible/**"
+            - "terraform/**"
+            - ".github/workflows/homelab-ci.yml"
+
+concurrency:
+    group: homelab-ci
+    cancel-in-progress: true
+
+jobs:
+    smoke:
+        runs-on: [self-hosted, Linux, ARM64] # eller [self-hosted, pi-ci] hvis du legger til label
+        steps:
+            - uses: actions/checkout@v4
+            - name: Runner info
+              run: |
+                  hostname
+                  uname -a
+                  id
+                  df -h
+                  git --version
