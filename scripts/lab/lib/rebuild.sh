@@ -121,7 +121,7 @@ cmd_rebuild() {
     # Call cmd_run with SKIP_LOCK=true and existing env vars
     export SKIP_LOCK=true
     
-    if cmd_run --profile "$SUITE_PROFILE" $([[ "$keep" == "true" ]] && echo "--keep") --no-verify; then
+    if cmd_run --profile "$SUITE_PROFILE" $([[ "$keep" == "true" ]] && echo "--keep") $([[ "$no_verify" == "true" ]] && echo "--no-verify" || echo "--verify"); then
         :
     else
         finalize_rebuild "FAIL" "$no_verify" "$start_time_epoch" "$start_time_iso"
@@ -231,6 +231,159 @@ JSON
 
     [[ "$status" == "SUCCESS" ]] && return 0 || return 1
 }
+
+    # --- Feature 020: Deterministic teardown helpers (VM/LXC) ---
+
+    append_teardown_log() {
+        local evidence_file="$1"
+        local label="$2"
+        local cmd="$3"
+        local rc="$4"
+        local output="$5"
+        local ts
+        ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        {
+            echo "[$ts] ${label}"
+            echo "CMD: ${cmd}"
+            echo "RC: ${rc}"
+            echo "OUTPUT:"
+            [[ -n "$output" ]] && echo "$output" || echo "<empty>"
+            echo ""
+        } >> "$evidence_file"
+    }
+
+    run_teardown_cmd() {
+        local evidence_file="$1"
+        local label="$2"
+        local remote_cmd="$3"
+
+        local output
+        output=$(ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "$remote_cmd" 2>&1)
+        local rc=$?
+        append_teardown_log "$evidence_file" "$label" "$remote_cmd" "$rc" "$output"
+        return $rc
+    }
+
+    teardown_vm_with_retries() {
+        local vmid="$1"
+        local evidence_file="${EVIDENCE_ROOT}/reports/cleanup/teardown-vm-${vmid}.txt"
+        mkdir -p "$(dirname "$evidence_file")"
+
+        local exists=true
+        if ! ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "qm status $vmid" >/dev/null 2>&1; then
+            exists=false
+            append_teardown_log "$evidence_file" "vm-$vmid" "qm status $vmid" "1" "VM $vmid not found"
+        fi
+
+        local attempts=0
+        local success=false
+        local last_rc=0
+
+        while [[ $attempts -lt 3 && "$exists" == "true" ]]; do
+            attempts=$((attempts + 1))
+
+            run_teardown_cmd "$evidence_file" "vm-$vmid stop attempt $attempts" "qm stop $vmid --skiplock"
+
+            # Wait for not-running state (best-effort)
+            for _ in {1..5}; do
+                if ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "qm status $vmid" 2>/dev/null | grep -q "status: running"; then
+                    sleep 2
+                else
+                    break
+                fi
+            done
+
+            run_teardown_cmd "$evidence_file" "vm-$vmid destroy attempt $attempts" "qm destroy $vmid --purge"
+            last_rc=$?
+
+            if [[ $last_rc -eq 0 ]]; then
+                success=true
+                break
+            fi
+
+            # rc=25 indicates still running; retry after stop
+            if [[ $last_rc -ne 25 ]]; then
+                break
+            fi
+        done
+
+        local result="PASS"
+        local reason="Destroyed VM $vmid"
+        if [[ "$exists" != "true" ]]; then
+            reason="VM $vmid not present"
+        elif [[ "$success" != "true" ]]; then
+            result="FAIL"
+            reason="VM $vmid destroy failed after ${attempts} attempt(s), rc=${last_rc}"
+        fi
+
+        append_teardown_log "$evidence_file" "vm-$vmid final" "result" "-" "$reason"
+
+        export CURRENT_SOURCE="harness"
+        export CURRENT_PHASE="cleanup"
+        record_check "TEARDOWN-001" "Nested VM destroyed cleanly (no destroy errors)" "high" "PASS" "$result" "$reason" "reports/cleanup/teardown-vm-${vmid}.txt"
+
+        [[ "$result" == "PASS" ]] && return 0 || return 1
+    }
+
+    teardown_lxc_with_retries() {
+        local ctid="$1"
+        local evidence_file="${EVIDENCE_ROOT}/reports/cleanup/teardown-lxc-${ctid}.txt"
+        mkdir -p "$(dirname "$evidence_file")"
+
+        local exists=true
+        if ! ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "pct status $ctid" >/dev/null 2>&1; then
+            exists=false
+            append_teardown_log "$evidence_file" "lxc-$ctid" "pct status $ctid" "1" "CT $ctid not found"
+        fi
+
+        local attempts=0
+        local success=false
+        local last_rc=0
+
+        while [[ $attempts -lt 3 && "$exists" == "true" ]]; do
+            attempts=$((attempts + 1))
+
+            run_teardown_cmd "$evidence_file" "lxc-$ctid stop attempt $attempts" "pct stop $ctid --force"
+
+            for _ in {1..5}; do
+                if ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "pct status $ctid" 2>/dev/null | grep -q "status: running"; then
+                    sleep 2
+                else
+                    break
+                fi
+            done
+
+            run_teardown_cmd "$evidence_file" "lxc-$ctid destroy attempt $attempts" "pct destroy $ctid --purge --force"
+            last_rc=$?
+
+            if [[ $last_rc -eq 0 ]]; then
+                success=true
+                break
+            fi
+
+            if [[ $last_rc -ne 25 ]]; then
+                break
+            fi
+        done
+
+        local result="PASS"
+        local reason="Destroyed LXC $ctid"
+        if [[ "$exists" != "true" ]]; then
+            reason="LXC $ctid not present"
+        elif [[ "$success" != "true" ]]; then
+            result="FAIL"
+            reason="LXC $ctid destroy failed after ${attempts} attempt(s), rc=${last_rc}"
+        fi
+
+        append_teardown_log "$evidence_file" "lxc-$ctid final" "result" "-" "$reason"
+
+        export CURRENT_SOURCE="harness"
+        export CURRENT_PHASE="cleanup"
+        record_check "TEARDOWN-002" "Nested LXC destroyed cleanly (no destroy errors)" "high" "PASS" "$result" "$reason" "reports/cleanup/teardown-lxc-${ctid}.txt"
+
+        [[ "$result" == "PASS" ]] && return 0 || return 1
+    }
 
 run_baseline_host_checks() {
     local ssh_target="${SSH_USER}@${PROXMOX_HOST}"

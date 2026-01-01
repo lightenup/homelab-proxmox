@@ -39,6 +39,22 @@
     "severity": "medium",
     "source": "harness"
   },
+  "TEARDOWN-001": {
+    "check_id": "TEARDOWN-001",
+    "title": "Nested VM destroyed cleanly (no destroy errors)",
+    "owner": "harness",
+    "phase": "cleanup",
+    "severity": "high",
+    "source": "harness"
+  },
+  "TEARDOWN-002": {
+    "check_id": "TEARDOWN-002",
+    "title": "Nested LXC destroyed cleanly (no destroy errors)",
+    "owner": "harness",
+    "phase": "cleanup",
+    "severity": "high",
+    "source": "harness"
+  },
   "GUARD-001": {
     "check_id": "GUARD-001",
     "title": "Verify playbook is running against lab inventory",
@@ -287,5 +303,14 @@
     "phase": "baseline-templates",
     "severity": "medium",
     "source": "harness"
+  },
+  "VAL-001": {
+    "check_id": "VAL-001",
+    "title": "Optional validation report fetched",
+    "owner": "harness",
+    "phase": "validation",
+    "severity": "low",
+    "source": "harness",
+    "allow_missing_evidence": true
   }
 }

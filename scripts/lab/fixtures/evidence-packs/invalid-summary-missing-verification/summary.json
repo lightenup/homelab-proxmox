@@ -1,0 +1,9 @@
+{
+  "contract_version": "1.0.0",
+  "run_id": "fixture-summary-missing-verification",
+  "profile_id": "hypervisor-nested-workload",
+  "status": "SUCCESS",
+  "checks_file": "checks.json",
+  "provenance_file": "provenance.json",
+  "evidence_manifest_file": "evidence_manifest.json"
+}

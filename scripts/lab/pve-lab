@@ -347,6 +347,29 @@ JSON
     log_info "Evidence Pack finalized. Status: $status"
 }
 
+# Optional validation fetch with allow-missing semantics (VAL-001)
+validation_fetch_optional() {
+    local run_id="$1"
+    local artifact_dir="$2"
+    local target_path="$artifact_dir/reports/validation.json"
+
+    mkdir -p "$(dirname "$target_path")"
+
+    log_info "Attempting optional validation fetch (VAL-001)..."
+
+    if scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/var/lib/validation/checks.json" "$target_path" 2>/dev/null; then
+        log_info "Validation report fetched to $target_path"
+        export CURRENT_SOURCE="harness"
+        export CURRENT_PHASE="validation"
+        record_check "VAL-001" "Optional validation report fetched" "low" "PASS" "PASS" "Validation report fetched" "reports/validation.json"
+    else
+        log_info "Validation report unavailable; marking VAL-001 as SKIP (allow_missing)"
+        export CURRENT_SOURCE="harness"
+        export CURRENT_PHASE="validation"
+        record_check "VAL-001" "Optional validation report fetched" "low" "PASS" "SKIP" "Validation report not available (allow_missing)" "source:allow_missing"
+    fi
+}
+
 # Ensure artifacts dir exists
 mkdir -p artifacts/019-lab
 
@@ -616,14 +639,10 @@ collect_artifacts() {
         scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.txt" "$artifact_dir/config/" 2>/dev/null || log_warn "Failed to fetch config artifacts"
         scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.log" "$artifact_dir/logs/" 2>/dev/null || log_warn "Failed to fetch log artifacts"
         
-        # Fetch Validation Report
-        scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/var/lib/validation/checks.json" "$artifact_dir/validation/" 2>/dev/null || log_warn "Failed to fetch validation report"
-        
         # Register artifacts in manifest (if function exists)
         if command -v evidence_add_artifact >/dev/null; then
              for f in "$artifact_dir/config"/*.txt; do evidence_add_artifact "config" "$f" "Config Dump"; done
              for f in "$artifact_dir/logs"/*.log; do evidence_add_artifact "log" "$f" "System Log"; done
-             for f in "$artifact_dir/validation"/*.json; do evidence_add_artifact "report" "$f" "Validation Report"; done
         fi
     else
         log_warn "Failed to execute artifact collection commands on Lab VM."
@@ -762,12 +781,19 @@ cmd_up() {
 }
 
 cmd_destroy() {
-    log_info "Scanning for Lab VMs to destroy..."
+    log_info "Running deterministic teardown for nested resources..."
+
+    # Dedicated teardown for nested VM/LXC with evidence and retries
+    teardown_vm_with_retries 100 || true
+    teardown_lxc_with_retries 101 || true
+
+    # Best-effort cleanup for any remaining tagged lab VMs
+    log_info "Scanning for tagged Lab VMs to destroy..."
     local vmids
     vmids=$(find_lab_vms)
     
     if [[ -z "$vmids" ]]; then
-        log_info "No Lab VMs found to destroy."
+        log_info "No tagged Lab VMs found to destroy."
         return 0
     fi
     
@@ -1167,6 +1193,8 @@ cmd_run() {
         # Collect artifacts before teardown so SSH still succeeds (avoid "No route to host" post-destroy)
         if [[ "${SUITE_ABORT_REQUESTED:-0}" -ne 1 ]]; then
             collect_artifacts "$run_id"
+            # Optional validation fetch (VAL-001 governance)
+            validation_fetch_optional "$run_id" "$artifact_dir"
         fi
         
         # 019c1: Run cleanup verification checks - Phase 5 US3
@@ -1294,34 +1322,62 @@ JSON
     # Finalize Evidence
     evidence_finalize "$status"
     
-    # 019e1: Auto-Verification (FR-008)
+    # 019e1: Auto-Verification (FR-008) with summary/verify.json alignment
     if [[ "$verify_evidence" == "true" ]]; then
         log_info "Running Evidence Verification..."
         if python3 "$SCRIPT_DIR/verify_evidence.py" "$artifact_dir" > "$artifact_dir/reports/verify.txt" 2>&1; then
             log_info "  Verification: PASS"
-            # Append verification result to summary
-            # Using temp file to avoid reading/writing same file with jq (if we had jq)
-            # Since we don't assume jq, we'll just append a field if possible or leave it separate.
-            # But spec says "record result in summary.json".
-            # Let's just log it for now, or use a simple sed if we really need to inject it.
-            # Actually, verify_evidence.py doesn't output JSON, it outputs text.
-            # We can just save the report.
         else
             log_error "  Verification: FAIL"
             cat "$artifact_dir/reports/verify.txt"
-            # If verification fails, we should probably fail the run if status was SUCCESS?
-            # Spec says: "Given suite produces an invalid evidence pack... suite exits non-zero"
             if [[ "$status" == "SUCCESS" ]]; then
                 status="FAILED_VERIFICATION"
                 log_error "Run marked as FAILED due to verification errors."
-                # Update summary status
                 if command -v sed &>/dev/null; then
                     sed -i.bak 's/"status": "SUCCESS"/"status": "FAILED_VERIFICATION"/' "$summary_file" && rm "${summary_file}.bak"
                 fi
             fi
         fi
     else
-        log_warn "Verification skipped (--no-verify)"
+        log_info "Verification skipped (--no-verify); recording SKIP in summary and verify.json"
+        mkdir -p "$artifact_dir/reports"
+        python3 - "$artifact_dir" <<'PY'
+import json
+import sys
+from pathlib import Path
+from datetime import datetime
+
+artifact_dir = Path(sys.argv[1])
+summary_file = artifact_dir / "summary.json"
+verify_file = artifact_dir / "reports" / "verify.json"
+
+try:
+    summary = json.loads(summary_file.read_text()) if summary_file.exists() else {}
+except Exception:
+    summary = {}
+
+summary.setdefault("contract_version", "1.0.0")
+summary["verification"] = {
+    "status": "SKIP",
+    "report_path": "reports/verify.json",
+    "verifier_version": "1.0.0",
+    "reason": "verification disabled via --no-verify"
+}
+
+summary_file.write_text(json.dumps(summary, indent=2))
+
+verify_report = {
+    "status": "SKIP",
+    "errors": [],
+    "warnings": [],
+    "contract_version": summary.get("contract_version", "1.0.0"),
+    "verifier_version": "1.0.0",
+    "timestamp": datetime.now().isoformat(),
+    "reasons": ["verification disabled via --no-verify"]
+}
+
+verify_file.write_text(json.dumps(verify_report, indent=2))
+PY
     fi
 
     # Enforce Retention (FR-003)
