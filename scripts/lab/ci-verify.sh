@@ -64,11 +64,11 @@ for fixture in "$FIXTURES_DIR"/*; do
     fi
 done
 
-# Scan evidence-packs dir
+# Scan evidence-packs dir (explicit sort for deterministic order)
 if [[ -d "$FIXTURES_DIR/evidence-packs" ]]; then
-    for fixture in "$FIXTURES_DIR/evidence-packs"/*; do
-        if [[ -d "$fixture" ]]; then
-            run_test "$fixture"
+    for fixture in $(ls -1 "$FIXTURES_DIR/evidence-packs"); do
+        if [[ -d "$FIXTURES_DIR/evidence-packs/$fixture" ]]; then
+            run_test "$FIXTURES_DIR/evidence-packs/$fixture"
         fi
     done
 fi

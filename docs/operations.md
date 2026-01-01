@@ -103,6 +103,18 @@ The `pve-lab rebuild` command validates the host baseline and templates before r
 4.  **Suite Execution**: Runs the `hypervisor-nested-workload` suite.
 5.  **Verification**: Auto-verifies the generated evidence pack.
 
+### Validation Phase (020 hardening)
+
+- A post-run **validation** phase fetches the optional validation report (VAL-001) and records it under `reports/validation.json`.
+- VAL-001 is catalog-governed (phase `validation`, allow_missing_evidence=true). If the report is unavailable, it is recorded as SKIP with reason and no WARN noise.
+
+### Teardown & Verification (020 hardening)
+
+- Teardown evidence is recorded as `reports/cleanup/teardown-vm-<vmid>.txt` and `reports/cleanup/teardown-lxc-<ctid>.txt`. Checks TEARDOWN-001/002 expect titles `Nested VM destroyed cleanly (no destroy errors)` / `Nested LXC destroyed cleanly (no destroy errors)` and FAIL if retries exhaust.
+- Cleanup verification runs after guardrails: CLEANUP-001/002 confirm no lab VMs remain and no locks are present; failures flip the run to FAILED.
+- Verification emits `reports/verify.json` plus `summary.verification` (status, report_path, verifier_version, reason on SKIP/FAIL). `--no-verify` sets SKIP with reason; otherwise PASS/FAIL gates exit code.
+- Optional validation fetch (VAL-001) remains SKIP if absent; PASS when fetched; never warns. All titles must match catalog to avoid CAT-005 failures.
+
 ### Outputs
 
 - Evidence pack: `artifacts/019-lab/<runid>/` containing `summary.json`, `provenance.json`, `checks.json`.

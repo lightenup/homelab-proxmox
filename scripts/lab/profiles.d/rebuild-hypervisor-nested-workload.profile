@@ -29,4 +29,7 @@ EXPECTED_CHECKS=(
     "TPL-004"
     "TPL-005"
     "TPL-006"
+    "TEARDOWN-001"
+    "TEARDOWN-002"
+    "VAL-001"
 )

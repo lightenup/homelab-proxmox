@@ -391,14 +391,20 @@ class EvidenceVerifier:
     def report(self):
         summary = self.data.get('summary') or {}
         contract_version = summary.get('contract_version', '1.0.0')
-        
+
+        status = "PASS" if not self.errors else "FAIL"
+        reason = ""
+        if status != "PASS":
+            reason = "; ".join(err.get('message', '') for err in self.errors if err.get('message'))
+
         report_data = {
-            "status": "PASS" if not self.errors else "FAIL",
+            "status": status,
             "errors": self.errors,
             "warnings": self.warnings,
             "contract_version": contract_version,
             "verifier_version": "1.0.0",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "reasons": [reason] if reason else []
         }
         
         # Write report
@@ -406,7 +412,24 @@ class EvidenceVerifier:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         with open(report_path, 'w') as f:
             json.dump(report_data, f, indent=2)
-            
+
+        # Update summary with verification block
+        try:
+            summary_path = self.pack_path / "summary.json"
+            summary_content = summary if summary else {}
+            summary_content.setdefault("contract_version", contract_version)
+            summary_content["verification"] = {
+                "status": status,
+                "report_path": "reports/verify.json",
+                "verifier_version": "1.0.0",
+                "reason": reason
+            }
+            with open(summary_path, 'w') as sf:
+                json.dump(summary_content, sf, indent=2)
+        except Exception as exc:
+            # Non-fatal; emit warning
+            self.add_warning("SUMMARY-001", f"Failed to update summary.json: {exc}", "Manually add verification block to summary.json")
+        
         # Console Output
         print(f"Verification Status: {report_data['status']}")
         if self.errors:

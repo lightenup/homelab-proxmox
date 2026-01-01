@@ -1,0 +1,22 @@
+[
+  {
+    "check_id": "TEARDOWN-001",
+    "title": "Nested VM destroyed",
+    "severity": "high",
+    "expected": "PASS",
+    "result": "PASS",
+    "phase": "cleanup",
+    "source": "harness",
+    "evidence_refs": ["reports/cleanup/teardown-vm-100.txt"]
+  },
+  {
+    "check_id": "TEARDOWN-002",
+    "title": "Nested LXC destroyed",
+    "severity": "high",
+    "expected": "PASS",
+    "result": "PASS",
+    "phase": "cleanup",
+    "source": "harness",
+    "evidence_refs": ["reports/cleanup/teardown-lxc-101.txt"]
+  }
+]

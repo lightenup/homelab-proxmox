@@ -195,6 +195,8 @@
         update_cache: true
       environment:
         DEBIAN_FRONTEND: noninteractive
+      async: 1800           # bound long-running install to 30 minutes
+      poll: 15              # poll periodically so hung ssh/control sockets don’t stall forever
       retries: 3
       delay: 10
       register: apt_res
@@ -888,30 +890,19 @@
                   'details': 'HTTP service on LXC 101:8080 reachable from lab VM' if (net_check is success) else 'Service reachability check failed'
                 }] }}"
 
-        # Cleanup
-        - name: Destroy Nested LXC
-          command: pct destroy 101 --force
-          ignore_errors: true
-
-        - name: Destroy Nested VM
-          command: qm destroy 100
-          ignore_errors: true
+        # Cleanup delegated to harness teardown (020)
+        - name: Note harness-managed teardown for Nested LXC/VM
+          debug:
+            msg: "Teardown handled by harness (TEARDOWN-001/002); skipping Ansible destroy."
+          changed_when: false
 
       when: tier2_mode is defined and tier2_mode == 'plus'
       always:
         # Ensure cleanup happens even if tests fail
-        - name: Cleanup Nested LXC (Always)
-          shell: |
-            pct stop 101 || true
-            pct destroy 101 --force || true
-          ignore_errors: true
-          when: tier2_mode is defined and tier2_mode == 'plus'
-        
-        - name: Cleanup Nested VM (Always)
-          shell: |
-            qm stop 100 || true
-            qm destroy 100 || true
-          ignore_errors: true
+        - name: Skip redundant cleanup for nested resources (handled by harness)
+          debug:
+            msg: "Cleanup already performed by harness teardown; no additional Ansible actions executed."
+          changed_when: false
           when: tier2_mode is defined and tier2_mode == 'plus'
 
     # -------------------------------------------------------------------------
