@@ -1,0 +1,49 @@
+name: Proxmox Apply + Verify
+
+on:
+    workflow_dispatch:
+    push:
+        branches: ["main"]
+        paths:
+            - "scripts/**"
+            - "ansible/**"
+            - ".github/workflows/proxmox-apply.yml"
+
+concurrency:
+    group: proxmox-apply
+    cancel-in-progress: false
+
+jobs:
+    apply:
+        runs-on: [self-hosted]
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Sanity (offline fixtures)
+              run: |
+                  ./scripts/lab/ci-verify.sh fixtures/evidence-packs/valid
+
+            - name: Sync repo to PVE
+              run: |
+                  rsync -az --delete --exclude '.git' ./ pve:/home/ci/homelab-proxmox/
+
+            - name: Apply + verify on PVE
+              run: |
+                  ssh pve "cd /home/ci/homelab-proxmox/scripts/lab && sudo ./pve-lab rebuild --apply --verify"
+                  echo "RUN_ID=$(ssh pve 'cd /home/ci/homelab-proxmox/scripts/lab && ls -1t artifacts | head -1')" >> $GITHUB_ENV
+
+            - name: Fetch evidence pack
+              run: |
+                  mkdir -p evidence
+                  ssh pve "cd /home/ci/homelab-proxmox/scripts/lab && tar czf /tmp/evidence.tgz artifacts/${RUN_ID}"
+                  scp pve:/tmp/evidence.tgz evidence/
+                  tar xzf evidence/evidence.tgz -C evidence/
+
+            - name: Verify evidence pack (offline verifier)
+              run: |
+                  ./scripts/lab/ci-verify.sh evidence/artifacts/${RUN_ID}
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: evidence-${{ env.RUN_ID }}
+                  path: evidence/
