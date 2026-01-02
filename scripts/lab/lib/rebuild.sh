@@ -507,7 +507,7 @@ run_baseline_host_checks() {
 
     # HOST-003: Storage
     local storage_check
-    storage_check=$(host_exec "pvesm status" 2>&1)
+    storage_check=$(host_exec "PATH=/usr/sbin:/sbin:$PATH pvesm status" 2>&1)
     echo "$storage_check" > "${ARTIFACT_DIR}/reports/host/HOST-003-storage.txt"
     
     if echo "$storage_check" | grep -q "local-lvm"; then
