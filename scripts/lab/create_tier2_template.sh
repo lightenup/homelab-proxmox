@@ -18,9 +18,19 @@ NC='\033[0m'
 
 log() { echo -e "${GREEN}[INFO]${NC} $1"; }
 
-# Helper to run commands on host (sudo -n for qm/pvesm allowed list)
+# Helper to run commands on host; run local if targeting this host
 pve_exec() {
-    ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "sudo -n PATH=/usr/sbin:/sbin:\$PATH $*"
+    local target="$PROXMOX_HOST"
+    local self_host
+    self_host="$(hostname -s)"
+    local self_fqdn
+    self_fqdn="$(hostname -f 2>/dev/null || true)"
+
+    if [ "$target" = "localhost" ] || [ "$target" = "127.0.0.1" ] || [ "$target" = "$self_host" ] || { [ -n "$self_fqdn" ] && [ "$target" = "$self_fqdn" ]; }; then
+        sudo -n PATH=/usr/sbin:/sbin:$PATH "$@"
+    else
+        ssh $SSH_OPTS "$SSH_USER@$target" "sudo -n PATH=/usr/sbin:/sbin:\$PATH $*"
+    fi
 }
 
 log "Checking if VM $VMID exists..."
