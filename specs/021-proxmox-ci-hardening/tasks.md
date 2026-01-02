@@ -78,10 +78,10 @@
 
 **Purpose**: Documentation and alignment across tooling
 
-- [ ] T015 [P] Document pi-ci workflow, artifact path, sudoers policy, and runbook in docs/operations/proxmox-ci.md
-- [ ] T016 [P] Add quickstart steps for rerunning proxmox-apply and reviewing evidence bundles in specs/021-proxmox-ci-hardening/quickstart.md
-- [ ] T017 Update docs/operations.md to reinforce ci-only Ansible/Terraform usage and Proxmox API token guidance
-- [ ] T018 Add validation step (lint or scripted check) ensuring Ansible uses remote_user=ci with become -n and Terraform uses non-root Proxmox API token; document required roles/secret wiring in docs/operations/proxmox-ci.md
+- [x] T015 [P] Document pi-ci workflow, artifact path, sudoers policy, and runbook in docs/operations/proxmox-ci.md
+- [x] T016 [P] Add quickstart steps for rerunning proxmox-apply and reviewing evidence bundles in specs/021-proxmox-ci-hardening/quickstart.md
+- [x] T017 Update docs/operations.md to reinforce ci-only Ansible/Terraform usage and Proxmox API token guidance
+- [x] T018 Add validation step (lint or scripted check) ensuring Ansible uses remote_user=ci with become -n and Terraform uses non-root Proxmox API token; document required roles/secret wiring in docs/operations/proxmox-ci.md
 
 ---
 
