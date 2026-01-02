@@ -2,8 +2,9 @@
 set -e
 
 # Configuration
-PROXMOX_HOST="192.168.1.112"
-SSH_USER="root"
+PROXMOX_HOST="${PROXMOX_HOST:-pve}"
+SSH_USER="${SSH_USER:-ci}"
+SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null}"
 VMID=9001
 TEMPLATE_NAME="lab-tpl-debian-13-tier1"
 IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/daily/latest/debian-13-generic-amd64-daily.qcow2"
@@ -17,9 +18,9 @@ NC='\033[0m'
 
 log() { echo -e "${GREEN}[INFO]${NC} $1"; }
 
-# Helper to run commands on host
+# Helper to run commands on host (sudo -n for qm/pvesm allowed list)
 pve_exec() {
-    ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_USER@$PROXMOX_HOST" "$@"
+    ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "sudo -n PATH=/usr/sbin:/sbin:\$PATH $*"
 }
 
 log "Checking if VM $VMID exists..."
@@ -29,7 +30,7 @@ if pve_exec "qm status $VMID" >/dev/null 2>&1; then
 fi
 
 log "Uploading SSH Key..."
-pve_exec "echo '$SSH_KEY' > /tmp/lab.pub"
+pve_exec "echo \"$SSH_KEY\" | tee /tmp/lab.pub >/dev/null"
 
 log "Downloading Debian 13 Cloud Image..."
 pve_exec "wget -qO /tmp/debian-13.qcow2 $IMAGE_URL"
