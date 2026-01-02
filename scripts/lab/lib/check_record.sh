@@ -35,6 +35,11 @@ if [[ -z "${RUNID:-}" ]]; then
     exit 1
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+    echo "ERROR: Missing dependency jq; run dependency preflight and install jq (e.g., apt-get install jq)." >&2
+    exit 1
+fi
+
 # Source harness libraries
 source "${HARNESS_LIB_DIR}/checks.sh"
 source "${HARNESS_LIB_DIR}/jsonl.sh"

@@ -2,6 +2,52 @@
 # scripts/lab/lib/rebuild.sh
 # Rebuild Orchestrator Library (019f)
 
+# Provisioning defaults (overridable via env)
+PROVISION_SSH_TIMEOUT_SEC="${PROVISION_SSH_TIMEOUT_SEC:-600}"   # >=5 minutes per requirements
+PROVISION_SSH_INTERVAL_SEC="${PROVISION_SSH_INTERVAL_SEC:-5}"
+PROVISION_SSH_USER="${PROVISION_SSH_USER:-ansible}"
+PROVISION_SSH_KEY="${PROVISION_SSH_KEY:-}"
+
+build_provision_ssh_opts() {
+    local opts="$SSH_OPTS"
+    if [[ -n "$PROVISION_SSH_KEY" ]]; then
+        opts="$opts -i $PROVISION_SSH_KEY"
+    fi
+    echo "$opts"
+}
+
+wait_for_provisioning_ssh() {
+    local target_ip="$1"
+    local ssh_user="$PROVISION_SSH_USER"
+    local timeout_sec="$PROVISION_SSH_TIMEOUT_SEC"
+    local interval_sec="$PROVISION_SSH_INTERVAL_SEC"
+    local ssh_opts
+    ssh_opts=$(build_provision_ssh_opts)
+
+    local start_ts end_ts elapsed
+    start_ts=$(date +%s)
+    end_ts=$((start_ts + timeout_sec))
+
+    local log_file="${EVIDENCE_ROOT:-${ARTIFACT_DIR:-/tmp}}/logs/provisioning-ssh-wait.log"
+    mkdir -p "$(dirname "$log_file")"
+
+    log_info "Waiting for SSH (${ssh_user}@${target_ip}) for up to ${timeout_sec}s..."
+    while [[ $(date +%s) -lt $end_ts ]]; do
+        if ssh $ssh_opts -J "$SSH_USER@$PROXMOX_HOST" "${ssh_user}@${target_ip}" "echo ready" >/dev/null 2>&1; then
+            elapsed=$(( $(date +%s) - start_ts ))
+            log_info "SSH ready after ${elapsed}s"
+            echo "SSH ready after ${elapsed}s" > "$log_file"
+            return 0
+        fi
+        sleep "$interval_sec"
+    done
+
+    elapsed=$(( $(date +%s) - start_ts ))
+    log_error "Timeout waiting for SSH on ${target_ip} after ${elapsed}s"
+    echo "Timeout after ${elapsed}s" > "$log_file"
+    return 1
+}
+
 cmd_rebuild() {
     local profile="rebuild-hypervisor-nested-workload"
     local apply=false
@@ -13,6 +59,16 @@ cmd_rebuild() {
 
     start_time_epoch="$(date +%s)"
     start_time_iso="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+    if ! run_dependency_preflight; then
+        log_error "Dependency preflight failed; install missing tools (jq, ssh, rsync) before rebuild."
+        exit 1
+    fi
+
+    if ! ensure_artifact_root; then
+        log_error "Artifact root missing or not writable; create ${ARTIFACT_ROOT} and ensure ci owns it."
+        exit 1
+    fi
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -40,9 +96,13 @@ cmd_rebuild() {
 
     # Initialize Evidence Pack
     local run_id
-    run_id="$(create_evidence_pack "artifacts/019-lab")"
+    local base_dir
+    base_dir="$(artifact_path "019-lab")"
+    mkdir -p "$base_dir"
+
+    run_id="$(create_evidence_pack "$base_dir")"
     export RUN_ID="$run_id"
-    export ARTIFACT_DIR="artifacts/019-lab/${run_id}"
+    export ARTIFACT_DIR="${base_dir}/${run_id}"
     export EVIDENCE_ROOT="$ARTIFACT_DIR"
 
     # Reuse harness evidence layout and provenance

@@ -7,12 +7,29 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/lib"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROXMOX_HOST="${PROXMOX_HOST:-pve}"
+SSH_USER="${SSH_USER:-ci}"
+SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+ARTIFACT_ROOT="/var/lib/homelab-proxmox/artifacts"
 
 # Source required libraries
 # shellcheck source=lib/checks.sh
 source "${LIB_DIR}/checks.sh"
 # shellcheck source=lib/jsonl.sh
 source "${LIB_DIR}/jsonl.sh"
+
+ensure_ci_artifact_root() {
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+
+    echo "Ensuring artifact root ${ARTIFACT_ROOT} on ${ssh_target}" >&2
+
+    if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p ${ARTIFACT_ROOT} && sudo -n chown ci:ci ${ARTIFACT_ROOT}"; then
+        echo "Failed to ensure artifact root at ${ARTIFACT_ROOT}" >&2
+        return 1
+    fi
+
+    return 0
+}
 
 # GUARD-001: Verify tier2 playbook rejects execution without lab_inventory=true
 # Expected: FAIL (playbook should reject)
@@ -322,9 +339,14 @@ run_all_guardrails() {
 # If script is executed directly (not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     if [[ $# -lt 1 ]]; then
-        echo "Usage: $0 evidence_dir [runid]" >&2
+        echo "Usage: $0 ensure-artifacts | evidence_dir [runid]" >&2
         exit 1
     fi
-    
+
+    if [[ "$1" == "ensure-artifacts" ]]; then
+        ensure_ci_artifact_root
+        exit $?
+    fi
+
     run_all_guardrails "$1" "${2:-}"
 fi
