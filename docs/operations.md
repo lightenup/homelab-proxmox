@@ -1,5 +1,12 @@
 # Operations Manual
 
+## Proxmox CI Posture
+
+- CI user only: all SSH/rsync from workflows must target `ci@pve` with non-interactive sudo; root SSH is disallowed.
+- Ansible defaults: use `remote_user=ci` with `become_flags=-n`; avoid `remote_user: root` except bootstrap.
+- Terraform: use a non-root Proxmox API token (e.g., `ci-terraform@pve!token`) provided via `TF_VAR_proxmox_api_token_id`/`TF_VAR_proxmox_api_token_secret`.
+- Runbook and sudoers details live in [docs/operations/proxmox-ci.md](docs/operations/proxmox-ci.md); quickstart in [specs/021-proxmox-ci-hardening/quickstart.md](specs/021-proxmox-ci-hardening/quickstart.md).
+
 ## Remote Access (Tailscale)
 
 ### Validation (Smoke Test)

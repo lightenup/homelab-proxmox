@@ -19,6 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate CI IaC posture
+        run: ./scripts/lab/ci-validate-iac.sh
+
       - name: Offline fixtures (pre-flight)
         run: ./scripts/lab/ci-verify.sh fixtures/evidence-packs/valid
 
