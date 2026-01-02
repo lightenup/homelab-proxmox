@@ -76,13 +76,19 @@ capture_target_info() {
     local ssh_target="$1"
     
     local pveversion
-    pveversion="$(ssh "$ssh_target" "pveversion 2>/dev/null | grep 'pve-manager' | awk '{print \$2}'" || echo 'unknown')"
     
     local kernel
-    kernel="$(ssh "$ssh_target" "uname -r" || echo 'unknown')"
     
     local distro
-    distro="$(ssh "$ssh_target" "cat /etc/os-release 2>/dev/null | grep '^PRETTY_NAME=' | cut -d= -f2 | tr -d '\"'" || echo 'unknown')"
+        if is_local_proxmox; then
+            pveversion="$(host_exec "pveversion 2>/dev/null | grep 'pve-manager' | awk '{print \$2}'" || echo 'unknown')"
+            kernel="$(host_exec "uname -r" || echo 'unknown')"
+            distro="$(host_exec "cat /etc/os-release 2>/dev/null | grep '^PRETTY_NAME=' | cut -d= -f2 | tr -d '\"'" || echo 'unknown')"
+        else
+            pveversion="$(ssh $SSH_OPTS "$ssh_target" "pveversion 2>/dev/null | grep 'pve-manager' | awk '{print \$2}'" || echo 'unknown')"
+            kernel="$(ssh $SSH_OPTS "$ssh_target" "uname -r" || echo 'unknown')"
+            distro="$(ssh $SSH_OPTS "$ssh_target" "cat /etc/os-release 2>/dev/null | grep '^PRETTY_NAME=' | cut -d= -f2 | tr -d '\"'" || echo 'unknown')"
+        fi
     
     cat <<EOF
 {

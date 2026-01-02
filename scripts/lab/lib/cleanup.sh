@@ -18,7 +18,12 @@ check_no_lab_vms() {
     # Check for VMs in lab range with lab markers
     # Exclude templates (9001, 9002)
     local lab_vms
-    lab_vms="$(ssh "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 && \$1 != 9001 && \$1 != 9002 {print \$1}'" || echo "")"
+    # Use host_exec for local host or SSH_OPTS for remote to avoid host key prompts
+    if is_local_proxmox; then
+        lab_vms="$(host_exec "qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 && \$1 != 9001 && \$1 != 9002 {print \$1}'" || echo "")"
+    else
+        lab_vms="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 && \$1 != 9001 && \$1 != 9002 {print \$1}'" || echo "")"
+    fi
     
     if [[ -z "$lab_vms" ]]; then
         echo "PASS: No lab VMs found in range 9000-9099"
@@ -39,7 +44,11 @@ capture_vm_inventory() {
     
     # Get VM list and format as JSON
     local vm_list
-    vm_list="$(ssh "$ssh_target" "qm list 2>/dev/null" || echo "")"
+    if is_local_proxmox; then
+        vm_list="$(host_exec "qm list 2>/dev/null" || echo "")"
+    else
+        vm_list="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null" || echo "")"
+    fi
     
     # Simple JSON format
     cat > "$output_file" <<EOF
