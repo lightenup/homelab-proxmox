@@ -48,6 +48,24 @@ wait_for_provisioning_ssh() {
     return 1
 }
 
+is_local_proxmox() {
+    local host_lower="${PROXMOX_HOST,,}"
+    local hostname_short
+    hostname_short=$(hostname -s)
+    local hostname_fqdn
+    hostname_fqdn=$(hostname -f 2>/dev/null || hostname)
+    [[ "$host_lower" == "localhost" || "$host_lower" == "127.0.0.1" || "$host_lower" == "${hostname_short,,}" || "$host_lower" == "${hostname_fqdn,,}" ]]
+}
+
+host_exec() {
+    local cmd="$1"
+    if is_local_proxmox; then
+        bash -lc "$cmd"
+    else
+        ssh $SSH_OPTS "${SSH_USER}@${PROXMOX_HOST}" "$cmd"
+    fi
+}
+
 cmd_rebuild() {
     local profile="rebuild-hypervisor-nested-workload"
     local apply=false
@@ -321,7 +339,7 @@ JSON
         local remote_cmd="$3"
 
         local output
-        output=$(ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "$remote_cmd" 2>&1)
+        output=$(host_exec "$remote_cmd" 2>&1)
         local rc=$?
         append_teardown_log "$evidence_file" "$label" "$remote_cmd" "$rc" "$output"
         return $rc
@@ -333,7 +351,7 @@ JSON
         mkdir -p "$(dirname "$evidence_file")"
 
         local exists=true
-        if ! ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "qm status $vmid" >/dev/null 2>&1; then
+        if ! host_exec "qm status $vmid" >/dev/null 2>&1; then
             exists=false
             append_teardown_log "$evidence_file" "vm-$vmid" "qm status $vmid" "1" "VM $vmid not found"
         fi
@@ -349,7 +367,7 @@ JSON
 
             # Wait for not-running state (best-effort)
             for _ in {1..5}; do
-                if ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "qm status $vmid" 2>/dev/null | grep -q "status: running"; then
+                if host_exec "qm status $vmid" 2>/dev/null | grep -q "status: running"; then
                     sleep 2
                 else
                     break
@@ -394,7 +412,7 @@ JSON
         mkdir -p "$(dirname "$evidence_file")"
 
         local exists=true
-        if ! ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "pct status $ctid" >/dev/null 2>&1; then
+        if ! host_exec "pct status $ctid" >/dev/null 2>&1; then
             exists=false
             append_teardown_log "$evidence_file" "lxc-$ctid" "pct status $ctid" "1" "CT $ctid not found"
         fi
@@ -409,7 +427,7 @@ JSON
             run_teardown_cmd "$evidence_file" "lxc-$ctid stop attempt $attempts" "pct stop $ctid --force"
 
             for _ in {1..5}; do
-                if ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "pct status $ctid" 2>/dev/null | grep -q "status: running"; then
+                if host_exec "pct status $ctid" 2>/dev/null | grep -q "status: running"; then
                     sleep 2
                 else
                     break
@@ -448,13 +466,12 @@ JSON
     }
 
 run_baseline_host_checks() {
-    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
     local failed=0
 
     # HOST-001: SSH
     local ssh_output
     local ssh_evidence="${ARTIFACT_DIR}/reports/host/HOST-001-ssh.txt"
-    if ssh_output=$(ssh $SSH_OPTS "$ssh_target" "echo pong" 2>&1); then
+    if ssh_output=$(host_exec "echo pong" 2>&1); then
         echo "$ssh_output" > "$ssh_evidence"
         record_check "HOST-001" "Proxmox host reachable via SSH" "blocker" "PASS" "PASS" "SSH connection successful" "reports/host/HOST-001-ssh.txt"
     else
@@ -465,7 +482,7 @@ run_baseline_host_checks() {
 
     # HOST-002: Bridge
     local bridge_check
-    bridge_check=$(ssh $SSH_OPTS "$ssh_target" "ip addr show $LAB_BRIDGE" 2>&1)
+    bridge_check=$(host_exec "ip addr show $LAB_BRIDGE" 2>&1)
     echo "$bridge_check" > "${ARTIFACT_DIR}/reports/host/HOST-002-bridge.txt"
     
     if echo "$bridge_check" | grep -q "$LAB_GATEWAY"; then
@@ -477,7 +494,7 @@ run_baseline_host_checks() {
 
     # HOST-003: Storage
     local storage_check
-    storage_check=$(ssh $SSH_OPTS "$ssh_target" "pvesm status" 2>&1)
+    storage_check=$(host_exec "pvesm status" 2>&1)
     echo "$storage_check" > "${ARTIFACT_DIR}/reports/host/HOST-003-storage.txt"
     
     if echo "$storage_check" | grep -q "local-lvm"; then
@@ -489,7 +506,7 @@ run_baseline_host_checks() {
 
     # HOST-004: Nested
     local nested_check
-    nested_check=$(ssh $SSH_OPTS "$ssh_target" "cat /sys/module/kvm_intel/parameters/nested 2>/dev/null || cat /sys/module/kvm_amd/parameters/nested 2>/dev/null")
+    nested_check=$(host_exec "cat /sys/module/kvm_intel/parameters/nested 2>/dev/null || cat /sys/module/kvm_amd/parameters/nested 2>/dev/null")
     echo "$nested_check" > "${ARTIFACT_DIR}/reports/host/HOST-004-nested.txt"
     
     if [[ "$nested_check" == "Y" || "$nested_check" == "1" ]]; then
@@ -502,12 +519,11 @@ run_baseline_host_checks() {
 }
 
 run_baseline_template_checks() {
-    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
     local failed=0
 
     # TPL-001: Base Template
     local tpl1_status
-    tpl1_status=$(ssh $SSH_OPTS "$ssh_target" "qm status $LAB_TEMPLATE_VMID" 2>&1)
+    tpl1_status=$(host_exec "qm status $LAB_TEMPLATE_VMID" 2>&1)
     echo "$tpl1_status" > "${ARTIFACT_DIR}/reports/templates/TPL-001-qm-status-${LAB_TEMPLATE_VMID}.txt"
     
     if echo "$tpl1_status" | grep -q "status:"; then
@@ -519,7 +535,7 @@ run_baseline_template_checks() {
 
     # TPL-002: Tier2 Template
     local tpl2_status
-    tpl2_status=$(ssh $SSH_OPTS "$ssh_target" "qm status $LAB_TEMPLATE_VMID_TIER2" 2>&1)
+    tpl2_status=$(host_exec "qm status $LAB_TEMPLATE_VMID_TIER2" 2>&1)
     echo "$tpl2_status" > "${ARTIFACT_DIR}/reports/templates/TPL-002-qm-status-${LAB_TEMPLATE_VMID_TIER2}.txt"
     
     if echo "$tpl2_status" | grep -q "status:"; then
@@ -534,7 +550,7 @@ run_baseline_template_checks() {
     local tpl3_evidence_refs=()
     for vmid in $LAB_TEMPLATE_VMID $LAB_TEMPLATE_VMID_TIER2; do
         local config
-        config=$(ssh $SSH_OPTS "$ssh_target" "qm config $vmid" 2>&1)
+        config=$(host_exec "qm config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-003-qm-config-${vmid}.txt"
         tpl3_evidence_refs+=("reports/templates/TPL-003-qm-config-${vmid}.txt")
         
@@ -556,7 +572,7 @@ run_baseline_template_checks() {
     local tpl4_evidence_refs=()
     for vmid in $LAB_TEMPLATE_VMID $LAB_TEMPLATE_VMID_TIER2; do
         local config
-        config=$(ssh $SSH_OPTS "$ssh_target" "qm config $vmid" 2>&1)
+        config=$(host_exec "qm config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-004-tags-${vmid}.txt"
         tpl4_evidence_refs+=("reports/templates/TPL-004-tags-${vmid}.txt")
         
@@ -578,7 +594,7 @@ run_baseline_template_checks() {
     local tpl5_evidence_refs=()
     for vmid in $LAB_TEMPLATE_VMID $LAB_TEMPLATE_VMID_TIER2; do
         local config
-        config=$(ssh $SSH_OPTS "$ssh_target" "qm config $vmid" 2>&1)
+        config=$(host_exec "qm config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-005-cloudinit-${vmid}.txt"
         tpl5_evidence_refs+=("reports/templates/TPL-005-cloudinit-${vmid}.txt")
         
@@ -600,7 +616,7 @@ run_baseline_template_checks() {
     local tpl6_evidence_refs=()
     for vmid in $LAB_TEMPLATE_VMID $LAB_TEMPLATE_VMID_TIER2; do
         local config
-        config=$(ssh $SSH_OPTS "$ssh_target" "qm config $vmid" 2>&1)
+        config=$(host_exec "qm config $vmid" 2>&1)
         # Check name
         local name
         name=$(echo "$config" | grep "name:" | awk '{print $2}')
@@ -624,22 +640,21 @@ run_baseline_template_checks() {
 }
 
 remediate_templates() {
-    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
     local rem_log="${ARTIFACT_DIR}/logs/remediation-templates.log"
     
     log_info "Remediating templates..."
-    emit_event "remediation_start" "$RUN_ID" "scope=templates" "target_host=$ssh_target"
+    emit_event "remediation_start" "$RUN_ID" "scope=templates" "target_host=${SSH_USER}@${PROXMOX_HOST}"
     mkdir -p "${ARTIFACT_DIR}/logs"
     : > "$rem_log"
 
     # Helper to destroy if exists
     destroy_if_exists() {
         local vmid="$1"
-        if ssh $SSH_OPTS "$ssh_target" "qm status $vmid" >/dev/null 2>&1; then
+        if host_exec "qm status $vmid" >/dev/null 2>&1; then
             log_info "Destroying existing template $vmid..."
             emit_event "remediation_step" "$RUN_ID" "action=destroy" "vmid=$vmid"
             # Purge to remove disk images too
-            if ! ssh $SSH_OPTS "$ssh_target" "qm destroy $vmid --purge" >>"$rem_log" 2>&1; then
+            if ! host_exec "qm destroy $vmid --purge" >>"$rem_log" 2>&1; then
                 log_error "Failed to destroy template $vmid. It might have linked clones."
                 emit_event "remediation_error" "$RUN_ID" "action=destroy" "vmid=$vmid"
                 return 1
