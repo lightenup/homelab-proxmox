@@ -17,10 +17,16 @@ source "${LIB_DIR}/jsonl.sh"
 source "${LIB_DIR}/provenance.sh"
 # shellcheck source=lib/evidence.sh
 source "${LIB_DIR}/evidence.sh"
+# shellcheck source=lib/artifacts.sh
+source "${LIB_DIR}/artifacts.sh"
+# shellcheck source=lib/sudo.sh
+source "${LIB_DIR}/sudo.sh"
 # shellcheck source=lib/cleanup.sh
 source "${LIB_DIR}/cleanup.sh"
 # shellcheck source=lib/rebuild.sh
 source "${LIB_DIR}/rebuild.sh"
+# shellcheck source=checks.d/deps.sh
+source "${SCRIPT_DIR}/checks.d/deps.sh"
 
 # Configuration
 LAB_VMID_START=9000
@@ -32,9 +38,10 @@ LAB_GATEWAY="10.99.0.1"
 LAB_BRIDGE="vmbr99"
 IDENTITY_TAG_KEY="ManagedBy"
 IDENTITY_TAG_VAL="019a"
-PROXMOX_HOST="192.168.1.112" # Hostname or IP in SSH config
-SSH_USER="root"
-LOCK_FILE="artifacts/019-lab/.lock"
+PROXMOX_HOST="${PROXMOX_HOST:-pve}" # Hostname or IP in SSH config
+SSH_USER="${SSH_USER:-ci}"
+ARTIFACT_BASE="$(artifact_path "019-lab")"
+LOCK_FILE="${ARTIFACT_BASE}/.lock"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 # Suite execution control (019c1)
@@ -316,7 +323,7 @@ EVIDENCE_ROOT=""
 evidence_init() {
     local run_id=$1
     local profile=$2
-    EVIDENCE_ROOT="artifacts/019-lab/$run_id"
+    EVIDENCE_ROOT="$(artifact_path "019-lab/$run_id")"
     
     mkdir -p "$EVIDENCE_ROOT"/{logs,config,validation}
     
@@ -765,18 +772,14 @@ cmd_up() {
     log_info "Starting VM..."
     log_cmd_exec pve_exec "qm start $vmid"
     
-    # 7. Wait for SSH
-    log_info "Waiting for SSH at $LAB_IP..."
-    for i in {1..60}; do
-        if ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "echo ready" >/dev/null 2>&1; then
-            log_info "SSH is ready!"
-            return 0
-        fi
-        sleep 2
-        echo -n "."
-    done
-    
-    log_error "Timeout waiting for SSH."
+    # 7. Wait for SSH (parameterized timeout/user/key)
+    if wait_for_provisioning_ssh "$LAB_IP"; then
+        return 0
+    fi
+
+    # Provisioning timeout: collect evidence
+    collect_provisioning_evidence "$vmid" "$LAB_IP" "$EVIDENCE_ROOT"
+    log_error "Timeout waiting for SSH. Provisioning evidence captured under $EVIDENCE_ROOT/reports/provisioning"
     return 1
 }
 
@@ -955,6 +958,52 @@ ingest_ansible_reports() {
     done
 }
 
+install_ci_sudoers() {
+    local profile_file="${SCRIPT_DIR}/profiles.d/ci-sudoers.conf"
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    local remote_tmp="/tmp/ci-sudoers.conf"
+    local remote_dst="/etc/sudoers.d/ci-homelab"
+
+    if [[ ! -f "$profile_file" ]]; then
+        log_warn "ci sudoers profile missing; expected at $profile_file"
+        return 1
+    fi
+
+    log_info "Installing ci sudoers profile to $remote_dst on $ssh_target"
+
+    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n mkdir -p /etc/sudoers.d"; then
+        log_warn "Failed to ensure /etc/sudoers.d exists on $ssh_target"
+        return 1
+    fi
+
+    if ! ssh $SSH_OPTS "$ssh_target" "cat > $remote_tmp" < "$profile_file"; then
+        log_warn "Failed to upload sudoers profile to $remote_tmp"
+        return 1
+    fi
+
+    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n chown root:root $remote_tmp && sudo -n chmod 0440 $remote_tmp"; then
+        log_warn "Failed to set ownership/permissions on $remote_tmp"
+        ssh $SSH_OPTS "$ssh_target" "rm -f $remote_tmp" >/dev/null 2>&1 || true
+        return 1
+    fi
+
+    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n visudo -c -f $remote_tmp"; then
+        log_error "visudo validation failed for ci sudoers profile"
+        ssh $SSH_OPTS "$ssh_target" "sudo -n rm -f $remote_tmp" >/dev/null 2>&1 || true
+        return 1
+    fi
+
+    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n install -o root -g root -m 0440 $remote_tmp $remote_dst"; then
+        log_warn "Failed to install sudoers profile to $remote_dst"
+        ssh $SSH_OPTS "$ssh_target" "sudo -n rm -f $remote_tmp" >/dev/null 2>&1 || true
+        return 1
+    fi
+
+    ssh $SSH_OPTS "$ssh_target" "sudo -n rm -f $remote_tmp" >/dev/null 2>&1 || true
+    log_info "ci sudoers profile installed"
+    return 0
+}
+
 cmd_run() {
     # Defaults
     local tier=1
@@ -962,6 +1011,7 @@ cmd_run() {
     local keep_vm=false
     local profile=""
     local verify_evidence=true
+    local apply_sudoers=false
     
     # Parse args
     while [[ $# -gt 0 ]]; do
@@ -972,10 +1022,20 @@ cmd_run() {
             --keep) keep_vm=true ;;
             --verify) verify_evidence=true ;;
             --no-verify) verify_evidence=false ;;
+            --apply-sudoers) apply_sudoers=true ;;
             *) log_error "Unknown argument: $1"; exit 1 ;;
         esac
         shift
     done
+
+    if ! run_dependency_preflight; then
+        log_error "Dependency preflight failed; install missing tools (jq, ssh, rsync) before running."
+        exit 1
+    fi
+
+    if [[ "$apply_sudoers" == "true" ]]; then
+        install_ci_sudoers || log_warn "Sudoers installation skipped or failed; ensure ci has required sudo -n rights."
+    fi
 
     # 019c1 Phase 7: Legacy-to-Profile Mapping (T052, T053, T054)
     local legacy_mode_used=false
@@ -1031,6 +1091,8 @@ cmd_run() {
     export CURRENT_PHASE="bootstrap"
 
     # Locking (flock)
+    ensure_artifact_root
+    mkdir -p "${ARTIFACT_BASE}"
     exec 200>"$LOCK_FILE"
     if [[ "${SKIP_LOCK:-false}" != "true" ]]; then
         if ! flock -n 200; then
@@ -1045,15 +1107,15 @@ cmd_run() {
         run_id="$RUN_ID"
         log_info "Using existing evidence pack: $run_id"
     else
-        run_id="$(create_evidence_pack "artifacts/019-lab")"
+        run_id="$(create_evidence_pack "$ARTIFACT_BASE")"
         export RUN_ID="$run_id"
-        export ARTIFACT_DIR="artifacts/019-lab/${run_id}"
+        export ARTIFACT_DIR="${ARTIFACT_BASE}/${run_id}"
     fi
     
     # Export context for sub-functions and Ansible
     export RUN_ID="$run_id"
     export PROFILE_ID="${PROFILE_ID:-custom}"
-    export EVIDENCE_DIR="$PWD/artifacts/019-lab/$run_id"
+    export EVIDENCE_DIR="${ARTIFACT_BASE}/${run_id}"
 
     # Legacy: Also set EVIDENCE_ROOT for backward compatibility
     evidence_init "$run_id" "${profile:-custom}"
@@ -1573,6 +1635,7 @@ usage() {
     echo "  --keep                Keep VM after run (don't destroy on exit)"
     echo "  --verify              Run evidence verification (default)"
     echo "  --no-verify           Skip evidence verification"
+    echo "  --apply-sudoers       Install ci sudoers profile before running"
     exit 1
 }
 

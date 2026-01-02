@@ -17,6 +17,7 @@ create_evidence_pack() {
     local evidence_dir="${base_dir}/${runid}"
     
     # Create directory structure
+    mkdir -p "$base_dir"
     mkdir -p "$evidence_dir"
     mkdir -p "$evidence_dir/logs"
     mkdir -p "$evidence_dir/reports"
@@ -133,4 +134,29 @@ validate_evidence() {
     else
         return 1
     fi
+}
+
+# Collect provisioning evidence on timeout/failure
+# Usage: collect_provisioning_evidence <vmid> [target_ip] [evidence_dir]
+collect_provisioning_evidence() {
+    local vmid="$1"
+    local target_ip="${2:-${LAB_IP:-10.99.0.10}}"
+    local evidence_dir="${3:-${EVIDENCE_ROOT:-${ARTIFACT_DIR:-/tmp}}}"
+    local ssh_target="${SSH_USER:-ci}@${PROXMOX_HOST:-pve}"
+    local dir="${evidence_dir}/reports/provisioning"
+    local ssh_opts="${SSH_OPTS:-}"
+
+    mkdir -p "$dir"
+
+    # Host-side probes
+    ssh $ssh_opts "$ssh_target" "qm status $vmid" > "$dir/qm-status-${vmid}.txt" 2>&1 || true
+    ssh $ssh_opts "$ssh_target" "qm config $vmid" > "$dir/qm-config-${vmid}.txt" 2>&1 || true
+    ssh $ssh_opts "$ssh_target" "qm cloudinit dump $vmid user" > "$dir/qm-cloudinit-user-${vmid}.txt" 2>&1 || true
+    ssh $ssh_opts "$ssh_target" "qm cloudinit dump $vmid network" > "$dir/qm-cloudinit-net-${vmid}.txt" 2>&1 || true
+    ssh $ssh_opts "$ssh_target" "ping -c 3 ${target_ip}" > "$dir/ping-${target_ip}.txt" 2>&1 || true
+    ssh $ssh_opts "$ssh_target" "journalctl -u pvedaemon -n 200 --no-pager" > "$dir/journal-pvedaemon.txt" 2>&1 || true
+    ssh $ssh_opts "$ssh_target" "ip addr show ${LAB_BRIDGE:-vmbr99}" > "$dir/ip-${LAB_BRIDGE:-vmbr99}.txt" 2>&1 || true
+
+    # Capture recent task log for the VM if available
+    ssh $ssh_opts "$ssh_target" "qm cloudinit status $vmid --verbose" > "$dir/qm-cloudinit-status-${vmid}.txt" 2>&1 || true
 }
