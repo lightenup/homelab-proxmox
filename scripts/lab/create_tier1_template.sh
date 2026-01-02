@@ -26,10 +26,12 @@ pve_exec() {
     local self_fqdn
     self_fqdn="$(hostname -f 2>/dev/null || true)"
 
+    local sudo_path="PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH"
+
     if [ "$target" = "localhost" ] || [ "$target" = "127.0.0.1" ] || [ "$target" = "$self_host" ] || { [ -n "$self_fqdn" ] && [ "$target" = "$self_fqdn" ]; }; then
-        sudo -n PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH "$@"
+        sudo -n $sudo_path bash -lc "$*"
     else
-        ssh $SSH_OPTS "$SSH_USER@$target" "sudo -n PATH=/usr/sbin:/sbin:/usr/bin:/bin:\$PATH $*"
+        ssh $SSH_OPTS "$SSH_USER@$target" "sudo -n $sudo_path bash -lc '$*'"
     fi
 }
 
