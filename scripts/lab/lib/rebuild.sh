@@ -54,6 +54,7 @@ cmd_rebuild() {
     local dry_run=true
     local keep=false
     local no_verify=false
+    local apply_sudoers=false
     local start_time_epoch
     local start_time_iso
 
@@ -78,6 +79,7 @@ cmd_rebuild() {
             --keep) keep=true; shift ;;
             --verify) no_verify=false; shift ;;
             --no-verify) no_verify=true; shift ;;
+            --apply-sudoers) apply_sudoers=true; shift ;;
             *) log_error "Unknown option: $1"; exit 1 ;;
         esac
     done
@@ -181,7 +183,7 @@ cmd_rebuild() {
     # Call cmd_run with SKIP_LOCK=true and existing env vars
     export SKIP_LOCK=true
     
-    if cmd_run --profile "$SUITE_PROFILE" $([[ "$keep" == "true" ]] && echo "--keep") $([[ "$no_verify" == "true" ]] && echo "--no-verify" || echo "--verify"); then
+    if cmd_run --profile "$SUITE_PROFILE" $([[ "$keep" == "true" ]] && echo "--keep") $([[ "$no_verify" == "true" ]] && echo "--no-verify" || echo "--verify") $([[ "$apply_sudoers" == "true" ]] && echo "--apply-sudoers"); then
         :
     else
         finalize_rebuild "FAIL" "$no_verify" "$start_time_epoch" "$start_time_iso"
