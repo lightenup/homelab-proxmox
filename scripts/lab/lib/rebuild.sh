@@ -500,10 +500,14 @@ run_baseline_host_checks() {
 
     # HOST-003: Storage
     local storage_check
-    storage_check=$(host_exec "PATH=/usr/sbin:/sbin:$PATH pvesm status" 2>&1)
+    storage_check=$(host_exec "sudo -n PATH=/usr/sbin:/sbin:$PATH pvesm status" 2>&1)
+    local storage_rc=$?
     echo "$storage_check" > "${ARTIFACT_DIR}/reports/host/HOST-003-storage.txt"
     
-    if echo "$storage_check" | grep -q "local-lvm"; then
+    if [[ $storage_rc -ne 0 ]]; then
+        record_check "HOST-003" "Required storage backend exists" "blocker" "PASS" "FAIL" "pvesm status rc=$storage_rc" "reports/host/HOST-003-storage.txt"
+        failed=1
+    elif echo "$storage_check" | grep -q "local-lvm"; then
         record_check "HOST-003" "Required storage backend exists" "blocker" "PASS" "PASS" "Storage local-lvm found" "reports/host/HOST-003-storage.txt"
     else
         record_check "HOST-003" "Required storage backend exists" "blocker" "PASS" "FAIL" "Storage local-lvm missing" "reports/host/HOST-003-storage.txt"
