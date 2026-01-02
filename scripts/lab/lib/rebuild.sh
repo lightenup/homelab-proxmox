@@ -8,13 +8,6 @@ PROVISION_SSH_INTERVAL_SEC="${PROVISION_SSH_INTERVAL_SEC:-5}"
 PROVISION_SSH_USER="${PROVISION_SSH_USER:-ansible}"
 PROVISION_SSH_KEY="${PROVISION_SSH_KEY:-}"
 
-# Normalize PROXMOX_HOST when running directly on the PVE node to avoid self-SSH host key prompts
-if hostname_short_norm="$(hostname -s)"; then
-    hostname_label_norm=${hostname_short_norm%%.*}
-    if [[ "${PROXMOX_HOST:-pve}" == "$hostname_short_norm" || "${PROXMOX_HOST:-pve}" == "$hostname_label_norm" ]]; then
-        PROXMOX_HOST="127.0.0.1"
-    fi
-fi
 
 build_provision_ssh_opts() {
     local opts="$SSH_OPTS"
