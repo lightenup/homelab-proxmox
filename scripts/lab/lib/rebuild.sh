@@ -476,6 +476,7 @@ JSON
     }
 
 run_baseline_host_checks() {
+    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
     local failed=0
 
     # HOST-001: SSH
@@ -483,9 +484,11 @@ run_baseline_host_checks() {
     local ssh_evidence="${ARTIFACT_DIR}/reports/host/HOST-001-ssh.txt"
     if ssh_output=$(host_exec "echo pong" 2>&1); then
         echo "$ssh_output" > "$ssh_evidence"
+        log_info "HOST-001: SSH OK target=${ssh_target} host=${PROXMOX_HOST} user=${SSH_USER}"
         record_check "HOST-001" "Proxmox host reachable via SSH" "blocker" "PASS" "PASS" "SSH connection successful" "reports/host/HOST-001-ssh.txt"
     else
         echo "$ssh_output" > "$ssh_evidence"
+        log_error "HOST-001: SSH failed target=${ssh_target} host=${PROXMOX_HOST} user=${SSH_USER} opts='${SSH_OPTS}' output=${ssh_output}"
         record_check "HOST-001" "Proxmox host reachable via SSH" "blocker" "PASS" "FAIL" "SSH connection failed" "reports/host/HOST-001-ssh.txt"
         return 1
     fi
