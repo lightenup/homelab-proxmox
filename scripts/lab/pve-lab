@@ -64,13 +64,11 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # ENV-001: Verify lab environment via hostname pattern
 check_env_001() {
-    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
-    
     log_info "Running ENV-001: Verify lab environment (hostname pattern)"
     
     # Check hostname contains 'lab' or is in test environment
     local hostname
-    hostname="$(ssh $SSH_OPTS "$ssh_target" "hostname")"
+    hostname="$(host_exec "hostname")"
     
     if [[ "$hostname" =~ lab ]] || [[ "$hostname" == "pve" ]]; then
         log_info "  ENV-001 PASS: Hostname '$hostname' contains 'lab'"
@@ -98,13 +96,11 @@ check_env_001() {
 
 # ENV-002: Verify required resources available
 check_env_002() {
-    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
-    
     log_info "Running ENV-002: Verify required resources (memory, CPU, storage)"
     
     # Check memory (require at least 8GB free)
     local free_mem_mb
-    free_mem_mb="$(ssh $SSH_OPTS "$ssh_target" "free -m | awk '/^Mem:/{print \$7}'")"
+    free_mem_mb="$(host_exec "free -m | awk '/^Mem:/{print \$7}'")"
     
     if [[ -z "$free_mem_mb" ]]; then
         log_warn "  Could not determine host memory"

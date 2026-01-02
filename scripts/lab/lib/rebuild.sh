@@ -54,7 +54,9 @@ is_local_proxmox() {
     hostname_short=$(hostname -s)
     local hostname_fqdn
     hostname_fqdn=$(hostname -f 2>/dev/null || hostname)
-    [[ "$host_lower" == "localhost" || "$host_lower" == "127.0.0.1" || "$host_lower" == "${hostname_short,,}" || "$host_lower" == "${hostname_fqdn,,}" ]]
+    local hostname_label
+    hostname_label=${hostname_fqdn%%.*}
+    [[ "$host_lower" == "localhost" || "$host_lower" == "127.0.0.1" || "$host_lower" == "${hostname_short,,}" || "$host_lower" == "${hostname_fqdn,,}" || "$host_lower" == "${hostname_label,,}" ]]
 }
 
 host_exec() {
