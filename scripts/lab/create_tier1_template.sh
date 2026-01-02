@@ -27,9 +27,9 @@ pve_exec() {
     self_fqdn="$(hostname -f 2>/dev/null || true)"
 
     if [ "$target" = "localhost" ] || [ "$target" = "127.0.0.1" ] || [ "$target" = "$self_host" ] || { [ -n "$self_fqdn" ] && [ "$target" = "$self_fqdn" ]; }; then
-        sudo -n PATH=/usr/sbin:/sbin:$PATH "$@"
+        sudo -n PATH=/usr/sbin:/sbin:/usr/bin:/bin:$PATH "$@"
     else
-        ssh $SSH_OPTS "$SSH_USER@$target" "sudo -n PATH=/usr/sbin:/sbin:\$PATH $*"
+        ssh $SSH_OPTS "$SSH_USER@$target" "sudo -n PATH=/usr/sbin:/sbin:/usr/bin:/bin:\$PATH $*"
     fi
 }
 
