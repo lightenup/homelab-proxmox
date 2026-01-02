@@ -44,6 +44,13 @@ ARTIFACT_BASE="$(artifact_path "019-lab")"
 LOCK_FILE="${ARTIFACT_BASE}/.lock"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
+# Avoid self-SSH key churn when already on the target host
+local_host_short=$(hostname -s)
+local_host_label=${local_host_short%%.*}
+if [[ "${PROXMOX_HOST,,}" == "${local_host_short,,}" || "${PROXMOX_HOST,,}" == "${local_host_label,,}" ]]; then
+    PROXMOX_HOST="127.0.0.1"
+fi
+
 # Suite execution control (019c1)
 SUITE_ABORT_REQUESTED=0
 
