@@ -9,7 +9,7 @@ LIB_DIR="${SCRIPT_DIR}/lib"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PROXMOX_HOST="${PROXMOX_HOST:-pve}"
 SSH_USER="${SSH_USER:-ci}"
-SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 ARTIFACT_ROOT="/var/lib/homelab-proxmox/artifacts"
 
 # Source required libraries

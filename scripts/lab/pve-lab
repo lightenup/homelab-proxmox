@@ -42,7 +42,7 @@ PROXMOX_HOST="${PROXMOX_HOST:-pve}" # Hostname or IP in SSH config
 SSH_USER="${SSH_USER:-ci}"
 ARTIFACT_BASE="$(artifact_path "019-lab")"
 LOCK_FILE="${ARTIFACT_BASE}/.lock"
-SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
 # Suite execution control (019c1)
 SUITE_ABORT_REQUESTED=0
