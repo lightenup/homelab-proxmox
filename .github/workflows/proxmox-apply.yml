@@ -19,6 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install rsync/ssh (act fallback)
+        if: env.ACT == 'true'
+        run: |
+          if ! command -v rsync >/dev/null 2>&1; then
+            apt-get update
+            apt-get install -y rsync openssh-client
+          fi
+
       - name: Validate CI IaC posture
         run: ./scripts/lab/ci-validate-iac.sh
 
