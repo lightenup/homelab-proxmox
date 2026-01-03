@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # lib/checks.sh - Check recording and management functions
-# Part of 019c1-semantic-safety-closure
 
 set -euo pipefail
 
@@ -64,7 +63,13 @@ record_check() {
     
     # Get context from environment or defaults
     local source="${CURRENT_SOURCE:-harness}"
-    local phase="${CURRENT_PHASE:-unknown}"
+    # Align dedup check to catalog-defined phase regardless of current phase
+    local phase
+    if [[ "$check_id" == "SUITE-DEDUP-001" ]]; then
+        phase="bootstrap"
+    else
+        phase="${CURRENT_PHASE:-unknown}"
+    fi
 
     # Build JSON object for this check
     local check_json
@@ -86,6 +91,48 @@ EOF
     
     # Append to checks array
     CHECKS_ARRAY+=("$check_json")
+}
+
+# Remove all recorded checks (and seen IDs) for a given phase. Useful when a
+# phase is re-run after remediation to avoid duplicate-id noise.
+prune_checks_by_phase() {
+    local target_phase="$1"
+
+    local -a new_checks=()
+    local -a removed_ids=()
+
+    for check_json in "${CHECKS_ARRAY[@]:-}"; do
+        local check_phase
+        check_phase=$(echo "$check_json" | jq -r '.phase')
+        local check_id
+        check_id=$(echo "$check_json" | jq -r '.check_id')
+
+        if [[ "$check_phase" == "$target_phase" ]]; then
+            removed_ids+=("$check_id")
+            continue
+        fi
+
+        new_checks+=("$check_json")
+    done
+
+    CHECKS_ARRAY=("${new_checks[@]:-}")
+
+    if [[ "${#removed_ids[@]}" -gt 0 ]]; then
+        local -a new_seen=()
+        for seen_id in "${SEEN_CHECK_IDS[@]:-}"; do
+            local skip=false
+            for removed in "${removed_ids[@]}"; do
+                if [[ "$seen_id" == "$removed" ]]; then
+                    skip=true
+                    break
+                fi
+            done
+            if [[ "$skip" == false ]]; then
+                new_seen+=("$seen_id")
+            fi
+        done
+        SEEN_CHECK_IDS=("${new_seen[@]:-}")
+    fi
 }
 
 # Serialize checks to checks.json

@@ -1,8 +1,6 @@
 #!/bin/bash
 # Monitoring Stack Smoke Test
-# Feature: 017-synology-metrics
 # Purpose: Validate Prometheus, Grafana, and Alertmanager endpoints return 200 OK
-# Requirement: FR-021 (Smoke test validation)
 
 set -euo pipefail
 

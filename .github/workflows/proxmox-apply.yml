@@ -1,74 +1,89 @@
 name: Proxmox Apply + Verify
 
 on:
-  workflow_dispatch:
-  push:
-    branches: ["main"]
-    paths:
-      - "scripts/**"
-      - "ansible/**"
-      - ".github/workflows/proxmox-apply.yml"
+    workflow_dispatch:
+    push:
+        branches: ["main"]
+        paths:
+            - "scripts/**"
+            - "ansible/**"
+            - ".github/workflows/proxmox-apply.yml"
 
 concurrency:
-  group: proxmox-apply
-  cancel-in-progress: false
+    group: proxmox-apply
+    cancel-in-progress: false
 
 jobs:
-  apply:
-    runs-on: [self-hosted]
-    steps:
-      - uses: actions/checkout@v4
+    apply:
+        runs-on: [self-hosted]
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Validate CI IaC posture
-        run: ./scripts/lab/ci-validate-iac.sh
+            - name: Install rsync/ssh (act fallback)
+              if: env.ACT == 'true'
+              run: |
+                  if ! command -v rsync >/dev/null 2>&1; then
+                    apt-get update
+                    apt-get install -y rsync openssh-client
+                  fi
 
-      - name: Offline fixtures (pre-flight)
-        run: ./scripts/lab/ci-verify.sh fixtures/evidence-packs/valid
+            - name: Validate CI IaC posture
+              run: ./scripts/lab/ci-validate-iac.sh
 
-      - name: Ensure artifact root on PVE
-        run: |
-          SSH_USER=ci PROXMOX_HOST=pve ./scripts/lab/guardrails.sh ensure-artifacts
+            - name: Offline fixtures (pre-flight)
+              run: ./scripts/lab/ci-verify.sh fixtures/evidence-packs/valid
 
-      - name: Sync repo to PVE
-        run: |
-          rsync -az --delete \
-            --exclude '.git' \
-            --exclude 'scripts/lab/artifacts/' \
-            --exclude 'artifacts/' \
-            ./ ci@pve:/home/ci/homelab-proxmox/
+            - name: Ensure artifact root on PVE
+              run: |
+                  SSH_USER=ci PROXMOX_HOST=pve ./scripts/lab/guardrails.sh ensure-artifacts
 
-      - name: Apply + verify on PVE
-        run: |
-          ssh ci@pve "cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ./pve-lab rebuild --apply --verify --apply-sudoers"
-          echo "RUN_ID=$(ssh ci@pve 'ls -1t /var/lib/homelab-proxmox/artifacts | head -1')" >> $GITHUB_ENV
+            - name: Sync repo to PVE
+              run: |
+                  rsync -az --delete \
+                    --exclude '.git' \
+                    --exclude 'scripts/lab/artifacts/' \
+                    --exclude 'artifacts/' \
+                    ./ ci@pve:/home/ci/homelab-proxmox/
 
-      - name: Sudo smoke checks
-        run: |
-          ssh ci@pve <<'EOF'
-          set -e
-          sudo -n true
-          sudo -n qm --version >/dev/null
-          sudo -n pveversion >/dev/null
-          if sudo -n bash -c 'echo should-fail' 2>/dev/null; then
-            echo "sudo allowed bash escalation (expected deny)"
-            exit 1
-          fi
-          EOF
+            - name: Apply + verify on PVE
+              env:
+                  ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+              run: |
+                  vault_env=""
+                  if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+                    # Forward vault secret to pve without printing it (bash %q keeps it shell-safe)
+                    vault_env="ANSIBLE_VAULT_PASSWORD=$(printf '%q' "$ANSIBLE_VAULT_PASSWORD")"
+                  fi
+                  ssh ci@pve "cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ${vault_env} ./pve-lab rebuild --apply --verify --apply-sudoers"
+                  echo "RUN_ID=$(ssh ci@pve 'ls -1t /var/lib/homelab-proxmox/artifacts/lab-runs | head -1')" >> $GITHUB_ENV
 
-      - name: Fetch evidence pack
-        run: |
-          mkdir -p evidence
-          ssh ci@pve "tar czf /tmp/evidence.tgz -C /var/lib/homelab-proxmox/artifacts ${RUN_ID}"
-          scp ci@pve:/tmp/evidence.tgz evidence/
-          tar xzf evidence/evidence.tgz -C evidence/
+            - name: Sudo smoke checks
+              run: |
+                  ssh ci@pve <<'EOF'
+                  set -e
+                  sudo -n /usr/sbin/qm list >/dev/null
+                  sudo -n /usr/bin/pveversion >/dev/null
+                  if sudo -n bash -c 'echo should-fail' 2>/dev/null; then
+                    echo "sudo allowed bash escalation (expected deny)"
+                    exit 1
+                  fi
+                  EOF
 
-      - name: Verify evidence pack (offline)
-        run: ./scripts/lab/ci-verify.sh evidence/${RUN_ID}
+            - name: Fetch evidence pack
+              run: |
+                  mkdir -p evidence
+                  ssh ci@pve "tar czf /tmp/evidence.tgz -C /var/lib/homelab-proxmox/artifacts/lab-runs ${RUN_ID}"
+                  scp ci@pve:/tmp/evidence.tgz evidence/
+                  tar xzf evidence/evidence.tgz -C evidence/
 
-      - name: Offline fixtures (post-deploy)
-        run: ./scripts/lab/ci-verify.sh fixtures/evidence-packs/valid
+            - name: Verify evidence pack (offline)
+              run: ./scripts/lab/ci-verify.sh evidence/${RUN_ID}
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: evidence-${{ env.RUN_ID }}
-          path: evidence/
+            - name: Offline fixtures (post-deploy)
+              run: ./scripts/lab/ci-verify.sh fixtures/evidence-packs/valid
+
+            - uses: actions/upload-artifact@v4
+              if: env.ACT != 'true'
+              with:
+                  name: evidence-${{ env.RUN_ID }}
+                  path: evidence/

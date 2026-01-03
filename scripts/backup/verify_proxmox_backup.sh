@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # scripts/backup/verify_proxmox_backup.sh
 # Verify Proxmox backup integrity without full extraction
-# Feature: 013-proxmox-config-backup (Phase 6, User Story 4)
 # Usage: ./verify_proxmox_backup.sh <backup-file.tar.zst.age>
 
 set -euo pipefail

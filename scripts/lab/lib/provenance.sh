@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # lib/provenance.sh - Provenance capture (git, versions, environment)
-# Part of 019c1-semantic-safety-closure
 
 set -euo pipefail
 

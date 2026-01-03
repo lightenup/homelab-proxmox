@@ -64,7 +64,6 @@ class EvidenceDiff:
         if not self.data_a or not self.data_b:
             return False
 
-        # FR-010: Profile Mismatch Check
         profile_a = self.data_a['summary'].get('profile_id')
         profile_b = self.data_b['summary'].get('profile_id')
 
@@ -122,11 +121,10 @@ class EvidenceDiff:
 
     def report(self):
         # Write report
-        # FR-009a: Output to artifacts/019-lab/diff-<runA>-<runB>/
         # We need to find repo root or use a relative path.
         # Assuming script is in scripts/lab/, repo root is ../..
         repo_root = Path(__file__).parent.parent.parent
-        diff_dir = repo_root / "artifacts" / "019-lab" / f"diff-{self.path_a.name}-{self.path_b.name}"
+        diff_dir = repo_root / "artifacts" / "lab-runs" / f"diff-{self.path_a.name}-{self.path_b.name}"
         diff_dir.mkdir(parents=True, exist_ok=True)
         
         report_path = diff_dir / "reports" / "diff.json"

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #
-# Feature 017: SNMPv3 Verification Script
 # Purpose: Verify Synology NAS SNMPv3 configuration before deployment
 # Usage: ./scripts/monitoring/verify-snmpv3.sh [nas_ip]
 #

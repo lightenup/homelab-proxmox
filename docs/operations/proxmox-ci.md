@@ -9,7 +9,7 @@ Audience: operators running `proxmox-apply` on pi-ci. Goal: keep all automation 
 3. **Guardrails:** `scripts/lab/guardrails.sh ensure-artifacts` prepares the artifact root; pve-lab uses sudo helper and provisioning timeouts with evidence hooks.
 4. **Main action:** Workflow syncs repo to `/home/ci/homelab-proxmox/` and runs `scripts/lab/pve-lab rebuild --apply --verify --apply-sudoers` as `ci`.
 5. **Smoke checks:** Sudo smoke verifies `sudo -n true`, `sudo -n qm --version`, `sudo -n pveversion` succeed and `sudo -n bash` is denied.
-6. **Evidence:** Latest run ID is captured, evidence pack tarred from `/var/lib/homelab-proxmox/artifacts/<runid>` and verified offline via `scripts/lab/ci-verify.sh`.
+6. **Evidence:** Latest run ID is captured, evidence pack tarred from `/var/lib/homelab-proxmox/artifacts/lab-runs/<runid>` and verified offline via `scripts/lab/ci-verify.sh`.
 
 ## Sudoers Policy (ci)
 
@@ -48,8 +48,26 @@ ls evidence/<RUN_ID>/
 ## Secrets & Roles
 
 - **SSH:** pi-ci uses the `ci` SSH key (alias `pve`) with `StrictHostKeyChecking=no`, `CheckHostIP=no`, and ephemeral known_hosts.
+- **Ansible Vault:** Playbooks require `ANSIBLE_VAULT_PASSWORD` (provided as a GitHub Secret on pi-ci; when running locally via `act`, use `--secret-file`).
 - **Sudo:** `ci` must belong to the sudoers policy deployed by `pve-lab --apply-sudoers`.
 - **Terraform token:** Provision via Proxmox UI/API for user `ci` or another non-root account scoped to required resources; store in GitHub Secrets/environment (never committed).
+
+## Local Validation with act (macOS)
+
+1. Create a local secrets file (gitignored):
+
+```bash
+cp .act.secrets.example .act.secrets
+${EDITOR:-nano} .act.secrets
+```
+
+2. Run the workflow locally (requires your `.act-ssh/` to contain a working `ci@pve` key/config):
+
+```bash
+act workflow_dispatch -W .github/workflows/proxmox-apply.yml -j apply \
+	--secret-file .act.secrets \
+	--container-options "-v $(pwd)/.act-ssh:/root/.ssh:ro"
+```
 
 ## Troubleshooting
 

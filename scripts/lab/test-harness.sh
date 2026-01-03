@@ -292,7 +292,7 @@ source "$SCRIPT_DIR/lib/cleanup.sh"
 mkdir -p "$TEST_DIR/cleanup-test/reports"
 
 # Test lock status probe
-probe_lock_status "artifacts/019-lab" "$TEST_DIR/cleanup-test/reports/lock_status.json"
+probe_lock_status "artifacts/lab-runs" "$TEST_DIR/cleanup-test/reports/lock_status.json"
 
 if [[ -f "$TEST_DIR/cleanup-test/reports/lock_status.json" ]]; then
     log_pass "Cleanup: Created lock_status.json"

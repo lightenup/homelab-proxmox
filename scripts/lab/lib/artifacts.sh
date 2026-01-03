@@ -7,6 +7,9 @@ set -euo pipefail
 # Default artifact root on PVE (outside repo sync)
 : "${ARTIFACT_ROOT:=/var/lib/homelab-proxmox/artifacts}"
 
+# Evidence packs / run outputs live under a semantic namespace.
+: "${ARTIFACT_RUNS_DIR:=lab-runs}"
+
 artifact_root() {
     echo "$ARTIFACT_ROOT"
 }
@@ -18,6 +21,19 @@ artifact_path() {
     else
         echo "$ARTIFACT_ROOT/${relative#./}"
     fi
+}
+
+artifact_runs_dir() {
+    echo "$ARTIFACT_RUNS_DIR"
+}
+
+artifact_runs_path() {
+    artifact_path "$(artifact_runs_dir)"
+}
+
+artifact_run_path() {
+    local run_id="$1"
+    artifact_path "$(artifact_runs_dir)/${run_id#./}"
 }
 
 ensure_artifact_root() {

@@ -17,8 +17,7 @@ ansible/inventories/generated/
 ansible/playbooks/artifacts/
 *.retry
 
-# T005 [CONSTITUTION COMPLIANCE] - Secrets protection (Principle II)
-# Never commit secrets: Tailscale auth keys, vault files, private keys, passwords
+# Secrets (never commit)
 **/vault.yml
 **/*secret*.yml
 **/*_secrets.yml
@@ -26,7 +25,7 @@ ansible/playbooks/artifacts/
 **/*.key
 **/*.pem
 
-# Disaster Recovery drill files (local only) - Feature 012
+# Disaster Recovery drill files (local only)
 scripts/dr/rclone.conf
 scripts/dr/*.env
 scripts/dr/drill-reports/
@@ -42,6 +41,12 @@ scripts/dr/drill-reports/
 *.tfplan
 ansible/roles/geerlingguy.docker
 
-# Healthcheck Artifacts - Feature 018a
+# Local act runner material
+.act-ssh/
+.act.secrets
+.actrc
+
+# Local artifacts
 artifacts/healthcheck/
 artifacts/019-lab/
+artifacts/lab-runs/

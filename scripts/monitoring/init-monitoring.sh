@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #
-# Feature 017: Monitoring Stack Initialization Script
 # Purpose: Automate vault creation, encryption, and Terraform/Ansible deployment
 # Usage: ./scripts/monitoring/init-monitoring.sh
 #
