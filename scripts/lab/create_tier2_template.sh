@@ -49,8 +49,12 @@ pve_exec_root() {
 
 log "Checking if VM $VMID exists..."
 if pve_exec_root qm status "$VMID" >/dev/null 2>&1; then
-    echo "VM $VMID already exists. Please remove it manually if you want to recreate it."
-    exit 1
+    log "VM $VMID exists; destroying it for fresh template build..."
+    pve_exec_root qm stop "$VMID" --skiplock >/dev/null 2>&1 || true
+    if ! pve_exec_root qm destroy "$VMID" --purge >/dev/null 2>&1; then
+        echo "Failed to destroy existing VM $VMID; manual cleanup required."
+        exit 1
+    fi
 fi
 
 log "Uploading SSH Key..."
