@@ -95,7 +95,6 @@ class EvidenceVerifier:
             return False
 
     def validate_structure(self):
-        # FR-002: Check required files
         missing_files = []
         for filename in REQUIRED_FILES:
             if not (self.pack_path / filename).exists():
@@ -110,7 +109,6 @@ class EvidenceVerifier:
             # If critical files are missing, we might not be able to proceed with other checks
             # But we try to load what we can
         
-        # FR-002a: Parse JSON files
         self.data['summary'] = self.load_json("summary.json")
         self.data['checks'] = self.load_json("checks.json")
         self.data['provenance'] = self.load_json("provenance.json")
@@ -122,12 +120,10 @@ class EvidenceVerifier:
 
         summary = self.data['summary']
         
-        # FR-001: Contract Version
         contract_version = summary.get('contract_version')
         if not contract_version:
             self.add_error("CONTRACT-002", "Missing contract_version in summary.json", "Update pve-lab to inject contract_version")
         else:
-            # FR-001b: Version check
             try:
                 major, minor, patch = map(int, contract_version.split('.'))
                 if major != 1:
@@ -138,7 +134,6 @@ class EvidenceVerifier:
         run_id = summary.get('run_id')
         profile_id = summary.get('profile_id')
 
-        # FR-002b: Run ID Coherence
         dir_name = self.pack_path.name
         if run_id != dir_name:
             self.add_error(
@@ -156,15 +151,7 @@ class EvidenceVerifier:
                     "Ensure all artifacts belong to the same run"
                 )
 
-        # checks.json is a list, so we can't check run_id easily unless it's in the list items or metadata
-        # The spec says "matches checks.run_id (if present)". 
-        # Usually checks.json is a list of checks. 
-        # If it's a dict with metadata, we check it.
-        # Based on checks.sh, it's a list of check objects.
-        # Check objects don't seem to have run_id.
-        # So we skip checks.run_id check for now unless we find it.
-
-        # FR-002c: Profile ID Coherence
+        # checks.json is a list of checks; run_id is validated via summary/provenance.
         if not profile_id:
             self.add_error(
                 "EVID-003",
@@ -204,7 +191,6 @@ class EvidenceVerifier:
                 self.add_error("EVID-004", "Check missing check_id", "Ensure all checks have check_id")
                 continue
 
-            # FR-006: Check existence in catalog
             if check_id not in self.catalog:
                 self.add_error(
                     "CAT-003",
@@ -215,7 +201,6 @@ class EvidenceVerifier:
 
             catalog_entry = self.catalog[check_id]
 
-            # FR-006a: Deprecation
             if catalog_entry.get('deprecated', False) and not allow_deprecated:
                 self.add_error(
                     "CAT-004",
@@ -223,24 +208,20 @@ class EvidenceVerifier:
                     f"Remove {check_id} or set allow_deprecated_checks=true in summary.json"
                 )
 
-            # FR-007: Ownership
             source = check.get('source')
             catalog_owner = catalog_entry.get('owner')
             
             if not source:
                 self.add_error("OWN-002", f"Check {check_id} missing source field", "Ensure emitter adds source field")
             else:
-                # FR-007a: source must be ansible or harness
                 if source not in ["ansible", "harness"]:
                     self.add_error("OWN-003", f"Invalid source '{source}' for {check_id}", "Source must be 'ansible' or 'harness'")
                 
-                # FR-007b: Source vs Catalog Owner
                 if catalog_owner == "ansible" and source != "ansible":
                     self.add_error("OWN-003", f"Owner mismatch for {check_id}: catalog says 'ansible' but source is '{source}'", "Fix source in emitter or owner in catalog")
                 elif catalog_owner == "harness" and source != "harness":
                     self.add_error("OWN-002", f"Owner mismatch for {check_id}: catalog says 'harness' but source is '{source}'", "Fix source in emitter or owner in catalog")
 
-                # FR-007c: Ansible Provenance Proof
                 evidence_refs = check.get('evidence_refs', [])
                 if catalog_owner == "ansible":
                     # Must include assertions report
@@ -251,9 +232,7 @@ class EvidenceVerifier:
                             f"Ansible check {check_id} missing assertion report ref",
                             "Ensure ansible checks reference reports/assertions.<phase>.json"
                         )
-                    # TODO: Parse assertion report to confirm check_id exists (FR-007c part 2)
                 
-                # FR-007d: Harness Ownership Guard
                 elif catalog_owner == "harness":
                     # Should not rely on assertion reports
                     has_report = any("reports/assertions" in ref for ref in evidence_refs)
@@ -264,7 +243,6 @@ class EvidenceVerifier:
                             "Harness checks should not rely on Ansible assertion reports"
                         )
 
-            # FR-005b: Title Strictness
             title = check.get('title')
             catalog_title = catalog_entry.get('title')
             if title and title != catalog_title:
@@ -274,7 +252,6 @@ class EvidenceVerifier:
                     f"Expected: '{catalog_title}', Got: '{title}'. Update emitter to match catalog."
                 )
 
-            # FR-005c: Phase Required
             phase = check.get('phase')
             catalog_phase = catalog_entry.get('phase')
             if not phase:
@@ -286,7 +263,6 @@ class EvidenceVerifier:
                     f"Expected: '{catalog_phase}', Got: '{phase}'. Update emitter or catalog."
                 )
 
-            # FR-005d: Severity Handling
             severity = check.get('severity')
             catalog_severity = catalog_entry.get('severity')
             if severity and severity != catalog_severity:
@@ -316,7 +292,6 @@ class EvidenceVerifier:
             if not check_id:
                 continue
 
-            # FR-004: Uniqueness
             if check_id in seen_ids:
                 self.add_error(
                     "DEDUP-001",
@@ -325,7 +300,6 @@ class EvidenceVerifier:
                 )
             seen_ids.add(check_id)
 
-            # FR-003: Evidence Refs
             evidence_refs = check.get('evidence_refs', [])
             result = check.get('result')
             
@@ -334,7 +308,6 @@ class EvidenceVerifier:
             allow_missing = catalog_entry.get('allow_missing_evidence', False)
 
             for ref in evidence_refs:
-                # Handle prefixes (019e1)
                 clean_ref = ref
                 if ref.startswith('file:'):
                     clean_ref = ref[5:].strip()
@@ -342,9 +315,7 @@ class EvidenceVerifier:
                     # Metadata ref, skip file check
                     continue
 
-                # FR-003a: Relative paths
                 if clean_ref.startswith('/') or '..' in clean_ref:
-                    # Special case for collision_id (see T001 discussion)
                     if clean_ref.startswith('collision_id:'):
                         continue
                         
@@ -357,7 +328,6 @@ class EvidenceVerifier:
 
                 ref_path = self.pack_path / clean_ref
                 if not ref_path.exists():
-                    # FR-003b: Missing evidence
                     if result == "PASS":
                         self.add_error(
                             "REF-002",
@@ -373,17 +343,13 @@ class EvidenceVerifier:
                             )
 
     def run(self) -> bool:
-        # 1. Load Catalog
         if not self.load_catalog():
             return False
 
-        # 2. Validate Structure (T006)
         self.validate_structure()
 
-        # 3. Validate Catalog Compliance (T007)
         self.validate_catalog()
 
-        # 4. Validate Integrity (T008)
         self.validate_integrity()
 
         return len(self.errors) == 0

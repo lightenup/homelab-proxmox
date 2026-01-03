@@ -79,7 +79,7 @@ pve_exec_root qm set "$VMID" --boot c --bootdisk scsi0
 pve_exec_root qm set "$VMID" --serial0 socket --vga serial0
 pve_exec_root qm set "$VMID" --agent enabled=1
 pve_exec_root qm set "$VMID" --ciuser ansible --sshkeys /tmp/lab.pub
-pve_exec_root qm set "$VMID" --description 'ManagedBy=019a'
+pve_exec_root qm set "$VMID" --description 'ManagedBy=homelab-proxmox'
 
 log "Converting to Template..."
 pve_exec_root qm template "$VMID"

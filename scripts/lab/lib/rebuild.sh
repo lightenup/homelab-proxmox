@@ -1,12 +1,48 @@
 #!/bin/bash
 # scripts/lab/lib/rebuild.sh
-# Rebuild Orchestrator Library (019f)
 
 # Provisioning defaults (overridable via env)
 PROVISION_SSH_TIMEOUT_SEC="${PROVISION_SSH_TIMEOUT_SEC:-600}"   # >=5 minutes per requirements
 PROVISION_SSH_INTERVAL_SEC="${PROVISION_SSH_INTERVAL_SEC:-5}"
 PROVISION_SSH_USER="${PROVISION_SSH_USER:-ansible}"
 PROVISION_SSH_KEY="${PROVISION_SSH_KEY:-}"
+PROVISION_SSH_PUBKEY="${PROVISION_SSH_PUBKEY:-}"
+PROVISION_SSH_KEY_TEMP="${PROVISION_SSH_KEY_TEMP:-false}"
+
+ensure_provisioning_ssh_material() {
+    # Reuse user-supplied key material when provided
+    if [[ -n "$PROVISION_SSH_KEY" && -f "$PROVISION_SSH_KEY" ]]; then
+        if [[ -z "$PROVISION_SSH_PUBKEY" ]]; then
+            PROVISION_SSH_PUBKEY="${PROVISION_SSH_KEY}.pub"
+        fi
+        return 0
+    fi
+
+    # Generate ephemeral keypair for provisioning waits when none provided
+    local key_dir
+    key_dir="${TMPDIR:-/tmp}/pve-lab-${RUN_ID:-$$}"
+    mkdir -p "$key_dir"
+
+    PROVISION_SSH_KEY="${key_dir}/provision_ed25519"
+    PROVISION_SSH_PUBKEY="${PROVISION_SSH_KEY}.pub"
+
+    if [[ ! -f "$PROVISION_SSH_KEY" ]]; then
+        log_info "Generating ephemeral provisioning SSH keypair"
+        ssh-keygen -t ed25519 -N '' -C "pve-lab-provision-${RUN_ID:-$(date +%s)}" -f "$PROVISION_SSH_KEY" >/dev/null
+        chmod 600 "$PROVISION_SSH_KEY"
+        PROVISION_SSH_KEY_TEMP="true"
+    fi
+}
+
+cleanup_provisioning_ssh_material() {
+    if [[ "${PROVISION_SSH_KEY_TEMP:-false}" != "true" ]]; then
+        return 0
+    fi
+
+    rm -f "$PROVISION_SSH_KEY" "$PROVISION_SSH_PUBKEY" 2>/dev/null || true
+    rmdir "$(dirname "$PROVISION_SSH_KEY")" 2>/dev/null || true
+    PROVISION_SSH_KEY_TEMP="false"
+}
 
 
 build_provision_ssh_opts() {
@@ -14,6 +50,8 @@ build_provision_ssh_opts() {
     if [[ -n "$PROVISION_SSH_KEY" ]]; then
         opts="$opts -i $PROVISION_SSH_KEY"
     fi
+    # Ensure we never hang on password prompts during CI waits
+    opts="$opts -o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1"
     echo "$opts"
 }
 
@@ -34,11 +72,21 @@ wait_for_provisioning_ssh() {
 
     log_info "Waiting for SSH (${ssh_user}@${target_ip}) for up to ${timeout_sec}s..."
     while [[ $(date +%s) -lt $end_ts ]]; do
-        if ssh $ssh_opts -J "$SSH_USER@$PROXMOX_HOST" "${ssh_user}@${target_ip}" "echo ready" >/dev/null 2>&1; then
-            elapsed=$(( $(date +%s) - start_ts ))
-            log_info "SSH ready after ${elapsed}s"
-            echo "SSH ready after ${elapsed}s" > "$log_file"
-            return 0
+        if is_local_proxmox; then
+            # When running on the Proxmox host itself, don't ProxyJump back to the same host.
+            if ssh $ssh_opts "${ssh_user}@${target_ip}" "echo ready" >/dev/null 2>&1; then
+                elapsed=$(( $(date +%s) - start_ts ))
+                log_info "SSH ready after ${elapsed}s"
+                echo "SSH ready after ${elapsed}s" > "$log_file"
+                return 0
+            fi
+        else
+            if ssh $ssh_opts -J "$SSH_USER@$PROXMOX_HOST" "${ssh_user}@${target_ip}" "echo ready" >/dev/null 2>&1; then
+                elapsed=$(( $(date +%s) - start_ts ))
+                log_info "SSH ready after ${elapsed}s"
+                echo "SSH ready after ${elapsed}s" > "$log_file"
+                return 0
+            fi
         fi
         sleep "$interval_sec"
     done
@@ -63,9 +111,9 @@ is_local_proxmox() {
 host_exec() {
     local cmd="$1"
     if is_local_proxmox; then
-        bash -lc "$cmd"
+        PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH" bash -lc "$cmd"
     else
-        ssh $SSH_OPTS "${SSH_USER}@${PROXMOX_HOST}" "$cmd"
+        ssh $SSH_OPTS "${SSH_USER}@${PROXMOX_HOST}" "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin $cmd"
     fi
 }
 
@@ -120,7 +168,7 @@ cmd_rebuild() {
     # Initialize Evidence Pack
     local run_id
     local base_dir
-    base_dir="$(artifact_path "019-lab")"
+    base_dir="$(artifact_runs_path)"
     mkdir -p "$base_dir"
 
     run_id="$(create_evidence_pack "$base_dir")"
@@ -179,6 +227,7 @@ cmd_rebuild() {
             log_info "Attempting remediation of templates..."
             if remediate_templates; then
                 log_info "Remediation complete. Re-running template checks..."
+                prune_checks_by_phase "baseline-templates"
                 if run_baseline_template_checks; then
                     templates_valid=true
                 else
@@ -315,8 +364,6 @@ JSON
     [[ "$status" == "SUCCESS" ]] && return 0 || return 1
 }
 
-    # --- Feature 020: Deterministic teardown helpers (VM/LXC) ---
-
     append_teardown_log() {
         local evidence_file="$1"
         local label="$2"
@@ -354,9 +401,9 @@ JSON
         mkdir -p "$(dirname "$evidence_file")"
 
         local exists=true
-        if ! host_exec "qm status $vmid" >/dev/null 2>&1; then
+        if ! host_exec "sudo -n /usr/sbin/qm status $vmid" >/dev/null 2>&1; then
             exists=false
-            append_teardown_log "$evidence_file" "vm-$vmid" "qm status $vmid" "1" "VM $vmid not found"
+            append_teardown_log "$evidence_file" "vm-$vmid" "sudo -n /usr/sbin/qm status $vmid" "1" "VM $vmid not found"
         fi
 
         local attempts=0
@@ -366,18 +413,18 @@ JSON
         while [[ $attempts -lt 3 && "$exists" == "true" ]]; do
             attempts=$((attempts + 1))
 
-            run_teardown_cmd "$evidence_file" "vm-$vmid stop attempt $attempts" "qm stop $vmid --skiplock"
+            run_teardown_cmd "$evidence_file" "vm-$vmid stop attempt $attempts" "sudo -n /usr/sbin/qm stop $vmid --skiplock"
 
             # Wait for not-running state (best-effort)
             for _ in {1..5}; do
-                if host_exec "qm status $vmid" 2>/dev/null | grep -q "status: running"; then
+                if host_exec "sudo -n /usr/sbin/qm status $vmid" 2>/dev/null | grep -q "status: running"; then
                     sleep 2
                 else
                     break
                 fi
             done
 
-            run_teardown_cmd "$evidence_file" "vm-$vmid destroy attempt $attempts" "qm destroy $vmid --purge"
+            run_teardown_cmd "$evidence_file" "vm-$vmid destroy attempt $attempts" "sudo -n /usr/sbin/qm destroy $vmid --purge"
             last_rc=$?
 
             if [[ $last_rc -eq 0 ]]; then
@@ -500,7 +547,8 @@ run_baseline_host_checks() {
 
     # HOST-003: Storage
     local storage_check
-    storage_check=$(host_exec "sudo -n PATH=/usr/sbin:/sbin:$PATH pvesm status" 2>&1)
+    # Avoid sudo PATH overrides that violate secure_path; use absolute binary path
+    storage_check=$(host_exec "sudo -n /usr/sbin/pvesm status" 2>&1)
     local storage_rc=$?
     echo "$storage_check" > "${ARTIFACT_DIR}/reports/host/HOST-003-storage.txt"
     
@@ -530,10 +578,12 @@ run_baseline_host_checks() {
 
 run_baseline_template_checks() {
     local failed=0
+    # Use sudo without PATH override to satisfy sudoers secure_path rules
+    local qm_cmd="sudo -n /usr/sbin/qm"
 
     # TPL-001: Base Template
     local tpl1_status
-    tpl1_status=$(host_exec "qm status $LAB_TEMPLATE_VMID" 2>&1)
+    tpl1_status=$(host_exec "$qm_cmd status $LAB_TEMPLATE_VMID" 2>&1)
     echo "$tpl1_status" > "${ARTIFACT_DIR}/reports/templates/TPL-001-qm-status-${LAB_TEMPLATE_VMID}.txt"
     
     if echo "$tpl1_status" | grep -q "status:"; then
@@ -545,7 +595,7 @@ run_baseline_template_checks() {
 
     # TPL-002: Tier2 Template
     local tpl2_status
-    tpl2_status=$(host_exec "qm status $LAB_TEMPLATE_VMID_TIER2" 2>&1)
+    tpl2_status=$(host_exec "$qm_cmd status $LAB_TEMPLATE_VMID_TIER2" 2>&1)
     echo "$tpl2_status" > "${ARTIFACT_DIR}/reports/templates/TPL-002-qm-status-${LAB_TEMPLATE_VMID_TIER2}.txt"
     
     if echo "$tpl2_status" | grep -q "status:"; then
@@ -560,7 +610,7 @@ run_baseline_template_checks() {
     local tpl3_evidence_refs=()
     for vmid in $LAB_TEMPLATE_VMID $LAB_TEMPLATE_VMID_TIER2; do
         local config
-        config=$(host_exec "qm config $vmid" 2>&1)
+        config=$(host_exec "$qm_cmd config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-003-qm-config-${vmid}.txt"
         tpl3_evidence_refs+=("reports/templates/TPL-003-qm-config-${vmid}.txt")
         
@@ -582,7 +632,7 @@ run_baseline_template_checks() {
     local tpl4_evidence_refs=()
     for vmid in $LAB_TEMPLATE_VMID $LAB_TEMPLATE_VMID_TIER2; do
         local config
-        config=$(host_exec "qm config $vmid" 2>&1)
+        config=$(host_exec "$qm_cmd config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-004-tags-${vmid}.txt"
         tpl4_evidence_refs+=("reports/templates/TPL-004-tags-${vmid}.txt")
         
@@ -604,7 +654,7 @@ run_baseline_template_checks() {
     local tpl5_evidence_refs=()
     for vmid in $LAB_TEMPLATE_VMID $LAB_TEMPLATE_VMID_TIER2; do
         local config
-        config=$(host_exec "qm config $vmid" 2>&1)
+        config=$(host_exec "$qm_cmd config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-005-cloudinit-${vmid}.txt"
         tpl5_evidence_refs+=("reports/templates/TPL-005-cloudinit-${vmid}.txt")
         
@@ -626,7 +676,7 @@ run_baseline_template_checks() {
     local tpl6_evidence_refs=()
     for vmid in $LAB_TEMPLATE_VMID $LAB_TEMPLATE_VMID_TIER2; do
         local config
-        config=$(host_exec "qm config $vmid" 2>&1)
+        config=$(host_exec "$qm_cmd config $vmid" 2>&1)
         # Check name
         local name
         name=$(echo "$config" | grep "name:" | awk '{print $2}')
@@ -660,11 +710,11 @@ remediate_templates() {
     # Helper to destroy if exists
     destroy_if_exists() {
         local vmid="$1"
-        if host_exec "qm status $vmid" >/dev/null 2>&1; then
+        if host_exec "sudo -n /usr/sbin/qm status $vmid" >/dev/null 2>&1; then
             log_info "Destroying existing template $vmid..."
             emit_event "remediation_step" "$RUN_ID" "action=destroy" "vmid=$vmid"
             # Purge to remove disk images too
-            if ! host_exec "qm destroy $vmid --purge" >>"$rem_log" 2>&1; then
+            if ! host_exec "sudo -n /usr/sbin/qm destroy $vmid --purge" >>"$rem_log" 2>&1; then
                 log_error "Failed to destroy template $vmid. It might have linked clones."
                 emit_event "remediation_error" "$RUN_ID" "action=destroy" "vmid=$vmid"
                 return 1

@@ -13,8 +13,9 @@ ssh ci@pi-ci-host  # or use runner console
 cd /home/ci/homelab-proxmox
 ./scripts/lab/guardrails.sh ensure-artifacts
 rsync -az --delete --exclude '.git' --exclude 'scripts/lab/artifacts/' --exclude 'artifacts/' ./ ci@pve:/home/ci/homelab-proxmox/
-ssh ci@pve "cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ./pve-lab rebuild --apply --verify --apply-sudoers"
-ssh ci@pve 'ls -1t /var/lib/homelab-proxmox/artifacts | head -1'  # capture RUN_ID
+export ANSIBLE_VAULT_PASSWORD=...  # required for Ansible Vault
+ssh ci@pve "cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ANSIBLE_VAULT_PASSWORD=\"$ANSIBLE_VAULT_PASSWORD\" ./pve-lab rebuild --apply --verify --apply-sudoers"
+ssh ci@pve 'ls -1t /var/lib/homelab-proxmox/artifacts/lab-runs | head -1'  # capture RUN_ID
 ```
 
 ## Review an evidence bundle
@@ -33,3 +34,4 @@ ls /tmp/evidence/${RUN_ID}/
 - Re-apply sudoers: `ssh ci@pve 'cd /home/ci/homelab-proxmox/scripts/lab && ./pve-lab --apply-sudoers'`
 - Fix artifacts ownership: `ssh ci@pve 'sudo chown -R ci:ci /var/lib/homelab-proxmox/artifacts'`
 - Provisioning timeout evidence lives under `/var/lib/homelab-proxmox/artifacts/<RUN_ID>/`.
+- Evidence packs live under `/var/lib/homelab-proxmox/artifacts/lab-runs/<RUN_ID>/`.

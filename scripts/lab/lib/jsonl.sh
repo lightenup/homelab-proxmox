@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # lib/jsonl.sh - JSONL event emission to stderr
-# Part of 019c1-semantic-safety-closure
 
 set -euo pipefail
 

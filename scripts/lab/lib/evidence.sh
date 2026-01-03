@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # lib/evidence.sh - Evidence pack management functions
-# Part of 019c1-semantic-safety-closure
 
 set -euo pipefail
 
@@ -149,14 +148,39 @@ collect_provisioning_evidence() {
     mkdir -p "$dir"
 
     # Host-side probes
-    ssh $ssh_opts "$ssh_target" "qm status $vmid" > "$dir/qm-status-${vmid}.txt" 2>&1 || true
-    ssh $ssh_opts "$ssh_target" "qm config $vmid" > "$dir/qm-config-${vmid}.txt" 2>&1 || true
-    ssh $ssh_opts "$ssh_target" "qm cloudinit dump $vmid user" > "$dir/qm-cloudinit-user-${vmid}.txt" 2>&1 || true
-    ssh $ssh_opts "$ssh_target" "qm cloudinit dump $vmid network" > "$dir/qm-cloudinit-net-${vmid}.txt" 2>&1 || true
-    ssh $ssh_opts "$ssh_target" "ping -c 3 ${target_ip}" > "$dir/ping-${target_ip}.txt" 2>&1 || true
-    ssh $ssh_opts "$ssh_target" "journalctl -u pvedaemon -n 200 --no-pager" > "$dir/journal-pvedaemon.txt" 2>&1 || true
-    ssh $ssh_opts "$ssh_target" "ip addr show ${LAB_BRIDGE:-vmbr99}" > "$dir/ip-${LAB_BRIDGE:-vmbr99}.txt" 2>&1 || true
+    if is_local_proxmox; then
+        host_exec "sudo -n /usr/sbin/qm status $vmid" > "$dir/qm-status-${vmid}.txt" 2>&1 || true
+        host_exec "sudo -n /usr/sbin/qm config $vmid" > "$dir/qm-config-${vmid}.txt" 2>&1 || true
+        host_exec "sudo -n /usr/sbin/qm cloudinit dump $vmid user" > "$dir/qm-cloudinit-user-${vmid}.txt" 2>&1 || true
+        host_exec "sudo -n /usr/sbin/qm cloudinit dump $vmid network" > "$dir/qm-cloudinit-net-${vmid}.txt" 2>&1 || true
+        host_exec "ping -c 3 ${target_ip}" > "$dir/ping-${target_ip}.txt" 2>&1 || true
+        host_exec "(command -v nc >/dev/null 2>&1 && nc -vz -w 3 ${target_ip} 22) || echo 'nc not available'" > "$dir/nc-22-${target_ip}.txt" 2>&1 || true
+        host_exec "journalctl -u pvedaemon -n 200 --no-pager" > "$dir/journal-pvedaemon.txt" 2>&1 || true
+        host_exec "ip addr show ${LAB_BRIDGE:-vmbr99}" > "$dir/ip-${LAB_BRIDGE:-vmbr99}.txt" 2>&1 || true
+        host_exec "sudo -n /usr/sbin/qm cloudinit pending $vmid" > "$dir/qm-cloudinit-status-${vmid}.txt" 2>&1 || true
 
-    # Capture recent task log for the VM if available
-    ssh $ssh_opts "$ssh_target" "qm cloudinit status $vmid --verbose" > "$dir/qm-cloudinit-status-${vmid}.txt" 2>&1 || true
+        if [[ -n "${PROVISION_SSH_KEY:-}" && -f "${PROVISION_SSH_KEY}" ]]; then
+            host_exec "ssh -vvv -o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1 -i '${PROVISION_SSH_KEY}' '${PROVISION_SSH_USER:-ansible}@${target_ip}' 'echo ok'" > "$dir/ssh-attempt-${target_ip}.txt" 2>&1 || true
+        else
+            host_exec "ssh -vvv -o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1 '${PROVISION_SSH_USER:-ansible}@${target_ip}' 'echo ok'" > "$dir/ssh-attempt-${target_ip}.txt" 2>&1 || true
+        fi
+    else
+        ssh $ssh_opts "$ssh_target" "sudo -n /usr/sbin/qm status $vmid" > "$dir/qm-status-${vmid}.txt" 2>&1 || true
+        ssh $ssh_opts "$ssh_target" "sudo -n /usr/sbin/qm config $vmid" > "$dir/qm-config-${vmid}.txt" 2>&1 || true
+        ssh $ssh_opts "$ssh_target" "sudo -n /usr/sbin/qm cloudinit dump $vmid user" > "$dir/qm-cloudinit-user-${vmid}.txt" 2>&1 || true
+        ssh $ssh_opts "$ssh_target" "sudo -n /usr/sbin/qm cloudinit dump $vmid network" > "$dir/qm-cloudinit-net-${vmid}.txt" 2>&1 || true
+        ssh $ssh_opts "$ssh_target" "ping -c 3 ${target_ip}" > "$dir/ping-${target_ip}.txt" 2>&1 || true
+        ssh $ssh_opts "$ssh_target" "(command -v nc >/dev/null 2>&1 && nc -vz -w 3 ${target_ip} 22) || echo 'nc not available'" > "$dir/nc-22-${target_ip}.txt" 2>&1 || true
+        ssh $ssh_opts "$ssh_target" "journalctl -u pvedaemon -n 200 --no-pager" > "$dir/journal-pvedaemon.txt" 2>&1 || true
+        ssh $ssh_opts "$ssh_target" "ip addr show ${LAB_BRIDGE:-vmbr99}" > "$dir/ip-${LAB_BRIDGE:-vmbr99}.txt" 2>&1 || true
+        # Capture recent task log for the VM if available
+        ssh $ssh_opts "$ssh_target" "sudo -n /usr/sbin/qm cloudinit pending $vmid" > "$dir/qm-cloudinit-status-${vmid}.txt" 2>&1 || true
+
+        # Try one verbose SSH attempt from the Proxmox host to the VM
+        if [[ -n "${PROVISION_SSH_KEY:-}" && -f "${PROVISION_SSH_KEY}" ]]; then
+            ssh $ssh_opts "$ssh_target" "ssh -vvv -o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1 -i '${PROVISION_SSH_KEY}' '${PROVISION_SSH_USER:-ansible}@${target_ip}' 'echo ok'" > "$dir/ssh-attempt-${target_ip}.txt" 2>&1 || true
+        else
+            ssh $ssh_opts "$ssh_target" "ssh -vvv -o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1 '${PROVISION_SSH_USER:-ansible}@${target_ip}' 'echo ok'" > "$dir/ssh-attempt-${target_ip}.txt" 2>&1 || true
+        fi
+    fi
 }

@@ -1,14 +1,13 @@
 #!/bin/bash
 set -e
 
-# Ensure Ansible uses the correct configuration (including vault password)
-export ANSIBLE_CONFIG="ansible/ansible.cfg"
-
 # Get script directory for sourcing libraries
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="${SCRIPT_DIR}/lib"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# Source 019c1 libraries
+# Ensure Ansible uses the correct configuration (including vault password)
+export ANSIBLE_CONFIG="${REPO_ROOT}/ansible/ansible.cfg"
+LIB_DIR="${SCRIPT_DIR}/lib"
 # shellcheck source=lib/checks.sh
 source "${LIB_DIR}/checks.sh"
 # shellcheck source=lib/jsonl.sh
@@ -37,16 +36,16 @@ LAB_IP="10.99.0.10"
 LAB_GATEWAY="10.99.0.1"
 LAB_BRIDGE="vmbr99"
 IDENTITY_TAG_KEY="ManagedBy"
-IDENTITY_TAG_VAL="019a"
+IDENTITY_TAG_VAL="${IDENTITY_TAG_VAL:-homelab-proxmox}"
 PROXMOX_HOST="${PROXMOX_HOST:-pve}" # Hostname or IP in SSH config
 SSH_USER="${SSH_USER:-ci}"
-ARTIFACT_BASE="$(artifact_path "019-lab")"
+QM_CMD="sudo -n /usr/sbin/qm"
+ARTIFACT_BASE="$(artifact_runs_path)"
 LOCK_FILE="${ARTIFACT_BASE}/.lock"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
 # Keep PROXMOX_HOST as provided; ci user resides on PVE and host-key handling is via SSH_OPTS
 
-# Suite execution control (019c1)
 SUITE_ABORT_REQUESTED=0
 
 # Colors
@@ -62,7 +61,33 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# --- Feature 019c1: Preflight Environment Checks ---
+lab_vm_ssh() {
+    local cmd="$1"
+    local vm_user="${PROVISION_SSH_USER:-ansible}"
+    local ssh_opts
+    ssh_opts=$(build_provision_ssh_opts)
+
+    if is_local_proxmox; then
+        ssh $ssh_opts "${vm_user}@${LAB_IP}" "$cmd"
+    else
+        ssh $ssh_opts -J "${SSH_USER}@${PROXMOX_HOST}" "${vm_user}@${LAB_IP}" "$cmd"
+    fi
+}
+
+lab_vm_scp_from() {
+    local remote_glob="$1"
+    local local_dir="$2"
+    local vm_user="${PROVISION_SSH_USER:-ansible}"
+    local ssh_opts
+    ssh_opts=$(build_provision_ssh_opts)
+
+    mkdir -p "$local_dir"
+    if is_local_proxmox; then
+        scp $ssh_opts "${vm_user}@${LAB_IP}:${remote_glob}" "$local_dir" 2>/dev/null
+    else
+        scp $ssh_opts -o ProxyJump="${SSH_USER}@${PROXMOX_HOST}" "${vm_user}@${LAB_IP}:${remote_glob}" "$local_dir" 2>/dev/null
+    fi
+}
 
 # ENV-001: Verify lab environment via hostname pattern
 check_env_001() {
@@ -139,7 +164,6 @@ check_env_002() {
 
 # CLEANUP-PRE-001: Preflight check for stale resources
 check_cleanup_pre_001() {
-    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
     local evidence_file="${EVIDENCE_ROOT}/reports/cleanup/preflight-inventory.txt"
     mkdir -p "$(dirname "$evidence_file")"
 
@@ -147,10 +171,10 @@ check_cleanup_pre_001() {
 
     # 1. Scan for VMs in range (excluding templates)
     local stale_vms
-    stale_vms="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= $LAB_VMID_START && \$1 <= $LAB_VMID_END && \$1 != $LAB_TEMPLATE_VMID && \$1 != $LAB_TEMPLATE_VMID_TIER2 {print \$1}'")"
-    
+    stale_vms="$(pve_exec "$QM_CMD list 2>/dev/null | awk '\$1 >= $LAB_VMID_START && \$1 <= $LAB_VMID_END && \$1 != $LAB_TEMPLATE_VMID && \$1 != $LAB_TEMPLATE_VMID_TIER2 {print \$1}'")"
+
     # Capture inventory evidence
-    ssh $SSH_OPTS "$ssh_target" "qm list" > "$evidence_file"
+    pve_exec "$QM_CMD list" > "$evidence_file"
 
     if [[ -z "$stale_vms" ]]; then
         log_info "  CLEANUP-PRE-001 PASS: No stale resources found"
@@ -171,7 +195,7 @@ check_cleanup_pre_001() {
     local cleanup_failed=0
     for vmid in $stale_vms; do
         log_info "    Destroying stale VM $vmid..."
-        if ! ssh $SSH_OPTS "$ssh_target" "qm stop $vmid --skiplock >/dev/null 2>&1; qm destroy $vmid --purge >/dev/null 2>&1"; then
+        if ! pve_exec "$QM_CMD stop $vmid --skiplock >/dev/null 2>&1; $QM_CMD destroy $vmid --purge >/dev/null 2>&1"; then
             log_error "    Failed to destroy VM $vmid"
             cleanup_failed=1
         fi
@@ -179,7 +203,7 @@ check_cleanup_pre_001() {
 
     # 3. Verify cleanup
     local remaining_vms
-    remaining_vms="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= $LAB_VMID_START && \$1 <= $LAB_VMID_END && \$1 != $LAB_TEMPLATE_VMID && \$1 != $LAB_TEMPLATE_VMID_TIER2 {print \$1}'")"
+    remaining_vms="$(pve_exec "$QM_CMD list 2>/dev/null | awk '\$1 >= $LAB_VMID_START && \$1 <= $LAB_VMID_END && \$1 != $LAB_TEMPLATE_VMID && \$1 != $LAB_TEMPLATE_VMID_TIER2 {print \$1}'")"
 
     if [[ -n "$remaining_vms" ]]; then
         log_error "  CLEANUP-PRE-001 FAIL: Failed to remove stale resources: $(echo "$remaining_vms" | tr '\n' ' ')"
@@ -229,7 +253,6 @@ should_abort_suite() {
     return 0
 }
 
-# Console check summary formatter (019c1)
 # Prints compact checklist (<2 lines per check)
 print_check_summary() {
     echo ""
@@ -284,8 +307,6 @@ print_check_summary() {
     echo ""
 }
 
-# --- Feature 019c: Confidence Suite ---
-
 # Profile Definitions
 # Usage: parse_profile "profile_name"
 # Sets: PROFILE_TIER, PROFILE_MODE, PROFILE_SAFETY
@@ -321,7 +342,7 @@ EVIDENCE_ROOT=""
 evidence_init() {
     local run_id=$1
     local profile=$2
-    EVIDENCE_ROOT="$(artifact_path "019-lab/$run_id")"
+    EVIDENCE_ROOT="$(artifact_run_path "$run_id")"
     
     mkdir -p "$EVIDENCE_ROOT"/{logs,config,validation}
     
@@ -376,7 +397,7 @@ validation_fetch_optional() {
 }
 
 # Ensure artifacts dir exists
-mkdir -p artifacts/019-lab
+mkdir -p "$(artifact_runs_path)"
 
 # Helper: Get timestamp in milliseconds
 get_ms_timestamp() {
@@ -412,27 +433,25 @@ log_cmd_exec() {
     return $exit_code
 }
 
-# Helper: Run command on Proxmox host
+# Helper: Run command on Proxmox host (local when already on the box)
 pve_exec() {
-    # We don't log every pve_exec to jsonl to avoid noise, or maybe we do?
-    # Let's log it.
-    # But pve_exec is often used in subshells $(pve_exec ...), which makes logging hard (stdout pollution).
-    # So we ONLY log if NOT in a subshell context where stdout is captured.
-    # Actually, for simplicity, we won't wrap pve_exec in log_cmd_exec when used for data retrieval.
-    # We will wrap "Action" commands.
-    ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "$@"
+    if is_local_proxmox; then
+        PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH" bash -lc "$*"
+    else
+        ssh $SSH_OPTS "$SSH_USER@$PROXMOX_HOST" "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin $*"
+    fi
 }
 
 # Helper: Check if VM exists
 vm_exists() {
     local vmid=$1
-    pve_exec "qm status $vmid" >/dev/null 2>&1
+    pve_exec "$QM_CMD status $vmid" >/dev/null 2>&1
 }
 
 # Helper: Get VM Status
 vm_status() {
     local vmid=$1
-    pve_exec "qm status $vmid" | awk '{print $2}'
+    pve_exec "$QM_CMD status $vmid" | awk '{print $2}'
 }
 
 # Helper: Find next free VMID
@@ -440,7 +459,7 @@ get_free_vmid() {
     local vmid
     # Get list of all VMIDs once to avoid spamming SSH
     local existing_vmids
-    existing_vmids=$(pve_exec "qm list" | awk '{print $1}' | grep -E "^[0-9]+$")
+    existing_vmids=$(pve_exec "$QM_CMD list" | awk '{print $1}' | grep -E "^[0-9]+$")
     
     for ((vmid=LAB_VMID_START; vmid<=LAB_VMID_END; vmid++)); do
         if ! echo "$existing_vmids" | grep -q "^$vmid$"; then
@@ -457,7 +476,7 @@ find_lab_vms() {
     local found_vmids=""
     # Optimization: Get all VMs in range first
     local range_vmids
-    range_vmids=$(pve_exec "qm list" | awk -v start="$LAB_VMID_START" -v end="$LAB_VMID_END" '$1 >= start && $1 <= end {print $1}')
+    range_vmids=$(pve_exec "$QM_CMD list" | awk -v start="$LAB_VMID_START" -v end="$LAB_VMID_END" '$1 >= start && $1 <= end {print $1}')
     
     for vmid in $range_vmids; do
         if check_safety "$vmid" "quiet"; then
@@ -485,7 +504,7 @@ check_safety() {
 
     # Check 2: Identity
     local config
-    config=$(pve_exec "qm config $vmid" 2>/dev/null || true)
+    config=$(pve_exec "$QM_CMD config $vmid" 2>/dev/null || true)
     
     # Must have ManagedBy tag
     if [[ "$config" != *"$IDENTITY_TAG_KEY=$IDENTITY_TAG_VAL"* ]]; then
@@ -525,7 +544,7 @@ validate_safety_profile() {
         # We get all VMs in range, then check if they pass check_safety.
         # If check_safety fails, it means it's an invalid/orphaned VM in our reserved range.
         local all_vmids_in_range
-        all_vmids_in_range=$(pve_exec "qm list" | awk -v start="$LAB_VMID_START" -v end="$LAB_VMID_END" '$1 >= start && $1 <= end {print $1}')
+        all_vmids_in_range=$(pve_exec "$QM_CMD list" | awk -v start="$LAB_VMID_START" -v end="$LAB_VMID_END" '$1 >= start && $1 <= end {print $1}')
         
         for vmid in $all_vmids_in_range; do
             # Ignore Templates
@@ -585,7 +604,7 @@ check_host_requirements() {
         fi
         
         # 2. Guest Check
-        if ! ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "test -e /dev/kvm"; then
+        if ! lab_vm_ssh "test -e /dev/kvm"; then
             log_error "Guest /dev/kvm check failed. Nested virtualization not passed to Lab VM."
             return 1
         fi
@@ -600,14 +619,14 @@ check_network_requirements() {
     
     # Check FQDN resolution (from Lab VM)
     # Using 'getent hosts' or 'host' or 'ping'
-    if ! ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "getent hosts deb.debian.org >/dev/null"; then
+    if ! lab_vm_ssh "getent hosts deb.debian.org >/dev/null"; then
         log_error "DNS Resolution failed on Lab VM (deb.debian.org)."
         return 1
     fi
     log_info "  DNS Resolution: OK"
 
     # Check Internet Connectivity
-    if ! ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "curl -I -s --connect-timeout 5 https://deb.debian.org >/dev/null"; then
+    if ! lab_vm_ssh "curl -I -s --connect-timeout 5 https://deb.debian.org >/dev/null"; then
         log_error "Internet Connectivity failed on Lab VM."
         return 1
     fi
@@ -619,7 +638,7 @@ check_network_requirements() {
 # Helper: Collect Artifacts
 collect_artifacts() {
     local run_id=$1
-    local artifact_dir="${EVIDENCE_ROOT:-artifacts/019-lab/$run_id}"
+    local artifact_dir="${EVIDENCE_ROOT:-$(artifact_run_path "$run_id")}"
     
     log_info "Collecting artifacts for run $run_id..."
     
@@ -638,11 +657,10 @@ collect_artifacts() {
         journalctl -n 1000 --no-pager > /tmp/journal.log 2>&1;
     "
     
-    if ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "$remote_cmds"; then
+    if lab_vm_ssh "$remote_cmds"; then
         # Fetch files
-        # Using scp with ProxyJump
-        scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.txt" "$artifact_dir/config/" 2>/dev/null || log_warn "Failed to fetch config artifacts"
-        scp $SSH_OPTS -o ProxyJump="$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP:/tmp/*.log" "$artifact_dir/logs/" 2>/dev/null || log_warn "Failed to fetch log artifacts"
+        lab_vm_scp_from "/tmp/*.txt" "$artifact_dir/config/" || log_warn "Failed to fetch config artifacts"
+        lab_vm_scp_from "/tmp/*.log" "$artifact_dir/logs/" || log_warn "Failed to fetch log artifacts"
         
         # Register artifacts in manifest (if function exists)
         if command -v evidence_add_artifact >/dev/null; then
@@ -656,10 +674,10 @@ collect_artifacts() {
     log_info "Artifacts collected in $artifact_dir"
 }
 
-# Helper: Evidence Retention Policy (FR-003)
 enforce_evidence_retention() {
     local max_keep=${1:-5}
-    local artifact_base="artifacts/019-lab"
+    local artifact_base
+    artifact_base="$(artifact_runs_path)"
     
     log_info "Enforcing Evidence Retention Policy (Keep Last $max_keep)..."
     
@@ -699,7 +717,7 @@ cmd_status() {
         if [[ "$state" == "running" ]]; then
             log_info "  IP Address: $LAB_IP (Static)"
             # Check reachability
-            if ssh $SSH_OPTS -J "$SSH_USER@$PROXMOX_HOST" "ansible@$LAB_IP" "echo ready" >/dev/null 2>&1; then
+            if lab_vm_ssh "echo ready" >/dev/null 2>&1; then
                 log_info "  SSH Reachable: YES"
             else
                 log_warn "  SSH Reachable: NO"
@@ -751,7 +769,7 @@ cmd_up() {
 
     # 4. Clone
     log_info "Cloning template $template_id to $vmid..."
-    log_cmd_exec pve_exec "qm clone $template_id $vmid --name lab-pve-$vmid --full 1"
+    log_cmd_exec pve_exec "$QM_CMD clone $template_id $vmid --name lab-pve-$vmid --full 1"
     
     # 5. Configure
     log_info "Configuring VM..."
@@ -759,16 +777,24 @@ cmd_up() {
     
     local resource_args=""
     if [[ "$tier" -ge 2 ]]; then
-        # Enforce Resource Floor (FR-008)
         log_info "Enforcing Tier 2 Resource Floor (4GB RAM, 2 vCPU, CPU=host)..."
         resource_args="--memory 4096 --cores 2 --cpu host"
     fi
+
+    ensure_provisioning_ssh_material
+
+    local sshkey_arg=""
+    if [[ -n "$PROVISION_SSH_PUBKEY" && -f "$PROVISION_SSH_PUBKEY" ]]; then
+        sshkey_arg="--sshkey ${PROVISION_SSH_PUBKEY}"
+    else
+        log_warn "Provisioning SSH public key missing; falling back to template key"
+    fi
     
-    log_cmd_exec pve_exec "qm set $vmid --description '$tags' --ipconfig0 ip=$LAB_IP/24,gw=$LAB_GATEWAY --net0 virtio,bridge=$LAB_BRIDGE $resource_args"
+    log_cmd_exec pve_exec "$QM_CMD set $vmid --description '$tags' --ipconfig0 ip=$LAB_IP/24,gw=$LAB_GATEWAY --net0 virtio,bridge=$LAB_BRIDGE --ciuser ${PROVISION_SSH_USER} $sshkey_arg $resource_args"
     
     # 6. Start
     log_info "Starting VM..."
-    log_cmd_exec pve_exec "qm start $vmid"
+    log_cmd_exec pve_exec "$QM_CMD start $vmid"
     
     # 7. Wait for SSH (parameterized timeout/user/key)
     if wait_for_provisioning_ssh "$LAB_IP"; then
@@ -777,6 +803,7 @@ cmd_up() {
 
     # Provisioning timeout: collect evidence
     collect_provisioning_evidence "$vmid" "$LAB_IP" "$EVIDENCE_ROOT"
+    cleanup_provisioning_ssh_material
     log_error "Timeout waiting for SSH. Provisioning evidence captured under $EVIDENCE_ROOT/reports/provisioning"
     return 1
 }
@@ -806,11 +833,11 @@ cmd_destroy() {
         fi
         
         log_info "Stopping VM $vmid..."
-        log_cmd_exec pve_exec "qm stop $vmid" 2>/dev/null || true
+        log_cmd_exec pve_exec "$QM_CMD stop $vmid" 2>/dev/null || true
         sleep 2
         
         log_info "Removing VM $vmid..."
-        log_cmd_exec pve_exec "qm destroy $vmid"
+        log_cmd_exec pve_exec "$QM_CMD destroy $vmid"
         log_info "VM $vmid destroyed."
     done
 }
@@ -819,21 +846,48 @@ cmd_test() {
     local tier=${1:-1}
     local tier2_mode=${2:-"min"}
 
+    local -a ssh_key_args=()
+    if [[ -n "${PROVISION_SSH_KEY:-}" && -f "${PROVISION_SSH_KEY}" ]]; then
+        ssh_key_args=(--private-key "${PROVISION_SSH_KEY}")
+    fi
+
+    # Vault handling: prompt when interactive, otherwise require env var.
+    local -a vault_args=()
+    local vault_pass_file=""
+    if [[ -z "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+        if [[ -t 0 ]]; then
+            read -r -s -p "Ansible Vault password: " ANSIBLE_VAULT_PASSWORD
+            echo
+            export ANSIBLE_VAULT_PASSWORD
+        fi
+    fi
+    if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+        vault_pass_file="$(mktemp -t pve-lab-vault.XXXXXX)"
+        chmod 0600 "$vault_pass_file" || true
+        printf '%s' "$ANSIBLE_VAULT_PASSWORD" > "$vault_pass_file"
+        vault_args=(--vault-password-file "$vault_pass_file")
+        trap "rm -f '$vault_pass_file'" RETURN
+    fi
+
     log_info "Running tests (Tier: $tier)..."
     
     # Tier 0: Static Checks
     log_info "Tier 0: Static Checks"
     
-    log_info "Running Terraform fmt check..."
-    if log_cmd_exec terraform fmt -check -recursive terraform/; then
-        log_info "Terraform fmt passed."
+    if command -v terraform >/dev/null 2>&1; then
+        log_info "Running Terraform fmt check..."
+        if log_cmd_exec terraform fmt -check -recursive "${REPO_ROOT}/terraform/"; then
+            log_info "Terraform fmt passed."
+        else
+            log_error "Terraform fmt failed."
+            return 1
+        fi
     else
-        log_error "Terraform fmt failed."
-        return 1
+        log_warn "terraform not found on host; skipping Terraform fmt check"
     fi
     
     log_info "Running Ansible syntax check..."
-    if log_cmd_exec ansible-playbook ansible/playbooks/lab_bootstrap.yml -i ansible/inventories/lab/hosts.yml --syntax-check; then
+    if log_cmd_exec ansible-playbook "${REPO_ROOT}/ansible/playbooks/lab_bootstrap.yml" -i "${REPO_ROOT}/ansible/inventories/lab/hosts.yml" "${ssh_key_args[@]}" "${vault_args[@]}" --syntax-check; then
         log_info "Ansible syntax check passed."
     else
         log_error "Ansible syntax check failed."
@@ -849,8 +903,13 @@ cmd_test() {
     # fi
 
     log_info "Running Lab Bootstrap Playbook..."
-    
-    if log_cmd_exec ansible-playbook ansible/playbooks/lab_bootstrap.yml -i ansible/inventories/lab/hosts.yml --extra-vars "evidence_dir=$EVIDENCE_DIR run_id=$RUN_ID profile_id=$PROFILE_ID phase=bootstrap"; then
+
+    if [[ -z "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+        log_error "Ansible Vault password required but not provided. Set ANSIBLE_VAULT_PASSWORD, or run interactively to be prompted."
+        return 1
+    fi
+
+    if log_cmd_exec ansible-playbook "${REPO_ROOT}/ansible/playbooks/lab_bootstrap.yml" -i "${REPO_ROOT}/ansible/inventories/lab/hosts.yml" "${ssh_key_args[@]}" "${vault_args[@]}" --extra-vars "evidence_dir=$EVIDENCE_DIR run_id=$RUN_ID profile_id=$PROFILE_ID phase=bootstrap"; then
         log_info "Tier 1 Convergence passed."
     else
         log_error "Tier 1 Convergence failed."
@@ -861,7 +920,6 @@ cmd_test() {
     if [[ "$tier" -ge 2 ]]; then
         log_info "Tier 2: PVE Install & Verification (Mode: $tier2_mode)"
         
-        # Tier 2 Plus Preflight Checks (FR-016)
         if ! check_host_requirements "$tier2_mode"; then
             return 1
         fi
@@ -872,7 +930,7 @@ cmd_test() {
         export RUNID="${run_id}"
         
         # Run Tier 2 Playbook
-        if log_cmd_exec ansible-playbook ansible/playbooks/lab_tier2_pve.yml -i ansible/inventories/lab/hosts.yml --extra-vars "tier2_mode=$tier2_mode evidence_dir=$EVIDENCE_DIR runid=$RUN_ID run_id=$RUN_ID profile_id=$PROFILE_ID phase=tier2"; then
+         if log_cmd_exec ansible-playbook "${REPO_ROOT}/ansible/playbooks/lab_tier2_pve.yml" -i "${REPO_ROOT}/ansible/inventories/lab/hosts.yml" "${ssh_key_args[@]}" "${vault_args[@]}" --extra-vars "tier2_mode=$tier2_mode evidence_dir=$EVIDENCE_DIR runid=$RUN_ID run_id=$RUN_ID profile_id=$PROFILE_ID phase=tier2"; then
              log_info "Tier 2 passed."
         else
              log_error "Tier 2 failed."
@@ -881,7 +939,6 @@ cmd_test() {
     fi
 }
 
-# Helper: Ingest Ansible Assertion Reports (019d)
 ingest_ansible_reports() {
     local evidence_dir="$1"
     local report_pattern="$evidence_dir/reports/assertions.*.json"
@@ -961,6 +1018,7 @@ install_ci_sudoers() {
     local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
     local remote_tmp="/tmp/ci-sudoers.conf"
     local remote_dst="/etc/sudoers.d/ci-homelab"
+    local legacy_ci_rule="/etc/sudoers.d/ci"
 
     if [[ ! -f "$profile_file" ]]; then
         log_warn "ci sudoers profile missing; expected at $profile_file"
@@ -969,35 +1027,71 @@ install_ci_sudoers() {
 
     log_info "Installing ci sudoers profile to $remote_dst on $ssh_target"
 
-    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n mkdir -p /etc/sudoers.d"; then
-        log_warn "Failed to ensure /etc/sudoers.d exists on $ssh_target"
+    # Validate locally (does not require sudo)
+    if command -v visudo >/dev/null 2>&1; then
+        if ! visudo -c -f "$profile_file"; then
+            log_error "visudo validation failed for ci sudoers profile"
+            return 1
+        fi
+    fi
+
+    # If running directly on the Proxmox host, avoid self-SSH and install locally
+    if is_local_proxmox; then
+        if ! sudo -n /bin/mkdir -p /etc/sudoers.d; then
+            log_warn "Failed to ensure /etc/sudoers.d exists locally"
+            return 1
+        fi
+
+        if ! sudo -n /usr/bin/tee "$remote_dst" >/dev/null < "$profile_file"; then
+            log_warn "Failed to write sudoers profile to $remote_dst locally"
+            return 1
+        fi
+
+        # Use /usr/bin paths for bootstrap compatibility with older sudoers profiles
+        sudo -n /usr/bin/chown root:root "$remote_dst" >/dev/null 2>&1 || true
+        sudo -n /usr/bin/chmod 0440 "$remote_dst" >/dev/null 2>&1 || true
+
+        # Remove any legacy overly-permissive rule that grants ci NOPASSWD:ALL
+        sudo -n /bin/rm -f "$legacy_ci_rule" >/dev/null 2>&1 || true
+
+        # Validate overall sudoers configuration (best-effort; may not be allowed yet)
+        sudo -n /usr/sbin/visudo -c >/dev/null 2>&1 || true
+
+        log_info "ci sudoers profile installed"
+        return 0
+    fi
+
+    # Remote install path
+    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n /bin/mkdir -p /etc/sudoers.d"; then
+        log_warn "Failed to ensure /etc/sudoers.d exists"
         return 1
     fi
 
-    if ! ssh $SSH_OPTS "$ssh_target" "cat > $remote_tmp" < "$profile_file"; then
-        log_warn "Failed to upload sudoers profile to $remote_tmp"
+    if ! scp $SSH_OPTS "$profile_file" "$ssh_target:$remote_tmp"; then
+        log_warn "Failed to upload sudoers profile"
         return 1
     fi
 
-    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n chown root:root $remote_tmp && sudo -n chmod 0440 $remote_tmp"; then
+    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n /usr/bin/chown root:root $remote_tmp && sudo -n /usr/bin/chmod 0440 $remote_tmp"; then
         log_warn "Failed to set ownership/permissions on $remote_tmp"
         ssh $SSH_OPTS "$ssh_target" "rm -f $remote_tmp" >/dev/null 2>&1 || true
         return 1
     fi
 
-    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n visudo -c -f $remote_tmp"; then
-        log_error "visudo validation failed for ci sudoers profile"
-        ssh $SSH_OPTS "$ssh_target" "sudo -n rm -f $remote_tmp" >/dev/null 2>&1 || true
-        return 1
-    fi
-
-    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n install -o root -g root -m 0440 $remote_tmp $remote_dst"; then
+    # Install to destination using tee (avoids dependency on sudo install(1))
+    if ! ssh $SSH_OPTS "$ssh_target" "sudo -n /usr/bin/tee $remote_dst >/dev/null < $remote_tmp && sudo -n /usr/bin/chown root:root $remote_dst && sudo -n /usr/bin/chmod 0440 $remote_dst"; then
         log_warn "Failed to install sudoers profile to $remote_dst"
-        ssh $SSH_OPTS "$ssh_target" "sudo -n rm -f $remote_tmp" >/dev/null 2>&1 || true
+        ssh $SSH_OPTS "$ssh_target" "sudo -n /bin/rm -f $remote_tmp" >/dev/null 2>&1 || true
         return 1
     fi
 
-    ssh $SSH_OPTS "$ssh_target" "sudo -n rm -f $remote_tmp" >/dev/null 2>&1 || true
+    # Remove any legacy overly-permissive rule that grants ci NOPASSWD:ALL
+    ssh $SSH_OPTS "$ssh_target" "sudo -n /bin/rm -f $legacy_ci_rule" >/dev/null 2>&1 || true
+
+    # Validate overall sudoers configuration (best-effort; may not be allowed yet)
+    ssh $SSH_OPTS "$ssh_target" "sudo -n /usr/sbin/visudo -c" >/dev/null 2>&1 || true
+
+    ssh $SSH_OPTS "$ssh_target" "sudo -n /bin/rm -f $remote_tmp" >/dev/null 2>&1 || true
     log_info "ci sudoers profile installed"
     return 0
 }
@@ -1035,7 +1129,6 @@ cmd_run() {
         install_ci_sudoers || log_warn "Sudoers installation skipped or failed; ensure ci has required sudo -n rights."
     fi
 
-    # 019c1 Phase 7: Legacy-to-Profile Mapping (T052, T053, T054)
     local legacy_mode_used=false
     
     # T053: Map legacy flags to profiles if --profile not explicitly set
@@ -1070,7 +1163,6 @@ cmd_run() {
         PROFILE_ID="custom"
     fi
 
-    # Map Profile to Catalog Phase (019e1)
     local profile_phase="unknown"
     case "$PROFILE_ID" in
         "bootstrap")
@@ -1099,7 +1191,6 @@ cmd_run() {
         fi
     fi
     
-    # 019c1: Create evidence pack with new runid format
     local run_id
     if [[ -n "${RUN_ID:-}" && -n "${ARTIFACT_DIR:-}" ]]; then
         run_id="$RUN_ID"
@@ -1121,7 +1212,6 @@ cmd_run() {
     local summary_file="$artifact_dir/summary.json"
     local log_file="$artifact_dir/run.log"
     
-    # 019c1: Initialize JSONL events
     init_jsonl_events "$artifact_dir/logs/events.jsonl"
     
     # Set Global ARTIFACT_DIR for logging
@@ -1134,7 +1224,6 @@ cmd_run() {
     log_info "Artifacts: $artifact_dir"
     log_info "Configuration: Tier=$tier, Mode=$tier2_mode, Keep=$keep_vm, Profile=${profile:-custom}"
     
-    # 019c1 Phase 6: Generate provenance.json (T050)
     log_info "=== Capturing Provenance ==="
     
     # T047: Check and warn if git working tree is dirty
@@ -1156,7 +1245,6 @@ cmd_run() {
     local start_time=$(date +%s)
     local status="FAILED"
     
-    # --- 019c1: Preflight Environment Checks (ENV-001, ENV-002) ---
     log_info "=== Preflight Environment Checks ==="
     
     if ! check_env_001; then
@@ -1170,7 +1258,6 @@ cmd_run() {
     
     log_info "=== Preflight Checks Complete ==="
     
-    # 019c1: Emit phase event
     emit_phase_start "$run_id" "destroy-cleanup"
     
     # Ensure clean state (CLEANUP-PRE-001)
@@ -1184,7 +1271,6 @@ cmd_run() {
     # Switch to profile-mapped phase for provisioning/testing that follows
     export CURRENT_PHASE="$profile_phase"
     
-    # Validate Safety Profile (FR-019c)
     if ! validate_safety_profile; then
         log_error "Safety Validation Failed. Aborting."
         exit 1
@@ -1192,18 +1278,16 @@ cmd_run() {
     
     # Trap to ensure destroy runs (unless keep_vm is set)
     if [[ "$keep_vm" == "true" ]]; then
-        trap "log_info 'Keeping VM as requested (--keep).'" EXIT
+        trap "cleanup_provisioning_ssh_material; log_info 'Keeping VM as requested (--keep).'" EXIT
     else
-        trap "cmd_destroy" EXIT
+        trap "cleanup_provisioning_ssh_material; cmd_destroy" EXIT
     fi
     
-    # 019c1: Emit phase event for provisioning
     emit_phase_start "$run_id" "vm-provision"
     
     if cmd_up "$run_id" "$tier"; then
         emit_phase_complete "$run_id" "vm-provision"
         
-        # 019c1: Emit phase event for testing
         emit_phase_start "$run_id" "validation"
         
         if cmd_test "$tier" "$tier2_mode"; then
@@ -1214,7 +1298,6 @@ cmd_run() {
         
         emit_phase_complete "$run_id" "validation"
         
-        # 019c1: Run guardrail checks (negative tests) - Phase 4 US2
         emit_phase_start "$run_id" "guardrails"
         log_info "Running guardrail checks (negative tests)..."
         
@@ -1257,7 +1340,6 @@ cmd_run() {
             validation_fetch_optional "$run_id" "$artifact_dir"
         fi
         
-        # 019c1: Run cleanup verification checks - Phase 5 US3
         if [[ "${SUITE_ABORT_REQUESTED:-0}" -ne 1 ]]; then
             # Switch to cleanup phase for checks
             export CURRENT_PHASE="cleanup"
@@ -1287,7 +1369,8 @@ cmd_run() {
             else
                 # T038-T044: Run cleanup verification checks
                 local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
-                local lock_dir="artifacts/019-lab"
+                local lock_dir
+                lock_dir="$(artifact_runs_path)"
                 
                 # Explicitly destroy resources before verification (T003)
                 log_info "Teardown: Destroying lab resources..."
@@ -1346,18 +1429,14 @@ cmd_run() {
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
-    # 019d: Ingest Ansible Reports
     ingest_ansible_reports "$artifact_dir"
 
-    # 019c1: Generate checks.json
     local checks_file="$artifact_dir/checks.json"
     serialize_checks "$checks_file"
     log_info "Generated checks.json: $checks_file"
     
-    # 019c1: Print console check summary
     print_check_summary
     
-    # Generate Summary (019c1: updated with profile reference)
     cat <<JSON > "$summary_file"
 {
   "contract_version": "1.0.0",
@@ -1382,7 +1461,6 @@ JSON
     # Finalize Evidence
     evidence_finalize "$status"
     
-    # 019e1: Auto-Verification (FR-008) with summary/verify.json alignment
     if [[ "$verify_evidence" == "true" ]]; then
         log_info "Running Evidence Verification..."
         if python3 "$SCRIPT_DIR/verify_evidence.py" "$artifact_dir" > "$artifact_dir/reports/verify.txt" 2>&1; then
@@ -1440,7 +1518,6 @@ verify_file.write_text(json.dumps(verify_report, indent=2))
 PY
     fi
 
-    # Enforce Retention (FR-003)
     enforce_evidence_retention 5
     
     if [[ "$status" != "SUCCESS" ]]; then
@@ -1461,7 +1538,7 @@ cmd_safety_suite() {
                 echo "name: prod-vm-9999" # Missing tags
             elif [[ "$cmd" == "qm config 9010" ]]; then
                 echo "name: lab-pve-9010"
-                echo "ManagedBy=019a"
+                echo "$IDENTITY_TAG_KEY=$IDENTITY_TAG_VAL"
                 echo "RunId=test"
             else
                 # Default fail for others
@@ -1536,7 +1613,6 @@ cmd_confidence_suite() {
     log_info "Confidence Suite Completed Successfully."
 }
 
-# 019c1: New suite command with profile-based execution
 cmd_suite() {
     local profile_name="$1"
     shift
@@ -1565,7 +1641,6 @@ cmd_suite() {
     cmd_run --profile "$profile_name" "$@"
 }
 
-# 019e: Verify Evidence Pack
 cmd_verify_evidence() {
     local pack_path="$1"
     if [[ -z "$pack_path" ]]; then
@@ -1582,7 +1657,6 @@ cmd_verify_evidence() {
     python3 "${SCRIPT_DIR}/verify_evidence.py" "$pack_path"
 }
 
-# 019e: Diff Evidence Packs
 cmd_diff_evidence() {
     local run_a="$1"
     local run_b="$2"
@@ -1592,7 +1666,8 @@ cmd_diff_evidence() {
         exit 1
     fi
     
-    if [[ ! -d "$run_a" ]]; then
+        if lab_vm_scp_from "/var/lib/validation/checks.json" "$(dirname "$target_path")"; then
+            mv "$(dirname "$target_path")/checks.json" "$target_path" 2>/dev/null || true
         log_error "Evidence pack A not found: $run_a"
         exit 1
     fi
@@ -1658,7 +1733,26 @@ case "$1" in
         ;;
     rebuild)
         shift
-        cmd_rebuild "$@"
+        apply_sudoers=false
+        rebuild_args=()
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --apply-sudoers)
+                    apply_sudoers=true
+                    shift
+                    ;;
+                *)
+                    rebuild_args+=("$1")
+                    shift
+                    ;;
+            esac
+        done
+
+        if [[ "$apply_sudoers" == "true" ]]; then
+            install_ci_sudoers || log_warn "Sudoers installation skipped or failed; ensure ci has required sudo -n rights."
+        fi
+
+        cmd_rebuild "${rebuild_args[@]}"
         ;;
     verify-evidence)
         shift

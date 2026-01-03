@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # lib/cleanup.sh - Cleanup verification check functions
-# Part of 019c1-semantic-safety-closure
 
 set -euo pipefail
 
@@ -20,9 +19,9 @@ check_no_lab_vms() {
     local lab_vms
     # Use host_exec for local host or SSH_OPTS for remote to avoid host key prompts
     if is_local_proxmox; then
-        lab_vms="$(host_exec "qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 && \$1 != 9001 && \$1 != 9002 {print \$1}'" || echo "")"
+        lab_vms="$(host_exec "sudo -n /usr/sbin/qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 && \$1 != 9001 && \$1 != 9002 {print \$1}'" || echo "")"
     else
-        lab_vms="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 && \$1 != 9001 && \$1 != 9002 {print \$1}'" || echo "")"
+        lab_vms="$(ssh $SSH_OPTS "$ssh_target" "sudo -n /usr/sbin/qm list 2>/dev/null | awk '\$1 >= 9000 && \$1 <= 9099 && \$1 != 9001 && \$1 != 9002 {print \$1}'" || echo "")"
     fi
     
     if [[ -z "$lab_vms" ]]; then
@@ -45,9 +44,9 @@ capture_vm_inventory() {
     # Get VM list and format as JSON
     local vm_list
     if is_local_proxmox; then
-        vm_list="$(host_exec "qm list 2>/dev/null" || echo "")"
+        vm_list="$(host_exec "sudo -n /usr/sbin/qm list 2>/dev/null" || echo "")"
     else
-        vm_list="$(ssh $SSH_OPTS "$ssh_target" "qm list 2>/dev/null" || echo "")"
+        vm_list="$(ssh $SSH_OPTS "$ssh_target" "sudo -n /usr/sbin/qm list 2>/dev/null" || echo "")"
     fi
     
     # Simple JSON format

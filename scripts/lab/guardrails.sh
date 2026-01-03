@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # scripts/lab/guardrails.sh - Negative test harness for safety validation
-# Part of 019c1-semantic-safety-closure
 
 set -euo pipefail
 

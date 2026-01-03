@@ -332,7 +332,6 @@ def check_coverage(inventory: Dict[str, Any]) -> List[str]:
     
     hostvars = inventory.get("_meta", {}).get("hostvars", {})
     
-    # Generate baseline.json artifact (FR-008)
     baseline = {
         "timestamp": datetime.now().isoformat(),
         "targets": []
@@ -504,9 +503,7 @@ def main():
             reset_color = "\033[0m"
             print(f"{r['hostname']:<20} {status_color}{r['status']:<10}{reset_color} {r['target_ip'] or 'N/A':<15} {r['details']}")
         
-    # Exit 1 only if there are actual failures (not SKIPs) or if coverage gaps exist (and we care about them?)
-    # Spec says: "Ensure SKIP does not count towards non-zero exit code."
-    # We should probably still exit 1 on FAIL.
+    # Exit 1 only if there are actual failures (not SKIPs).
     if any(r["status"] == "FAIL" for r in results):
         sys.exit(1)
     # Optional: Exit 1 on GAP if strict? For now, let's keep it as warning unless alert_on_gap is set?

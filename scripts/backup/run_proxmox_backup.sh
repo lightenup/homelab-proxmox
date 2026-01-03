@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # scripts/backup/run_proxmox_backup.sh
 # Manual wrapper for Proxmox backup deployment
-# Feature: 013-proxmox-config-backup
 
 set -euo pipefail
 

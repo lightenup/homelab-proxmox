@@ -34,9 +34,16 @@ run_test() {
     expected=$(cat "$expected_file" | tr -d '[:space:]')
     
     echo -n "Testing $name... "
+
+    local tmp_root
+    tmp_root="$(mktemp -d -t ci-verify-fixture.XXXXXX)"
+    trap 'rm -rf "$tmp_root"' RETURN
+
+    local tmp_fixture="$tmp_root/$name"
+    cp -R "$fixture" "$tmp_fixture"
     
     set +e
-    python3 "${SCRIPT_DIR}/verify_evidence.py" "$fixture" >/dev/null 2>&1
+    python3 "${SCRIPT_DIR}/verify_evidence.py" "$tmp_fixture" >/dev/null 2>&1
     local rc=$?
     set -e
     
