@@ -94,6 +94,7 @@ parse_common_flags() {
 init_evidence_pack() {
     ensure_artifact_root
 
+    export RUN_ID_PREFIX="${ENVIRONMENT:-lab}"
     RUN_ID="$(create_evidence_pack "$(artifact_runs_path)")"
     EVIDENCE_ROOT="$(artifact_run_path "${RUN_ID}")"
 

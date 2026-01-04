@@ -9,9 +9,11 @@ set -euo pipefail
 create_evidence_pack() {
     local base_dir="$1"
     
-    # Generate runid with timestamp format: lab-YYYYMMDD-HHMMSS
+    # Generate runid with timestamp format: <prefix>-YYYYMMDD-HHMMSS
+    # Default prefix is "lab" for backwards compatibility.
+    local prefix="${RUN_ID_PREFIX:-lab}"
     local runid
-    runid="lab-$(date -u +"%Y%m%d-%H%M%S")"
+    runid="${prefix}-$(date -u +"%Y%m%d-%H%M%S")"
     
     local evidence_dir="${base_dir}/${runid}"
     
