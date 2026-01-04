@@ -884,10 +884,43 @@ sys.exit(3)
     if [[ ! -x "${hc}" ]]; then
         die "missing healthcheck script for service=${SERVICE}: ${hc}"
     fi
-    "${hc}" \
-        --profile lan \
-        --output-json "${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.json" \
-        | tee "${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.txt"
+
+    # Services may briefly return 503 right after first start (package install + systemd).
+    # Treat healthcheck as a readiness probe with a bounded retry window.
+    local hc_json="${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.json"
+    local hc_txt="${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.txt"
+    : >"${hc_txt}"
+
+    local hc_timeout_seconds="${HEALTHCHECK_TIMEOUT_SECONDS:-180}"
+    local hc_retry_seconds="${HEALTHCHECK_RETRY_SECONDS:-5}"
+    local hc_waited=0
+    local hc_attempt=1
+    local hc_rc=1
+
+    while (( hc_waited <= hc_timeout_seconds )); do
+        echo "--- healthcheck attempt ${hc_attempt} (waited=${hc_waited}s) ---" | tee -a "${hc_txt}"
+        if "${hc}" \
+            --profile lan \
+            --output-json "${hc_json}" \
+            | tee -a "${hc_txt}"; then
+            hc_rc=0
+            break
+        else
+            hc_rc=$?
+        fi
+
+        if (( hc_waited >= hc_timeout_seconds )); then
+            break
+        fi
+
+        sleep "${hc_retry_seconds}"
+        hc_waited=$((hc_waited + hc_retry_seconds))
+        hc_attempt=$((hc_attempt + 1))
+    done
+
+    if (( hc_rc != 0 )); then
+        die "healthcheck failed for service=${SERVICE} after ${hc_waited}s (rc=${hc_rc}); see reports/healthcheck/${SERVICE}.txt"
+    fi
 
     popd >/dev/null
 
