@@ -448,6 +448,10 @@ cmd_apply() {
         export ANSIBLE_VAULT_IDENTITY_LIST="${vault_id}@${ANSIBLE_VAULT_PASSWORD_FILE}"
     fi
 
+    # Tracks any repo-local symlinks created for vault files so we can clean them
+    # up on error/success. Must be declared before the ERR trap (set -u).
+    local -a linked_vault_files=()
+
     on_apply_error() {
         local rc="$1"
         local line="$2"
@@ -472,6 +476,21 @@ cmd_apply() {
 
     emit_phase_start "${RUN_ID}" "apply"
     emit_event "inputs" "${RUN_ID}" "environment=${ENVIRONMENT}" "service=${SERVICE}"
+
+    # Fail fast if the service slug doesn't map to a terraform module.
+    # This avoids confusing "no-op" applies followed by missing state lookups.
+    if [[ ! -f "${REPO_ROOT}/terraform/main.tf" ]] || \
+        ! grep -qE "module[[:space:]]+\"${SERVICE}_lxc\"" "${REPO_ROOT}/terraform/main.tf"; then
+        {
+            echo "status=failure"
+            echo "reason=unknown service slug: ${SERVICE}"
+            echo "hint=expected a terraform module named ${SERVICE}_lxc in terraform/main.tf"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+        emit_error "${RUN_ID}" "unknown service slug: ${SERVICE}"
+        run_offline_verify || true
+        trap - ERR
+        return 1
+    fi
 
     local tfvars_path
     if ! tfvars_path="$(resolve_tfvars_path "${ENVIRONMENT}")"; then
@@ -663,7 +682,7 @@ sys.exit(3)
             vault_source_root="${env_vault_root}"
         fi
     fi
-    local linked_vault_files=()
+    # linked_vault_files is declared earlier so traps can safely clean up.
     link_vault_file_if_needed() {
         local rel="$1"                     # e.g. ansible/group_vars/all/vault.yml
         local dest="${REPO_ROOT}/${rel}"
