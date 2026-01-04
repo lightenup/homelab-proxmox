@@ -22,7 +22,7 @@ name: LXC Deploy (Gated)
                 required: true
                 type: string
             confirm:
-                description: "Required for PROD apply; must match expected confirmation string"
+              description: "Only for prod: type 'deploy-prod'"
                 required: false
                 type: string
 
