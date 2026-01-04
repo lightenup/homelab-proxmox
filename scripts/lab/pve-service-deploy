@@ -1,0 +1,915 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+export ANSIBLE_CONFIG="${REPO_ROOT}/ansible/ansible.cfg"
+
+LIB_DIR="${SCRIPT_DIR}/lib"
+# shellcheck source=lib/artifacts.sh
+source "${LIB_DIR}/artifacts.sh"
+# shellcheck source=lib/evidence.sh
+source "${LIB_DIR}/evidence.sh"
+# shellcheck source=lib/jsonl.sh
+source "${LIB_DIR}/jsonl.sh"
+# shellcheck source=lib/sudo.sh
+source "${LIB_DIR}/sudo.sh"
+
+# Evidence namespace for this feature (separate from lab harness)
+: "${ARTIFACT_RUNS_DIR:=service-deploy-runs}"
+
+CONTRACT_VERSION="1.0.0"
+PROFILE_ID="service-deploy"
+
+PROD_CONFIRM_STRING="deploy-prod"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  pve-service-deploy <plan|apply> [--environment <lab|prod>] [--service <slug>] [--confirm <string>]
+
+Notes:
+  - This script is intended to run on the Proxmox host as a non-root automation user.
+  - Evidence bundles are written under:
+      $ARTIFACT_ROOT/$ARTIFACT_RUNS_DIR/<run_id>
+EOF
+}
+
+die() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+is_slug() {
+    [[ "$1" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]]
+}
+
+parse_common_flags() {
+    ENVIRONMENT="${ENVIRONMENT:-}"
+    SERVICE="${SERVICE:-}"
+    CONFIRM="${CONFIRM:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --environment)
+                ENVIRONMENT="${2:-}"
+                shift 2
+                ;;
+            --service)
+                SERVICE="${2:-}"
+                shift 2
+                ;;
+            --confirm)
+                CONFIRM="${2:-}"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                die "Unknown argument: $1"
+                ;;
+        esac
+    done
+
+    if [[ -z "${ENVIRONMENT}" ]]; then
+        ENVIRONMENT="lab"
+    fi
+
+    case "${ENVIRONMENT}" in
+        lab|prod) ;;
+        *) die "Invalid --environment '${ENVIRONMENT}' (expected lab|prod)" ;;
+    esac
+
+    if [[ -z "${SERVICE}" ]]; then
+        die "Missing required --service <slug>"
+    fi
+    if ! is_slug "${SERVICE}"; then
+        die "Invalid --service '${SERVICE}' (expected slug like 'jellyfin')"
+    fi
+}
+
+init_evidence_pack() {
+    ensure_artifact_root
+
+    RUN_ID="$(create_evidence_pack "$(artifact_runs_path)")"
+    EVIDENCE_ROOT="$(artifact_run_path "${RUN_ID}")"
+
+    mkdir -p "${EVIDENCE_ROOT}/logs"
+    mkdir -p "${EVIDENCE_ROOT}/reports/plan"
+
+    init_jsonl_events "${EVIDENCE_ROOT}/logs/events.jsonl"
+
+    cat >"${EVIDENCE_ROOT}/summary.json" <<EOF
+{
+  "run_id": "${RUN_ID}",
+  "profile_id": "${PROFILE_ID}",
+  "contract_version": "${CONTRACT_VERSION}"
+}
+EOF
+
+    cat >"${EVIDENCE_ROOT}/provenance.json" <<EOF
+{
+  "run_id": "${RUN_ID}",
+  "profile_id": "${PROFILE_ID}"
+}
+EOF
+
+    cat >"${EVIDENCE_ROOT}/checks.json" <<EOF
+{
+  "checks_schema_version": "1.0.0",
+  "checks": []
+}
+EOF
+
+    cat >"${EVIDENCE_ROOT}/evidence_manifest.json" <<EOF
+{
+  "contract_version": "${CONTRACT_VERSION}",
+  "manifest_schema_version": "1.0.0",
+  "artifacts": []
+}
+EOF
+}
+
+run_offline_verify() {
+    "${REPO_ROOT}/scripts/lab/ci-verify.sh" "${EVIDENCE_ROOT}"
+}
+
+terraform_chdir() {
+    terraform -chdir="${REPO_ROOT}/terraform" "$@"
+}
+
+ensure_terraform() {
+    local bin_dir="${HOME}/.local/bin"
+    export PATH="${bin_dir}:${PATH}"
+
+    if command -v terraform >/dev/null 2>&1; then
+        return 0
+    fi
+    if [[ -x "${bin_dir}/terraform" ]]; then
+        return 0
+    fi
+
+    local version="${TERRAFORM_VERSION:-1.6.6}"
+    local os="linux"
+    local arch="amd64"
+    local url="https://releases.hashicorp.com/terraform/${version}/terraform_${version}_${os}_${arch}.zip"
+
+    mkdir -p "${bin_dir}"
+
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+
+    command -v curl >/dev/null 2>&1 || die "terraform missing and curl not available to download it"
+    command -v python3 >/dev/null 2>&1 || die "terraform missing and python3 not available to extract it"
+
+    curl -fsSL "${url}" -o "${tmpdir}/terraform.zip" || die "failed to download terraform ${version}"
+
+    ZIP_PATH="${tmpdir}/terraform.zip" OUT_DIR="${bin_dir}" python3 - <<'PY'
+import os
+import zipfile
+
+zip_path = os.environ["ZIP_PATH"]
+out_dir = os.environ["OUT_DIR"]
+
+with zipfile.ZipFile(zip_path, 'r') as z:
+    z.extract('terraform', out_dir)
+PY
+
+    chmod +x "${bin_dir}/terraform"
+
+    rm -rf "${tmpdir}"
+
+    command -v terraform >/dev/null 2>&1 || die "terraform install failed"
+}
+
+resolve_tfvars_relpath() {
+    local env="$1"
+
+    local candidates=(
+        "environments/${env}.tfvars"
+        "${env}.tfvars"
+    )
+
+    # Back-compat: existing repo currently has terraform/prod.tfvars.
+    if [[ "$env" == "lab" ]]; then
+        candidates+=("prod.tfvars")
+    fi
+
+    local candidate
+    for candidate in "${candidates[@]}"; do
+        if [[ -f "${REPO_ROOT}/terraform/${candidate}" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+resolve_tfvars_path() {
+    local env="$1"
+
+    # Prefer an external tfvars location on PVE so we never have to sync
+    # environment config (often gitignored) as part of the repo rsync.
+    if [[ -n "${TFVARS_PATH:-}" ]]; then
+        if [[ -f "${TFVARS_PATH}" ]]; then
+            echo "${TFVARS_PATH}"
+            return 0
+        fi
+    fi
+
+    if [[ -n "${TFVARS_DIR:-}" ]]; then
+        local ext_candidates=("${TFVARS_DIR}/${env}.tfvars")
+        if [[ "$env" == "lab" ]]; then
+            ext_candidates+=("${TFVARS_DIR}/prod.tfvars")
+        fi
+
+        local ext
+        for ext in "${ext_candidates[@]}"; do
+            if [[ -f "${ext}" ]]; then
+                echo "${ext}"
+                return 0
+            fi
+        done
+    fi
+
+    local rel
+    if rel="$(resolve_tfvars_relpath "${env}")"; then
+        echo "${REPO_ROOT}/terraform/${rel}"
+        return 0
+    fi
+
+    return 1
+}
+
+write_plan_summary() {
+    local intent="$1"
+    local reason="$2"
+
+    printf '%s\n' "intent=${intent}" >"${EVIDENCE_ROOT}/reports/plan/summary.txt"
+    printf '%s\n' "reason=${reason}" >>"${EVIDENCE_ROOT}/reports/plan/summary.txt"
+}
+
+enforce_plan_scope_guard() {
+    local plan_json="$1"
+    local allowed_prefix="module.${SERVICE}_lxc"
+    local violations
+
+    violations="$(
+        jq -r --arg prefix "${allowed_prefix}" '
+          [ .resource_changes[]? | select(.change.actions != ["no-op"]) | .address ]
+          | map(select(startswith($prefix) | not))
+          | .[]
+        ' "${plan_json}" 2>/dev/null || true
+    )"
+
+    if [[ -n "${violations}" ]]; then
+        {
+            echo "DENY: Planned changes outside allowed scope"
+            echo "allowed_prefix=${allowed_prefix}"
+            echo "violations:"
+            echo "${violations}" | sed 's/^/  - /'
+        } >"${EVIDENCE_ROOT}/reports/plan/scope-guard.txt"
+        return 1
+    fi
+
+    {
+        echo "ALLOW: Planned changes within allowed scope"
+        echo "allowed_prefix=${allowed_prefix}"
+    } >"${EVIDENCE_ROOT}/reports/plan/scope-guard.txt"
+    return 0
+}
+
+cmd_plan() {
+    parse_common_flags "$@"
+    init_evidence_pack
+
+    ensure_terraform
+
+    on_plan_error() {
+        local rc="$1"
+        local line="$2"
+        write_plan_summary "blocked" "error rc=${rc} at line ${line}"
+        emit_error "${RUN_ID}" "error rc=${rc} at line ${line}"
+        run_offline_verify || true
+    }
+    trap 'on_plan_error $? $LINENO' ERR
+
+    emit_phase_start "${RUN_ID}" "plan"
+    emit_event "inputs" "${RUN_ID}" "environment=${ENVIRONMENT}" "service=${SERVICE}"
+
+    local planfile="${EVIDENCE_ROOT}/reports/plan/plan.tfplan"
+    local plan_json="${EVIDENCE_ROOT}/reports/plan/plan.json"
+    local plan_txt="${EVIDENCE_ROOT}/reports/plan/plan.txt"
+
+    # Ensure we have a dedicated SSH key on PVE to reach freshly provisioned LXCs.
+    # We inject the matching public key during Terraform plan/apply.
+    local lxc_key_file="${ANSIBLE_LXC_SSH_KEY_FILE:-${HOME}/.ssh/id_lxc_deploy}"
+    if [[ ! -f "${lxc_key_file}" ]]; then
+        command -v ssh-keygen >/dev/null 2>&1 || die "ssh-keygen not available; cannot create ${lxc_key_file}"
+        mkdir -p "$(dirname "${lxc_key_file}")"
+        ssh-keygen -t ed25519 -f "${lxc_key_file}" -N '' -C 'ci@pve lxc deploy' >/dev/null
+        chmod 600 "${lxc_key_file}" || true
+        chmod 644 "${lxc_key_file}.pub" || true
+    fi
+    if [[ ! -f "${lxc_key_file}.pub" ]]; then
+        command -v ssh-keygen >/dev/null 2>&1 || die "ssh-keygen not available; cannot derive ${lxc_key_file}.pub"
+        ssh-keygen -y -f "${lxc_key_file}" >"${lxc_key_file}.pub"
+        chmod 644 "${lxc_key_file}.pub" || true
+    fi
+    if [[ "${USE_TFVARS_SSH_KEYS:-}" != "1" ]]; then
+        command -v python3 >/dev/null 2>&1 || die "python3 not available; cannot format TF_VAR_ssh_public_keys"
+        local lxc_pub
+        lxc_pub="$(cat "${lxc_key_file}.pub")"
+        TF_VAR_ssh_public_keys="$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "${lxc_pub}")"
+        export TF_VAR_ssh_public_keys
+    fi
+
+    local tfvars_path
+    if ! tfvars_path="$(resolve_tfvars_path "${ENVIRONMENT}")"; then
+        write_plan_summary "blocked" "missing tfvars file for environment=${ENVIRONMENT}"
+        emit_error "${RUN_ID}" "missing tfvars file for environment=${ENVIRONMENT}"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+    {
+        echo "environment=${ENVIRONMENT}"
+        echo "tfvars_path=${tfvars_path}"
+        if [[ "${tfvars_path}" == "${REPO_ROOT}/"* ]]; then
+            echo "tfvars_source=repo"
+        else
+            echo "tfvars_source=external"
+        fi
+    } >"${EVIDENCE_ROOT}/reports/plan/tfvars.txt"
+
+    terraform_chdir init -input=false -no-color
+    terraform_chdir validate -no-color
+
+    # terraform plan with -detailed-exitcode intentionally returns:
+    #   0 = no changes, 2 = changes present
+    # Wrap in an `if` to prevent the ERR trap from firing on rc=2.
+    local plan_rc=0
+    if terraform_chdir plan -input=false -no-color \
+        -target="module.${SERVICE}_lxc" \
+        -var-file="${tfvars_path}" \
+        -out="${planfile}" \
+        -detailed-exitcode; then
+        plan_rc=0
+    else
+        plan_rc=$?
+    fi
+
+    echo "${plan_rc}" >"${EVIDENCE_ROOT}/reports/plan/exitcode.txt"
+
+    if [[ "${plan_rc}" -eq 1 ]]; then
+        write_plan_summary "blocked" "terraform plan failed"
+        emit_error "${RUN_ID}" "terraform plan failed"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+
+    terraform_chdir show -no-color "${planfile}" >"${plan_txt}"
+    terraform_chdir show -json "${planfile}" >"${plan_json}"
+
+    if ! enforce_plan_scope_guard "${plan_json}"; then
+        write_plan_summary "blocked" "scope guard violation"
+        emit_error "${RUN_ID}" "scope guard violation"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+
+    local intent="no-op"
+    if [[ "${plan_rc}" -eq 2 ]]; then
+        # Coarse classification: if there is any create action, call it create; otherwise update.
+        if jq -e '.resource_changes[]? | select(.change.actions | index("create"))' "${plan_json}" >/dev/null 2>&1; then
+            intent="create"
+        else
+            intent="update"
+        fi
+    fi
+
+    write_plan_summary "${intent}" "terraform plan exitcode=${plan_rc}"
+    emit_phase_complete "${RUN_ID}" "plan"
+
+    run_offline_verify
+    trap - ERR
+    return 0
+}
+
+cmd_apply() {
+    parse_common_flags "$@"
+
+    case "${ENVIRONMENT}" in
+        lab)
+            ;;
+        prod)
+            if [[ "${ALLOW_PROD_APPLY:-}" != "1" ]]; then
+                die "PROD apply is disabled unless ALLOW_PROD_APPLY=1 is set"
+            fi
+            if [[ "${CONFIRM}" != "${PROD_CONFIRM_STRING}" ]]; then
+                die "PROD apply requires --confirm '${PROD_CONFIRM_STRING}'"
+            fi
+            ;;
+        *)
+            die "Invalid --environment '${ENVIRONMENT}' (expected lab|prod)"
+            ;;
+    esac
+
+    init_evidence_pack
+
+    ensure_terraform
+
+    # Ansible consumes vault secrets via a password file.
+    # GitHub Actions passes secrets most conveniently as an env var, so bridge it.
+    local vault_pw_file=""
+    if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" && -z "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]]; then
+        vault_pw_file="$(mktemp -t ansible-vault.XXXXXX)"
+        chmod 600 "${vault_pw_file}"
+        printf '%s' "${ANSIBLE_VAULT_PASSWORD}" >"${vault_pw_file}"
+        export ANSIBLE_VAULT_PASSWORD_FILE="${vault_pw_file}"
+        unset ANSIBLE_VAULT_PASSWORD
+    fi
+
+    # Optional: support vault-id formatted vault files while still using a single password.
+    # If your vault files include a vault-id (e.g. $ANSIBLE_VAULT;...;AES256;homelab),
+    # Ansible needs an identity list mapping that vault-id to the password file.
+    if [[ -n "${ANSIBLE_VAULT_PASSWORD_FILE:-}" && -z "${ANSIBLE_VAULT_IDENTITY_LIST:-}" ]]; then
+        local vault_id_default="homelab"
+        if [[ -n "${ENVIRONMENT:-}" ]]; then
+            vault_id_default="${ENVIRONMENT}"
+        fi
+        local vault_id="${VAULT_ID:-${vault_id_default}}"
+        export ANSIBLE_VAULT_IDENTITY_LIST="${vault_id}@${ANSIBLE_VAULT_PASSWORD_FILE}"
+    fi
+
+    on_apply_error() {
+        local rc="$1"
+        local line="$2"
+        {
+            echo "status=failure"
+            echo "reason=error rc=${rc} at line ${line}"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+        emit_error "${RUN_ID}" "error rc=${rc} at line ${line}"
+        run_offline_verify || true
+        if [[ -n "${vault_pw_file}" ]]; then
+            rm -f "${vault_pw_file}" || true
+        fi
+        if [[ ${#linked_vault_files[@]} -gt 0 ]]; then
+            rm -f "${linked_vault_files[@]}" || true
+        fi
+    }
+    trap 'on_apply_error $? $LINENO' ERR
+
+    mkdir -p "${EVIDENCE_ROOT}/reports/plan"
+    mkdir -p "${EVIDENCE_ROOT}/reports/apply"
+    mkdir -p "${EVIDENCE_ROOT}/reports/healthcheck"
+
+    emit_phase_start "${RUN_ID}" "apply"
+    emit_event "inputs" "${RUN_ID}" "environment=${ENVIRONMENT}" "service=${SERVICE}"
+
+    local tfvars_path
+    if ! tfvars_path="$(resolve_tfvars_path "${ENVIRONMENT}")"; then
+        {
+            echo "status=failure"
+            echo "reason=missing tfvars file for environment=${ENVIRONMENT}"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+        emit_error "${RUN_ID}" "missing tfvars file for environment=${ENVIRONMENT}"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+    {
+        echo "environment=${ENVIRONMENT}"
+        echo "tfvars_path=${tfvars_path}"
+        if [[ "${tfvars_path}" == "${REPO_ROOT}/"* ]]; then
+            echo "tfvars_source=repo"
+        else
+            echo "tfvars_source=external"
+        fi
+    } >"${EVIDENCE_ROOT}/reports/plan/tfvars.txt"
+
+    local planfile="${EVIDENCE_ROOT}/reports/plan/plan.tfplan"
+    local plan_json="${EVIDENCE_ROOT}/reports/plan/plan.json"
+    local plan_txt="${EVIDENCE_ROOT}/reports/plan/plan.txt"
+
+    # Ensure we have a dedicated SSH key on PVE to reach freshly provisioned LXCs.
+    # We inject the matching public key during Terraform plan/apply.
+    local lxc_key_file="${ANSIBLE_LXC_SSH_KEY_FILE:-${HOME}/.ssh/id_lxc_deploy}"
+    if [[ ! -f "${lxc_key_file}" ]]; then
+        command -v ssh-keygen >/dev/null 2>&1 || die "ssh-keygen not available; cannot create ${lxc_key_file}"
+        mkdir -p "$(dirname "${lxc_key_file}")"
+        ssh-keygen -t ed25519 -f "${lxc_key_file}" -N '' -C 'ci@pve lxc deploy' >/dev/null
+        chmod 600 "${lxc_key_file}" || true
+        chmod 644 "${lxc_key_file}.pub" || true
+    fi
+    if [[ ! -f "${lxc_key_file}.pub" ]]; then
+        command -v ssh-keygen >/dev/null 2>&1 || die "ssh-keygen not available; cannot derive ${lxc_key_file}.pub"
+        ssh-keygen -y -f "${lxc_key_file}" >"${lxc_key_file}.pub"
+        chmod 644 "${lxc_key_file}.pub" || true
+    fi
+    if [[ "${USE_TFVARS_SSH_KEYS:-}" != "1" ]]; then
+        command -v python3 >/dev/null 2>&1 || die "python3 not available; cannot format TF_VAR_ssh_public_keys"
+        local lxc_pub
+        lxc_pub="$(cat "${lxc_key_file}.pub")"
+        TF_VAR_ssh_public_keys="$(python3 -c 'import json,sys; print(json.dumps([sys.argv[1]]))' "${lxc_pub}")"
+        export TF_VAR_ssh_public_keys
+    fi
+
+    terraform_chdir init -input=false -no-color
+    terraform_chdir validate -no-color
+
+    # terraform plan with -detailed-exitcode intentionally returns:
+    #   0 = no changes, 2 = changes present
+    # Wrap in an `if` to prevent the ERR trap from firing on rc=2.
+    local plan_rc=0
+    if terraform_chdir plan -input=false -no-color \
+        -target="module.${SERVICE}_lxc" \
+        -var-file="${tfvars_path}" \
+        -out="${planfile}" \
+        -detailed-exitcode; then
+        plan_rc=0
+    else
+        plan_rc=$?
+    fi
+    echo "${plan_rc}" >"${EVIDENCE_ROOT}/reports/plan/exitcode.txt"
+
+    if [[ "${plan_rc}" -eq 1 ]]; then
+        {
+            echo "status=failure"
+            echo "reason=terraform plan failed"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+        emit_error "${RUN_ID}" "terraform plan failed"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+
+    terraform_chdir show -no-color "${planfile}" >"${plan_txt}"
+    terraform_chdir show -json "${planfile}" >"${plan_json}"
+
+    if ! enforce_plan_scope_guard "${plan_json}"; then
+        {
+            echo "status=failure"
+            echo "reason=scope guard violation"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+        emit_error "${RUN_ID}" "scope guard violation"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+
+    # Apply exactly the reviewed plan
+    terraform_chdir apply -input=false -no-color -auto-approve "${planfile}" \
+        | tee "${EVIDENCE_ROOT}/reports/apply/terraform-apply.txt"
+
+    # Terraform does not reliably update root outputs when using -target.
+    # Prefer root output when present, else fall back to module output from state.
+    local ansible_inventory_json=""
+    local inventory_rc=0
+    if ansible_inventory_json="$(terraform_chdir output -json ansible_inventory 2>/dev/null)"; then
+        inventory_rc=0
+    else
+        inventory_rc=$?
+    fi
+
+    if [[ ${inventory_rc} -ne 0 || -z "${ansible_inventory_json}" ]]; then
+        # Prefer `terraform state pull` here: it works even when root outputs were not
+        # updated due to resource targeting. Capture stderr into evidence so failures
+        # are diagnosable without leaking full state into the pack.
+        local state_pull_stderr="${EVIDENCE_ROOT}/reports/apply/terraform-state-pull.stderr.txt"
+        local state_json=""
+        local state_rc=0
+        if state_json="$(terraform_chdir state pull 2>"${state_pull_stderr}")"; then
+            state_rc=0
+        else
+            state_rc=$?
+        fi
+
+        if [[ ${state_rc} -ne 0 || -z "${state_json}" ]]; then
+            die "terraform state pull failed (rc=${state_rc}) or returned empty output; see ${state_pull_stderr}"
+        fi
+
+        ansible_inventory_json="$(printf '%s' "${state_json}" | SERVICE="${SERVICE}" python3 -c '
+import json
+import os
+import sys
+
+service = os.environ.get("SERVICE")
+if not service:
+    print("Missing SERVICE env", file=sys.stderr)
+    sys.exit(2)
+
+raw = sys.stdin.read()
+if not raw.strip():
+    print("terraform state pull produced empty stdout", file=sys.stderr)
+    sys.exit(4)
+
+try:
+    doc = json.loads(raw)
+except json.JSONDecodeError:
+    print("terraform state pull did not return valid JSON", file=sys.stderr)
+    sys.exit(5)
+
+module_addr = f"module.{service}_lxc"
+
+# terraform state pull format (v4): look for the proxmox_lxc resource and grab network[0].ip
+for res in doc.get("resources") or []:
+    if res.get("module") != module_addr:
+        continue
+    if res.get("type") != "proxmox_lxc" or res.get("name") != "this":
+        continue
+    for inst in res.get("instances") or []:
+        attrs = inst.get("attributes") or {}
+        net = (attrs.get("network") or [])
+        if net and isinstance(net, list):
+            ip = (net[0] or {}).get("ip")
+            if ip:
+                print(json.dumps({"services": {service: ip}}, sort_keys=True))
+                sys.exit(0)
+
+print(f"Could not find proxmox_lxc network ip in state for module={module_addr}", file=sys.stderr)
+sys.exit(3)
+')"
+    fi
+
+    printf '%s\n' "${ansible_inventory_json}" >"${EVIDENCE_ROOT}/reports/apply/ansible-inventory.json"
+
+    # From here on, ensure we run from repo root so relative paths resolve
+    # correctly in helper scripts and ansible.cfg.
+    pushd "${REPO_ROOT}" >/dev/null
+
+    # Vault files are intentionally gitignored in this repo. In CI, they must be
+    # sourced from a persistent location on PVE.
+    #
+    # Convention: store encrypted vault files under /var/lib/homelab-proxmox/vault,
+    # mirroring ansible's group_vars layout:
+    #   /var/lib/homelab-proxmox/vault/group_vars/all/vault.yml
+    #   /var/lib/homelab-proxmox/vault/group_vars/<group>/vault.yml
+    local vault_source_root="${VAULT_SOURCE_ROOT:-/var/lib/homelab-proxmox/vault}"
+    # Optional safety: if per-environment vault directories exist on PVE, prefer them.
+    # This reduces the risk of accidentally reusing PROD secrets in LAB (or vice versa).
+    # Layout:
+    #   /var/lib/homelab-proxmox/vault/lab/group_vars/...
+    #   /var/lib/homelab-proxmox/vault/prod/group_vars/...
+    if [[ -z "${VAULT_SOURCE_ROOT:-}" && -n "${ENVIRONMENT:-}" ]]; then
+        local env_vault_root="${vault_source_root}/${ENVIRONMENT}"
+        if [[ -d "${env_vault_root}" ]]; then
+            vault_source_root="${env_vault_root}"
+        fi
+    fi
+    local linked_vault_files=()
+    link_vault_file_if_needed() {
+        local rel="$1"                     # e.g. ansible/group_vars/all/vault.yml
+        local dest="${REPO_ROOT}/${rel}"
+
+        if [[ -f "${dest}" ]]; then
+            return 0
+        fi
+
+        local alt_rel="${rel#ansible/}"    # e.g. group_vars/all/vault.yml
+        local cand1="${vault_source_root}/${rel}"
+        local cand2="${vault_source_root}/${alt_rel}"
+        local src=""
+        if [[ -f "${cand1}" ]]; then
+            src="${cand1}"
+        elif [[ -f "${cand2}" ]]; then
+            src="${cand2}"
+        fi
+
+        if [[ -z "${src}" ]]; then
+            return 0
+        fi
+
+        mkdir -p "$(dirname "${dest}")"
+        ln -sf "${src}" "${dest}"
+        linked_vault_files+=("${dest}")
+        return 0
+    }
+
+    # Vault-encrypted files are intentionally gitignored, so CI sources them from PVE.
+    # NOTE: even if a secret is not used by a given service, Ansible may still need to
+    # decrypt group_vars files for groups present in the generated inventory.
+    link_vault_file_if_needed "ansible/group_vars/all/vault.yml"
+    link_vault_file_if_needed "ansible/group_vars/services/secrets.yml"
+
+    # Fail fast with a clear error if the vault password cannot decrypt the expected vault.
+    # This avoids confusing downstream failures during inventory parsing or playbook execution.
+    if [[ -n "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]]; then
+        if [[ ! -f "${ANSIBLE_VAULT_PASSWORD_FILE}" ]]; then
+            die "ANSIBLE_VAULT_PASSWORD_FILE is set but does not exist: ${ANSIBLE_VAULT_PASSWORD_FILE}"
+        fi
+
+        local expected_vault_file="${REPO_ROOT}/ansible/group_vars/all/vault.yml"
+        if [[ ! -f "${expected_vault_file}" ]]; then
+            {
+                echo "Missing expected vault file: ${expected_vault_file}"
+                echo "This repo intentionally gitignores vault.yml, so CI must source it from PVE."
+                echo "Create an encrypted vault file on PVE, e.g.:"
+                echo "  sudo mkdir -p ${vault_source_root}/group_vars/all"
+                echo "  sudo chown -R ci:ci ${vault_source_root}"
+                echo "  cp <your-local-repo>/ansible/group_vars/all/vault.yml ${vault_source_root}/group_vars/all/vault.yml"
+                echo "Or set VAULT_SOURCE_ROOT to a different directory."
+            } >"${EVIDENCE_ROOT}/reports/apply/vault-check.stderr.txt"
+            echo "vault_check_rc=2" >"${EVIDENCE_ROOT}/reports/apply/vault-check.txt"
+            die "missing required ansible vault file; see reports/apply/vault-check.stderr.txt"
+        fi
+
+        local vault_check_rc=0
+        if ansible-vault view "${expected_vault_file}" \
+            >"/dev/null" \
+            2>"${EVIDENCE_ROOT}/reports/apply/vault-check.stderr.txt"; then
+            vault_check_rc=0
+        else
+            vault_check_rc=$?
+        fi
+
+        echo "vault_check_rc=${vault_check_rc}" >"${EVIDENCE_ROOT}/reports/apply/vault-check.txt"
+        if [[ ${vault_check_rc} -ne 0 ]]; then
+            die "vault password could not decrypt ansible/group_vars/all/vault.yml (rc=${vault_check_rc}); see reports/apply/vault-check.stderr.txt"
+        fi
+    fi
+
+    # Generate ansible/inventories/generated/hosts.yml
+    ANSIBLE_INVENTORY_JSON="${ansible_inventory_json}" \
+        ANSIBLE_SSH_PRIVATE_KEY_FILE="${lxc_key_file}" \
+        ./scripts/update_ansible_inventory.sh \
+        >"${EVIDENCE_ROOT}/reports/apply/update-inventory.txt" 2>&1
+
+    # Wait for SSH to come up on the newly created/started LXC.
+    # The Proxmox provider can return before sshd is ready, causing flaky bootstrap.
+    local service_ip
+    service_ip="$(printf '%s' "${ansible_inventory_json}" | python3 -c 'import json,sys; d=json.load(sys.stdin); (svc,)=list(d.get("services",{}).keys()); ip=d["services"][svc].split("/")[0]; print(ip)')"
+    if [[ -z "${service_ip}" ]]; then
+        die "could not resolve service IP from ansible inventory json"
+    fi
+
+    # Ensure Ansible uses consistent, non-interactive SSH settings. In lab we deliberately
+    # avoid failing on host key changes because LXCs can be recreated while keeping the
+    # same IP, which otherwise bricks CI with known_hosts mismatches.
+    local ssh_common_args
+    ssh_common_args="${ANSIBLE_SSH_COMMON_ARGS:--o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null}"
+
+    local ssh_wait_seconds="${SSH_WAIT_SECONDS:-120}"
+    local ssh_sleep_seconds="${SSH_WAIT_SLEEP_SECONDS:-5}"
+    local waited=0
+    while true; do
+        if ssh -i "${lxc_key_file}" \
+            ${ssh_common_args} \
+            "root@${service_ip}" 'true' >/dev/null 2>&1; then
+            break
+        fi
+        if (( waited >= ssh_wait_seconds )); then
+            die "ssh not ready on ${service_ip} after ${ssh_wait_seconds}s"
+        fi
+        sleep "${ssh_sleep_seconds}"
+        waited=$((waited + ssh_sleep_seconds))
+    done
+
+    # DNS sanity: Proxmox may set CT nameserver in config, but the container's
+    # /etc/resolv.conf might not reflect it until a reboot. If DNS is wrong,
+    # bootstrap's apt-get will fail.
+    local ctid=""
+    local state_addr=""
+    state_addr="$(terraform_chdir state list 2>/dev/null | grep -E "^module\\.${SERVICE}_lxc\\.proxmox_lxc\\.this$" | head -n 1 || true)"
+    if [[ -n "${state_addr}" ]]; then
+        local tf_id=""
+        tf_id="$(terraform_chdir state show -no-color "${state_addr}" 2>/dev/null | awk -F'"' '/^id\s+=/ {print $2; exit}' || true)"
+        if [[ -n "${tf_id}" ]]; then
+            ctid="$(printf '%s' "${tf_id}" | awk -F/ '{print $NF}')"
+        fi
+    fi
+
+    if [[ -n "${ctid}" ]]; then
+        local dns_report="${EVIDENCE_ROOT}/reports/apply/dns-check.txt"
+        local dns_stderr="${EVIDENCE_ROOT}/reports/apply/dns-check.stderr.txt"
+        local configured_nameserver=""
+        configured_nameserver="$(sudo pct config "${ctid}" 2>"${dns_stderr}" | awk '/^nameserver:/ {print $2; exit}' || true)"
+
+        {
+            echo "ctid=${ctid}"
+            echo "configured_nameserver=${configured_nameserver:-}" 
+        } >"${dns_report}"
+
+        if [[ -n "${configured_nameserver}" ]]; then
+            local attempt=1
+            while [[ ${attempt} -le 2 ]]; do
+                local resolv_contents=""
+                resolv_contents="$(sudo pct exec "${ctid}" -- cat /etc/resolv.conf 2>>"${dns_stderr}" || true)"
+                {
+                    echo "--- resolv.conf (attempt ${attempt}) ---"
+                    printf '%s\n' "${resolv_contents}"
+                } >>"${dns_report}"
+
+                if printf '%s\n' "${resolv_contents}" | grep -q "^nameserver ${configured_nameserver}$"; then
+                    echo "dns_status=ok" >>"${dns_report}"
+                    break
+                fi
+
+                echo "dns_status=mismatch" >>"${dns_report}"
+                if [[ ${attempt} -eq 1 ]]; then
+                    echo "action=reboot" >>"${dns_report}"
+                    sudo pct reboot "${ctid}" >>"${dns_report}" 2>>"${dns_stderr}" || true
+
+                    # After reboot, wait for SSH again.
+                    waited=0
+                    while true; do
+                        if ssh -i "${lxc_key_file}" \
+                            ${ssh_common_args} \
+                            "root@${service_ip}" 'true' >/dev/null 2>&1; then
+                            break
+                        fi
+                        if (( waited >= ssh_wait_seconds )); then
+                            die "ssh not ready on ${service_ip} after reboot (${ssh_wait_seconds}s)"
+                        fi
+                        sleep "${ssh_sleep_seconds}"
+                        waited=$((waited + ssh_sleep_seconds))
+                    done
+                fi
+
+                attempt=$((attempt + 1))
+            done
+        fi
+    fi
+
+    # Bootstrap the host (as root) so the 'ansible' user exists and is trusted.
+    local inventory_file="${REPO_ROOT}/ansible/inventories/generated/hosts.yml"
+    local bootstrap_playbook="${REPO_ROOT}/ansible/playbooks/bootstrap.yml"
+    if [[ ! -f "${bootstrap_playbook}" ]]; then
+        die "missing bootstrap playbook: ${bootstrap_playbook}"
+    fi
+    ansible-playbook -i "${inventory_file}" "${bootstrap_playbook}" \
+        --limit "${SERVICE}" \
+        --ssh-common-args "${ssh_common_args}" \
+        -u root \
+        -e ansible_user=root \
+        | tee "${EVIDENCE_ROOT}/reports/apply/ansible-bootstrap.txt"
+
+    # Configure inside the LXC
+    local playbook="${REPO_ROOT}/ansible/playbooks/${SERVICE}.yml"
+    if [[ ! -f "${playbook}" ]]; then
+        die "missing ansible playbook for service=${SERVICE}: ${playbook}"
+    fi
+    ansible-playbook -i "${inventory_file}" "${playbook}" \
+        --limit "${SERVICE}" \
+        --ssh-common-args "${ssh_common_args}" \
+        | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
+
+    # Healthcheck (uses ansible-inventory + host_vars)
+    local hc="${REPO_ROOT}/scripts/healthcheck/${SERVICE}.sh"
+    if [[ ! -x "${hc}" ]]; then
+        die "missing healthcheck script for service=${SERVICE}: ${hc}"
+    fi
+    "${hc}" \
+        --profile lan \
+        --output-json "${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.json" \
+        | tee "${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.txt"
+
+    popd >/dev/null
+
+    {
+        echo "status=success"
+        echo "terraform_plan_exitcode=${plan_rc}"
+    } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+
+    emit_phase_complete "${RUN_ID}" "apply"
+    run_offline_verify
+    trap - ERR
+    if [[ -n "${vault_pw_file}" ]]; then
+        rm -f "${vault_pw_file}" || true
+    fi
+    if [[ ${#linked_vault_files[@]} -gt 0 ]]; then
+        rm -f "${linked_vault_files[@]}" || true
+    fi
+    return 0
+}
+
+main() {
+    local subcommand="${1:-}"
+    shift || true
+
+    case "$subcommand" in
+        -h|--help|help|"")
+            usage
+            return 0
+            ;;
+        plan)
+            cmd_plan "$@"
+            ;;
+        apply)
+            cmd_apply "$@"
+            ;;
+        *)
+            echo "ERROR: Unknown subcommand: $subcommand" >&2
+            usage >&2
+            return 2
+            ;;
+    esac
+}
+
+main "$@"

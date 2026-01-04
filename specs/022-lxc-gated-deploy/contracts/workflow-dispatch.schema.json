@@ -12,8 +12,10 @@
     },
     "service": {
       "type": "string",
-      "enum": ["jellyfin"],
-      "description": "Service to deploy. (Baseline: jellyfin)"
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "description": "Service slug to deploy (e.g. jellyfin). Not restricted; baseline example is jellyfin.",
+      "examples": ["jellyfin"]
     },
     "confirm": {
       "type": "string",

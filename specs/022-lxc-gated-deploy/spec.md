@@ -3,7 +3,7 @@
 **Feature Branch**: `022-lxc-gated-deploy`  
 **Created**: 2026-01-04  
 **Status**: Draft  
-**Input**: User description: "$ARGUMENTS"
+**Input**: Create a gated, least-privilege CI/CD flow to deploy new Proxmox LXC services (baseline example: Jellyfin).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -47,7 +47,7 @@ As an operator, I want an apply stage for LAB that can create a new unprivileged
 
 **Acceptance Scenarios**:
 
-1. **Given** the LAB target has no existing LXC with the requested name/ID, **When** apply runs, **Then** a new unprivileged LXC is created and the Jellyfin service becomes healthy.
+1. **Given** the LAB target has no existing LXC with the requested name/ID, **When** apply runs, **Then** a new unprivileged LXC is created and the service becomes healthy (baseline example: Jellyfin).
 2. **Given** the LAB LXC already exists, **When** apply runs again, **Then** it does not recreate the LXC and converges configuration to the desired state.
 3. **Given** apply completes, **When** validation runs, **Then** an evidence bundle is produced and offline verification passes.
 4. **Given** apply is running, **When** it detects a required shared-infra change, **Then** it fails fast without making partial changes.
@@ -74,6 +74,8 @@ As an operator, I want production apply to be explicitly gated so it cannot run 
 
 ### Edge Cases
 
+**Definition (shared infrastructure change)**: Any change outside the single target service LXC, including Proxmox bridges, storage pools, templates, host firewall/networking, NAS/NFS mounts, and any other LXC/VM. If plan/preflight detects a shared-infra change, it MUST fail fast.
+
 - Requested container ID is already in use by a different workload.
 - Requested container name conflicts with an existing container.
 - The desired template/storage/bridge is unavailable on the target host.
@@ -84,11 +86,6 @@ As an operator, I want production apply to be explicitly gated so it cannot run 
 
 ## Requirements *(mandatory)*
 
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right functional requirements.
--->
-
 ### Functional Requirements
 
 - **FR-001**: System MUST provide a non-destructive plan/preflight stage that reports create/update/no-op intent for a new LXC deployment.
@@ -96,11 +93,12 @@ As an operator, I want production apply to be explicitly gated so it cannot run 
 - **FR-003**: System MUST keep LAB and PROD deployments separated, with LAB permitted to auto-apply and PROD requiring explicit approval.
 - **FR-004**: System MUST prevent production apply from running without both manual approval and an explicit confirmation input.
 - **FR-005**: System MUST operate without requiring Proxmox root login; all operations must be performed using a non-root automation account with narrowly scoped elevation.
+  The deploy flow MUST capture the remote effective identity and allowed elevation surface (e.g., permitted elevated operations) into the evidence bundle and MUST NOT require interactive elevation.
 - **FR-006**: System MUST manage secrets via the CI secret store and must not require secrets to be committed to the repository.
 - **FR-007**: System MUST be idempotent: rerunning apply MUST NOT recreate an existing container and MUST converge configuration.
 - **FR-008**: System MUST capture durable evidence for each deployment attempt (success or failure) and store it in a persistent artifact location on the Proxmox host.
 - **FR-009**: System MUST support offline verification of evidence bundles and fail the pipeline when verification fails.
-- **FR-010**: System MUST validate service health (Jellyfin baseline) and include the results in the evidence bundle.
+- **FR-010**: System MUST validate service health (baseline example: Jellyfin) and include the results in the evidence bundle.
 - **FR-011**: System MUST avoid downtime for existing workloads; if a requested change would require modifying shared infrastructure, it MUST fail fast.
 - **FR-012**: System MUST support safe parameterization for container identity, compute/storage/network resources, optional mounts, and optional GPU passthrough (disabled by default).
 
@@ -121,7 +119,7 @@ As an operator, I want production apply to be explicitly gated so it cannot run 
 
 ### Measurable Outcomes
 
-- **SC-001**: Plan/preflight completes successfully on pull requests and produces a plan artifact in under 2 minutes.
+- **SC-001**: Plan/preflight completes successfully on pull requests from this repository (non-fork) and on `workflow_dispatch`, and produces a plan artifact in under 2 minutes.
 - **SC-002**: LAB apply completes with a verified evidence bundle (verification PASS) in under 15 minutes.
 - **SC-003**: Re-running LAB apply results in “no recreate” behavior (no new container identity created) and still produces a verified evidence bundle.
 - **SC-004**: Production apply cannot start without both a manual approval and explicit confirmation input (0 accidental prod applies).
@@ -131,7 +129,7 @@ As an operator, I want production apply to be explicitly gated so it cannot run 
 
 - LAB is allowed to auto-apply; PROD requires manual approval.
 - A non-root automation account exists on the Proxmox host and can perform required operations via narrowly-scoped elevation.
-- The Jellyfin baseline is acceptable as the initial service validation target.
+- Jellyfin is acceptable as the initial service validation target (baseline example).
 
 ## Out of Scope
 

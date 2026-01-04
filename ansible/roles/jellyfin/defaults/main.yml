@@ -1,0 +1,14 @@
+---
+# Jellyfin APT repo settings (Debian/Ubuntu)
+
+jellyfin_repo_enabled: true
+jellyfin_repo_url: "https://repo.jellyfin.org/{{ ansible_distribution | lower }}"
+# Example: bookworm, jammy
+jellyfin_repo_suite: "{{ ansible_distribution_release }}"
+jellyfin_repo_components: "main"
+
+jellyfin_apt_key_url: "https://repo.jellyfin.org/jellyfin_team.gpg.key"
+jellyfin_apt_keyring_path: "/usr/share/keyrings/jellyfin-archive-keyring.gpg"
+
+jellyfin_packages:
+  - jellyfin

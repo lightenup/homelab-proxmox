@@ -21,7 +21,7 @@ Represents which environment is being targeted.
 Desired state for a single service LXC.
 
 - **Fields**:
-  - `service`: string (initial baseline: `jellyfin`)
+  - `service`: string (baseline example: `jellyfin`)
   - `hostname`: string
   - `vmid`: integer (optional; if used must be unique)
   - `ip`: string (static)

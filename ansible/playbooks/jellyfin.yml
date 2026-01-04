@@ -1,0 +1,12 @@
+---
+- name: Configure base for Jellyfin
+  hosts: jellyfin
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure Jellyfin
+  hosts: jellyfin
+  become: true
+  roles:
+    - jellyfin

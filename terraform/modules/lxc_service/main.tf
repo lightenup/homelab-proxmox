@@ -23,6 +23,9 @@ resource "proxmox_lxc" "this" {
     gw     = var.gateway
   }
 
+  nameserver   = var.nameserver
+  searchdomain = var.searchdomain
+
   ssh_public_keys = var.ssh_public_keys
 
   features {

@@ -12,7 +12,7 @@
   - Direct `pct create` / `pvesh` in scripts: rejected (mixes responsibilities; harder to plan safely).
 
 ### Decision: Use Ansible for configuration inside the LXC
-- **Chosen**: Ansible roles/playbooks to install/configure the service (Jellyfin baseline) after Terraform creates the container.
+- **Chosen**: Ansible roles/playbooks to install/configure the service (baseline example: Jellyfin) after Terraform creates the container.
 - **Rationale**: Matches repo constitution (Ansible owns inside configuration) and current repo layout.
 - **Alternatives considered**:
   - Bake everything into the LXC template: rejected (less transparent, harder to iterate and verify).
@@ -37,7 +37,7 @@
 
 ## Open Items (resolved enough for planning)
 
-- **Service baseline**: Jellyfin (per spec) for first implementation slice.
+- **Service baseline**: Jellyfin (per spec) for first implementation slice (baseline example).
 - **Environment split**: LAB vs PROD controlled by workflow inputs and GitHub Environments.
 - **Least privilege**:
   - CI connects as `ci@pve` (no root SSH).

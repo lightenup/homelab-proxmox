@@ -51,3 +51,15 @@ variable "service_ips" {
   type        = map(string)
   description = "Map of service names to IP addresses (CIDR format)"
 }
+
+variable "nameserver" {
+  type        = string
+  description = "LXC DNS nameserver(s) as a space-separated string (e.g. '192.168.1.210 1.1.1.1'). If null, provider defaults apply."
+  default     = null
+}
+
+variable "searchdomain" {
+  type        = string
+  description = "LXC DNS search domain (e.g. 'home.arpa'). If null, provider defaults apply."
+  default     = null
+}

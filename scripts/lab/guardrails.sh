@@ -10,6 +10,7 @@ PROXMOX_HOST="${PROXMOX_HOST:-pve}"
 SSH_USER="${SSH_USER:-ci}"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 ARTIFACT_ROOT="/var/lib/homelab-proxmox/artifacts"
+VAULT_ROOT="/var/lib/homelab-proxmox/vault"
 
 # Source required libraries
 # shellcheck source=lib/checks.sh
@@ -22,7 +23,7 @@ ensure_ci_artifact_root() {
 
     echo "Ensuring artifact root ${ARTIFACT_ROOT} on ${ssh_target}" >&2
 
-    if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p ${ARTIFACT_ROOT} && sudo -n chown ci:ci ${ARTIFACT_ROOT}"; then
+    if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p ${ARTIFACT_ROOT} ${VAULT_ROOT} && sudo -n chown ci:ci ${ARTIFACT_ROOT} ${VAULT_ROOT} && sudo -n chmod 700 ${VAULT_ROOT}"; then
         echo "Failed to ensure artifact root at ${ARTIFACT_ROOT}" >&2
         return 1
     fi
