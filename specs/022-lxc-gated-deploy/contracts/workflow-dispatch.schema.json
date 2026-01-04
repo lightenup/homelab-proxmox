@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LXC Deploy Workflow Dispatch Inputs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["environment", "service"],
+  "properties": {
+    "environment": {
+      "type": "string",
+      "enum": ["lab", "prod"],
+      "description": "Deployment target environment. PROD is gated."
+    },
+    "service": {
+      "type": "string",
+      "enum": ["jellyfin"],
+      "description": "Service to deploy. (Baseline: jellyfin)"
+    },
+    "confirm": {
+      "type": "string",
+      "description": "Required for PROD apply. Must exactly match the workflow’s expected confirmation string.",
+      "minLength": 0
+    },
+    "hostname": {
+      "type": "string",
+      "description": "Optional override for the LXC hostname (default derived from service)."
+    },
+    "vmid": {
+      "type": "integer",
+      "minimum": 100,
+      "description": "Optional explicit VMID. Must not collide with existing containers."
+    },
+    "ip": {
+      "type": "string",
+      "description": "Optional explicit static IP override."
+    },
+    "gpu_passthrough_enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether GPU passthrough should be enabled (disabled by default)."
+    }
+  }
+}

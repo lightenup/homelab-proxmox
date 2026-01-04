@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Bundle Manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["run_id", "artifacts"],
+  "properties": {
+    "run_id": {"type": "string"},
+    "environment": {"type": "string", "enum": ["lab", "prod"]},
+    "service": {"type": "string"},
+    "started_at": {"type": "string"},
+    "ended_at": {"type": "string"},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "type", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "type": {"type": "string"},
+          "check_id": {"type": "string"},
+          "sha256": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}
