@@ -18,14 +18,61 @@ source "${LIB_DIR}/checks.sh"
 # shellcheck source=lib/jsonl.sh
 source "${LIB_DIR}/jsonl.sh"
 
+is_local_proxmox_target() {
+    local host_short
+    local host_fqdn
+
+    # If we're running on a Proxmox VE node, treat the target as local.
+    # This avoids SSH-to-self requirements (keys/config) for on-host execution.
+    if [[ -d /etc/pve ]] || command -v pveversion >/dev/null 2>&1; then
+        return 0
+    fi
+
+    host_short="$(hostname -s 2>/dev/null || hostname)"
+    host_fqdn="$(hostname -f 2>/dev/null || true)"
+
+    if [[ "${PROXMOX_HOST}" == "localhost" || "${PROXMOX_HOST}" == "127.0.0.1" ]]; then
+        return 0
+    fi
+
+    if [[ "${host_short}" == "${PROXMOX_HOST}" ]]; then
+        return 0
+    fi
+
+    if [[ -n "${host_fqdn}" && "${host_fqdn}" == "${PROXMOX_HOST}" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
 ensure_ci_artifact_root() {
-    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    if is_local_proxmox_target; then
+        echo "Ensuring artifact root ${ARTIFACT_ROOT} locally (PROXMOX_HOST=${PROXMOX_HOST})" >&2
 
-    echo "Ensuring artifact root ${ARTIFACT_ROOT} on ${ssh_target}" >&2
+        if ! sudo -n mkdir -p "${ARTIFACT_ROOT}" "${VAULT_ROOT}"; then
+            echo "Failed to create ${ARTIFACT_ROOT} / ${VAULT_ROOT}" >&2
+            return 1
+        fi
 
-    if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p ${ARTIFACT_ROOT} ${VAULT_ROOT} && sudo -n chown ci:ci ${ARTIFACT_ROOT} ${VAULT_ROOT} && sudo -n chmod 700 ${VAULT_ROOT}"; then
-        echo "Failed to ensure artifact root at ${ARTIFACT_ROOT}" >&2
-        return 1
+        if ! sudo -n chown "${SSH_USER}:${SSH_USER}" "${ARTIFACT_ROOT}" "${VAULT_ROOT}"; then
+            echo "Failed to chown ${ARTIFACT_ROOT} / ${VAULT_ROOT} to ${SSH_USER}" >&2
+            return 1
+        fi
+
+        if ! sudo -n chmod 700 "${VAULT_ROOT}"; then
+            echo "Failed to chmod 700 ${VAULT_ROOT}" >&2
+            return 1
+        fi
+    else
+        local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+
+        echo "Ensuring artifact root ${ARTIFACT_ROOT} on ${ssh_target}" >&2
+
+        if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p '${ARTIFACT_ROOT}' '${VAULT_ROOT}' && sudo -n chown '${SSH_USER}:${SSH_USER}' '${ARTIFACT_ROOT}' '${VAULT_ROOT}' && sudo -n chmod 700 '${VAULT_ROOT}'"; then
+            echo "Failed to ensure artifact root at ${ARTIFACT_ROOT}" >&2
+            return 1
+        fi
     fi
 
     return 0
