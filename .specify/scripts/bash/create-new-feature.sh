@@ -244,6 +244,27 @@ if [ -z "$BRANCH_NUMBER" ]; then
         HIGHEST=$(get_highest_from_specs "$SPECS_DIR")
         BRANCH_NUMBER=$((HIGHEST + 1))
     fi
+else
+    # Prevent accidental reuse of an already-taken feature number.
+    # This repository uses a global, monotonically increasing feature number sequence.
+    if [ "$HAS_GIT" = true ]; then
+        NEXT_EXPECTED=$(check_existing_branches "$SPECS_DIR")
+        MAX_EXISTING=$((NEXT_EXPECTED - 1))
+    else
+        MAX_EXISTING=$(get_highest_from_specs "$SPECS_DIR")
+    fi
+
+    # Force base-10 interpretation; treat non-numeric input as invalid.
+    if ! [[ "$BRANCH_NUMBER" =~ ^[0-9]+$ ]]; then
+        echo "Error: --number must be numeric (got '$BRANCH_NUMBER')" >&2
+        exit 1
+    fi
+
+    if [ $((10#$BRANCH_NUMBER)) -le "$MAX_EXISTING" ]; then
+        echo "Error: Feature number '$BRANCH_NUMBER' is already used (max existing is $(printf '%03d' "$MAX_EXISTING"))." >&2
+        echo "Hint: Omit --number to auto-select the next number ($(printf '%03d' "$((MAX_EXISTING + 1))"))." >&2
+        exit 1
+    fi
 fi
 
 # Force base-10 interpretation to prevent octal conversion (e.g., 010 → 8 in octal, but should be 10 in decimal)
