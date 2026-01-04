@@ -349,6 +349,26 @@ cmd_plan() {
     terraform_chdir init -input=false -no-color
     terraform_chdir validate -no-color
 
+    # Safety: prevent accidental duplicate service LXCs.
+    # If a container named $SERVICE already exists but Terraform doesn't track it,
+    # a targeted plan will happily create another one (leading to IP conflicts).
+    local existing_ctids=""
+    existing_ctids="$(sudo pct list 2>/dev/null | awk -v s="${SERVICE}" 'NR>1 && $4==s {print $1}' | xargs || true)"
+    local existing_count=0
+    if [[ -n "${existing_ctids}" ]]; then
+        existing_count="$(wc -w <<<"${existing_ctids}" | tr -d ' ' 2>/dev/null || echo 0)"
+    fi
+
+    local state_addr=""
+    state_addr="$(terraform_chdir state list 2>/dev/null | grep -E "^module\.${SERVICE}_lxc\.proxmox_lxc\.this$" | head -n 1 || true)"
+
+    if [[ -z "${state_addr}" && ${existing_count} -gt 0 ]]; then
+        die "Found existing LXC(s) named '${SERVICE}' (CTID(s): ${existing_ctids}) but Terraform state does not track it; refusing to create a duplicate. Import it or destroy the stray CT(s)."
+    fi
+    if [[ -n "${state_addr}" && ${existing_count} -gt 1 ]]; then
+        die "Found multiple LXC(s) named '${SERVICE}' (CTID(s): ${existing_ctids}); expected exactly 1. Destroy stray duplicates to avoid IP conflicts."
+    fi
+
     # terraform plan with -detailed-exitcode intentionally returns:
     #   0 = no changes, 2 = changes present
     # Wrap in an `if` to prevent the ERR trap from firing on rc=2.
