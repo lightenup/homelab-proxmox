@@ -13,7 +13,7 @@ from email.message import EmailMessage
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-def get_inventory(inventory_path: Optional[str] = None) -> Dict[str, Any]:
+def get_inventory(inventory_path: Optional[str] = None, host: Optional[str] = None) -> Dict[str, Any]:
     """
     Get inventory from file or by executing ansible-inventory.
     """
@@ -26,7 +26,19 @@ def get_inventory(inventory_path: Optional[str] = None) -> Dict[str, Any]:
             sys.exit(1)
 
     try:
-        # Run ansible-inventory from the ansible directory to ensure host_vars are picked up correctly
+        # Run ansible-inventory from the ansible directory to ensure host_vars are picked up correctly.
+        # NOTE: `--list` loads the entire inventory (and therefore all group_vars/host_vars),
+        # which can fail if unrelated hosts reference vault files not present in CI.
+        if host:
+            cmd = ["ansible-inventory", "-i", "inventories/generated/hosts.yml", "--host", host]
+            result = subprocess.run(cmd, cwd="ansible", capture_output=True, text=True, check=True)
+            hostvars = json.loads(result.stdout)
+            return {
+                "all": {"vars": {}},
+                "services": {"hosts": [host]},
+                "_meta": {"hostvars": {host: hostvars}},
+            }
+
         cmd = ["ansible-inventory", "-i", "inventories/generated/hosts.yml", "-i", "inventories/static/hosts.yml", "--list"]
         result = subprocess.run(cmd, cwd="ansible", capture_output=True, text=True, check=True)
         return json.loads(result.stdout)
@@ -405,13 +417,14 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output JSON report to stdout")
     parser.add_argument("--output-json", help="Save JSON report to file")
     parser.add_argument("--filter", help="Filter hosts by name (substring)")
+    parser.add_argument("--host", action="append", help="Check an explicit host (repeatable); avoids loading full inventory")
     parser.add_argument("--no-notify", action="store_true", help="Disable email notifications")
     parser.add_argument("--alert-on-gap", action="store_true", help="Enable email alerts for coverage gaps")
     parser.add_argument("--inventory", help="Path to JSON inventory file")
     parser.add_argument("--check-drift", action="store_true", help="Check for configuration drift/schema violations")
     args = parser.parse_args()
 
-    inventory = get_inventory(args.inventory)
+    inventory = get_inventory(args.inventory, host=args.host[0] if args.host else None)
     
     if args.check_drift:
         drift_errors = {}
@@ -450,6 +463,8 @@ def main():
             if get_service_config(vars):
                 if args.filter and args.filter not in hostname:
                     continue
+                if args.host and hostname not in args.host:
+                    continue
                 hosts_to_check.append(hostname)
     else:
         print("Invalid inventory format: missing _meta.hostvars", file=sys.stderr)
@@ -460,6 +475,8 @@ def main():
     # Add GAP results for coverage failures
     for h in coverage_failures:
         if args.filter and args.filter not in h:
+            continue
+        if args.host and h not in args.host:
             continue
         results.append({
             "hostname": h,

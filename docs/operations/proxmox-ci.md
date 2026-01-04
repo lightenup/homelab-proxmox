@@ -11,6 +11,10 @@ Audience: operators running `proxmox-apply` on pi-ci. Goal: keep all automation 
 5. **Smoke checks:** Sudo smoke verifies `sudo -n true`, `sudo -n qm --version`, `sudo -n pveversion` succeed and `sudo -n bash` is denied.
 6. **Evidence:** Latest run ID is captured, evidence pack tarred from `/var/lib/homelab-proxmox/artifacts/lab-runs/<runid>` and verified offline via `scripts/lab/ci-verify.sh`.
 
+Related:
+
+- LXC gated service deploy workflow: [docs/operations/lxc-deploy-ci.md](docs/operations/lxc-deploy-ci.md)
+
 ## Sudoers Policy (ci)
 
 - Deployed to `/etc/sudoers.d/ci-homelab` from `scripts/lab/profiles.d/ci-sudoers.conf` via `pve-lab --apply-sudoers`.

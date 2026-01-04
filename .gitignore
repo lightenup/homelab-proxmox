@@ -50,3 +50,4 @@ ansible/roles/geerlingguy.docker
 artifacts/healthcheck/
 artifacts/019-lab/
 artifacts/lab-runs/
+artifacts/service-deploy-runs/

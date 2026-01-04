@@ -1,0 +1,44 @@
+---
+- name: Install repo prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Download Jellyfin signing key
+  ansible.builtin.get_url:
+    url: "{{ jellyfin_apt_key_url }}"
+    dest: /tmp/jellyfin_team.gpg.key
+    mode: "0644"
+  when: jellyfin_repo_enabled
+
+- name: Install Jellyfin keyring
+  ansible.builtin.command: >-
+    gpg --dearmor -o {{ jellyfin_apt_keyring_path }} /tmp/jellyfin_team.gpg.key
+  args:
+    creates: "{{ jellyfin_apt_keyring_path }}"
+  become: true
+  when: jellyfin_repo_enabled
+
+- name: Configure Jellyfin apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by={{ jellyfin_apt_keyring_path }}] {{ jellyfin_repo_url }} {{ jellyfin_repo_suite }} {{ jellyfin_repo_components }}"
+    filename: jellyfin
+    state: present
+  when: jellyfin_repo_enabled
+
+- name: Install Jellyfin
+  ansible.builtin.apt:
+    name: "{{ jellyfin_packages }}"
+    state: present
+    update_cache: true
+
+- name: Enable and start Jellyfin
+  ansible.builtin.service:
+    name: jellyfin
+    enabled: true
+    state: started

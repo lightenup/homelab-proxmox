@@ -44,6 +44,18 @@ variable "gateway" {
   description = "Default gateway for this container, e.g. 192.168.20.1"
 }
 
+variable "nameserver" {
+  type        = string
+  description = "DNS nameserver(s) as a space-separated string (e.g. '192.168.1.210 1.1.1.1'). If null, provider defaults apply."
+  default     = null
+}
+
+variable "searchdomain" {
+  type        = string
+  description = "DNS search domain (e.g. 'home.arpa'). If null, provider defaults apply."
+  default     = null
+}
+
 variable "mountpoints" {
   description = "List of mount points for the container"
   type = list(object({

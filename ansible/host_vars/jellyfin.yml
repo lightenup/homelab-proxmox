@@ -1,0 +1,6 @@
+healthcheck_url:
+  scheme: http
+  port: 8096
+  path: /
+healthcheck_profile: lan
+healthcheck_expect_status: 200
