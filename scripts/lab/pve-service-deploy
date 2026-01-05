@@ -795,20 +795,25 @@ sys.exit(3)
     local ssh_common_args
     ssh_common_args="${ANSIBLE_SSH_COMMON_ARGS:--o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null}"
 
-    local ssh_wait_seconds="${SSH_WAIT_SECONDS:-120}"
+    local ssh_wait_seconds="${SSH_WAIT_SECONDS:-300}"
     local ssh_sleep_seconds="${SSH_WAIT_SLEEP_SECONDS:-5}"
     local waited=0
+    local attempt=1
+    echo "[ssh-wait] waiting for ssh on ${service_ip} (timeout=${ssh_wait_seconds}s, step=${ssh_sleep_seconds}s)"
     while true; do
         if ssh -i "${lxc_key_file}" \
             ${ssh_common_args} \
             "root@${service_ip}" 'true' >/dev/null 2>&1; then
+            echo "[ssh-wait] success after ${waited}s (attempt=${attempt})"
             break
         fi
+        echo "[ssh-wait] attempt=${attempt} waited=${waited}s"
         if (( waited >= ssh_wait_seconds )); then
             die "ssh not ready on ${service_ip} after ${ssh_wait_seconds}s"
         fi
         sleep "${ssh_sleep_seconds}"
         waited=$((waited + ssh_sleep_seconds))
+        attempt=$((attempt + 1))
     done
 
     # DNS sanity: Proxmox may set CT nameserver in config, but the container's
@@ -864,11 +869,13 @@ sys.exit(3)
                             "root@${service_ip}" 'true' >/dev/null 2>&1; then
                             break
                         fi
+                        echo "[ssh-wait-reboot] attempt=${attempt} waited=${waited}s"
                         if (( waited >= ssh_wait_seconds )); then
                             die "ssh not ready on ${service_ip} after reboot (${ssh_wait_seconds}s)"
                         fi
                         sleep "${ssh_sleep_seconds}"
                         waited=$((waited + ssh_sleep_seconds))
+                        attempt=$((attempt + 1))
                     done
                 fi
 

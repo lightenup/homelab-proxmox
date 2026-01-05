@@ -1,13 +1,8 @@
 name: Proxmox Apply + Verify
 
 on:
-    workflow_dispatch:
-    push:
-        branches: ["main"]
-        paths:
-            - "scripts/**"
-            - "ansible/**"
-            - ".github/workflows/proxmox-apply.yml"
+  workflow_dispatch:
+  # push trigger temporarily disabled
 
 concurrency:
     group: proxmox-apply
