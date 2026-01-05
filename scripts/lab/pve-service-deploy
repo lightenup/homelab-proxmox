@@ -789,6 +789,9 @@ sys.exit(3)
         die "could not resolve service IP from ansible inventory json"
     fi
 
+    # Clear stale host key to avoid MAN-IN-THE-MIDDLE prompts when the CT is recreated.
+    ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${service_ip}" >/dev/null 2>&1 || true
+
     # Ensure Ansible uses consistent, non-interactive SSH settings. In lab we deliberately
     # avoid failing on host key changes because LXCs can be recreated while keeping the
     # same IP, which otherwise bricks CI with known_hosts mismatches.
