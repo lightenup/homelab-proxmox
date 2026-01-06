@@ -159,6 +159,22 @@ PROD apply is protected by two independent gates:
 - CI connects to Proxmox as `ci@pve` (no root SSH).
 - Any required elevation must be non-interactive (`sudo -n`) and restricted to specific commands.
 
+## Host storage prerequisites (PVE)
+
+Terraform expects host-side bind targets to exist before `plan`/`apply` (mount validation happens on create). Ensure these mounts are present on PVE:
+
+- Immich: `192.168.1.109:/volume1/homelab_immich` → `/mnt/nas/homelab_immich` (already in `/etc/fstab`).
+- Jellyfin media: `192.168.1.109:/volume1/video` → `/mnt/nas/video`.
+
+To add the Jellyfin media mount on PVE:
+
+```bash
+sudo mkdir -p /mnt/nas/video
+echo "192.168.1.109:/volume1/video /mnt/nas/video nfs rw,nofail 0 0" | sudo tee -a /etc/fstab
+sudo mount /mnt/nas/video
+mount | grep /mnt/nas/video
+```
+
 ## Evidence Verification
 
 The workflow fetches the evidence bundle from PVE and runs offline verification using:
