@@ -60,11 +60,11 @@ variable "mountpoints" {
   description = "List of mount points for the container"
   type = list(object({
     mp      = string
-    size    = string
-    slot    = number
-    key     = string
-    storage = string
     volume  = string
+    size    = optional(string)
+    slot    = optional(number)
+    key     = optional(string)
+    storage = optional(string)
   }))
   default = []
 }

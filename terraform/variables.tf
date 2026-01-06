@@ -63,3 +63,16 @@ variable "searchdomain" {
   description = "LXC DNS search domain (e.g. 'home.arpa'). If null, provider defaults apply."
   default     = null
 }
+
+variable "service_mountpoints" {
+  type = map(map(object({
+    mp      = string
+    volume  = string
+    size    = optional(string)
+    slot    = optional(number)
+    key     = optional(string)
+    storage = optional(string)
+  })))
+  description = "Per-service bind mounts (host path in volume, container path in mp). Keys under service name."
+  default     = {}
+}

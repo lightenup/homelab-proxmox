@@ -123,4 +123,6 @@ module "jellyfin_lxc" {
   nameserver      = var.nameserver
   searchdomain    = var.searchdomain
   ssh_public_keys = join("\n", var.ssh_public_keys)
+
+  mountpoints = values(lookup(var.service_mountpoints, "jellyfin", {}))
 }

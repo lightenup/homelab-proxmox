@@ -36,10 +36,10 @@ resource "proxmox_lxc" "this" {
     for_each = var.mountpoints
     content {
       mp      = mountpoint.value.mp
-      size    = mountpoint.value.size
-      slot    = mountpoint.value.slot
-      key     = mountpoint.value.key
-      storage = mountpoint.value.storage
+      size    = mountpoint.value.size != null ? mountpoint.value.size : "0G"
+      slot    = mountpoint.value.slot != null ? mountpoint.value.slot : 0
+      key     = mountpoint.value.key != null ? mountpoint.value.key : ""
+      storage = mountpoint.value.storage != null ? mountpoint.value.storage : var.storage_pool
       volume  = mountpoint.value.volume
     }
   }
