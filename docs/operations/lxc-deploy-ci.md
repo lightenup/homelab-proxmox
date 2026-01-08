@@ -198,3 +198,52 @@ The workflow fetches the evidence bundle from PVE and runs offline verification 
 ## Local runs (act)
 
 This repo supports local workflow simulation using `act`. See `docs/operations/proxmox-ci.md` for runner prerequisites and secret handling.
+
+### Quick start (LAB)
+
+1. Create a local secrets file (gitignored):
+
+```bash
+cp .act.secrets.example .act.secrets
+${EDITOR:-nano} .act.secrets
+```
+
+2. Create a `workflow_dispatch` event payload with inputs:
+
+```bash
+cat > /tmp/act-lxc-deploy-lab.json <<'JSON'
+{
+	"inputs": {
+		"environment": "lab",
+		"service": "jellyfin",
+		"confirm": "",
+		"confirm_destructive": ""
+	}
+}
+JSON
+```
+
+3. Run plan only (safe):
+
+```bash
+act workflow_dispatch \
+	-W .github/workflows/lxc-deploy.yml \
+	-j plan \
+	-e /tmp/act-lxc-deploy-lab.json \
+	--secret-file .act.secrets \
+	--container-options "-v $(pwd)/.act-ssh:/root/.ssh:ro"
+```
+
+4. Run the full LAB flow (plan + apply_lab). Warning: this does real SSH to PVE and will run `apply`:
+
+```bash
+act workflow_dispatch \
+	-W .github/workflows/lxc-deploy.yml \
+	-e /tmp/act-lxc-deploy-lab.json \
+	--secret-file .act.secrets \
+	--container-options "-v $(pwd)/.act-ssh:/root/.ssh:ro"
+```
+
+Notes:
+- The workflow defaults `PROXMOX_HOST` to `pve`. If your SSH config uses a different host alias, run with `-s PROXMOX_HOST=<alias>` or set `PROXMOX_HOST` in your environment.
+- Your `.act-ssh/` should contain a working key + config for `ci@pve` (mounted read-only into the container).
