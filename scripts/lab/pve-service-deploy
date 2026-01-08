@@ -1231,8 +1231,8 @@ sys.exit(3)
         state_show_output="$(terraform_chdir state show -no-color -state="${state_path}" "${state_addr}" 2>>"${ctid_stderr}" || true)"
 
         # Terraform state output may render values with or without quotes.
-        id_raw="$(printf '%s\n' "${state_show_output}" | awk -F= '/^id\s*=/{sub(/^[^=]*=\s*/,"",$0); gsub(/"/,"",$0); print $0; exit}' || true)"
-        vmid_raw="$(printf '%s\n' "${state_show_output}" | awk -F= '/^vmid\s*=/{sub(/^[^=]*=\s*/,"",$0); gsub(/"/,"",$0); print $0; exit}' || true)"
+        id_raw="$(printf '%s\n' "${state_show_output}" | awk -F= '/^[[:space:]]*id[[:space:]]*=/{sub(/^[^=]*=\s*/,"",$0); gsub(/"/,"",$0); print $0; exit}' || true)"
+        vmid_raw="$(printf '%s\n' "${state_show_output}" | awk -F= '/^[[:space:]]*vmid[[:space:]]*=/{sub(/^[^=]*=\s*/,"",$0); gsub(/"/,"",$0); print $0; exit}' || true)"
 
         if [[ -n "${id_raw}" ]]; then
             tf_id="${id_raw}"
