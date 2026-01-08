@@ -30,7 +30,7 @@ resource "proxmox_lxc" "this" {
 
   features {
     nesting = true
-    mount   = var.features_mount
+    # mount feature is applied host-side by orchestrator via `pct set` to avoid API token permission limits
   }
 
   dynamic "mountpoint" {
