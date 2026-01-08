@@ -932,8 +932,29 @@ cmd_apply() {
 
     # Backup state to Synology after successful apply.
     # Proof is captured into evidence to satisfy SD-002.
-    "${REPO_ROOT}/scripts/backup_tfstate.sh" --state-path "${state_path}" --prefix "${ENVIRONMENT}-${SERVICE}" \
-        >"${EVIDENCE_ROOT}/reports/apply/state-backup.txt" 2>&1
+    #
+    # In PROD this is mandatory and failures must fail the run.
+    # In LAB we record the failure but do not fail the apply, since LAB hosts
+    # may not have the Synology mount available.
+    if "${REPO_ROOT}/scripts/backup_tfstate.sh" --state-path "${state_path}" --prefix "${ENVIRONMENT}-${SERVICE}" \
+        >"${EVIDENCE_ROOT}/reports/apply/state-backup.txt" 2>&1; then
+        preflight_ok "state backup succeeded"
+    else
+        if [[ "${ENVIRONMENT}" == "prod" ]]; then
+            preflight_fail "state backup failed"
+            {
+                echo "status=failure"
+                echo "reason=state backup failed"
+                echo "hint=see reports/apply/state-backup.txt"
+            } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+            emit_error "${RUN_ID}" "state backup failed"
+            run_offline_verify
+            trap - ERR
+            return 1
+        fi
+
+        preflight_fail "state backup failed (lab non-fatal)"
+    fi
 
     # LAB idempotency verification: a second plan must be a no-op.
     if [[ "${ENVIRONMENT}" == "lab" ]]; then
