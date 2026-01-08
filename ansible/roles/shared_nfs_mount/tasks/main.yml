@@ -1,0 +1,90 @@
+---
+- name: Ensure assertion results initialized
+  ansible.builtin.set_fact:
+    assertion_results: "{{ assertion_results | default([]) }}"
+
+- name: Install NFS client
+  ansible.builtin.apt:
+    name:
+      - nfs-common
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure mount target exists
+  ansible.builtin.file:
+    path: "{{ shared_nfs_mount_target }}"
+    state: directory
+    mode: "0755"
+
+- name: Configure + mount shared media NFS
+  ansible.builtin.mount:
+    path: "{{ shared_nfs_mount_target }}"
+    src: "{{ shared_nfs_mount_server }}:{{ shared_nfs_mount_export }}"
+    fstype: "{{ shared_nfs_mount_fstype }}"
+    opts: "{{ shared_nfs_mount_opts }}"
+    state: mounted
+  notify: Reload systemd
+
+- name: Read mount options via findmnt
+  ansible.builtin.command: "findmnt -n -o OPTIONS --target {{ shared_nfs_mount_target }}"
+  register: shared_nfs_mount_findmnt
+  changed_when: false
+  failed_when: false
+
+- name: Read mount line via mount
+  ansible.builtin.shell: "mount | grep -F ' on {{ shared_nfs_mount_target }} ' || true"
+  register: shared_nfs_mount_mountline
+  changed_when: false
+
+- name: Compute shared mount RO status
+  ansible.builtin.set_fact:
+    shared_nfs_mount_is_ro: "{{ shared_nfs_mount_findmnt.rc == 0 and (shared_nfs_mount_findmnt.stdout | default('')) is search('(^|,)ro(,|$)') }}"
+
+- name: Build shared mount details
+  ansible.builtin.set_fact:
+    shared_nfs_mount_details: |
+      findmnt_options={{ shared_nfs_mount_findmnt.stdout | default('') | trim }}
+      mount_line={{ shared_nfs_mount_mountline.stdout | default('') | trim }}
+
+- name: Record SD-003 assertion result
+  ansible.builtin.set_fact:
+    assertion_results: >-
+      {{ assertion_results + [{
+        'id': 'SD-003',
+        'status': ('PASS' if shared_nfs_mount_is_ro else 'FAIL'),
+        'description': 'Shared media NFS mount present and read-only',
+        'details': shared_nfs_mount_details
+      }] }}
+
+- name: Ensure evidence workload report directory exists
+  ansible.builtin.file:
+    path: "{{ evidence_dir }}/reports/workload"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  when: evidence_dir is defined
+
+- name: Write mount evidence into evidence pack
+  ansible.builtin.copy:
+    content: |
+      target={{ shared_nfs_mount_target }}
+      src={{ shared_nfs_mount_server }}:{{ shared_nfs_mount_export }}
+      opts={{ shared_nfs_mount_opts }}
+
+      findmnt_rc={{ shared_nfs_mount_findmnt.rc }}
+      findmnt_options={{ shared_nfs_mount_findmnt.stdout | default('') | trim }}
+
+      mount_line={{ shared_nfs_mount_mountline.stdout | default('') | trim }}
+    dest: "{{ evidence_dir }}/reports/workload/shared-nfs-mount.txt"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  when: evidence_dir is defined
+
+- name: Fail if shared mount is missing or not read-only
+  ansible.builtin.fail:
+    msg: "Shared NFS mount is missing or not read-only at {{ shared_nfs_mount_target }} (see evidence reports/workload/shared-nfs-mount.txt)"
+  when:
+    - not shared_nfs_mount_is_ro

@@ -146,6 +146,9 @@ The workflow supports these `workflow_dispatch` inputs:
 - `environment`: `lab` or `prod`
 - `service`: service slug (e.g. `jellyfin`)
 - `confirm`: required for PROD apply; must be exactly `deploy-prod`
+- `confirm_destructive`: required only when the plan contains replace/destroy
+	- LAB: `apply-lab-destructive`
+	- PROD: `deploy-prod-destructive`
 
 ## PROD Gating
 
@@ -154,26 +157,37 @@ PROD apply is protected by two independent gates:
 1. GitHub Actions Environment approval via the `prod` Environment (configure required reviewers in GitHub).
 2. An explicit confirmation string: set `confirm=deploy-prod` when triggering the workflow.
 
+If the reviewed plan includes any **replace** or **destroy** actions, a second confirmation is required via `confirm_destructive` (see Inputs).
+
 ## Operating Model
 
 - CI connects to Proxmox as `ci@pve` (no root SSH).
 - Any required elevation must be non-interactive (`sudo -n`) and restricted to specific commands.
 
-## Host storage prerequisites (PVE)
+## Shared media mounts (in-guest)
 
-Terraform expects host-side bind targets to exist before `plan`/`apply` (mount validation happens on create). Ensure these mounts are present on PVE:
+Spec 023 policy is **no host-path bind mounts in Terraform**. Shared media must be mounted **inside the container**.
 
-- Immich: `192.168.1.109:/volume1/homelab_immich` → `/mnt/nas/homelab_immich` (already in `/etc/fstab`).
-- Jellyfin media: `192.168.1.109:/volume1/video` → `/mnt/nas/video`.
+- Role: `ansible/roles/shared_nfs_mount`
+- Mount: `192.168.1.109:/volume1/video` → `/media/video`
+- Options: read-only with automount (`ro,nofail,_netdev,x-systemd.automount`)
 
-To add the Jellyfin media mount on PVE:
+Evidence produced during apply includes:
+- `reports/workload/shared-nfs-mount.txt`
+- `reports/assertions.workload.json` (includes `SD-003` result)
+- `reports/healthcheck/<service>.txt` (includes a mount check for Jellyfin)
 
-```bash
-sudo mkdir -p /mnt/nas/video
-echo "192.168.1.109:/volume1/video /mnt/nas/video nfs rw,nofail 0 0" | sudo tee -a /etc/fstab
-sudo mount /mnt/nas/video
-mount | grep /mnt/nas/video
-```
+Note: this means you do **not** need to mount the Jellyfin media export on PVE for the deploy workflow.
+
+## Terraform state
+
+Terraform state is per-service on PVE:
+
+- `/var/lib/homelab-proxmox/state/services/<service>/terraform.tfstate`
+
+After a successful apply, the orchestrator backs up that state file to Synology and captures proof in evidence:
+
+- `reports/apply/state-backup.txt`
 
 ## Evidence Verification
 

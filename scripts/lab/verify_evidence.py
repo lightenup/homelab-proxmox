@@ -16,6 +16,21 @@ REQUIRED_FILES = [
     "logs/events.jsonl"
 ]
 
+
+def _required_files_for_profile(profile_id: str) -> List[str]:
+    # Profile-specific required inputs.
+    # Note: reports/verify.json is produced by the verifier itself and must not be
+    # required to exist before verification runs.
+    if profile_id == "service-deploy":
+        return [
+            "reports/plan/plan.txt",
+            "reports/plan/plan.json",
+            "preflight.txt",
+            "blast-radius.json",
+        ]
+
+    return []
+
 class VerificationError(Exception):
     def __init__(self, code: str, message: str, remediation: str):
         self.code = code
@@ -99,15 +114,9 @@ class EvidenceVerifier:
         for filename in REQUIRED_FILES:
             if not (self.pack_path / filename).exists():
                 missing_files.append(filename)
-        
-        if missing_files:
-            self.add_error(
-                "STRUCT-001",
-                f"Missing required files: {', '.join(missing_files)}",
-                "Ensure evidence pack contains all required files"
-            )
-            # If critical files are missing, we might not be able to proceed with other checks
-            # But we try to load what we can
+
+        # If critical files are missing, we might not be able to proceed with other checks,
+        # but we try to load what we can to surface more actionable errors.
         
         self.data['summary'] = self.load_json("summary.json")
         self.data['checks'] = self.load_json("checks.json")
@@ -133,6 +142,18 @@ class EvidenceVerifier:
 
         run_id = summary.get('run_id')
         profile_id = summary.get('profile_id')
+
+        if profile_id:
+            for filename in _required_files_for_profile(profile_id):
+                if not (self.pack_path / filename).exists():
+                    missing_files.append(filename)
+
+        if missing_files:
+            self.add_error(
+                "STRUCT-001",
+                f"Missing required files: {', '.join(sorted(set(missing_files)))}",
+                "Ensure evidence pack contains all required files for its profile"
+            )
 
         dir_name = self.pack_path.name
         if run_id != dir_name:

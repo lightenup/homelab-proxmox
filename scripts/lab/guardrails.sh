@@ -11,6 +11,8 @@ SSH_USER="${SSH_USER:-ci}"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 ARTIFACT_ROOT="/var/lib/homelab-proxmox/artifacts"
 VAULT_ROOT="/var/lib/homelab-proxmox/vault"
+STATE_ROOT="/var/lib/homelab-proxmox/state"
+TFVARS_ROOT="/var/lib/homelab-proxmox/tfvars"
 
 # Source required libraries
 # shellcheck source=lib/checks.sh
@@ -50,12 +52,12 @@ ensure_ci_artifact_root() {
     if is_local_proxmox_target; then
         echo "Ensuring artifact root ${ARTIFACT_ROOT} locally (PROXMOX_HOST=${PROXMOX_HOST})" >&2
 
-        if ! sudo -n mkdir -p "${ARTIFACT_ROOT}" "${VAULT_ROOT}"; then
+        if ! sudo -n mkdir -p "${ARTIFACT_ROOT}" "${VAULT_ROOT}" "${STATE_ROOT}/services" "${TFVARS_ROOT}"; then
             echo "Failed to create ${ARTIFACT_ROOT} / ${VAULT_ROOT}" >&2
             return 1
         fi
 
-        if ! sudo -n chown "${SSH_USER}:${SSH_USER}" "${ARTIFACT_ROOT}" "${VAULT_ROOT}"; then
+        if ! sudo -n chown "${SSH_USER}:${SSH_USER}" "${ARTIFACT_ROOT}" "${VAULT_ROOT}" "${STATE_ROOT}" "${STATE_ROOT}/services" "${TFVARS_ROOT}"; then
             echo "Failed to chown ${ARTIFACT_ROOT} / ${VAULT_ROOT} to ${SSH_USER}" >&2
             return 1
         fi
@@ -64,12 +66,17 @@ ensure_ci_artifact_root() {
             echo "Failed to chmod 700 ${VAULT_ROOT}" >&2
             return 1
         fi
+
+        if ! sudo -n chmod 700 "${STATE_ROOT}" "${STATE_ROOT}/services" "${TFVARS_ROOT}"; then
+            echo "Failed to chmod state/tfvars roots" >&2
+            return 1
+        fi
     else
         local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
 
         echo "Ensuring artifact root ${ARTIFACT_ROOT} on ${ssh_target}" >&2
 
-        if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p '${ARTIFACT_ROOT}' '${VAULT_ROOT}' && sudo -n chown '${SSH_USER}:${SSH_USER}' '${ARTIFACT_ROOT}' '${VAULT_ROOT}' && sudo -n chmod 700 '${VAULT_ROOT}'"; then
+        if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p '${ARTIFACT_ROOT}' '${VAULT_ROOT}' '${STATE_ROOT}/services' '${TFVARS_ROOT}' && sudo -n chown '${SSH_USER}:${SSH_USER}' '${ARTIFACT_ROOT}' '${VAULT_ROOT}' '${STATE_ROOT}' '${STATE_ROOT}/services' '${TFVARS_ROOT}' && sudo -n chmod 700 '${VAULT_ROOT}' '${STATE_ROOT}' '${STATE_ROOT}/services' '${TFVARS_ROOT}'"; then
             echo "Failed to ensure artifact root at ${ARTIFACT_ROOT}" >&2
             return 1
         fi
