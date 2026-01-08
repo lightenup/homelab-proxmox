@@ -310,6 +310,58 @@ PY
     command -v terraform >/dev/null 2>&1 || die "terraform install failed"
 }
 
+assert_state_lxc_exists_or_empty() {
+    local state_path="${1:?assert_state_lxc_exists_or_empty requires state_path}"
+    local service="${2:?assert_state_lxc_exists_or_empty requires service}"
+
+    if [[ ! -f "${state_path}" ]]; then
+        return 0
+    fi
+
+    local addr="module.${service}_lxc.proxmox_lxc.this"
+    if ! terraform_chdir state list -state="${state_path}" 2>/dev/null | grep -qx "${addr}"; then
+        return 0
+    fi
+
+    local state_show
+    state_show="$(terraform_chdir state show -no-color -state="${state_path}" "${addr}" 2>/dev/null || true)"
+    if [[ -z "${state_show}" ]]; then
+        return 0
+    fi
+
+    # telmate/proxmox provider uses an id like: pve/lxc/101
+    local id_line
+    id_line="$(grep -E '^[[:space:]]*id[[:space:]]*=' <<<"${state_show}" | head -n 1 || true)"
+    if [[ -z "${id_line}" ]]; then
+        return 0
+    fi
+
+    local vmid=""
+    vmid="$(sed -E 's/.*lxc\/([0-9]+).*/\1/' <<<"${id_line}" | tr -d '"' || true)"
+    if [[ -z "${vmid}" || ! "${vmid}" =~ ^[0-9]+$ ]]; then
+        return 0
+    fi
+
+    if ! sudo pct status "${vmid}" >/dev/null 2>&1; then
+        preflight_fail "stale terraform state: ${addr} id references missing vmid=${vmid}"
+        cat >&2 <<EOF
+ERROR: Terraform state for service '${service}' references a missing LXC (vmid=${vmid}).
+
+This usually means the container was deleted/recreated outside Terraform or you're using the wrong state file.
+
+Remediation options:
+  - If the LXC should exist: import it into state (terraform import ...)
+  - If the LXC was intentionally deleted: remove it from state, then re-plan/apply:
+      terraform -chdir=${REPO_ROOT}/terraform state rm -state=${state_path} ${addr}
+
+Safety note: after state changes, re-run a full plan and review blast radius.
+EOF
+        return 1
+    fi
+
+    return 0
+}
+
 resolve_tfvars_relpath() {
     local env="$1"
 
@@ -525,6 +577,15 @@ cmd_plan() {
     terraform_chdir init -input=false -no-color
     terraform_chdir validate -no-color
     preflight_ok "terraform init+validate succeeded"
+
+    # Fail early with a clearer message if state references a missing LXC.
+    if ! assert_state_lxc_exists_or_empty "${state_path}" "${SERVICE}"; then
+        write_plan_summary "blocked" "stale terraform state (missing lxc referenced by state)"
+        emit_error "${RUN_ID}" "stale terraform state (missing lxc referenced by state)"
+        run_offline_verify || true
+        trap - ERR
+        return 1
+    fi
 
     # Safety: prevent accidental duplicate service LXCs.
     # If a container named $SERVICE already exists but Terraform doesn't track it,
