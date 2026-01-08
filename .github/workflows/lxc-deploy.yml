@@ -183,6 +183,22 @@ jobs:
         if: always()
         run: ./scripts/lab/ci-verify.sh fixtures/evidence-packs/valid
 
+      - name: Debug summary (on plan failure)
+        if: steps.plan_on_pve.outcome != 'success'
+        run: |
+          set -euo pipefail
+          echo "--- DEBUG: evidence/${RUN_ID}/reports/plan/tfvars.txt ---"
+          cat "evidence/${RUN_ID}/reports/plan/tfvars.txt" 2>/dev/null || true
+
+          echo "--- DEBUG: evidence/${RUN_ID}/preflight.txt ---"
+          cat "evidence/${RUN_ID}/preflight.txt" 2>/dev/null || true
+
+          echo "--- DEBUG: evidence/${RUN_ID}/reports/plan/summary.txt ---"
+          cat "evidence/${RUN_ID}/reports/plan/summary.txt" 2>/dev/null || true
+
+          echo "--- DEBUG: tail plan output ---"
+          tail -n 200 "evidence/${RUN_ID}/reports/plan/plan.txt" 2>/dev/null || true
+
       - name: Fail job if plan failed
         if: steps.plan_on_pve.outcome != 'success'
         run: |
