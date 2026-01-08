@@ -47,6 +47,7 @@ resource "proxmox_lxc" "this" {
 
   lifecycle {
     ignore_changes = [
+      features,
       mountpoint,
       # Ignore changes to these as they are reset to defaults by provider if not specified
       # but we want to keep them if they were set manually or by other means
