@@ -1202,10 +1202,10 @@ sys.exit(3)
     # bootstrap's apt-get will fail.
     local ctid=""
     local state_addr=""
-    state_addr="$(terraform_chdir state list 2>/dev/null | grep -E "^module\\.${SERVICE}_lxc\\.proxmox_lxc\\.this$" | head -n 1 || true)"
+    state_addr="$(terraform_chdir state list -state="${state_path}" 2>/dev/null | grep -E "^module\\.${SERVICE}_lxc\\.proxmox_lxc\\.this$" | head -n 1 || true)"
     if [[ -n "${state_addr}" ]]; then
         local tf_id=""
-        tf_id="$(terraform_chdir state show -no-color "${state_addr}" 2>/dev/null | awk -F'"' '/^id\s+=/ {print $2; exit}' || true)"
+        tf_id="$(terraform_chdir state show -no-color -state="${state_path}" "${state_addr}" 2>/dev/null | awk -F'"' '/^id\s+=/ {print $2; exit}' || true)"
         if [[ -n "${tf_id}" ]]; then
             ctid="$(printf '%s' "${tf_id}" | awk -F/ '{print $NF}')"
         fi
@@ -1271,21 +1271,28 @@ sys.exit(3)
     if [[ -n "${ctid}" ]]; then
         local features_report="${EVIDENCE_ROOT}/reports/apply/lxc-features.txt"
         local features_stderr="${EVIDENCE_ROOT}/reports/apply/lxc-features.stderr.txt"
+        local had_mount_nfs_before=0
+        local had_mount_nfs_after=0
 
         {
             echo "ctid=${ctid}"
             echo "requested_features=mount=nfs"
             echo "--- pct config (before) ---"
-            sudo pct config "${ctid}" 2>>"${features_stderr}" | awk '/^(features|unprivileged|lxc\.apparation|lxc\.cgroup|lxc\.mount)/ {print}' || true
+            sudo pct config "${ctid}" 2>>"${features_stderr}" | awk '/^(features|unprivileged|lxc\.apparmor|lxc\.cgroup|lxc\.mount)/ {print}' || true
         } >"${features_report}"
+
+        if sudo pct config "${ctid}" 2>>"${features_stderr}" | grep -qE '^features:.*\bmount=nfs\b'; then
+            had_mount_nfs_before=1
+        fi
 
         if sudo -n pct set "${ctid}" -features "mount=nfs,nesting=1" >>"${features_report}" 2>>"${features_stderr}"; then
             {
                 echo "--- pct config (after) ---"
-                sudo pct config "${ctid}" 2>>"${features_stderr}" | awk '/^(features|unprivileged|lxc\.apparation|lxc\.cgroup|lxc\.mount)/ {print}' || true
+                sudo pct config "${ctid}" 2>>"${features_stderr}" | awk '/^(features|unprivileged|lxc\.apparmor|lxc\.cgroup|lxc\.mount)/ {print}' || true
             } >>"${features_report}"
 
             if sudo pct config "${ctid}" 2>>"${features_stderr}" | grep -qE '^features:.*\bmount=nfs\b'; then
+                had_mount_nfs_after=1
                 preflight_ok "lxc features include mount=nfs"
             else
                 preflight_fail "lxc features missing mount=nfs"
@@ -1294,6 +1301,29 @@ sys.exit(3)
         else
             preflight_fail "failed to set lxc features mount=nfs"
             die "Failed to set LXC ${ctid} feature mount=nfs via pct (see reports/apply/lxc-features.txt)"
+        fi
+
+        # Feature changes typically require a restart to take effect.
+        if [[ ${had_mount_nfs_before} -eq 0 && ${had_mount_nfs_after} -eq 1 ]]; then
+            echo "action=reboot" >>"${features_report}"
+            sudo -n pct reboot "${ctid}" >>"${features_report}" 2>>"${features_stderr}" || true
+
+            waited=0
+            attempt=1
+            while true; do
+                if ssh -i "${lxc_key_file}" \
+                    ${ssh_common_args} \
+                    "root@${service_ip}" 'true' >/dev/null 2>&1; then
+                    break
+                fi
+                echo "[ssh-wait-features-reboot] attempt=${attempt} waited=${waited}s"
+                if (( waited >= ssh_wait_seconds )); then
+                    die "ssh not ready on ${service_ip} after features reboot (${ssh_wait_seconds}s)"
+                fi
+                sleep "${ssh_sleep_seconds}"
+                waited=$((waited + ssh_sleep_seconds))
+                attempt=$((attempt + 1))
+            done
         fi
     fi
 
