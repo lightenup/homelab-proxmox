@@ -1231,8 +1231,8 @@ sys.exit(3)
         state_show_output="$(terraform_chdir state show -no-color -state="${state_path}" "${state_addr}" 2>>"${ctid_stderr}" || true)"
 
         # Terraform state output may render values with or without quotes.
-        id_raw="$(printf '%s\n' "${state_show_output}" | awk -F= '/^id\s*=/{sub(/^[^=]*=\s*/,"",$0); gsub(/"/,"",$0); print $0; exit}' || true)"
-        vmid_raw="$(printf '%s\n' "${state_show_output}" | awk -F= '/^vmid\s*=/{sub(/^[^=]*=\s*/,"",$0); gsub(/"/,"",$0); print $0; exit}' || true)"
+        id_raw="$(printf '%s\n' "${state_show_output}" | awk -F= '/^[[:space:]]*id[[:space:]]*=/{sub(/^[^=]*=\s*/,"",$0); gsub(/"/,"",$0); print $0; exit}' || true)"
+        vmid_raw="$(printf '%s\n' "${state_show_output}" | awk -F= '/^[[:space:]]*vmid[[:space:]]*=/{sub(/^[^=]*=\s*/,"",$0); gsub(/"/,"",$0); print $0; exit}' || true)"
 
         if [[ -n "${id_raw}" ]]; then
             tf_id="${id_raw}"
@@ -1372,6 +1372,66 @@ sys.exit(3)
                 waited=$((waited + ssh_sleep_seconds))
                 attempt=$((attempt + 1))
             done
+        fi
+    fi
+
+    # In-guest NFS mounts can be blocked for unprivileged LXCs (kernel userns mount restrictions)
+    # even when Proxmox features include mount=nfs. For Jellyfin, bind-mount the already-mounted
+    # host NFS path into the container (read-only) and record proof.
+    if [[ -n "${ctid}" && "${SERVICE}" == "jellyfin" ]]; then
+        local mp_report="${EVIDENCE_ROOT}/reports/apply/lxc-mountpoints.txt"
+        local mp_stderr="${EVIDENCE_ROOT}/reports/apply/lxc-mountpoints.stderr.txt"
+        local host_path="/mnt/nas/video"
+        local mp_target="/media/video"
+        local desired_mp0="${host_path},mp=${mp_target},ro=1"
+
+        {
+            echo "ctid=${ctid}"
+            echo "service=${SERVICE}"
+            echo "host_path=${host_path}"
+            echo "container_target=${mp_target}"
+            echo "requested_mp0=${desired_mp0}"
+            echo "--- host findmnt (target) ---"
+            findmnt -n -o SOURCE,FSTYPE,OPTIONS,TARGET --target "${host_path}" 2>>"${mp_stderr}" || true
+            echo "--- pct config (before) ---"
+            sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
+        } >"${mp_report}"
+
+        local mp0_before=""
+        mp0_before="$(sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk -F': ' '/^mp0:/ {print $2; exit}' || true)"
+
+        if [[ "${mp0_before}" != "${desired_mp0}" ]]; then
+            if sudo -n pct set "${ctid}" -mp0 "${desired_mp0}" >>"${mp_report}" 2>>"${mp_stderr}"; then
+                {
+                    echo "--- pct config (after) ---"
+                    sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
+                    echo "action=reboot"
+                } >>"${mp_report}"
+
+                sudo -n pct reboot "${ctid}" >>"${mp_report}" 2>>"${mp_stderr}" || true
+
+                waited=0
+                attempt=1
+                while true; do
+                    if ssh -i "${lxc_key_file}" \
+                        ${ssh_common_args} \
+                        "root@${service_ip}" 'true' >/dev/null 2>&1; then
+                        break
+                    fi
+                    echo "[ssh-wait-mp-reboot] attempt=${attempt} waited=${waited}s"
+                    if (( waited >= ssh_wait_seconds )); then
+                        die "ssh not ready on ${service_ip} after mp0 reboot (${ssh_wait_seconds}s)"
+                    fi
+                    sleep "${ssh_sleep_seconds}"
+                    waited=$((waited + ssh_sleep_seconds))
+                    attempt=$((attempt + 1))
+                done
+            else
+                preflight_fail "failed to set lxc mountpoint mp0"
+                die "Failed to set LXC ${ctid} mountpoint mp0 via pct (see reports/apply/lxc-mountpoints.txt)"
+            fi
+        else
+            echo "status=already-correct" >>"${mp_report}"
         fi
     fi
 

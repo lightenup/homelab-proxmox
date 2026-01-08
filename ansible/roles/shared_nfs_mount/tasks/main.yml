@@ -11,11 +11,22 @@
     update_cache: true
     cache_valid_time: 3600
 
+- name: Check if shared mount already present
+  ansible.builtin.command: "findmnt -n --target {{ shared_nfs_mount_target }}"
+  register: shared_nfs_mount_precheck
+  changed_when: false
+  failed_when: false
+
+- name: Compute whether to skip mounting
+  ansible.builtin.set_fact:
+    shared_nfs_mount_skip_mount: "{{ shared_nfs_mount_precheck.rc == 0 }}"
+
 - name: Ensure mount target exists
   ansible.builtin.file:
     path: "{{ shared_nfs_mount_target }}"
     state: directory
     mode: "0755"
+  when: not shared_nfs_mount_skip_mount
 
 - name: Configure + mount shared media NFS
   ansible.builtin.mount:
@@ -25,6 +36,7 @@
     opts: "{{ shared_nfs_mount_opts }}"
     state: mounted
   notify: Reload systemd
+  when: not shared_nfs_mount_skip_mount
 
 - name: Read mount options via findmnt
   ansible.builtin.command: "findmnt -n -o OPTIONS --target {{ shared_nfs_mount_target }}"
