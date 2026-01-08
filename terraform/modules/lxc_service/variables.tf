@@ -74,3 +74,9 @@ variable "ssh_public_keys" {
   description = "SSH public keys to inject into the LXC"
   default     = null
 }
+
+variable "features_mount" {
+  type        = string
+  description = "Proxmox LXC feature mount types to allow inside the container (e.g. 'nfs', 'nfs;cifs'). Empty string means default/none."
+  default     = ""
+}
