@@ -124,5 +124,8 @@ module "jellyfin_lxc" {
   searchdomain    = var.searchdomain
   ssh_public_keys = join("\n", var.ssh_public_keys)
 
+  # Required for in-guest NFS mounts inside an unprivileged LXC.
+  features_mount = "nfs"
+
   mountpoints = values(lookup(var.service_mountpoints, "jellyfin", {}))
 }

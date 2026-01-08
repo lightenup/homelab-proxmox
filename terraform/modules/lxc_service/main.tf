@@ -30,6 +30,7 @@ resource "proxmox_lxc" "this" {
 
   features {
     nesting = true
+    mount   = var.features_mount
   }
 
   dynamic "mountpoint" {
