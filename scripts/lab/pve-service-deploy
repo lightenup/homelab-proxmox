@@ -1265,6 +1265,38 @@ sys.exit(3)
         fi
     fi
 
+    # Proxmox API tokens cannot change certain feature flags (e.g., mount=nfs) unless
+    # authenticated as root@pam. To keep least-privilege (no root SSH) while still
+    # enabling in-guest NFS mounts, set the feature via local sudo+pct and record proof.
+    if [[ -n "${ctid}" ]]; then
+        local features_report="${EVIDENCE_ROOT}/reports/apply/lxc-features.txt"
+        local features_stderr="${EVIDENCE_ROOT}/reports/apply/lxc-features.stderr.txt"
+
+        {
+            echo "ctid=${ctid}"
+            echo "requested_features=mount=nfs"
+            echo "--- pct config (before) ---"
+            sudo pct config "${ctid}" 2>>"${features_stderr}" | awk '/^(features|unprivileged|lxc\.apparation|lxc\.cgroup|lxc\.mount)/ {print}' || true
+        } >"${features_report}"
+
+        if sudo -n pct set "${ctid}" -features "mount=nfs,nesting=1" >>"${features_report}" 2>>"${features_stderr}"; then
+            {
+                echo "--- pct config (after) ---"
+                sudo pct config "${ctid}" 2>>"${features_stderr}" | awk '/^(features|unprivileged|lxc\.apparation|lxc\.cgroup|lxc\.mount)/ {print}' || true
+            } >>"${features_report}"
+
+            if sudo pct config "${ctid}" 2>>"${features_stderr}" | grep -qE '^features:.*\bmount=nfs\b'; then
+                preflight_ok "lxc features include mount=nfs"
+            else
+                preflight_fail "lxc features missing mount=nfs"
+                die "LXC ${ctid} is missing features mount=nfs (see reports/apply/lxc-features.txt)"
+            fi
+        else
+            preflight_fail "failed to set lxc features mount=nfs"
+            die "Failed to set LXC ${ctid} feature mount=nfs via pct (see reports/apply/lxc-features.txt)"
+        fi
+    fi
+
     # Bootstrap the host (as root) so the 'ansible' user exists and is trusted.
     local inventory_file="${REPO_ROOT}/ansible/inventories/generated/hosts.yml"
     local bootstrap_playbook="${REPO_ROOT}/ansible/playbooks/bootstrap.yml"
