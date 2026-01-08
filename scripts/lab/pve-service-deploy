@@ -28,6 +28,10 @@ SERVICE_SCOPE_ALLOWLIST_PATH_DEFAULT="${REPO_ROOT}/scripts/lab/service-scope-all
 
 STATE_PATH_DEFAULT_ROOT="/var/lib/homelab-proxmox/state/services"
 
+# Terraform working directory (repo-local). For Spec 023 hardening we prefer
+# per-service roots to avoid cross-service plans.
+TERRAFORM_DIR=""
+
 usage() {
     cat <<'EOF'
 Usage:
@@ -263,7 +267,20 @@ terraform_chdir() {
         fi
     done
 
-    terraform -chdir="${REPO_ROOT}/terraform" "$@"
+    local tf_dir="${TERRAFORM_DIR:-${REPO_ROOT}/terraform}"
+    terraform -chdir="${tf_dir}" "$@"
+}
+
+set_terraform_dir_for_service() {
+    local service="${1:?set_terraform_dir_for_service requires service}"
+    local per_service_dir="${REPO_ROOT}/terraform/services/${service}"
+
+    if [[ -d "${per_service_dir}" && -f "${per_service_dir}/main.tf" ]]; then
+        TERRAFORM_DIR="${per_service_dir}"
+        return 0
+    fi
+
+    return 1
 }
 
 ensure_terraform() {
@@ -352,7 +369,7 @@ This usually means the container was deleted/recreated outside Terraform or you'
 Remediation options:
   - If the LXC should exist: import it into state (terraform import ...)
   - If the LXC was intentionally deleted: remove it from state, then re-plan/apply:
-      terraform -chdir=${REPO_ROOT}/terraform state rm -state=${state_path} ${addr}
+      terraform -chdir=${TERRAFORM_DIR:-${REPO_ROOT}/terraform} state rm -state=${state_path} ${addr}
 
 Safety note: after state changes, re-run a full plan and review blast radius.
 EOF
@@ -483,6 +500,11 @@ cmd_plan() {
     init_evidence_pack
 
     ensure_terraform
+
+    if ! set_terraform_dir_for_service "${SERVICE}"; then
+        preflight_fail "missing per-service terraform root at terraform/services/${SERVICE}"
+        die "Missing per-service Terraform root for service '${SERVICE}' at ${REPO_ROOT}/terraform/services/${SERVICE} (create it to avoid cross-service plans)."
+    fi
 
     on_plan_error() {
         local rc="$1"
@@ -714,6 +736,11 @@ cmd_apply() {
 
     ensure_terraform
 
+    if ! set_terraform_dir_for_service "${SERVICE}"; then
+        preflight_fail "missing per-service terraform root at terraform/services/${SERVICE}"
+        die "Missing per-service Terraform root for service '${SERVICE}' at ${REPO_ROOT}/terraform/services/${SERVICE} (create it to avoid cross-service plans)."
+    fi
+
     assert_no_target_env || { run_offline_verify || true; return 1; }
 
     # Ansible consumes vault secrets via a password file.
@@ -774,20 +801,7 @@ cmd_apply() {
         echo "state_path=${state_path}"
     } >"${EVIDENCE_ROOT}/reports/plan/state.txt"
 
-    # Fail fast if the service slug doesn't map to a terraform module.
-    # This avoids confusing "no-op" applies followed by missing state lookups.
-    if [[ ! -f "${REPO_ROOT}/terraform/main.tf" ]] || \
-        ! grep -qE "module[[:space:]]+\"${SERVICE}_lxc\"" "${REPO_ROOT}/terraform/main.tf"; then
-        {
-            echo "status=failure"
-            echo "reason=unknown service slug: ${SERVICE}"
-            echo "hint=expected a terraform module named ${SERVICE}_lxc in terraform/main.tf"
-        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
-        emit_error "${RUN_ID}" "unknown service slug: ${SERVICE}"
-        run_offline_verify || true
-        trap - ERR
-        return 1
-    fi
+    # Service existence is validated by requiring a per-service Terraform root.
 
     local tfvars_path
     if ! tfvars_path="$(resolve_tfvars_path "${ENVIRONMENT}")"; then
