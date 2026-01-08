@@ -455,6 +455,7 @@ cmd_plan() {
     local planfile="${EVIDENCE_ROOT}/reports/plan/plan.tfplan"
     local plan_json="${EVIDENCE_ROOT}/reports/plan/plan.json"
     local plan_txt="${EVIDENCE_ROOT}/reports/plan/plan.txt"
+    local plan_run_txt="${EVIDENCE_ROOT}/reports/plan/terraform-plan.txt"
 
     # Ensure we have a dedicated SSH key on PVE to reach freshly provisioned LXCs.
     # We inject the matching public key during Terraform plan/apply.
@@ -483,6 +484,16 @@ cmd_plan() {
     if ! tfvars_path="$(resolve_tfvars_path "${ENVIRONMENT}")"; then
         write_plan_summary "blocked" "missing tfvars file for environment=${ENVIRONMENT}"
         emit_error "${RUN_ID}" "missing tfvars file for environment=${ENVIRONMENT}"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+
+    # LAB safety: never allow PROD tfvars for a LAB run.
+    if [[ "${ENVIRONMENT}" == "lab" && "${tfvars_path}" == *"/prod.tfvars" ]]; then
+        write_plan_summary "blocked" "refusing to use prod.tfvars for lab run"
+        emit_error "${RUN_ID}" "refusing to use prod.tfvars for lab run"
+        preflight_fail "refusing to use prod.tfvars for lab run"
         run_offline_verify
         trap - ERR
         return 1
@@ -543,7 +554,8 @@ cmd_plan() {
         -state="${state_path}" \
         -var-file="${tfvars_path}" \
         -out="${planfile}" \
-        -detailed-exitcode; then
+        -detailed-exitcode \
+        >"${plan_run_txt}" 2>&1; then
         plan_rc=0
     else
         plan_rc=$?
@@ -552,6 +564,23 @@ cmd_plan() {
     echo "${plan_rc}" >"${EVIDENCE_ROOT}/reports/plan/exitcode.txt"
 
     if [[ "${plan_rc}" -eq 1 ]]; then
+        # Preserve a readable failure artifact for offline debugging.
+        cp "${plan_run_txt}" "${plan_txt}" 2>/dev/null || true
+
+        # Emit stub JSON artifacts so offline verification can still run.
+        echo "{}" >"${plan_json}"
+        cat >"${EVIDENCE_ROOT}/blast-radius.json" <<EOF
+{
+    "schema_version": "1.0.0",
+    "run_id": "${RUN_ID}",
+    "environment": "${ENVIRONMENT}",
+    "service": "${SERVICE}",
+    "counts": { "create": 0, "update": 0, "replace": 0, "destroy": 0 },
+    "resources": [],
+    "destructive": false,
+    "note": "terraform plan failed; blast radius unavailable"
+}
+EOF
         write_plan_summary "blocked" "terraform plan failed"
         emit_error "${RUN_ID}" "terraform plan failed"
         run_offline_verify
