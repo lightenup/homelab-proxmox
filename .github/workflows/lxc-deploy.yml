@@ -25,16 +25,39 @@ name: LXC Deploy (Gated)
         description: "Only for prod: type 'deploy-prod'"
         required: false
         type: string
+      confirm_destructive:
+        description: "Only when plan has replace/destroy: lab='apply-lab-destructive', prod='deploy-prod-destructive'"
+        required: false
+        type: string
 
 jobs:
   plan:
     name: Plan (no changes)
     runs-on: [self-hosted]
+    outputs:
+      run_id: ${{ steps.capture_run_id.outputs.run_id }}
+      destructive: ${{ steps.detect_destructive.outputs.destructive }}
     if: |
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fail fast on forbidden inputs
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          vals=(
+            "${{ github.event.inputs.service }}"
+            "${{ github.event.inputs.confirm }}"
+            "${{ github.event.inputs.confirm_destructive }}"
+          )
+          for v in "${vals[@]}"; do
+            if [[ "${v}" == *"-target"* ]]; then
+              echo "ERROR: Forbidden target-like input detected (-target)." >&2
+              exit 1
+            fi
+          done
 
       - name: Install rsync/ssh (act fallback)
         if: env.ACT == 'true'
@@ -87,6 +110,8 @@ jobs:
             ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
 
       - name: Plan on PVE
+        id: plan_on_pve
+        continue-on-error: true
         env:
           ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
         run: |
@@ -108,6 +133,8 @@ jobs:
           fi
 
       - name: Capture RUN_ID
+        id: capture_run_id
+        if: always()
         run: |
           set -euo pipefail
           ssh_target="ci@${PROXMOX_HOST:-pve}"
@@ -115,8 +142,10 @@ jobs:
           RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" 'ls -1t /var/lib/homelab-proxmox/artifacts/service-deploy-runs | head -1')"
           test -n "${RUN_ID}"
           echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch evidence pack
+        if: always()
         run: |
           mkdir -p evidence
           set -euo pipefail
@@ -127,10 +156,38 @@ jobs:
           tar xzf evidence/service-deploy-evidence.tgz -C evidence/
 
       - name: Verify evidence pack (offline)
+        if: always()
         run: ./scripts/lab/ci-verify.sh evidence/${RUN_ID}
 
+      - name: Detect destructive blast radius
+        id: detect_destructive
+        if: steps.plan_on_pve.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          run_id = os.environ.get('RUN_ID')
+          if not run_id:
+            raise SystemExit('Missing RUN_ID')
+          path = os.path.join('evidence', run_id, 'blast-radius.json')
+          with open(path, 'r', encoding='utf-8') as f:
+            doc = json.load(f)
+          destructive = bool(doc.get('destructive'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+            out.write(f"destructive={'true' if destructive else 'false'}\n")
+          print(f"destructive={destructive}")
+          PY
+
       - name: Offline fixtures (post-run)
+        if: always()
         run: ./scripts/lab/ci-verify.sh fixtures/evidence-packs/valid
+
+      - name: Fail job if plan failed
+        if: steps.plan_on_pve.outcome != 'success'
+        run: |
+          echo "ERROR: Plan on PVE failed" >&2
+          exit 1
 
       - uses: actions/upload-artifact@v4
         if: env.ACT != 'true'
@@ -148,6 +205,33 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fail fast on forbidden inputs
+        run: |
+          set -euo pipefail
+          vals=(
+            "${{ github.event.inputs.service }}"
+            "${{ github.event.inputs.confirm_destructive }}"
+          )
+          for v in "${vals[@]}"; do
+            if [[ "${v}" == *"-target"* ]]; then
+              echo "ERROR: Forbidden target-like input detected (-target)." >&2
+              exit 1
+            fi
+          done
+
+      - name: Destructive confirm gate (LAB)
+        run: |
+          set -euo pipefail
+          destructive="${{ needs.plan.outputs.destructive }}"
+          confirm_destructive="${{ github.event.inputs.confirm_destructive }}"
+          if [[ "${destructive}" == "true" ]]; then
+            if [[ "${confirm_destructive}" != "apply-lab-destructive" ]]; then
+              echo "ERROR: Plan is destructive (replace/destroy)." >&2
+              echo "Remediation: rerun workflow with confirm_destructive=apply-lab-destructive" >&2
+              exit 1
+            fi
+          fi
 
       - name: Install rsync/ssh (act fallback)
         if: env.ACT == 'true'
@@ -292,6 +376,34 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fail fast on forbidden inputs
+        run: |
+          set -euo pipefail
+          vals=(
+            "${{ github.event.inputs.service }}"
+            "${{ github.event.inputs.confirm }}"
+            "${{ github.event.inputs.confirm_destructive }}"
+          )
+          for v in "${vals[@]}"; do
+            if [[ "${v}" == *"-target"* ]]; then
+              echo "ERROR: Forbidden target-like input detected (-target)." >&2
+              exit 1
+            fi
+          done
+
+      - name: Destructive confirm gate (PROD)
+        run: |
+          set -euo pipefail
+          destructive="${{ needs.plan.outputs.destructive }}"
+          confirm_destructive="${{ github.event.inputs.confirm_destructive }}"
+          if [[ "${destructive}" == "true" ]]; then
+            if [[ "${confirm_destructive}" != "deploy-prod-destructive" ]]; then
+              echo "ERROR: Plan is destructive (replace/destroy)." >&2
+              echo "Remediation: rerun workflow with confirm_destructive=deploy-prod-destructive" >&2
+              exit 1
+            fi
+          fi
 
       - name: Install rsync/ssh (act fallback)
         if: env.ACT == 'true'

@@ -1,0 +1,5 @@
+{
+  "jellyfin": [
+    "module.jellyfin_lxc"
+  ]
+}

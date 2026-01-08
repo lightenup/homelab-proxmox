@@ -24,6 +24,10 @@ PROFILE_ID="service-deploy"
 
 PROD_CONFIRM_STRING="deploy-prod"
 
+SERVICE_SCOPE_ALLOWLIST_PATH_DEFAULT="${REPO_ROOT}/scripts/lab/service-scope-allowlist.json"
+
+STATE_PATH_DEFAULT_ROOT="/var/lib/homelab-proxmox/state/services"
+
 usage() {
     cat <<'EOF'
 Usage:
@@ -91,10 +95,41 @@ parse_common_flags() {
     fi
 }
 
+git_sha_short() {
+    if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -C "${REPO_ROOT}" rev-parse --short=8 HEAD 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
+}
+
+git_is_dirty() {
+    if ! command -v git >/dev/null 2>&1; then
+        echo "unknown"
+        return 0
+    fi
+    if ! git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "unknown"
+        return 0
+    fi
+
+    # Count any tracked/untracked changes.
+    if [[ -n "$(git -C "${REPO_ROOT}" status --porcelain 2>/dev/null || true)" ]]; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
 init_evidence_pack() {
     ensure_artifact_root
 
-    export RUN_ID_PREFIX="${ENVIRONMENT:-lab}"
+    local sha
+    sha="$(git_sha_short)"
+
+    # Structured RUN_ID: deterministic components + UTC timestamp for uniqueness.
+    # Resulting format: <env>-<service>-<sha8>-YYYYMMDD-HHMMSS
+    export RUN_ID_PREFIX="${ENVIRONMENT:-lab}-${SERVICE:-unknown}-${sha}"
     RUN_ID="$(create_evidence_pack "$(artifact_runs_path)")"
     EVIDENCE_ROOT="$(artifact_run_path "${RUN_ID}")"
 
@@ -102,6 +137,14 @@ init_evidence_pack() {
     mkdir -p "${EVIDENCE_ROOT}/reports/plan"
 
     init_jsonl_events "${EVIDENCE_ROOT}/logs/events.jsonl"
+
+    # Preflight output is required evidence for this profile.
+    cat >"${EVIDENCE_ROOT}/preflight.txt" <<EOF
+run_id=${RUN_ID}
+profile_id=${PROFILE_ID}
+environment=${ENVIRONMENT}
+service=${SERVICE}
+EOF
 
     cat >"${EVIDENCE_ROOT}/summary.json" <<EOF
 {
@@ -111,27 +154,99 @@ init_evidence_pack() {
 }
 EOF
 
-    cat >"${EVIDENCE_ROOT}/provenance.json" <<EOF
+        local dirty
+        dirty="$(git_is_dirty)"
+
+        cat >"${EVIDENCE_ROOT}/provenance.json" <<EOF
 {
-  "run_id": "${RUN_ID}",
-  "profile_id": "${PROFILE_ID}"
+    "run_id": "${RUN_ID}",
+    "profile_id": "${PROFILE_ID}",
+    "environment": "${ENVIRONMENT}",
+    "service": "${SERVICE}",
+    "git_sha": "${sha}",
+    "git_dirty": "${dirty}",
+    "runner": {
+        "hostname": "$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)",
+        "user": "${USER:-unknown}"
+    }
 }
 EOF
 
-    cat >"${EVIDENCE_ROOT}/checks.json" <<EOF
+    cat >"${EVIDENCE_ROOT}/checks.json" <<'EOF'
 {
   "checks_schema_version": "1.0.0",
   "checks": []
 }
 EOF
 
-    cat >"${EVIDENCE_ROOT}/evidence_manifest.json" <<EOF
+        cat >"${EVIDENCE_ROOT}/evidence_manifest.json" <<EOF
 {
-  "contract_version": "${CONTRACT_VERSION}",
-  "manifest_schema_version": "1.0.0",
-  "artifacts": []
+    "contract_version": "${CONTRACT_VERSION}",
+    "manifest_schema_version": "1.0.0",
+    "artifacts": []
 }
 EOF
+}
+
+preflight_ok() {
+    local msg="${1:?preflight_ok requires a message}"
+    echo "OK: ${msg}" >>"${EVIDENCE_ROOT}/preflight.txt"
+}
+
+preflight_fail() {
+    local msg="${1:?preflight_fail requires a message}"
+    echo "FAIL: ${msg}" >>"${EVIDENCE_ROOT}/preflight.txt"
+}
+
+assert_no_target_env() {
+    # Detect target usage via TF_CLI_ARGS* which Terraform automatically appends.
+    # See: https://developer.hashicorp.com/terraform/cli/config/environment-variables
+    local vars=(
+        TF_CLI_ARGS
+        TF_CLI_ARGS_plan
+        TF_CLI_ARGS_apply
+        TF_CLI_ARGS_init
+        TF_CLI_ARGS_validate
+    )
+
+    local v
+    for v in "${vars[@]}"; do
+        local val="${!v:-}"
+        if [[ -z "${val}" ]]; then
+            continue
+        fi
+        if [[ " ${val} " =~ [[:space:]]-target(=|[[:space:]]) ]]; then
+            preflight_fail "targeted operation detected via ${v}; -target is forbidden"
+            echo "ERROR: Targeted Terraform operations are forbidden (detected -target in ${v})." >&2
+            echo "Remediation: remove any TF_CLI_ARGS* env vars containing -target and run a full plan." >&2
+            return 1
+        fi
+    done
+    preflight_ok "no targeted Terraform inputs detected"
+    return 0
+}
+
+ensure_state_path() {
+    local service="${1:?ensure_state_path requires a service name}"
+    local dir="${STATE_PATH_DEFAULT_ROOT}/${service}"
+    local state_path="${dir}/terraform.tfstate"
+
+    mkdir -p "${dir}"
+
+    # Safety: do NOT implicitly seed state from repo-local terraform.tfstate.
+    # That file (if present) may represent a different environment and can cause
+    # cross-environment drift (e.g., refreshing non-existent CTIDs in LAB).
+    # If you need to migrate legacy state, opt-in explicitly.
+    if [[ "${SEED_STATE_FROM_REPO:-}" == "1" ]]; then
+        if [[ "${ENVIRONMENT:-}" != "prod" ]]; then
+            die "Refusing to seed state from repo for non-prod environment (ENVIRONMENT=${ENVIRONMENT:-unknown}). Remove SEED_STATE_FROM_REPO or switch to prod."
+        fi
+        if [[ ! -f "${state_path}" && -f "${REPO_ROOT}/terraform/terraform.tfstate" ]]; then
+            cp "${REPO_ROOT}/terraform/terraform.tfstate" "${state_path}"
+        fi
+    fi
+
+    echo "${state_path}"
 }
 
 run_offline_verify() {
@@ -139,6 +254,15 @@ run_offline_verify() {
 }
 
 terraform_chdir() {
+    # Guard against any accidental -target usage (explicit args).
+    local arg
+    for arg in "$@"; do
+        if [[ "$arg" == "-target" || "$arg" == -target=* ]]; then
+            preflight_fail "targeted operation attempted via explicit CLI arg '${arg}'"
+            die "Targeted Terraform operations are forbidden (-target). Remove -target and re-run a full plan."
+        fi
+    done
+
     terraform -chdir="${REPO_ROOT}/terraform" "$@"
 }
 
@@ -195,7 +319,7 @@ resolve_tfvars_relpath() {
     )
 
     # Back-compat: existing repo currently has terraform/prod.tfvars.
-    if [[ "$env" == "lab" ]]; then
+    if [[ "$env" == "prod" ]]; then
         candidates+=("prod.tfvars")
     fi
 
@@ -224,7 +348,7 @@ resolve_tfvars_path() {
 
     if [[ -n "${TFVARS_DIR:-}" ]]; then
         local ext_candidates=("${TFVARS_DIR}/${env}.tfvars")
-        if [[ "$env" == "lab" ]]; then
+        if [[ "$env" == "prod" ]]; then
             ext_candidates+=("${TFVARS_DIR}/prod.tfvars")
         fi
 
@@ -256,13 +380,29 @@ write_plan_summary() {
 
 enforce_plan_scope_guard() {
     local plan_json="$1"
-    local allowed_prefix="module.${SERVICE}_lxc"
+    local allowlist_path="${SERVICE_SCOPE_ALLOWLIST_PATH:-${SERVICE_SCOPE_ALLOWLIST_PATH_DEFAULT}}"
+    local allowed_prefixes_json
     local violations
 
+    if [[ ! -f "${allowlist_path}" ]]; then
+        die "Missing service scope allowlist mapping at ${allowlist_path}"
+    fi
+    if ! command -v jq >/dev/null 2>&1; then
+        die "jq is required for scope guard but not available"
+    fi
+
+    allowed_prefixes_json="$(jq -c --arg svc "${SERVICE}" '.[$svc] // empty' "${allowlist_path}" 2>/dev/null || true)"
+    if [[ -z "${allowed_prefixes_json}" ]]; then
+        die "No allowlist entry for service '${SERVICE}' in ${allowlist_path}"
+    fi
+    if ! jq -e 'type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' >/dev/null 2>&1 <<<"${allowed_prefixes_json}"; then
+        die "Invalid allowlist entry for service '${SERVICE}' in ${allowlist_path} (expected non-empty array of strings)"
+    fi
+
     violations="$(
-        jq -r --arg prefix "${allowed_prefix}" '
+        jq -r --argjson prefixes "${allowed_prefixes_json}" '
           [ .resource_changes[]? | select(.change.actions != ["no-op"]) | .address ]
-          | map(select(startswith($prefix) | not))
+          | map(select(([$prefixes[] as $p | startswith($p)] | any) | not))
           | .[]
         ' "${plan_json}" 2>/dev/null || true
     )"
@@ -270,7 +410,8 @@ enforce_plan_scope_guard() {
     if [[ -n "${violations}" ]]; then
         {
             echo "DENY: Planned changes outside allowed scope"
-            echo "allowed_prefix=${allowed_prefix}"
+            echo "allowlist_path=${allowlist_path}"
+            echo "allowed_prefixes_json=${allowed_prefixes_json}"
             echo "violations:"
             echo "${violations}" | sed 's/^/  - /'
         } >"${EVIDENCE_ROOT}/reports/plan/scope-guard.txt"
@@ -279,7 +420,8 @@ enforce_plan_scope_guard() {
 
     {
         echo "ALLOW: Planned changes within allowed scope"
-        echo "allowed_prefix=${allowed_prefix}"
+        echo "allowlist_path=${allowlist_path}"
+        echo "allowed_prefixes_json=${allowed_prefixes_json}"
     } >"${EVIDENCE_ROOT}/reports/plan/scope-guard.txt"
     return 0
 }
@@ -301,6 +443,14 @@ cmd_plan() {
 
     emit_phase_start "${RUN_ID}" "plan"
     emit_event "inputs" "${RUN_ID}" "environment=${ENVIRONMENT}" "service=${SERVICE}"
+
+    assert_no_target_env || { run_offline_verify || true; return 1; }
+
+    local state_path
+    state_path="$(ensure_state_path "${SERVICE}")"
+    {
+        echo "state_path=${state_path}"
+    } >"${EVIDENCE_ROOT}/reports/plan/state.txt"
 
     local planfile="${EVIDENCE_ROOT}/reports/plan/plan.tfplan"
     local plan_json="${EVIDENCE_ROOT}/reports/plan/plan.json"
@@ -337,6 +487,13 @@ cmd_plan() {
         trap - ERR
         return 1
     fi
+
+    # Non-sensitive tfvars introspection to aid debugging of credential selection.
+    # Do NOT record secrets.
+    local tfvars_token_id=""
+    local tfvars_api_url=""
+    tfvars_token_id="$(grep -E '^\s*proxmox_api_token_id\s*=' "${tfvars_path}" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)"
+    tfvars_api_url="$(grep -E '^\s*proxmox_api_url\s*=' "${tfvars_path}" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)"
     {
         echo "environment=${ENVIRONMENT}"
         echo "tfvars_path=${tfvars_path}"
@@ -345,10 +502,18 @@ cmd_plan() {
         else
             echo "tfvars_source=external"
         fi
+
+        if [[ -n "${tfvars_api_url}" ]]; then
+            echo "proxmox_api_url=${tfvars_api_url}"
+        fi
+        if [[ -n "${tfvars_token_id}" ]]; then
+            echo "proxmox_api_token_id=${tfvars_token_id}"
+        fi
     } >"${EVIDENCE_ROOT}/reports/plan/tfvars.txt"
 
     terraform_chdir init -input=false -no-color
     terraform_chdir validate -no-color
+    preflight_ok "terraform init+validate succeeded"
 
     # Safety: prevent accidental duplicate service LXCs.
     # If a container named $SERVICE already exists but Terraform doesn't track it,
@@ -361,7 +526,7 @@ cmd_plan() {
     fi
 
     local state_addr=""
-    state_addr="$(terraform_chdir state list 2>/dev/null | grep -E "^module\.${SERVICE}_lxc\.proxmox_lxc\.this$" | head -n 1 || true)"
+    state_addr="$(terraform_chdir state list -state="${state_path}" 2>/dev/null | grep -E "^module\.${SERVICE}_lxc\.proxmox_lxc\.this$" | head -n 1 || true)"
 
     if [[ -z "${state_addr}" && ${existing_count} -gt 0 ]]; then
         die "Found existing LXC(s) named '${SERVICE}' (CTID(s): ${existing_ctids}) but Terraform state does not track it; refusing to create a duplicate. Import it or destroy the stray CT(s)."
@@ -375,7 +540,7 @@ cmd_plan() {
     # Wrap in an `if` to prevent the ERR trap from firing on rc=2.
     local plan_rc=0
     if terraform_chdir plan -input=false -no-color \
-        -target="module.${SERVICE}_lxc" \
+        -state="${state_path}" \
         -var-file="${tfvars_path}" \
         -out="${planfile}" \
         -detailed-exitcode; then
@@ -396,6 +561,9 @@ cmd_plan() {
 
     terraform_chdir show -no-color "${planfile}" >"${plan_txt}"
     terraform_chdir show -json "${planfile}" >"${plan_json}"
+    preflight_ok "plan artifacts emitted (reports/plan/plan.txt + reports/plan/plan.json)"
+
+    compute_blast_radius "${plan_json}" || true
 
     if ! enforce_plan_scope_guard "${plan_json}"; then
         write_plan_summary "blocked" "scope guard violation"
@@ -404,6 +572,16 @@ cmd_plan() {
         trap - ERR
         return 1
     fi
+    preflight_ok "scope guard passed"
+
+    if ! enforce_bind_mount_policy "${plan_json}"; then
+        write_plan_summary "blocked" "bind-mount policy violation"
+        emit_error "${RUN_ID}" "bind-mount policy violation"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+    preflight_ok "bind-mount policy passed"
 
     local intent="no-op"
     if [[ "${plan_rc}" -eq 2 ]]; then
@@ -445,6 +623,8 @@ cmd_apply() {
     init_evidence_pack
 
     ensure_terraform
+
+    assert_no_target_env || { run_offline_verify || true; return 1; }
 
     # Ansible consumes vault secrets via a password file.
     # GitHub Actions passes secrets most conveniently as an env var, so bridge it.
@@ -498,6 +678,12 @@ cmd_apply() {
     emit_phase_start "${RUN_ID}" "apply"
     emit_event "inputs" "${RUN_ID}" "environment=${ENVIRONMENT}" "service=${SERVICE}"
 
+    local state_path
+    state_path="$(ensure_state_path "${SERVICE}")"
+    {
+        echo "state_path=${state_path}"
+    } >"${EVIDENCE_ROOT}/reports/plan/state.txt"
+
     # Fail fast if the service slug doesn't map to a terraform module.
     # This avoids confusing "no-op" applies followed by missing state lookups.
     if [[ ! -f "${REPO_ROOT}/terraform/main.tf" ]] || \
@@ -524,6 +710,13 @@ cmd_apply() {
         trap - ERR
         return 1
     fi
+
+    # Non-sensitive tfvars introspection to aid debugging of credential selection.
+    # Do NOT record secrets.
+    local tfvars_token_id=""
+    local tfvars_api_url=""
+    tfvars_token_id="$(grep -E '^\s*proxmox_api_token_id\s*=' "${tfvars_path}" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)"
+    tfvars_api_url="$(grep -E '^\s*proxmox_api_url\s*=' "${tfvars_path}" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)"
     {
         echo "environment=${ENVIRONMENT}"
         echo "tfvars_path=${tfvars_path}"
@@ -531,6 +724,13 @@ cmd_apply() {
             echo "tfvars_source=repo"
         else
             echo "tfvars_source=external"
+        fi
+
+        if [[ -n "${tfvars_api_url}" ]]; then
+            echo "proxmox_api_url=${tfvars_api_url}"
+        fi
+        if [[ -n "${tfvars_token_id}" ]]; then
+            echo "proxmox_api_token_id=${tfvars_token_id}"
         fi
     } >"${EVIDENCE_ROOT}/reports/plan/tfvars.txt"
 
@@ -569,7 +769,7 @@ cmd_apply() {
     # Wrap in an `if` to prevent the ERR trap from firing on rc=2.
     local plan_rc=0
     if terraform_chdir plan -input=false -no-color \
-        -target="module.${SERVICE}_lxc" \
+        -state="${state_path}" \
         -var-file="${tfvars_path}" \
         -out="${planfile}" \
         -detailed-exitcode; then
@@ -592,6 +792,9 @@ cmd_apply() {
 
     terraform_chdir show -no-color "${planfile}" >"${plan_txt}"
     terraform_chdir show -json "${planfile}" >"${plan_json}"
+    preflight_ok "plan artifacts emitted (reports/plan/plan.txt + reports/plan/plan.json)"
+
+    compute_blast_radius "${plan_json}" || true
 
     if ! enforce_plan_scope_guard "${plan_json}"; then
         {
@@ -603,16 +806,66 @@ cmd_apply() {
         trap - ERR
         return 1
     fi
+    preflight_ok "scope guard passed"
+
+    if ! enforce_bind_mount_policy "${plan_json}"; then
+        {
+            echo "status=failure"
+            echo "reason=bind-mount policy violation"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+        emit_error "${RUN_ID}" "bind-mount policy violation"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+    preflight_ok "bind-mount policy passed"
 
     # Apply exactly the reviewed plan
-    terraform_chdir apply -input=false -no-color -auto-approve "${planfile}" \
+    terraform_chdir apply -input=false -no-color -auto-approve \
+        -state="${state_path}" \
+        "${planfile}" \
         | tee "${EVIDENCE_ROOT}/reports/apply/terraform-apply.txt"
 
-    # Terraform does not reliably update root outputs when using -target.
+    # Backup state to Synology after successful apply.
+    # Proof is captured into evidence to satisfy SD-002.
+    "${REPO_ROOT}/scripts/backup_tfstate.sh" --state-path "${state_path}" --prefix "${ENVIRONMENT}-${SERVICE}" \
+        >"${EVIDENCE_ROOT}/reports/apply/state-backup.txt" 2>&1
+
+    # LAB idempotency verification: a second plan must be a no-op.
+    if [[ "${ENVIRONMENT}" == "lab" ]]; then
+        local idem_planfile="${EVIDENCE_ROOT}/reports/apply/idempotency.tfplan"
+        local idem_txt="${EVIDENCE_ROOT}/reports/apply/idempotency-plan.txt"
+        local idem_rc=0
+
+        if terraform_chdir plan -input=false -no-color \
+            -state="${state_path}" \
+            -var-file="${tfvars_path}" \
+            -out="${idem_planfile}" \
+            -detailed-exitcode; then
+            idem_rc=0
+        else
+            idem_rc=$?
+        fi
+
+        echo "${idem_rc}" >"${EVIDENCE_ROOT}/reports/apply/idempotency-exitcode.txt"
+
+        if [[ "${idem_rc}" -eq 2 ]]; then
+            terraform_chdir show -no-color "${idem_planfile}" >"${idem_txt}" || true
+            {
+                echo "status=failure"
+                echo "reason=idempotency check failed: second plan had changes"
+            } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+            emit_error "${RUN_ID}" "idempotency check failed (second plan had changes)"
+            run_offline_verify
+            trap - ERR
+            return 1
+        fi
+    fi
+
     # Prefer root output when present, else fall back to module output from state.
     local ansible_inventory_json=""
     local inventory_rc=0
-    if ansible_inventory_json="$(terraform_chdir output -json ansible_inventory 2>/dev/null)"; then
+    if ansible_inventory_json="$(terraform_chdir output -json -state="${state_path}" ansible_inventory 2>/dev/null)"; then
         inventory_rc=0
     else
         inventory_rc=$?
@@ -625,7 +878,7 @@ cmd_apply() {
         local state_pull_stderr="${EVIDENCE_ROOT}/reports/apply/terraform-state-pull.stderr.txt"
         local state_json=""
         local state_rc=0
-        if state_json="$(terraform_chdir state pull 2>"${state_pull_stderr}")"; then
+        if state_json="$(terraform_chdir state pull -state="${state_path}" 2>"${state_pull_stderr}")"; then
             state_rc=0
         else
             state_rc=$?
@@ -908,6 +1161,9 @@ sys.exit(3)
     ansible-playbook -i "${inventory_file}" "${playbook}" \
         --limit "${SERVICE}" \
         --ssh-common-args "${ssh_common_args}" \
+        -e "evidence_dir=${EVIDENCE_ROOT}" \
+        -e "run_id=${RUN_ID}" \
+        -e "profile_id=${PROFILE_ID}" \
         | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
 
     # Healthcheck (uses ansible-inventory + host_vars)
@@ -930,7 +1186,10 @@ sys.exit(3)
 
     while (( hc_waited <= hc_timeout_seconds )); do
         echo "--- healthcheck attempt ${hc_attempt} (waited=${hc_waited}s) ---" | tee -a "${hc_txt}"
-        if "${hc}" \
+        if HC_SSH_TARGET="root@${service_ip}" \
+            HC_SSH_KEY_FILE="${lxc_key_file}" \
+            HC_SSH_COMMON_ARGS="${ssh_common_args}" \
+            "${hc}" \
             --profile lan \
             --output-json "${hc_json}" \
             | tee -a "${hc_txt}"; then
@@ -970,6 +1229,82 @@ sys.exit(3)
         rm -f "${linked_vault_files[@]}" || true
     fi
     return 0
+}
+
+compute_blast_radius() {
+        local plan_json="$1"
+        local out="${EVIDENCE_ROOT}/blast-radius.json"
+
+        if ! command -v jq >/dev/null 2>&1; then
+                preflight_fail "jq not available; cannot compute blast radius"
+                return 1
+        fi
+
+        jq -c '{
+            "schema_version": "1.0.0",
+            "run_id": ($run_id),
+            "environment": ($env),
+            "service": ($service),
+            "counts": {
+                "create": ([.resource_changes[]? | select(.change.actions == ["create"]) ] | length),
+                "update": ([.resource_changes[]? | select(.change.actions == ["update"]) ] | length),
+                "replace": ([.resource_changes[]? | select((.change.actions | index("create")) and (.change.actions | index("delete"))) ] | length),
+                "destroy": ([.resource_changes[]? | select(.change.actions == ["delete"]) ] | length)
+            },
+            "resources": ([
+                .resource_changes[]? | {
+                    address: .address,
+                    actions: .change.actions
+                }
+            ]),
+            "destructive": (
+                ([.resource_changes[]? | select(.change.actions == ["delete"] or ((.change.actions | index("create")) and (.change.actions | index("delete"))))] | length) > 0
+            )
+        }' \
+            --arg run_id "${RUN_ID}" \
+            --arg env "${ENVIRONMENT}" \
+            --arg service "${SERVICE}" \
+            "${plan_json}" >"${out}"
+
+        preflight_ok "blast-radius.json emitted"
+        return 0
+}
+
+enforce_bind_mount_policy() {
+        local plan_json="$1"
+
+        if ! command -v jq >/dev/null 2>&1; then
+                preflight_fail "jq not available; cannot enforce bind-mount policy"
+                return 1
+        fi
+
+        local violations
+        violations="$(jq -r '
+            .resource_changes[]? as $rc
+            | ($rc.change.after // empty) as $after
+            | select($after != null)
+            | (
+                    ($after.mountpoint // [])[]? | .volume? // empty
+                ) as $vol
+            | select(($vol | type == "string") and ($vol | startswith("/")))
+            | "\($rc.address)\t\($vol)"
+        ' "${plan_json}" 2>/dev/null || true)"
+
+        if [[ -n "${violations}" ]]; then
+                {
+                        echo "DENY: Host-path bind mount(s) detected (volume starts with '/')"
+                        echo "Each line: <terraform_address><TAB><volume>"
+                        echo
+                        echo "${violations}"
+                } >"${EVIDENCE_ROOT}/reports/plan/bind-mount-guard.txt"
+                preflight_fail "bind-mount policy violation (host-path bind mount detected)"
+                return 1
+        fi
+
+        {
+                echo "ALLOW: No host-path bind mounts detected"
+        } >"${EVIDENCE_ROOT}/reports/plan/bind-mount-guard.txt"
+        return 0
 }
 
 main() {

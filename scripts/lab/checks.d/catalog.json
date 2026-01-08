@@ -304,6 +304,30 @@
     "severity": "medium",
     "source": "harness"
   },
+  "SD-001": {
+    "check_id": "SD-001",
+    "title": "Blast radius summary emitted",
+    "owner": "harness",
+    "phase": "plan",
+    "severity": "high",
+    "source": "harness"
+  },
+  "SD-002": {
+    "check_id": "SD-002",
+    "title": "Terraform state backed up to Synology after apply",
+    "owner": "harness",
+    "phase": "apply",
+    "severity": "high",
+    "source": "harness"
+  },
+  "SD-003": {
+    "check_id": "SD-003",
+    "title": "Shared media NFS mount present and read-only",
+    "owner": "ansible",
+    "phase": "workload",
+    "severity": "high",
+    "source": "ansible"
+  },
   "VAL-001": {
     "check_id": "VAL-001",
     "title": "Optional validation report fetched",

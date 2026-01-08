@@ -1,0 +1,8 @@
+{
+  "create": 0,
+  "update": 0,
+  "replace": 0,
+  "destroy": 0,
+  "destructive": false,
+  "resources": []
+}

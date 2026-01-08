@@ -1,0 +1,9 @@
+---
+# Shared NFS media mount (in-guest)
+shared_nfs_mount_server: "192.168.1.109"
+shared_nfs_mount_export: "/volume1/video"
+shared_nfs_mount_target: "/media/video"
+
+# Read-only mount with safe defaults.
+shared_nfs_mount_fstype: "nfs"
+shared_nfs_mount_opts: "ro,nofail,_netdev,x-systemd.automount"

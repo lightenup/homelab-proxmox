@@ -8,5 +8,16 @@
 - name: Configure Jellyfin
   hosts: jellyfin
   become: true
+  vars:
+    assertion_results: []
+
+  pre_tasks:
+    - name: Initialize assertion results
+      ansible.builtin.set_fact:
+        assertion_results: []
   roles:
+    - shared_nfs_mount
     - jellyfin
+    - role: assertion_utils
+      vars:
+        phase: workload
