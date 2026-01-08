@@ -28,6 +28,10 @@ SERVICE_SCOPE_ALLOWLIST_PATH_DEFAULT="${REPO_ROOT}/scripts/lab/service-scope-all
 
 STATE_PATH_DEFAULT_ROOT="/var/lib/homelab-proxmox/state/services"
 
+# Terraform working directory (repo-local). For Spec 023 hardening we prefer
+# per-service roots to avoid cross-service plans.
+TERRAFORM_DIR=""
+
 usage() {
     cat <<'EOF'
 Usage:
@@ -263,7 +267,20 @@ terraform_chdir() {
         fi
     done
 
-    terraform -chdir="${REPO_ROOT}/terraform" "$@"
+    local tf_dir="${TERRAFORM_DIR:-${REPO_ROOT}/terraform}"
+    terraform -chdir="${tf_dir}" "$@"
+}
+
+set_terraform_dir_for_service() {
+    local service="${1:?set_terraform_dir_for_service requires service}"
+    local per_service_dir="${REPO_ROOT}/terraform/services/${service}"
+
+    if [[ -d "${per_service_dir}" && -f "${per_service_dir}/main.tf" ]]; then
+        TERRAFORM_DIR="${per_service_dir}"
+        return 0
+    fi
+
+    return 1
 }
 
 ensure_terraform() {
@@ -308,6 +325,58 @@ PY
     rm -rf "${tmpdir}"
 
     command -v terraform >/dev/null 2>&1 || die "terraform install failed"
+}
+
+assert_state_lxc_exists_or_empty() {
+    local state_path="${1:?assert_state_lxc_exists_or_empty requires state_path}"
+    local service="${2:?assert_state_lxc_exists_or_empty requires service}"
+
+    if [[ ! -f "${state_path}" ]]; then
+        return 0
+    fi
+
+    local addr="module.${service}_lxc.proxmox_lxc.this"
+    if ! terraform_chdir state list -state="${state_path}" 2>/dev/null | grep -qx "${addr}"; then
+        return 0
+    fi
+
+    local state_show
+    state_show="$(terraform_chdir state show -no-color -state="${state_path}" "${addr}" 2>/dev/null || true)"
+    if [[ -z "${state_show}" ]]; then
+        return 0
+    fi
+
+    # telmate/proxmox provider uses an id like: pve/lxc/101
+    local id_line
+    id_line="$(grep -E '^[[:space:]]*id[[:space:]]*=' <<<"${state_show}" | head -n 1 || true)"
+    if [[ -z "${id_line}" ]]; then
+        return 0
+    fi
+
+    local vmid=""
+    vmid="$(sed -E 's/.*lxc\/([0-9]+).*/\1/' <<<"${id_line}" | tr -d '"' || true)"
+    if [[ -z "${vmid}" || ! "${vmid}" =~ ^[0-9]+$ ]]; then
+        return 0
+    fi
+
+    if ! sudo pct status "${vmid}" >/dev/null 2>&1; then
+        preflight_fail "stale terraform state: ${addr} id references missing vmid=${vmid}"
+        cat >&2 <<EOF
+ERROR: Terraform state for service '${service}' references a missing LXC (vmid=${vmid}).
+
+This usually means the container was deleted/recreated outside Terraform or you're using the wrong state file.
+
+Remediation options:
+  - If the LXC should exist: import it into state (terraform import ...)
+  - If the LXC was intentionally deleted: remove it from state, then re-plan/apply:
+      terraform -chdir=${TERRAFORM_DIR:-${REPO_ROOT}/terraform} state rm -state=${state_path} ${addr}
+
+Safety note: after state changes, re-run a full plan and review blast radius.
+EOF
+        return 1
+    fi
+
+    return 0
 }
 
 resolve_tfvars_relpath() {
@@ -432,6 +501,11 @@ cmd_plan() {
 
     ensure_terraform
 
+    if ! set_terraform_dir_for_service "${SERVICE}"; then
+        preflight_fail "missing per-service terraform root at terraform/services/${SERVICE}"
+        die "Missing per-service Terraform root for service '${SERVICE}' at ${REPO_ROOT}/terraform/services/${SERVICE} (create it to avoid cross-service plans)."
+    fi
+
     on_plan_error() {
         local rc="$1"
         local line="$2"
@@ -525,6 +599,15 @@ cmd_plan() {
     terraform_chdir init -input=false -no-color
     terraform_chdir validate -no-color
     preflight_ok "terraform init+validate succeeded"
+
+    # Fail early with a clearer message if state references a missing LXC.
+    if ! assert_state_lxc_exists_or_empty "${state_path}" "${SERVICE}"; then
+        write_plan_summary "blocked" "stale terraform state (missing lxc referenced by state)"
+        emit_error "${RUN_ID}" "stale terraform state (missing lxc referenced by state)"
+        run_offline_verify || true
+        trap - ERR
+        return 1
+    fi
 
     # Safety: prevent accidental duplicate service LXCs.
     # If a container named $SERVICE already exists but Terraform doesn't track it,
@@ -653,6 +736,11 @@ cmd_apply() {
 
     ensure_terraform
 
+    if ! set_terraform_dir_for_service "${SERVICE}"; then
+        preflight_fail "missing per-service terraform root at terraform/services/${SERVICE}"
+        die "Missing per-service Terraform root for service '${SERVICE}' at ${REPO_ROOT}/terraform/services/${SERVICE} (create it to avoid cross-service plans)."
+    fi
+
     assert_no_target_env || { run_offline_verify || true; return 1; }
 
     # Ansible consumes vault secrets via a password file.
@@ -713,20 +801,7 @@ cmd_apply() {
         echo "state_path=${state_path}"
     } >"${EVIDENCE_ROOT}/reports/plan/state.txt"
 
-    # Fail fast if the service slug doesn't map to a terraform module.
-    # This avoids confusing "no-op" applies followed by missing state lookups.
-    if [[ ! -f "${REPO_ROOT}/terraform/main.tf" ]] || \
-        ! grep -qE "module[[:space:]]+\"${SERVICE}_lxc\"" "${REPO_ROOT}/terraform/main.tf"; then
-        {
-            echo "status=failure"
-            echo "reason=unknown service slug: ${SERVICE}"
-            echo "hint=expected a terraform module named ${SERVICE}_lxc in terraform/main.tf"
-        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
-        emit_error "${RUN_ID}" "unknown service slug: ${SERVICE}"
-        run_offline_verify || true
-        trap - ERR
-        return 1
-    fi
+    # Service existence is validated by requiring a per-service Terraform root.
 
     local tfvars_path
     if ! tfvars_path="$(resolve_tfvars_path "${ENVIRONMENT}")"; then

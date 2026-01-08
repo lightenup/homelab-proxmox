@@ -1,13 +1,6 @@
 name: LXC Deploy (Gated)
 
 "on":
-  pull_request:
-    paths:
-      - "terraform/**"
-      - "ansible/**"
-      - "scripts/**"
-      - "docs/operations/lxc-deploy-ci.md"
-      - ".github/workflows/lxc-deploy.yml"
   workflow_dispatch:
     inputs:
       environment:
@@ -37,9 +30,6 @@ jobs:
     outputs:
       run_id: ${{ steps.capture_run_id.outputs.run_id }}
       destructive: ${{ steps.detect_destructive.outputs.destructive }}
-    if: |
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
 

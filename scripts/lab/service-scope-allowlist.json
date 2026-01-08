@@ -1,5 +1,20 @@
 {
+  "adguard": [
+    "module.adguard_lxc"
+  ],
+  "homeassistant": [
+    "module.homeassistant_lxc"
+  ],
+  "immich": [
+    "module.immich_lxc"
+  ],
   "jellyfin": [
     "module.jellyfin_lxc"
+  ],
+  "monitoring": [
+    "module.monitoring_lxc"
+  ],
+  "reverse_proxy": [
+    "module.reverse_proxy_lxc"
   ]
 }

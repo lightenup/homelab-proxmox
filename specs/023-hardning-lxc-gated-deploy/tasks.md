@@ -102,6 +102,15 @@ Every task MUST follow:
 
 ---
 
+## Phase 5: Terraform Per-Service Roots (Follow-up)
+
+**Goal**: Ensure a per-service state file implies a per-service Terraform root so Terraform plans do not include unrelated services.
+
+- [X] T030 Create per-service Terraform roots under `terraform/services/<service>/` for all supported services
+- [X] T031 Update `scripts/lab/pve-service-deploy` to run Terraform from `terraform/services/<service>` and fail fast if missing
+
+---
+
 ## Dependencies & Execution Order
 
 - Phase 2 blocks everything (verifier + catalog + fixtures).
