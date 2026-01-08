@@ -111,6 +111,12 @@ Every task MUST follow:
 
 ---
 
+## Phase 6: Operational Tuning (Follow-up)
+
+- [X] T032 Make state backup non-fatal in LAB but fatal in PROD (record proof either way) in `scripts/lab/pve-service-deploy`
+
+---
+
 ## Dependencies & Execution Order
 
 - Phase 2 blocks everything (verifier + catalog + fixtures).

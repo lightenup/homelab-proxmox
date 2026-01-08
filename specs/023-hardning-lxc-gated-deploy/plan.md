@@ -10,7 +10,7 @@ Deliver a “v2” gated LXC deploy pipeline that:
 - Adds a **blast-radius gate** (confirm strings required when replace/destroy present).
 - Mounts shared media NFS **inside the container** at `/media/video` (read-only), reusable across services.
 - Produces durable evidence packs on PVE and verifies them offline on the runner.
-- Backs up Terraform state to Synology after successful apply (LAB and PROD).
+- Backs up Terraform state to Synology after successful apply (PROD required; LAB best-effort but still recorded in evidence).
 
 ## Phases
 
@@ -43,6 +43,8 @@ Implement in `scripts/lab/pve-service-deploy`:
     - Define and implement a structured RUN_ID format with deterministic components plus a UTC timestamp for uniqueness (e.g., `${ENV}-${SERVICE}-${GIT_SHA:0:8}-${UTC_TS}`).
 7. **State backup after apply (Synology)**
    - After successful `apply`, back up the per-service state file to Synology and record proof in evidence.
+   - PROD: backup is mandatory (apply fails if backup fails).
+   - LAB: backup is best-effort (failure is recorded in evidence but does not fail apply).
 8. **Evidence completeness**
     - Ensure evidence includes: provenance, plan txt+json, preflight, blast-radius summary, and offline verification output (`reports/verify.json`).
     - Apply runs additionally include healthcheck output and assertion report(s) under `reports/assertions.*.json`.
