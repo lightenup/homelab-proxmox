@@ -30,13 +30,13 @@ The technical approach uses GitHub Actions workflow splits (separate LAB-only an
 - Terraform state: local on Proxmox host at `/var/lib/homelab-proxmox/state/services/<service>/`
 - Evidence packs: local on Proxmox host at `/var/lib/homelab-proxmox/artifacts/service-deploy-runs/<run_id>/`
 - Production tfvars: local on Proxmox host at `/var/lib/homelab-proxmox/tfvars/prod.tfvars` (gitignored, provisioned at runtime)
-- LAB snapshots: embedded in evidence packs and uploaded as GitHub artifacts
+- LAB snapshots: embedded in evidence packs and uploaded as GitHub Actions artifacts
 
 **Testing**: 
 - Evidence-based verification using `scripts/lab/ci-verify.sh` with offline validation against evidence profiles
 - Destructive change detection via `blast-radius.json` in evidence packs
 - Idempotency verification (second apply must produce zero-change plan)
-- Fixture-based contract validation in `scripts/lab/fixtures/evidence-packs/valid/`
+- Fixture-based contract validation in `scripts/lab/fixtures/evidence-packs/service-deploy-valid/`
 
 **Target Platform**: 
 - Proxmox VE 8.x host (runs Terraform/Ansible via SSH from GitHub Actions self-hosted runner)
@@ -174,9 +174,8 @@ scripts/lab/
 ├── profiles.d/
 │   └── service-deploy.json     # EXISTING (extend with tfvars-proof and lab-snapshot fields)
 └── contracts/
-    └── evidence-v2/            # NEW: extended evidence contract definitions
-        ├── tfvars-proof.json
-        └── lab-snapshot.json
+  ├── evidence-tfvars-proof.schema.json
+  └── evidence-lab-snapshot.schema.json
 
 terraform/
 └── (no changes - Terraform modules unchanged)
@@ -333,7 +332,7 @@ Extract entities and relationships from the feature specification:
 - **New fields**:
   - `reports/prod-tfvars/provisioning.txt` (redacted summary)
   - `reports/prod-tfvars/prod.tfvars.sha256` (hash proof)
-  - `reports/prod-tfvars/validation.txt` (validation report)
+  - `reports/prod-tfvars/validation.json` (validation report)
   - `reports/lab-snapshot.json` (LAB inventory snapshot)
 - **Validation rules**:
   - tfvars proof required only for PROD environment runs
@@ -639,13 +638,13 @@ When generating `tasks.md`, organize tasks into these categories:
 - **T010**: Implement container state collection via `pct` commands
 - **T011**: Implement service evidence pointer collection
 - **T012**: Implement mount validation checks for shared media
-- **T013**: Upload LAB snapshot as GitHub artifact
+- **T013**: Upload LAB snapshot as GitHub Actions artifact
 
 #### Category 4: Evidence Integration
 - **T014**: Extend `scripts/lab/profiles.d/service-deploy.json` with new evidence fields
 - **T015**: Update `scripts/lab/verify_evidence.py` to validate tfvars proof schema
 - **T016**: Update `scripts/lab/verify_evidence.py` to validate LAB snapshot schema
-- **T017**: Create evidence fixtures for new fields in `fixtures/evidence-packs/valid/`
+- **T017**: Create evidence fixtures for new fields in `scripts/lab/fixtures/evidence-packs/service-deploy-valid/`
 
 #### Category 5: Documentation & Testing
 - **T018**: Update `docs/` with operator runbook for new workflows

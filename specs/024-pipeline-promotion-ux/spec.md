@@ -3,7 +3,7 @@
 **Feature Branch**: `024-pipeline-promotion-ux`  
 **Created**: 2026-01-09  
 **Status**: Draft  
-**Input**: User description: "Improve CI pipeline dispatcher UX, enforce LAB→PROD promotion with approval, automate prod.tfvars provisioning/validation on the Proxmox host without committing secrets, add safe hotfix path, and generate a LAB inventory snapshot artifact in evidence + pipeline artifacts."
+**Input**: User description: "Improve CI pipeline dispatcher UX, enforce LAB→PROD promotion with approval, automate prod.tfvars provisioning/validation on the Proxmox host without committing secrets, add safe hotfix path, and generate a LAB inventory snapshot artifact in evidence + GitHub Actions artifacts."
 
 ## Problem Statement
 
@@ -15,7 +15,7 @@ The current single-service LXC deploy workflow is effective but has operational 
 - Prerequisite gating assumes feature branches and blocks hotfix workflows on main.
 - It is hard to answer “what’s currently in LAB” without manual inspection (pct list/config, SSH in guests).
 
-This feature introduces a clearer dispatcher UX, a mandatory promotion pipeline (LAB → approval → PROD), automated/validated production variables provisioning on the Proxmox host, a safe hotfix override path, and a lightweight LAB snapshot included in evidence and uploaded as a pipeline artifact.
+This feature introduces a clearer dispatcher UX, a mandatory promotion pipeline (LAB → approval → PROD), automated/validated production variables provisioning on the Proxmox host, a safe hotfix override path, and a lightweight LAB snapshot included in evidence and uploaded as a GitHub Actions artifact.
 
 ## Goals
 
@@ -48,7 +48,7 @@ This feature introduces a clearer dispatcher UX, a mandatory promotion pipeline 
 
 - Produce a lightweight snapshot during plan/apply runs and optionally on-demand.
 - Include containers (vmid/hostname/status/IPv4), per-service pointers to latest evidence/state paths, and mount status checks (e.g. `/media/video` mounted RO when declared).
-- Store snapshot in the evidence pack and upload it as a GitHub artifact.
+- Store snapshot in the evidence pack and upload it as a GitHub Actions artifact.
 
 ## Non-goals
 
@@ -224,7 +224,7 @@ Where:
 - Evidence includes:
   - `reports/prod-tfvars/provisioning.txt` (redacted)
   - `reports/prod-tfvars/prod.tfvars.sha256`
-  - `reports/prod-tfvars/validation.txt`
+  - `reports/prod-tfvars/validation.json`
 
 No secrets are stored in evidence.
 
@@ -246,14 +246,17 @@ The snapshot is a single JSON document containing:
 - `environment`
 - `containers`: list of { vmid, hostname/name, status, ipv4 }
 - `services`: list of service roots detected + state paths
+- `errors`: any collection errors (non-fatal unless required fields are missing)
+
+Optional enhancements (later story):
+
 - `latest_evidence`: mapping service → latest RUN_ID + path
 - `mount_checks`: per-service checks for declared mounts (e.g., `/media/video` mounted and read-only)
-- `errors`: any collection errors (non-fatal unless required fields are missing)
 
 ### Storage
 
 - Store in evidence pack: `reports/lab-snapshot.json`
-- Upload as pipeline artifact for each plan/apply run.
+- Upload as GitHub Actions artifact for each plan/apply run.
 
 ## Evidence Contract Changes
 
@@ -277,7 +280,7 @@ The snapshot is a single JSON document containing:
 - **FR-008**: The system MUST record a redacted summary and hash of the rendered prod.tfvars in the evidence pack.
 - **FR-009**: The system MUST allow a hotfix path from main only with explicit override confirmation and an approval gate.
 - **FR-010**: The system MUST generate a LAB inventory snapshot during plan/apply runs and store it in the evidence pack.
-- **FR-011**: The system MUST upload the LAB snapshot as a GitHub artifact for quick access.
+- **FR-011**: The system MUST upload the LAB snapshot as a GitHub Actions artifact for quick access.
 - **FR-012**: The system MUST keep all existing guardrails (no -target, service allowlist, host-path bind mount rejection, offline evidence verification).
 
 ### Key Entities *(include if feature involves data)*

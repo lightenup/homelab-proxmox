@@ -32,7 +32,7 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 ## Baseline Decisions
 
 ### State Management
-- Terraform state is **local** on the runner.
+- Terraform state is **local** on the Proxmox (PVE) host.
 - State must be backed up to Synology after successful apply (via script/workflow). Do not introduce remote state unless explicitly requested.
 
 ### Storage
