@@ -383,6 +383,11 @@ jobs:
 
                   preflight="evidence/prod/${RUN_ID}/preflight.txt"
                   plan_txt="evidence/prod/${RUN_ID}/reports/plan/plan.txt"
+                  plan_summary="evidence/prod/${RUN_ID}/reports/plan/summary.txt"
+                  plan_run_txt="evidence/prod/${RUN_ID}/reports/plan/terraform-plan.txt"
+                  events_log="evidence/prod/${RUN_ID}/logs/events.jsonl"
+                  tfvars_provisioning="evidence/prod/${RUN_ID}/reports/prod-tfvars/provisioning.txt"
+                  tfvars_validation="evidence/prod/${RUN_ID}/reports/prod-tfvars/validation.json"
 
                   echo "--- preflight.txt (error-ish lines) ---"
                   if [[ -f "${preflight}" ]]; then
@@ -397,6 +402,29 @@ jobs:
                   else
                     echo "MISSING: ${plan_txt}"
                   fi
+
+                  echo "--- reports/plan/summary.txt ---"
+                  if [[ -f "${plan_summary}" ]]; then
+                    cat "${plan_summary}" || true
+                  else
+                    echo "MISSING: ${plan_summary}"
+                  fi
+
+                  echo "--- reports/plan/terraform-plan.txt (error-ish lines) ---"
+                  if [[ -f "${plan_run_txt}" ]]; then
+                    grep -nE '(^Error:|^ERROR:|error:|Error\b|Failed|failed|Forbidden|forbidden|No such file|not found)' "${plan_run_txt}" | tail -n 200 || true
+                  else
+                    echo "MISSING: ${plan_run_txt}"
+                  fi
+
+                  echo "--- reports/prod-tfvars/provisioning.txt (tail) ---"
+                  tail -n 120 "${tfvars_provisioning}" 2>/dev/null || true
+
+                  echo "--- reports/prod-tfvars/validation.json ---"
+                  cat "${tfvars_validation}" 2>/dev/null || true
+
+                  echo "--- logs/events.jsonl (tail) ---"
+                  tail -n 200 "${events_log}" 2>/dev/null || true
 
                   echo "--- preflight.txt (tail) ---"
                   tail -n 120 "${preflight}" 2>/dev/null || true
