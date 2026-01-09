@@ -1,6 +1,6 @@
 name: LXC Promote (LAB → PROD)
 
-"on":
+on:
     workflow_dispatch:
         inputs:
             service:

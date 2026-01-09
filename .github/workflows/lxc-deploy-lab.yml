@@ -1,6 +1,6 @@
 name: LXC Deploy (LAB)
 
-"on":
+on:
     workflow_dispatch:
         inputs:
             service:
