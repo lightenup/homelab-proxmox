@@ -201,6 +201,10 @@ jobs:
               echo "- RUN_ID: \`${run_id}\`"
               echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/service-deploy-runs/${run_id}\`"
             } >>"$GITHUB_STEP_SUMMARY"
+
+            bash ./scripts/lab/render_failure_evidence.sh \
+              --evidence-dir "evidence/lab/${run_id}" \
+              --max-lines 120 >>"$GITHUB_STEP_SUMMARY" || true
           fi
 
   apply_lab:
@@ -342,6 +346,10 @@ jobs:
               echo "- RUN_ID: \`${run_id}\`"
               echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/service-deploy-runs/${run_id}\`"
             } >>"$GITHUB_STEP_SUMMARY"
+
+            bash ./scripts/lab/render_failure_evidence.sh \
+              --evidence-dir "evidence/lab/${run_id}" \
+              --max-lines 120 >>"$GITHUB_STEP_SUMMARY" || true
           fi
 
       - name: Upload LAB evidence (plan + apply)
@@ -594,6 +602,10 @@ jobs:
               echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/service-deploy-runs/${run_id}\`"
               echo "- Next: fix the cause, then re-run promotion (PROD approval will not be requested)."
             } >>"$GITHUB_STEP_SUMMARY"
+
+            bash ./scripts/lab/render_failure_evidence.sh \
+              --evidence-dir "evidence/prod/${run_id}" \
+              --max-lines 120 >>"$GITHUB_STEP_SUMMARY" || true
           fi
 
   approve_prod:
@@ -680,24 +692,6 @@ jobs:
             ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && PROXMOX_API_TOKEN_SECRET='${token_secret}' GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars ALLOW_PROD_APPLY=1 VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'"
           fi
 
-      - name: Summarize PROD apply outcome
-        if: always()
-        run: |
-          set -euo pipefail
-          outcome="${{ steps.apply_on_pve.outcome }}"
-
-          if [[ "${outcome}" != "success" ]]; then
-            ./scripts/lab/render_github_annotations.sh \
-              --level error \
-              --title "PROD apply failed" \
-              --message "PROD apply failed. Evidence pack will contain details. No rollback was performed."
-            {
-              echo "## PROD apply failed"
-              echo "- State was preserved (no automatic rollback)"
-              echo "- Next: inspect evidence pack on PVE and consider re-running after remediation"
-            } >>"$GITHUB_STEP_SUMMARY"
-          fi
-
       - name: Capture RUN_ID (PROD apply)
         id: capture_run_id
         if: always()
@@ -733,6 +727,31 @@ jobs:
       - name: Verify evidence pack (offline)
         if: always()
         run: ./scripts/lab/ci-verify.sh evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
+
+      - name: Summarize PROD apply outcome
+        if: always()
+        run: |
+          set -euo pipefail
+          outcome="${{ steps.apply_on_pve.outcome }}"
+          run_id="${{ steps.capture_run_id.outputs.run_id }}"
+
+          if [[ "${outcome}" != "success" ]]; then
+            ./scripts/lab/render_github_annotations.sh \
+              --level error \
+              --title "PROD apply failed" \
+              --message "PROD apply failed. Evidence pack will contain details. No rollback was performed."
+            {
+              echo "## PROD apply failed"
+              echo "- RUN_ID: \`${run_id}\`"
+              echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/service-deploy-runs/${run_id}\`"
+              echo "- State was preserved (no automatic rollback)"
+              echo "- Next: inspect evidence pack on PVE and consider re-running after remediation"
+            } >>"$GITHUB_STEP_SUMMARY"
+
+            bash ./scripts/lab/render_failure_evidence.sh \
+              --evidence-dir "evidence/prod/${run_id}" \
+              --max-lines 120 >>"$GITHUB_STEP_SUMMARY" || true
+          fi
 
       - name: Upload PROD evidence (plan + apply)
         if: always()
