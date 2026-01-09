@@ -316,20 +316,23 @@ jobs:
               continue-on-error: true
               env:
                   ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+                PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
                   PROXMOX_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
               run: |
                   set -euo pipefail
 
                   service="${{ github.event.inputs.service }}"
 
+                token_secret="${PROXMOX_API_TOKEN_SECRET:-${PROXMOX_TOKEN_SECRET:-}}"
+
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
                   if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-                    payload="$(printf '%s\n%s' "${ANSIBLE_VAULT_PASSWORD}" "${PROXMOX_TOKEN_SECRET:-}")"
+                    payload="$(printf '%s\n%s' "${ANSIBLE_VAULT_PASSWORD}" "${token_secret}")"
                     ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; tokfile=\"\$(mktemp -t proxmox-token.XXXXXX)\"; IFS= read -r vault_pw || true; cat >\"\${tokfile}\"; printf '%s' \"\${vault_pw}\" >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; export PROXMOX_API_TOKEN_SECRET=\"\$(tr -d '\n' <\"\${tokfile}\")\"; cd /home/ci/homelab-proxmox/scripts/lab && HOTFIX_OVERRIDE='${{ github.event.inputs.hotfix_override }}' GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy plan --environment prod --service '${service}'; rm -f \"\${pwfile}\" \"\${tokfile}\"" <<<"${payload}"
                   else
-                    ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && PROXMOX_API_TOKEN_SECRET='${PROXMOX_TOKEN_SECRET:-}' HOTFIX_OVERRIDE='${{ github.event.inputs.hotfix_override }}' GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy plan --environment prod --service '${service}'"
+                    ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && PROXMOX_API_TOKEN_SECRET='${token_secret}' HOTFIX_OVERRIDE='${{ github.event.inputs.hotfix_override }}' GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy plan --environment prod --service '${service}'"
                   fi
 
             - name: Capture RUN_ID (PROD plan)
@@ -514,20 +517,23 @@ jobs:
               id: apply_on_pve
               env:
                   ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+                PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
                   PROXMOX_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
               run: |
                   set -euo pipefail
 
                   service="${{ github.event.inputs.service }}"
 
+                token_secret="${PROXMOX_API_TOKEN_SECRET:-${PROXMOX_TOKEN_SECRET:-}}"
+
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
                   if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-                    payload="$(printf '%s\n%s' "${ANSIBLE_VAULT_PASSWORD}" "${PROXMOX_TOKEN_SECRET:-}")"
+                    payload="$(printf '%s\n%s' "${ANSIBLE_VAULT_PASSWORD}" "${token_secret}")"
                     ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; tokfile=\"\$(mktemp -t proxmox-token.XXXXXX)\"; IFS= read -r vault_pw || true; cat >\"\${tokfile}\"; printf '%s' \"\${vault_pw}\" >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; export PROXMOX_API_TOKEN_SECRET=\"\$(tr -d '\n' <\"\${tokfile}\")\"; cd /home/ci/homelab-proxmox/scripts/lab && HOTFIX_OVERRIDE='${{ github.event.inputs.hotfix_override }}' GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars ALLOW_PROD_APPLY=1 VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod'; rm -f \"\${pwfile}\" \"\${tokfile}\"" <<<"${payload}"
                   else
-                    ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && PROXMOX_API_TOKEN_SECRET='${PROXMOX_TOKEN_SECRET:-}' HOTFIX_OVERRIDE='${{ github.event.inputs.hotfix_override }}' GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars ALLOW_PROD_APPLY=1 VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod'"
+                    ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && PROXMOX_API_TOKEN_SECRET='${token_secret}' HOTFIX_OVERRIDE='${{ github.event.inputs.hotfix_override }}' GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars ALLOW_PROD_APPLY=1 VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod'"
                   fi
 
             - name: Capture RUN_ID (PROD apply)
