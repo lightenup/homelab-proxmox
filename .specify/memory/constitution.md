@@ -53,6 +53,10 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 
 ### Local Workflow Testing
 - `act` is an approved tool for running GitHub Actions workflows locally during development.
+- When modifying `.github/workflows/*.yml`, you SHOULD validate the workflow with `act` before closing an implementation cycle (when `act` + Docker are available).
+	- Minimum check: `act -l` (ensures workflows parse and events like `workflow_dispatch` are recognized).
+	- If you changed a specific workflow: `act -n -W .github/workflows/<file>.yml workflow_dispatch` (or the relevant event).
+	- If it’s not feasible (e.g. no Docker daemon, `act` not installed), document the reason in the PR/work notes.
 - Keep any `act` runner artifacts local-only (gitignored).
 
 ### Repo Layout
@@ -65,4 +69,4 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 ## Governance
 This constitution supersedes all other practices. Amendments require documentation and approval. All PRs and reviews must verify compliance with these principles.
 
-**Version**: 1.0.0 | **Ratified**: 2025-12-15
+**Version**: 1.0.1 | **Ratified**: 2025-12-15
