@@ -1,5 +1,11 @@
 {
   "run_id": "service-deploy-valid",
   "profile_id": "service-deploy",
-  "contract_version": "1.0.0"
+  "contract_version": "1.0.0",
+  "verification": {
+    "status": "PASS",
+    "report_path": "reports/verify.json",
+    "verifier_version": "1.0.0",
+    "reason": ""
+  }
 }

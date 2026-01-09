@@ -51,3 +51,9 @@ artifacts/healthcheck/
 artifacts/019-lab/
 artifacts/lab-runs/
 artifacts/service-deploy-runs/
+
+# Node (tooling)
+node_modules/
+dist/
+build/
+coverage/

@@ -39,7 +39,7 @@ TERRAFORM_DIR=""
 usage() {
     cat <<'EOF'
 Usage:
-  pve-service-deploy <plan|apply> [--environment <lab|prod>] [--service <slug>] [--confirm <string>]
+    pve-service-deploy <plan|apply> [--environment <lab|prod>] [--service <slug>] [--confirm <string>] [--from-plan-run-id <RUN_ID>]
 
 Notes:
   - This script is intended to run on the Proxmox host as a non-root automation user.
@@ -61,6 +61,7 @@ parse_common_flags() {
     ENVIRONMENT="${ENVIRONMENT:-}"
     SERVICE="${SERVICE:-}"
     CONFIRM="${CONFIRM:-}"
+    FROM_PLAN_RUN_ID="${FROM_PLAN_RUN_ID:-}"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -74,6 +75,10 @@ parse_common_flags() {
                 ;;
             --confirm)
                 CONFIRM="${2:-}"
+                shift 2
+                ;;
+            --from-plan-run-id)
+                FROM_PLAN_RUN_ID="${2:-}"
                 shift 2
                 ;;
             -h|--help)
@@ -101,6 +106,29 @@ parse_common_flags() {
     if ! is_slug "${SERVICE}"; then
         die "Invalid --service '${SERVICE}' (expected slug like 'jellyfin')"
     fi
+
+    if [[ -n "${FROM_PLAN_RUN_ID}" ]]; then
+        if [[ "${FROM_PLAN_RUN_ID}" == *"/"* || "${FROM_PLAN_RUN_ID}" == *".."* ]]; then
+            die "Invalid --from-plan-run-id '${FROM_PLAN_RUN_ID}' (must be a run_id, not a path)"
+        fi
+    fi
+}
+
+sha256_file() {
+    local path="$1"
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "${path}" | awk '{print $1}'
+        return 0
+    fi
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "${path}" | awk '{print $1}'
+        return 0
+    fi
+    if command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "${path}" | awk '{print $NF}'
+        return 0
+    fi
+    return 1
 }
 
 git_sha_short() {
@@ -933,18 +961,130 @@ cmd_apply() {
     terraform_chdir init -input=false -no-color
     terraform_chdir validate -no-color
 
+    local plan_source_run_id="${FROM_PLAN_RUN_ID:-}"
+    local plan_source_sha256=""
+
     # terraform plan with -detailed-exitcode intentionally returns:
     #   0 = no changes, 2 = changes present
     # Wrap in an `if` to prevent the ERR trap from firing on rc=2.
     local plan_rc=0
-    if terraform_chdir plan -input=false -no-color \
-        -state="${state_path}" \
-        -var-file="${tfvars_path}" \
-        -out="${planfile}" \
-        -detailed-exitcode; then
-        plan_rc=0
+    if [[ -n "${plan_source_run_id}" ]]; then
+        local plan_source_root
+        plan_source_root="$(artifact_run_path "${plan_source_run_id}")"
+
+        if [[ ! -d "${plan_source_root}" ]]; then
+            {
+                echo "status=failure"
+                echo "reason=missing plan evidence directory for plan_source_run_id=${plan_source_run_id}"
+                echo "hint=verify Plan(PROD) completed and artifacts remain on PVE"
+            } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+            emit_error "${RUN_ID}" "missing plan evidence directory for plan_source_run_id=${plan_source_run_id}"
+            run_offline_verify || true
+            trap - ERR
+            return 1
+        fi
+
+        local plan_source_prov="${plan_source_root}/provenance.json"
+        if [[ ! -f "${plan_source_prov}" ]]; then
+            {
+                echo "status=failure"
+                echo "reason=missing provenance.json for plan_source_run_id=${plan_source_run_id}"
+                echo "hint=verify the plan run produced a complete evidence pack"
+            } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+            emit_error "${RUN_ID}" "missing provenance.json for plan_source_run_id=${plan_source_run_id}"
+            run_offline_verify || true
+            trap - ERR
+            return 1
+        fi
+
+        local src_env=""
+        local src_service=""
+        src_env="$(jq -r '.environment // empty' "${plan_source_prov}" 2>/dev/null || true)"
+        src_service="$(jq -r '.service // empty' "${plan_source_prov}" 2>/dev/null || true)"
+        if [[ -z "${src_env}" || -z "${src_service}" || "${src_env}" != "${ENVIRONMENT}" || "${src_service}" != "${SERVICE}" ]]; then
+            {
+                echo "status=failure"
+                echo "reason=plan metadata mismatch for plan_source_run_id=${plan_source_run_id}"
+                echo "expected=environment=${ENVIRONMENT} service=${SERVICE}"
+                echo "actual=environment=${src_env:-missing} service=${src_service:-missing}"
+            } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+            emit_error "${RUN_ID}" "plan metadata mismatch for plan_source_run_id=${plan_source_run_id}"
+            run_offline_verify || true
+            trap - ERR
+            return 1
+        fi
+
+        local plan_source_planfile="${plan_source_root}/reports/plan/plan.tfplan"
+        if [[ ! -f "${plan_source_planfile}" ]]; then
+            {
+                echo "status=failure"
+                echo "reason=missing planfile at reports/plan/plan.tfplan for plan_source_run_id=${plan_source_run_id}"
+                echo "hint=ensure Plan(PROD) uploaded full evidence pack including plan.tfplan"
+            } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+            emit_error "${RUN_ID}" "missing planfile for plan_source_run_id=${plan_source_run_id}"
+            run_offline_verify || true
+            trap - ERR
+            return 1
+        fi
+
+        plan_source_sha256="$(sha256_file "${plan_source_planfile}" 2>/dev/null || true)"
+
+        # Materialize plan artifacts into this apply run's evidence pack so
+        # verification remains self-contained.
+        cp "${plan_source_planfile}" "${planfile}"
+
+        local plan_source_exitcode="${plan_source_root}/reports/plan/exitcode.txt"
+        if [[ -f "${plan_source_exitcode}" ]]; then
+            plan_rc="$(tr -d '\r\n' <"${plan_source_exitcode}" | head -c 16)"
+        else
+            plan_rc=0
+        fi
+
+        local plan_source_plan_json="${plan_source_root}/reports/plan/plan.json"
+        local plan_source_plan_txt="${plan_source_root}/reports/plan/plan.txt"
+        if [[ -f "${plan_source_plan_txt}" ]]; then
+            cp "${plan_source_plan_txt}" "${plan_txt}" 2>/dev/null || true
+        else
+            terraform_chdir show -no-color "${planfile}" >"${plan_txt}"
+        fi
+        if [[ -f "${plan_source_plan_json}" ]]; then
+            cp "${plan_source_plan_json}" "${plan_json}" 2>/dev/null || true
+        else
+            terraform_chdir show -json "${planfile}" >"${plan_json}"
+        fi
+
+        preflight_ok "using saved planfile from run_id=${plan_source_run_id}"
+
+        {
+            echo "plan_source_run_id=${plan_source_run_id}"
+            echo "plan_source_path=${plan_source_root}"
+            if [[ -n "${plan_source_sha256}" ]]; then
+                echo "plan_sha256=${plan_source_sha256}"
+            fi
+        } >"${EVIDENCE_ROOT}/reports/apply/plan-provenance.txt" 2>/dev/null || true
+
+        if [[ -n "${plan_source_sha256}" ]]; then
+            local prov_tmp="${EVIDENCE_ROOT}/provenance.json.tmp"
+            jq --arg plan_source_run_id "${plan_source_run_id}" \
+               --arg plan_sha256 "${plan_source_sha256}" \
+               '. + {plan_source_run_id: $plan_source_run_id, plan_sha256: $plan_sha256}' \
+               "${EVIDENCE_ROOT}/provenance.json" >"${prov_tmp}"
+            mv -f "${prov_tmp}" "${EVIDENCE_ROOT}/provenance.json"
+        fi
     else
-        plan_rc=$?
+        if terraform_chdir plan -input=false -no-color \
+            -state="${state_path}" \
+            -var-file="${tfvars_path}" \
+            -out="${planfile}" \
+            -detailed-exitcode; then
+            plan_rc=0
+        else
+            plan_rc=$?
+        fi
+
+        terraform_chdir show -no-color "${planfile}" >"${plan_txt}"
+        terraform_chdir show -json "${planfile}" >"${plan_json}"
+        preflight_ok "plan artifacts emitted (reports/plan/plan.txt + reports/plan/plan.json)"
     fi
     echo "${plan_rc}" >"${EVIDENCE_ROOT}/reports/plan/exitcode.txt"
 
@@ -958,10 +1098,6 @@ cmd_apply() {
         trap - ERR
         return 1
     fi
-
-    terraform_chdir show -no-color "${planfile}" >"${plan_txt}"
-    terraform_chdir show -json "${planfile}" >"${plan_json}"
-    preflight_ok "plan artifacts emitted (reports/plan/plan.txt + reports/plan/plan.json)"
 
     compute_blast_radius "${plan_json}" || true
 
