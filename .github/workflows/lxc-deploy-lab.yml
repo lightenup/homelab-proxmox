@@ -20,10 +20,10 @@ name: LXC Deploy (LAB)
                 type: boolean
                 default: false
             confirm_destructive:
-                description: "Only when plan has replace/destroy: type 'apply-lab-destructive'"
-                required: false
-                type: string
-                default: ""
+              description: "Only when plan has replace/destroy: check to allow apply"
+              required: false
+              type: boolean
+              default: false
 
 jobs:
     plan:
@@ -40,7 +40,6 @@ jobs:
                   set -euo pipefail
                   vals=(
                     "${{ github.event.inputs.service }}"
-                    "${{ github.event.inputs.confirm_destructive }}"
                   )
                   for v in "${vals[@]}"; do
                     if [[ "${v}" == *"-target"* ]]; then
@@ -98,7 +97,8 @@ jobs:
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1t lab-${service}-* | head -1")"
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1t lab-${service}-* 2>/dev/null | head -1" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%:}"
                   test -n "${RUN_ID}"
                   echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
                   echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
@@ -109,10 +109,13 @@ jobs:
                   set -euo pipefail
                   mkdir -p evidence
 
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  test -n "${RUN_ID}"
+
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  ssh ${ssh_opts} "${ssh_target}" "tar czf /tmp/service-deploy-evidence.tgz -C /var/lib/homelab-proxmox/artifacts/service-deploy-runs ${RUN_ID}"
+                  ssh ${ssh_opts} "${ssh_target}" "tar czf /tmp/service-deploy-evidence.tgz -C /var/lib/homelab-proxmox/artifacts/service-deploy-runs \"${RUN_ID}\""
                   scp ${ssh_opts} "${ssh_target}:/tmp/service-deploy-evidence.tgz" evidence/
                   tar xzf evidence/service-deploy-evidence.tgz -C evidence/
 
@@ -144,6 +147,17 @@ jobs:
                   print(f"destructive={destructive}")
                   PY
 
+            - name: Enforce destructive confirmation (apply requested)
+              if: |
+                  steps.plan_on_pve.outcome == 'success' &&
+                  github.event.inputs.apply == 'true' &&
+                  steps.detect_destructive.outputs.destructive == 'true' &&
+                  github.event.inputs.confirm_destructive != 'true'
+              run: |
+                  echo "ERROR: Plan is destructive (replace/destroy)." >&2
+                  echo "Rerun with confirm_destructive=true to allow apply." >&2
+                  exit 1
+
             - name: Fail job if plan failed
               if: steps.plan_on_pve.outcome != 'success'
               run: |
@@ -161,7 +175,7 @@ jobs:
         needs: [plan]
         if: |
             github.event.inputs.apply == 'true' &&
-            (needs.plan.outputs.destructive != 'true' || github.event.inputs.confirm_destructive == 'apply-lab-destructive')
+            (needs.plan.outputs.destructive != 'true' || github.event.inputs.confirm_destructive == 'true')
         concurrency:
             group: lxc-deploy-lab-${{ github.event.inputs.service }}
             cancel-in-progress: false
@@ -215,7 +229,8 @@ jobs:
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1t lab-${service}-* | head -1")"
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1t lab-${service}-* 2>/dev/null | head -1" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%:}"
                   test -n "${RUN_ID}"
                   echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
                   echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
@@ -226,10 +241,13 @@ jobs:
                   set -euo pipefail
                   mkdir -p evidence
 
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  test -n "${RUN_ID}"
+
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  ssh ${ssh_opts} "${ssh_target}" "tar czf /tmp/service-deploy-evidence.tgz -C /var/lib/homelab-proxmox/artifacts/service-deploy-runs ${RUN_ID}"
+                  ssh ${ssh_opts} "${ssh_target}" "tar czf /tmp/service-deploy-evidence.tgz -C /var/lib/homelab-proxmox/artifacts/service-deploy-runs \"${RUN_ID}\""
                   scp ${ssh_opts} "${ssh_target}:/tmp/service-deploy-evidence.tgz" evidence/
                   tar xzf evidence/service-deploy-evidence.tgz -C evidence/
 

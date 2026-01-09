@@ -45,7 +45,7 @@ Both workflows use bounded inputs (dropdowns, booleans) instead of free-text fie
 |-------|------|----------|-------------|
 | `service` | Choice | Yes | Service to deploy (dropdown with allowlist) |
 | `apply` | Boolean | Yes | Plan+apply (true) or plan-only (false) |
-| `confirm_destructive` | String | Conditional | Enter `apply-lab-destructive` if plan detects destructive changes |
+| `confirm_destructive` | Boolean | Conditional | Check to allow apply if plan detects destructive changes |
 
 ### How to Run
 
@@ -55,7 +55,7 @@ Both workflows use bounded inputs (dropdowns, booleans) instead of free-text fie
 4. Toggle **apply**:
    - `false` (unchecked): Plan-only mode (safe, no changes)
    - `true` (checked): Plan+apply mode (makes changes)
-5. Leave **confirm_destructive** empty (only fill if plan fails with destructive change error)
+5. Leave **confirm_destructive** unchecked (only check if plan is destructive)
 6. Click **Run workflow**
 
 ### Expected Behavior
@@ -69,7 +69,7 @@ Both workflows use bounded inputs (dropdowns, booleans) instead of free-text fie
 #### Plan+Apply Mode (`apply: true`)
 1. Workflow runs Terraform plan on LAB
 2. Checks for destructive changes (replace/destroy)
-   - If destructive: workflow fails unless `confirm_destructive: apply-lab-destructive`
+  - If destructive: workflow fails unless `confirm_destructive: true`
 3. Runs Terraform apply (makes changes)
 4. Runs second apply for idempotency check
 5. Generates evidence pack and LAB snapshot
@@ -83,7 +83,7 @@ If plan detects destructive changes (replace or destroy operations):
 2. Review plan output in evidence artifact
 3. If changes are acceptable:
    - Rerun workflow with **same inputs**
-   - Set `confirm_destructive` to `apply-lab-destructive`
+  - Check `confirm_destructive: true`
 4. Workflow proceeds with apply
 
 ### Artifacts
@@ -104,8 +104,8 @@ If plan detects destructive changes (replace or destroy operations):
 | Input | Type | Required | Description |
 |-------|------|----------|-------------|
 | `service` | Choice | Yes | Service to promote (dropdown with allowlist) |
-| `confirm_destructive_lab` | String | Conditional | Enter `apply-lab-destructive` if LAB plan is destructive |
-| `confirm_destructive_prod` | String | Conditional | Enter `deploy-prod-destructive` if PROD plan is destructive |
+| `confirm_destructive_lab` | Boolean | Conditional | Check to proceed if LAB plan is destructive |
+| `confirm_destructive_prod` | Boolean | Conditional | Check to proceed if PROD plan is destructive |
 | `hotfix_override` | Boolean | Conditional | Check `true` if running from main branch (hotfix mode) |
 
 ### How to Run
@@ -113,7 +113,7 @@ If plan detects destructive changes (replace or destroy operations):
 1. Navigate to **Actions** → **LXC Promote (LAB → PROD)**
 2. Click **Run workflow**
 3. Select **service** from dropdown
-4. Leave destructive confirmations empty initially
+4. Leave destructive confirmations unchecked initially
 5. Leave **hotfix_override** unchecked (unless hotfix from main)
 6. Click **Run workflow**
 
@@ -122,7 +122,7 @@ If plan detects destructive changes (replace or destroy operations):
 #### Stage 1: LAB Deploy
 1. Workflow runs plan on LAB
 2. Checks for destructive changes
-   - If destructive: fails unless `confirm_destructive_lab: apply-lab-destructive`
+  - If destructive: fails unless `confirm_destructive_lab: true`
 3. Runs apply on LAB
 4. Generates LAB evidence pack with snapshot
 5. LAB stage completes
@@ -143,7 +143,7 @@ If plan detects destructive changes (replace or destroy operations):
    - Generates redacted proof in evidence (no secrets logged)
 2. Runs plan on PROD
 3. Checks for destructive changes
-   - If destructive: fails unless `confirm_destructive_prod: deploy-prod-destructive`
+  - If destructive: fails unless `confirm_destructive_prod: true`
 4. Runs apply on PROD
 5. Generates PROD evidence pack with snapshot and tfvars proof
 6. PROD stage completes
@@ -169,8 +169,8 @@ If destructive changes detected in LAB or PROD:
 1. Workflow fails at appropriate stage
 2. Review plan output in evidence
 3. Rerun with appropriate confirmation:
-   - LAB destructive: `confirm_destructive_lab: apply-lab-destructive`
-   - PROD destructive: `confirm_destructive_prod: deploy-prod-destructive`
+  - LAB destructive: `confirm_destructive_lab: true`
+  - PROD destructive: `confirm_destructive_prod: true`
 
 ### Artifacts
 
@@ -229,26 +229,23 @@ Terraform operations that replace or destroy existing resources:
 
 Destructive changes can cause downtime or data loss. Explicit confirmation ensures operator awareness.
 
-### Confirmation Strings
+### Confirmation Checkboxes
 
-| Environment | Confirmation String |
-|-------------|---------------------|
-| LAB | `apply-lab-destructive` |
-| PROD | `deploy-prod-destructive` |
+If a plan includes replace/destroy operations, rerun with the matching confirmation checkbox set to `true`.
 
 ### Example Workflow with Destructive Changes
 
 1. Run promote workflow (no confirmations)
 2. LAB plan detects destructive change → workflow fails
 3. Review plan output: "Plan will replace module.immich_lxc (IP changed)"
-4. Rerun workflow with `confirm_destructive_lab: apply-lab-destructive`
+4. Rerun workflow with `confirm_destructive_lab: true`
 5. LAB apply proceeds
 6. Approval granted
 7. PROD plan detects destructive change → workflow fails
 8. Review plan output
 9. Rerun workflow with both:
-   - `confirm_destructive_lab: apply-lab-destructive`
-   - `confirm_destructive_prod: deploy-prod-destructive`
+  - `confirm_destructive_lab: true`
+  - `confirm_destructive_prod: true`
 10. PROD apply proceeds
 
 ---
