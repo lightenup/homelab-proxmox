@@ -633,8 +633,8 @@ cmd_plan() {
     # Do NOT record secrets.
     local tfvars_token_id=""
     local tfvars_api_url=""
-    tfvars_token_id="$(grep -E '^\s*proxmox_api_token_id\s*=' "${tfvars_path}" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)"
-    tfvars_api_url="$(grep -E '^\s*proxmox_api_url\s*=' "${tfvars_path}" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)"
+    tfvars_token_id="$(awk -F'"' '/^[[:space:]]*proxmox_api_token_id[[:space:]]*=/ {print $2; exit}' "${tfvars_path}" 2>/dev/null || true)"
+    tfvars_api_url="$(awk -F'"' '/^[[:space:]]*proxmox_api_url[[:space:]]*=/ {print $2; exit}' "${tfvars_path}" 2>/dev/null || true)"
     {
         echo "environment=${ENVIRONMENT}"
         echo "tfvars_path=${tfvars_path}"
@@ -891,8 +891,8 @@ cmd_apply() {
     # Do NOT record secrets.
     local tfvars_token_id=""
     local tfvars_api_url=""
-    tfvars_token_id="$(grep -E '^\s*proxmox_api_token_id\s*=' "${tfvars_path}" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)"
-    tfvars_api_url="$(grep -E '^\s*proxmox_api_url\s*=' "${tfvars_path}" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true)"
+    tfvars_token_id="$(awk -F'"' '/^[[:space:]]*proxmox_api_token_id[[:space:]]*=/ {print $2; exit}' "${tfvars_path}" 2>/dev/null || true)"
+    tfvars_api_url="$(awk -F'"' '/^[[:space:]]*proxmox_api_url[[:space:]]*=/ {print $2; exit}' "${tfvars_path}" 2>/dev/null || true)"
     {
         echo "environment=${ENVIRONMENT}"
         echo "tfvars_path=${tfvars_path}"
