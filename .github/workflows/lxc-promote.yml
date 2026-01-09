@@ -366,20 +366,40 @@ jobs:
               if: always()
               run: ./scripts/lab/ci-verify.sh evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
 
-            - name: Summarize PROD plan failure (preflight + plan tail)
+            - name: Summarize PROD plan failure (preflight + plan)
               if: steps.plan_on_pve.outcome != 'success'
               run: |
                   set -euo pipefail
                   RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
                   test -n "${RUN_ID}"
 
-                  echo "ERROR: PROD plan failed on PVE. Showing evidence excerpts." >&2
+                  echo "ERROR: PROD plan failed on PVE. Showing evidence excerpts."
 
-                  echo "--- evidence/prod/${RUN_ID}/preflight.txt (tail) ---" >&2
-                  tail -n 120 "evidence/prod/${RUN_ID}/preflight.txt" 2>/dev/null || true
+                  echo "--- evidence/prod/${RUN_ID} (files) ---"
+                  find "evidence/prod/${RUN_ID}" -maxdepth 4 -type f -print | sort || true
 
-                  echo "--- evidence/prod/${RUN_ID}/reports/plan/plan.txt (tail) ---" >&2
-                  tail -n 200 "evidence/prod/${RUN_ID}/reports/plan/plan.txt" 2>/dev/null || true
+                  preflight="evidence/prod/${RUN_ID}/preflight.txt"
+                  plan_txt="evidence/prod/${RUN_ID}/reports/plan/plan.txt"
+
+                  echo "--- preflight.txt (error-ish lines) ---"
+                  if [[ -f "${preflight}" ]]; then
+                    grep -nE '(^ERROR:|^WARN:|Error:|error:|Failed|failed)' "${preflight}" | tail -n 200 || true
+                  else
+                    echo "MISSING: ${preflight}"
+                  fi
+
+                  echo "--- plan.txt (error-ish lines) ---"
+                  if [[ -f "${plan_txt}" ]]; then
+                    grep -nE '(^Error:|^ERROR:|error:|Error\b|Failed|failed|Forbidden|forbidden|No such file|not found)' "${plan_txt}" | tail -n 200 || true
+                  else
+                    echo "MISSING: ${plan_txt}"
+                  fi
+
+                  echo "--- preflight.txt (tail) ---"
+                  tail -n 120 "${preflight}" 2>/dev/null || true
+
+                  echo "--- plan.txt (tail) ---"
+                  tail -n 200 "${plan_txt}" 2>/dev/null || true
 
             - name: Upload PROD plan evidence
               if: always()
