@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/workflow-lab-deploy.json",
+  "type": "object",
+  "title": "LXC Deploy (LAB) Workflow Inputs",
+  "description": "Schema for LAB-only deployment workflow dispatcher inputs",
+  "properties": {
+    "service": {
+      "type": "string",
+      "enum": [
+        "adguard",
+        "homeassistant",
+        "immich",
+        "jellyfin",
+        "monitoring",
+        "reverse_proxy"
+      ],
+      "description": "Service to deploy (from service-scope-allowlist.json)"
+    },
+    "apply": {
+      "type": "boolean",
+      "description": "Run plan+apply (true) or plan-only (false)",
+      "default": false
+    },
+    "confirm_destructive": {
+      "type": "string",
+      "enum": [
+        "",
+        "apply-lab-destructive"
+      ],
+      "description": "Required confirmation when plan detects destructive changes (replace/destroy)",
+      "default": ""
+    }
+  },
+  "required": [
+    "service",
+    "apply"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "service": "immich",
+      "apply": false,
+      "confirm_destructive": ""
+    },
+    {
+      "service": "jellyfin",
+      "apply": true,
+      "confirm_destructive": "apply-lab-destructive"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import argparse
 import json
 import sys
 import os
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -30,6 +31,154 @@ def _required_files_for_profile(profile_id: str) -> List[str]:
         ]
 
     return []
+
+
+def _parse_condition(condition: str) -> Optional[Dict[str, str]]:
+    """Parse simple conditions like: environment == 'prod' or environment != 'prod'."""
+    m = re.match(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(==|!=)\s*'([^']*)'\s*$", condition)
+    if not m:
+        return None
+    return {"var": m.group(1), "op": m.group(2), "value": m.group(3)}
+
+
+def _eval_condition(condition: str, context: Dict[str, Any]) -> bool:
+    parsed = _parse_condition(condition)
+    if not parsed:
+        return False
+    actual = str(context.get(parsed["var"], ""))
+    if parsed["op"] == "==":
+        return actual == parsed["value"]
+    if parsed["op"] == "!=":
+        return actual != parsed["value"]
+    return False
+
+
+def _is_rfc3339_datetime(value: str) -> bool:
+    try:
+        # Accept trailing Z
+        if value.endswith("Z"):
+            datetime.fromisoformat(value[:-1] + "+00:00")
+        else:
+            datetime.fromisoformat(value)
+        return True
+    except Exception:
+        return False
+
+
+def _validate_schema_subset(schema: Dict[str, Any], instance: Any, path: str = "$") -> List[str]:
+    """Validate instance against a small subset of JSON Schema draft-07.
+
+    Supported: type, required, properties, patternProperties, items, enum, minimum,
+    minLength, pattern, additionalProperties:false, format:date-time.
+    """
+    errors: List[str] = []
+
+    if "enum" in schema:
+        if instance not in schema["enum"]:
+            errors.append(f"{path}: value {instance!r} not in enum {schema['enum']!r}")
+            return errors
+
+    expected_type = schema.get("type")
+    if expected_type:
+        if expected_type == "object":
+            if not isinstance(instance, dict):
+                return [f"{path}: expected object"]
+        elif expected_type == "array":
+            if not isinstance(instance, list):
+                return [f"{path}: expected array"]
+        elif expected_type == "string":
+            if not isinstance(instance, str):
+                return [f"{path}: expected string"]
+        elif expected_type == "integer":
+            if not (isinstance(instance, int) and not isinstance(instance, bool)):
+                return [f"{path}: expected integer"]
+        elif expected_type == "number":
+            if not (isinstance(instance, (int, float)) and not isinstance(instance, bool)):
+                return [f"{path}: expected number"]
+        elif expected_type == "boolean":
+            if not isinstance(instance, bool):
+                return [f"{path}: expected boolean"]
+
+    if expected_type == "string":
+        if "minLength" in schema and len(instance) < int(schema["minLength"]):
+            errors.append(f"{path}: string length < {schema['minLength']}")
+        if "pattern" in schema:
+            if re.match(schema["pattern"], instance) is None:
+                errors.append(f"{path}: string does not match pattern {schema['pattern']!r}")
+        if schema.get("format") == "date-time":
+            if not _is_rfc3339_datetime(instance):
+                errors.append(f"{path}: string is not valid date-time")
+
+    if expected_type == "integer":
+        if "minimum" in schema and instance < int(schema["minimum"]):
+            errors.append(f"{path}: value {instance} < minimum {schema['minimum']}")
+
+    if expected_type == "object":
+        required = schema.get("required", [])
+        for key in required:
+            if key not in instance:
+                errors.append(f"{path}: missing required property {key!r}")
+
+        properties = schema.get("properties", {})
+        pattern_properties = schema.get("patternProperties", {})
+
+        for key, sub_schema in properties.items():
+            if key in instance:
+                errors.extend(_validate_schema_subset(sub_schema, instance[key], f"{path}.{key}"))
+
+        compiled_patterns: List[tuple[re.Pattern[str], Dict[str, Any]]] = []
+        for pat, sub_schema in pattern_properties.items():
+            try:
+                compiled_patterns.append((re.compile(pat), sub_schema))
+            except re.error:
+                errors.append(f"{path}: invalid patternProperties regex {pat!r}")
+
+        for key, value in instance.items():
+            if key in properties:
+                continue
+            matched = False
+            for regex_obj, sub_schema in compiled_patterns:
+                if regex_obj.match(key):
+                    matched = True
+                    errors.extend(_validate_schema_subset(sub_schema, value, f"{path}.{key}"))
+            if schema.get("additionalProperties") is False and not matched:
+                errors.append(f"{path}: additional property {key!r} not allowed")
+
+    if expected_type == "array":
+        items_schema = schema.get("items")
+        if items_schema:
+            for i, item in enumerate(instance):
+                errors.extend(_validate_schema_subset(items_schema, item, f"{path}[{i}]"))
+
+    return errors
+
+
+def _load_evidence_profile(profile_id: str) -> Optional[Dict[str, Any]]:
+    script_dir = Path(__file__).parent
+    profile_path = script_dir / "profiles.d" / f"{profile_id}.json"
+    if not profile_path.exists():
+        return None
+    try:
+        with open(profile_path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _profile_required_paths(profile: Dict[str, Any], context: Dict[str, Any]) -> List[str]:
+    required: List[str] = []
+    for entry in profile.get("required_fields", []) or []:
+        path = entry.get("path")
+        if path:
+            required.append(path)
+
+    for entry in profile.get("conditional_fields", []) or []:
+        path = entry.get("path")
+        cond = entry.get("condition", "")
+        if path and cond and _eval_condition(cond, context):
+            required.append(path)
+
+    return required
 
 class VerificationError(Exception):
     def __init__(self, code: str, message: str, remediation: str):
@@ -143,10 +292,20 @@ class EvidenceVerifier:
         run_id = summary.get('run_id')
         profile_id = summary.get('profile_id')
 
+        provenance = self.data.get('provenance') or {}
+        environment = provenance.get('environment') or "lab"
+        context = {"environment": environment}
+
         if profile_id:
-            for filename in _required_files_for_profile(profile_id):
-                if not (self.pack_path / filename).exists():
-                    missing_files.append(filename)
+            evidence_profile = _load_evidence_profile(profile_id)
+            if evidence_profile:
+                for filename in _profile_required_paths(evidence_profile, context):
+                    if not (self.pack_path / filename).exists():
+                        missing_files.append(filename)
+            else:
+                for filename in _required_files_for_profile(profile_id):
+                    if not (self.pack_path / filename).exists():
+                        missing_files.append(filename)
 
         if missing_files:
             self.add_error(
@@ -154,6 +313,52 @@ class EvidenceVerifier:
                 f"Missing required files: {', '.join(sorted(set(missing_files)))}",
                 "Ensure evidence pack contains all required files for its profile"
             )
+
+        # Schema validation for new reports
+        if profile_id == "service-deploy":
+            self._validate_report_schema(
+                report_relpath="reports/lab-snapshot.json",
+                schema_filename="evidence-lab-snapshot.schema.json",
+                error_code="SCHEMA-001",
+                remediation="Regenerate reports/lab-snapshot.json to match schema"
+            )
+
+            if environment == "prod":
+                self._validate_report_schema(
+                    report_relpath="reports/prod-tfvars/validation.json",
+                    schema_filename="evidence-tfvars-proof.schema.json",
+                    error_code="SCHEMA-002",
+                    remediation="Regenerate reports/prod-tfvars/validation.json to match schema"
+                )
+
+                proof = self.load_json("reports/prod-tfvars/validation.json")
+                if isinstance(proof, dict):
+                    if proof.get("validation_status") != "pass":
+                        self.add_error(
+                            "TFVARS-001",
+                            "PROD tfvars validation_status is not 'pass'",
+                            "Fix prod.tfvars provisioning/inputs and re-run so validation_status becomes 'pass'"
+                        )
+
+                    if proof.get("secret_present") is not True:
+                        self.add_error(
+                            "TFVARS-002",
+                            "PROD tfvars secret_present is false",
+                            "Ensure PROXMOX_API_TOKEN_SECRET (or PROXMOX_TOKEN_SECRET) is set and not a placeholder"
+                        )
+
+                sha_path = self.pack_path / "reports/prod-tfvars/prod.tfvars.sha256"
+                if sha_path.exists():
+                    try:
+                        sha = sha_path.read_text(encoding="utf-8").strip()
+                    except Exception:
+                        sha = ""
+                    if re.fullmatch(r"[a-f0-9]{64}", sha or "") is None:
+                        self.add_error(
+                            "TFVARS-003",
+                            "PROD tfvars sha256 file is invalid (expected 64 lowercase hex chars)",
+                            "Regenerate reports/prod-tfvars/prod.tfvars.sha256 from a valid prod.tfvars"
+                        )
 
         dir_name = self.pack_path.name
         if run_id != dir_name:
@@ -188,6 +393,43 @@ class EvidenceVerifier:
                         f"Profile ID mismatch: summary.profile_id '{profile_id}' != provenance.profile_id '{prov_profile_id}'",
                         "Ensure all artifacts belong to the same profile"
                     )
+
+    def _validate_report_schema(self, report_relpath: str, schema_filename: str, error_code: str, remediation: str):
+        report_path = self.pack_path / report_relpath
+        if not report_path.exists():
+            return
+
+        schema_path = Path(__file__).parent / "contracts" / schema_filename
+        if not schema_path.exists():
+            self.add_error(
+                error_code,
+                f"Schema file missing: {schema_path}",
+                f"Ensure {schema_filename} exists under scripts/lab/contracts/"
+            )
+            return
+
+        report_data = self.load_json(report_relpath)
+        if report_data is None:
+            return
+
+        try:
+            with open(schema_path, "r") as f:
+                schema = json.load(f)
+        except Exception as exc:
+            self.add_error(
+                error_code,
+                f"Failed to load schema {schema_filename}: {exc}",
+                f"Fix schema JSON: {schema_filename}"
+            )
+            return
+
+        schema_errors = _validate_schema_subset(schema, report_data)
+        if schema_errors:
+            self.add_error(
+                error_code,
+                f"Schema validation failed for {report_relpath}: " + "; ".join(schema_errors[:5]),
+                remediation
+            )
 
     def validate_catalog(self):
         if not self.data.get('checks'):

@@ -1,4 +1,4 @@
-name: LXC Deploy (Gated)
+name: DEPRECATED - LXC Deploy (Gated)
 
 "on":
   workflow_dispatch:
@@ -32,6 +32,12 @@ jobs:
       destructive: ${{ steps.detect_destructive.outputs.destructive }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Deprecation notice
+        run: |
+          echo "WARNING: This workflow is deprecated." >&2
+          echo "Use: 'LXC Deploy (LAB)' (.github/workflows/lxc-deploy-lab.yml)" >&2
+          echo "  or: 'LXC Promote (LAB → PROD)' (.github/workflows/lxc-promote.yml)" >&2
 
       - name: Fail fast on forbidden inputs
         if: github.event_name == 'workflow_dispatch'

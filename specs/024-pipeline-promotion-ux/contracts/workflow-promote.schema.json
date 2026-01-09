@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/workflow-promote.json",
+  "type": "object",
+  "title": "LXC Promote (LAB → PROD) Workflow Inputs",
+  "description": "Schema for LAB to PROD promotion workflow dispatcher inputs",
+  "properties": {
+    "service": {
+      "type": "string",
+      "enum": [
+        "adguard",
+        "homeassistant",
+        "immich",
+        "jellyfin",
+        "monitoring",
+        "reverse_proxy"
+      ],
+      "description": "Service to promote (from service-scope-allowlist.json)"
+    },
+    "confirm_destructive_lab": {
+      "type": "string",
+      "enum": [
+        "",
+        "apply-lab-destructive"
+      ],
+      "description": "Required when LAB plan is destructive (replace/destroy)",
+      "default": ""
+    },
+    "confirm_destructive_prod": {
+      "type": "string",
+      "enum": [
+        "",
+        "deploy-prod-destructive"
+      ],
+      "description": "Required when PROD plan is destructive (replace/destroy)",
+      "default": ""
+    },
+    "hotfix_override": {
+      "type": "boolean",
+      "description": "Required confirmation when running from main branch (hotfix mode)",
+      "default": false
+    }
+  },
+  "required": [
+    "service"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "service": "immich",
+      "confirm_destructive_lab": "",
+      "confirm_destructive_prod": "",
+      "hotfix_override": false
+    },
+    {
+      "service": "jellyfin",
+      "confirm_destructive_lab": "apply-lab-destructive",
+      "confirm_destructive_prod": "deploy-prod-destructive",
+      "hotfix_override": false
+    },
+    {
+      "service": "adguard",
+      "confirm_destructive_lab": "",
+      "confirm_destructive_prod": "",
+      "hotfix_override": true
+    }
+  ]
+}

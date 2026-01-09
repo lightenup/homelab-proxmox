@@ -13,8 +13,12 @@ source "${LIB_DIR}/artifacts.sh"
 source "${LIB_DIR}/evidence.sh"
 # shellcheck source=lib/jsonl.sh
 source "${LIB_DIR}/jsonl.sh"
+# shellcheck source=lib/snapshot.sh
+source "${LIB_DIR}/snapshot.sh"
 # shellcheck source=lib/sudo.sh
 source "${LIB_DIR}/sudo.sh"
+# shellcheck source=lib/tfvars.sh
+source "${LIB_DIR}/tfvars.sh"
 
 # Evidence namespace for this feature (separate from lab harness)
 : "${ARTIFACT_RUNS_DIR:=service-deploy-runs}"
@@ -125,11 +129,30 @@ git_is_dirty() {
     fi
 }
 
+git_branch_name() {
+    if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -C "${REPO_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
+}
+
 init_evidence_pack() {
     ensure_artifact_root
 
     local sha
     sha="$(git_sha_short)"
+
+    local branch
+    branch="$(git_branch_name)"
+
+    local trigger_ref="${GIT_REF:-}"
+    local trigger_ref_name="${GIT_REF_NAME:-}"
+
+    local hotfix_override=false
+    if [[ "${HOTFIX_OVERRIDE:-}" == "true" ]]; then
+        hotfix_override=true
+    fi
 
     # Structured RUN_ID: deterministic components + UTC timestamp for uniqueness.
     # Resulting format: <env>-<service>-<sha8>-YYYYMMDD-HHMMSS
@@ -148,6 +171,10 @@ run_id=${RUN_ID}
 profile_id=${PROFILE_ID}
 environment=${ENVIRONMENT}
 service=${SERVICE}
+git_branch=${branch}
+trigger_ref=${trigger_ref}
+trigger_ref_name=${trigger_ref_name}
+hotfix_override=${hotfix_override}
 EOF
 
     cat >"${EVIDENCE_ROOT}/summary.json" <<EOF
@@ -168,7 +195,11 @@ EOF
     "environment": "${ENVIRONMENT}",
     "service": "${SERVICE}",
     "git_sha": "${sha}",
+    "git_branch": "${branch}",
     "git_dirty": "${dirty}",
+    "trigger_ref": "${trigger_ref}",
+    "trigger_ref_name": "${trigger_ref_name}",
+    "hotfix_override": ${hotfix_override},
     "runner": {
         "hostname": "$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)",
         "user": "${USER:-unknown}"
@@ -190,6 +221,12 @@ EOF
     "artifacts": []
 }
 EOF
+
+    # Snapshot is required evidence for this profile.
+    # Keep failures non-fatal, but always attempt to write a schema-shaped JSON.
+    if ! write_lab_snapshot "${EVIDENCE_ROOT}/reports/lab-snapshot.json" "${ENVIRONMENT}" "${STATE_PATH_DEFAULT_ROOT}"; then
+        echo "WARN: snapshot generation failed" >>"${EVIDENCE_ROOT}/preflight.txt"
+    fi
 }
 
 preflight_ok() {
@@ -554,6 +591,25 @@ cmd_plan() {
         export TF_VAR_ssh_public_keys
     fi
 
+    # PROD tfvars automation: provision/validate and emit redacted proof before Terraform.
+    if [[ "${ENVIRONMENT}" == "prod" ]]; then
+        local tfvars_dir="${TFVARS_DIR:-/var/lib/homelab-proxmox/tfvars}"
+
+        if ! _tfvars_provision_prod_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}"; then
+            write_plan_summary "blocked" "prod tfvars provisioning/validation failed"
+            emit_error "${RUN_ID}" "prod tfvars provisioning/validation failed"
+            run_offline_verify || true
+            trap - ERR
+            return 1
+        fi
+
+        # Prefer the rendered/provisioned PROD tfvars path.
+        if [[ -f "${tfvars_dir%/}/prod.tfvars" ]]; then
+            TFVARS_PATH="${tfvars_dir%/}/prod.tfvars"
+            export TFVARS_PATH
+        fi
+    fi
+
     local tfvars_path
     if ! tfvars_path="$(resolve_tfvars_path "${ENVIRONMENT}")"; then
         write_plan_summary "blocked" "missing tfvars file for environment=${ENVIRONMENT}"
@@ -742,6 +798,22 @@ cmd_apply() {
     fi
 
     assert_no_target_env || { run_offline_verify || true; return 1; }
+
+    # PROD tfvars automation: provision/validate and emit redacted proof before Terraform.
+    if [[ "${ENVIRONMENT}" == "prod" ]]; then
+        local tfvars_dir="${TFVARS_DIR:-/var/lib/homelab-proxmox/tfvars}"
+
+        if ! _tfvars_provision_prod_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}"; then
+            emit_error "${RUN_ID}" "prod tfvars provisioning/validation failed"
+            run_offline_verify || true
+            return 1
+        fi
+
+        if [[ -f "${tfvars_dir%/}/prod.tfvars" ]]; then
+            TFVARS_PATH="${tfvars_dir%/}/prod.tfvars"
+            export TFVARS_PATH
+        fi
+    fi
 
     # Ansible consumes vault secrets via a password file.
     # GitHub Actions passes secrets most conveniently as an env var, so bridge it.

@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 FIXTURES_DIR="${SCRIPT_DIR}/fixtures"
 CATALOG_FILE="${SCRIPT_DIR}/checks.d/catalog.json"
+SERVICE_DEPLOY_PROFILE_JSON="${SCRIPT_DIR}/profiles.d/service-deploy.json"
+SNAPSHOT_SCHEMA="${SCRIPT_DIR}/contracts/evidence-lab-snapshot.schema.json"
+TFVARS_SCHEMA="${SCRIPT_DIR}/contracts/evidence-tfvars-proof.schema.json"
 
 echo "=== CI Verification Gate ==="
 
@@ -15,6 +18,27 @@ if ! python3 -c "import json; json.load(open('$CATALOG_FILE'))"; then
     exit 1
 fi
 echo "PASS: Catalog JSON is valid"
+
+# 1b. Lint Evidence Profile (service-deploy)
+echo "Linting Evidence Profile: $SERVICE_DEPLOY_PROFILE_JSON"
+if [[ ! -f "$SERVICE_DEPLOY_PROFILE_JSON" ]]; then
+    echo "FAIL: Missing evidence profile: $SERVICE_DEPLOY_PROFILE_JSON"
+    exit 1
+fi
+if ! python3 -c "import json; json.load(open('$SERVICE_DEPLOY_PROFILE_JSON'))"; then
+    echo "FAIL: Evidence profile JSON is invalid"
+    exit 1
+fi
+echo "PASS: Evidence profile JSON is valid"
+
+# 1c. Ensure schemas exist
+for schema in "$SNAPSHOT_SCHEMA" "$TFVARS_SCHEMA"; do
+    if [[ ! -f "$schema" ]]; then
+        echo "FAIL: Missing schema: $schema"
+        exit 1
+    fi
+done
+echo "PASS: Required schemas exist"
 
 # 2. Run Fixtures
 echo "Running Fixtures..."
