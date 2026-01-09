@@ -92,20 +92,19 @@
 
 ---
 
-## Phase 6: User Story 4 - Hotfix on main with explicit override (Priority: P2)
+## Phase 6: User Story 4 - Promote from any branch (Priority: P2)
 
-**Goal**: Main-branch hotfix runs are possible but require explicit override and approvals; prerequisite checks no longer hard-require feature branches.
+**Goal**: Promotion runs do not require any special override input; operators rely on the existing destructive confirmations and the protected `prod` environment approval gate.
 
-**Independent Test**: Trigger promote workflow from `main` without override (must fail), then with override (must proceed to LAB and still require PROD approval).
+**Independent Test**: Trigger promote workflow from `main` and from a feature branch; both should run normally and still require PROD approval.
 
 ### Implementation
 
 - [x] T028 [P] [US4] Remove feature-branch-only assumptions in prerequisite checks by updating `scripts/lab/guardrails.sh` and any relevant checks in `scripts/lab/checks.d/`
-- [x] T029 [US4] Enforce hotfix override gating in `.github/workflows/lxc-promote.yml` when running from `main` (fail early unless `hotfix_override` is true)
-- [x] T030 [US4] Record hotfix mode in evidence metadata by updating `scripts/lab/pve-service-deploy` (e.g., include branch + hotfix flag in `provenance.json` or run metadata)
-- [x] T031 [US4] Update operator instructions in `specs/024-pipeline-promotion-ux/quickstart.md` to document hotfix override behavior and safety constraints
+- [x] T029 [US4] Remove special override input/gating from `.github/workflows/lxc-promote.yml` and remove related metadata from evidence
+- [x] T031 [US4] Update operator instructions in `specs/024-pipeline-promotion-ux/quickstart.md` to remove override behavior
 
-**Checkpoint**: Hotfix path exists without weakening safety.
+**Checkpoint**: No special override UX; safety remains enforced.
 
 ---
 
@@ -130,7 +129,7 @@
 **Purpose**: Documentation, migration, and consistency checks.
 
 - [x] T035 [P] Update workflow documentation in `README.md` to reference `.github/workflows/lxc-deploy-lab.yml` and `.github/workflows/lxc-promote.yml` and explain the production approval gate
-- [x] T036 [P] Add a deprecation notice to `.github/workflows/lxc-deploy.yml` pointing operators to the new workflows
+- [x] T036 [P] Remove deprecated workflow `.github/workflows/lxc-deploy.yml`
 - [x] T037 Validate docs and schemas stay in sync by reviewing `specs/024-pipeline-promotion-ux/quickstart.md` against the implemented workflow inputs
 
 ---
@@ -188,4 +187,4 @@
 
 ### Finally
 
-- Add **[US4]** hotfix override and **[US5]** richer snapshots + mount checks.
+- Add **[US4]** promote-from-any-branch behavior (no special override UX) and **[US5]** richer snapshots + mount checks.

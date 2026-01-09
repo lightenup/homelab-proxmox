@@ -149,11 +149,6 @@ init_evidence_pack() {
     local trigger_ref="${GIT_REF:-}"
     local trigger_ref_name="${GIT_REF_NAME:-}"
 
-    local hotfix_override=false
-    if [[ "${HOTFIX_OVERRIDE:-}" == "true" ]]; then
-        hotfix_override=true
-    fi
-
     # Structured RUN_ID: deterministic components + UTC timestamp for uniqueness.
     # Resulting format: <env>-<service>-<sha8>-YYYYMMDD-HHMMSS
     export RUN_ID_PREFIX="${ENVIRONMENT:-lab}-${SERVICE:-unknown}-${sha}"
@@ -174,7 +169,6 @@ service=${SERVICE}
 git_branch=${branch}
 trigger_ref=${trigger_ref}
 trigger_ref_name=${trigger_ref_name}
-hotfix_override=${hotfix_override}
 EOF
 
     cat >"${EVIDENCE_ROOT}/summary.json" <<EOF
@@ -199,7 +193,6 @@ EOF
     "git_dirty": "${dirty}",
     "trigger_ref": "${trigger_ref}",
     "trigger_ref_name": "${trigger_ref_name}",
-    "hotfix_override": ${hotfix_override},
     "runner": {
         "hostname": "$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)",
         "user": "${USER:-unknown}"

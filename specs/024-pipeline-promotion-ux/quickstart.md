@@ -106,7 +106,6 @@ If plan detects destructive changes (replace or destroy operations):
 | `service` | Choice | Yes | Service to promote (dropdown with allowlist) |
 | `confirm_destructive_lab` | Boolean | Conditional | Check to proceed if LAB plan is destructive |
 | `confirm_destructive_prod` | Boolean | Conditional | Check to proceed if PROD plan is destructive |
-| `hotfix_override` | Boolean | Conditional | Check `true` if running from main branch (hotfix mode) |
 
 ### How to Run
 
@@ -114,8 +113,7 @@ If plan detects destructive changes (replace or destroy operations):
 2. Click **Run workflow**
 3. Select **service** from dropdown
 4. Leave destructive confirmations unchecked initially
-5. Leave **hotfix_override** unchecked (unless hotfix from main)
-6. Click **Run workflow**
+5. Click **Run workflow**
 
 ### Expected Behavior
 
@@ -178,42 +176,6 @@ If destructive changes detected in LAB or PROD:
 - **PROD evidence pack**: `service-deploy-evidence-prod-<run-id>`
   - Includes: `reports/prod-tfvars/validation.json` (redacted tfvars proof)
   - Includes: `reports/lab-snapshot.json` (PROD snapshot)
-
----
-
-## Hotfix Path (Main Branch)
-
-**Use case**: Emergency PROD fix from main branch without feature branch
-
-### When to Use Hotfix
-
-- **Normal flow**: Create feature branch → iterate in LAB → promote to PROD
-- **Hotfix flow**: Critical bug requires immediate PROD fix from main
-
-### How to Run Hotfix
-
-1. Ensure you're on **main branch** (check branch selector in GitHub UI)
-2. Navigate to **Actions** → **LXC Promote (LAB → PROD)**
-3. Click **Run workflow**
-4. Select **service**
-5. **Check `hotfix_override: true`** ← REQUIRED for main branch
-6. Click **Run workflow**
-
-### Hotfix Behavior
-
-1. Workflow detects `github.ref == refs/heads/main`
-2. Checks `hotfix_override` input:
-   - If `false` or unchecked: workflow fails with error
-   - If `true`: workflow proceeds with warning "⚠️ HOTFIX MODE"
-3. LAB stage runs normally
-4. PROD stage **still requires approval** (no bypass)
-5. Evidence includes branch name and hotfix flag for audit trail
-
-### Hotfix Safety
-
-- **Hotfix does NOT bypass approval**: PROD still requires manual approval
-- **Hotfix does NOT bypass destructive gates**: Confirmations still required
-- **Hotfix is auditable**: Evidence and workflow logs show hotfix mode
 
 ---
 
@@ -328,11 +290,6 @@ JSON document capturing:
 **Cause**: Terraform plan includes replace/destroy operations  
 **Fix**: Review plan output, then rerun with appropriate `confirm_destructive` value
 
-### Error: "PROD deploy on main requires hotfix_override=true"
-
-**Cause**: Attempting PROD deploy from main branch without hotfix confirmation  
-**Fix**: Check `hotfix_override: true` or switch to feature branch
-
 ### Error: "Waiting for approval"
 
 **Cause**: PROD stage waiting for required reviewer approval  
@@ -367,11 +324,6 @@ JSON document capturing:
 1. Always review plan output before confirming destructive operations
 2. Understand blast radius (what will be replaced/destroyed)
 3. Consider alternative approaches (e.g., in-place updates) if possible
-
-### Hotfixes
-1. Use hotfix path only for genuine emergencies
-2. Create feature branch and follow normal flow when possible
-3. Document hotfix reasoning in PR description
 
 ---
 

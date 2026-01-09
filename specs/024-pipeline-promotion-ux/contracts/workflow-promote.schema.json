@@ -34,11 +34,6 @@
       ],
       "description": "Required when PROD plan is destructive (replace/destroy)",
       "default": ""
-    },
-    "hotfix_override": {
-      "type": "boolean",
-      "description": "Required confirmation when running from main branch (hotfix mode)",
-      "default": false
     }
   },
   "required": [
@@ -49,20 +44,12 @@
     {
       "service": "immich",
       "confirm_destructive_lab": "",
-      "confirm_destructive_prod": "",
-      "hotfix_override": false
+      "confirm_destructive_prod": ""
     },
     {
       "service": "jellyfin",
       "confirm_destructive_lab": "apply-lab-destructive",
-      "confirm_destructive_prod": "deploy-prod-destructive",
-      "hotfix_override": false
-    },
-    {
-      "service": "adguard",
-      "confirm_destructive_lab": "",
-      "confirm_destructive_prod": "",
-      "hotfix_override": true
+      "confirm_destructive_prod": "deploy-prod-destructive"
     }
   ]
 }
