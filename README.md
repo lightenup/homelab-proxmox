@@ -50,6 +50,18 @@ proxmox_api_token_secret = "YOUR_SECRET_HERE"
 
 ## Usage
 
+### GitHub Actions Workflows (Recommended)
+
+This repo includes bounded-input GitHub Actions workflows for safely deploying a single service:
+
+- `.github/workflows/lxc-deploy-lab.yml` — LAB-only plan or plan+apply.
+- `.github/workflows/lxc-promote.yml` — LAB plan+apply, then promote to PROD behind a protected `prod` environment approval gate.
+
+Notes:
+
+- The legacy workflow `.github/workflows/lxc-deploy.yml` is deprecated in favor of the two workflows above.
+- For PROD runs, `prod.tfvars` is rendered on the Proxmox host and a redacted proof is included in the evidence pack (secrets are never written to the repo).
+
 ### 1. Provision Infrastructure (Terraform)
 
 ```bash

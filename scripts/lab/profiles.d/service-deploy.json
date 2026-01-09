@@ -1,0 +1,51 @@
+{
+  "profile_id": "service-deploy",
+  "description": "Evidence pack requirements for service deployments",
+  "required_fields": [
+    {
+      "path": "reports/plan/plan.txt",
+      "type": "file",
+      "description": "Terraform plan output (text)"
+    },
+    {
+      "path": "reports/plan/plan.json",
+      "type": "file",
+      "description": "Terraform plan output (JSON)"
+    },
+    {
+      "path": "preflight.txt",
+      "type": "file",
+      "description": "Preflight checks and inputs"
+    },
+    {
+      "path": "blast-radius.json",
+      "type": "file",
+      "description": "Blast radius summary"
+    },
+    {
+      "path": "reports/lab-snapshot.json",
+      "type": "file",
+      "description": "LAB inventory snapshot (required for all runs)"
+    }
+  ],
+  "conditional_fields": [
+    {
+      "path": "reports/prod-tfvars/provisioning.txt",
+      "type": "file",
+      "condition": "environment == 'prod'",
+      "description": "PROD tfvars provisioning report (redacted; required for PROD runs)"
+    },
+    {
+      "path": "reports/prod-tfvars/validation.json",
+      "type": "file",
+      "condition": "environment == 'prod'",
+      "description": "PROD tfvars validation proof (required for PROD runs)"
+    },
+    {
+      "path": "reports/prod-tfvars/prod.tfvars.sha256",
+      "type": "file",
+      "condition": "environment == 'prod'",
+      "description": "PROD tfvars hash (required for PROD runs)"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-01-09T08:05:00Z",
+  "environment": "lab",
+  "containers": [],
+  "services": [],
+  "latest_evidence": {
+    "immich": {
+      "run_id": "lab-immich-abc12345-20260109-080500",
+      "path": "/var/lib/homelab-proxmox/artifacts/service-deploy-runs/lab-immich-abc12345-20260109-080500"
+    }
+  },
+  "mount_checks": [
+    {
+      "container_vmid": 200,
+      "mount_path": "/media/video",
+      "mounted": true,
+      "read_only": true,
+      "source": "192.168.1.109:/volume1/video"
+    }
+  ],
+  "errors": []
+}

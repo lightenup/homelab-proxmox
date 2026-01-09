@@ -51,6 +51,10 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 - Pipeline should: Validate/plan Terraform -> (Optional) lint Ansible -> Apply Terraform -> Run Ansible.
 - Avoid adding destructive automation without clear barriers (e.g. approvals, prevent_destroy).
 
+### Local Workflow Testing
+- `act` is an approved tool for running GitHub Actions workflows locally during development.
+- Keep any `act` runner artifacts local-only (gitignored).
+
 ### Repo Layout
 - `docs/` – architecture and network docs.
 - `terraform/` – providers, root module, `modules/lxc_service`.
