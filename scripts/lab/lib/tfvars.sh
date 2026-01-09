@@ -87,6 +87,8 @@ _tfvars_provision_prod_and_write_proof() {
 	timestamp="$(_tfvars_now_utc)"
 
 	# Secret passed by GitHub Actions (preferred). Back-compat supports PROXMOX_TOKEN_SECRET.
+	# If neither is present, we will attempt to reuse an existing rendered prod.tfvars
+	# (common when secrets are managed locally on PVE).
 	local token_secret="${PROXMOX_API_TOKEN_SECRET:-${PROXMOX_TOKEN_SECRET:-}}"
 	local secret_source=""
 	if [[ -n "${PROXMOX_API_TOKEN_SECRET:-}" ]]; then
@@ -128,6 +130,15 @@ _tfvars_provision_prod_and_write_proof() {
 		done
 	fi
 
+	# If no token secret is available, prefer validating an existing rendered prod.tfvars
+	# (so we don't overwrite a locally-managed secret with an empty value). This also
+	# satisfies the "template" requirement when no repo template exists.
+	if [[ -z "${token_secret}" && -f "${rendered_path}" ]]; then
+		template_path="${rendered_path}"
+		template_source="file:${rendered_path}"
+		secret_source="existing_file"
+	fi
+
 	if [[ -z "${template_path}" ]]; then
 		# No template -> fail early, but still write proof artifacts.
 		local errors_json='["Missing prod.tfvars template (set PROD_TFVARS_TEMPLATE or ensure terraform/environments/prod.tfvars.example exists)"]'
@@ -165,15 +176,18 @@ _tfvars_provision_prod_and_write_proof() {
 		printf '\nproxmox_api_token_id     = "%s"\n' "${required_token_id}" >>"${tmp}"
 	fi
 
-	# Inject secret if provided, otherwise keep placeholder.
-	local secret_escaped
-	secret_escaped="$(_tfvars_escape_hcl_string "${token_secret}")"
-	if grep -Eq '^[[:space:]]*proxmox_api_token_secret[[:space:]]*=' "${tmp}"; then
-		# macOS/BSD sed requires a backup suffix; GNU sed ignores it.
-		sed -i.bak -E "s|^[[:space:]]*proxmox_api_token_secret[[:space:]]*=.*$|proxmox_api_token_secret = \"${secret_escaped}\"|" "${tmp}" 2>/dev/null || true
-		rm -f "${tmp}.bak" 2>/dev/null || true
-	else
-		printf 'proxmox_api_token_secret = "%s"\n' "${secret_escaped}" >>"${tmp}"
+	# Inject secret only if provided. If no env secret is available, do NOT overwrite
+	# any existing secret in the file.
+	if [[ -n "${token_secret}" ]]; then
+		local secret_escaped
+		secret_escaped="$(_tfvars_escape_hcl_string "${token_secret}")"
+		if grep -Eq '^[[:space:]]*proxmox_api_token_secret[[:space:]]*=' "${tmp}"; then
+			# macOS/BSD sed requires a backup suffix; GNU sed ignores it.
+			sed -i.bak -E "s|^[[:space:]]*proxmox_api_token_secret[[:space:]]*=.*$|proxmox_api_token_secret = \"${secret_escaped}\"|" "${tmp}" 2>/dev/null || true
+			rm -f "${tmp}.bak" 2>/dev/null || true
+		else
+			printf 'proxmox_api_token_secret = "%s"\n' "${secret_escaped}" >>"${tmp}"
+		fi
 	fi
 
 	# Validation (no secrets in outputs)
@@ -185,12 +199,21 @@ _tfvars_provision_prod_and_write_proof() {
 		errors+=("Invalid token_id: expected '${required_token_id}', got '${token_id_in_file}'")
 	fi
 
+	# Validate secret presence without leaking it. If no env secret is present,
+	# validate the existing secret value in the file (if any).
+	local secret_in_file=""
+	secret_in_file="$(awk -F'"' '/^[[:space:]]*proxmox_api_token_secret[[:space:]]*=/ {print $2; exit}' "${tmp}" 2>/dev/null || true)"
+	local secret_value_for_validation="${token_secret}"
+	if [[ -z "${secret_value_for_validation}" ]]; then
+		secret_value_for_validation="${secret_in_file}"
+	fi
+
 	local secret_present="true"
-	if [[ -z "${token_secret}" ]]; then
+	if [[ -z "${secret_value_for_validation}" ]]; then
 		secret_present="false"
 		errors+=("Secret is empty")
 	else
-		case "${token_secret}" in
+		case "${secret_value_for_validation}" in
 			REDACTED|redacted|CHANGEME|changeme|PLACEHOLDER|placeholder)
 				secret_present="false"
 				errors+=("Secret is placeholder")
