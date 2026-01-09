@@ -94,6 +94,7 @@ description: "Task list for feature implementation"
 - [x] T031 [US4] Add next-step guidance for common failure modes (missing tfvars, missing planfile, token missing) in scripts/lab/render_github_summary.sh
 - [x] T032 [US4] Surface LAB state-backup outcome (success/failure) in LAB apply job summary in .github/workflows/lxc-promote.yml
 - [x] T033 [US4] Emit a non-fatal warning annotation when LAB state backup fails (apply continues) in .github/workflows/lxc-promote.yml
+- [x] T045 [US4] Append bounded evidence excerpts (preflight/summary) to `$GITHUB_STEP_SUMMARY` on failures in .github/workflows/lxc-promote.yml (scripts/lab/render_failure_evidence.sh)
 
 ---
 
