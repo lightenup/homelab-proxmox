@@ -1,0 +1,220 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/evidence-lab-snapshot.json",
+  "type": "object",
+  "title": "LAB Inventory Snapshot",
+  "description": "Snapshot of container state, service evidence pointers, and mount validation",
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Snapshot generation timestamp (ISO 8601)"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "lab",
+        "prod"
+      ],
+      "description": "Target environment for snapshot"
+    },
+    "containers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "vmid": {
+            "type": "integer",
+            "description": "Proxmox container ID",
+            "minimum": 100
+          },
+          "hostname": {
+            "type": "string",
+            "description": "Container hostname",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "stopped"
+            ],
+            "description": "Container status"
+          },
+          "ipv4": {
+            "type": "string",
+            "description": "Primary IPv4 address (optional, may be empty string)",
+            "pattern": "^(|[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})$"
+          }
+        },
+        "required": [
+          "vmid",
+          "hostname",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "description": "List of all containers on Proxmox host"
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "description": "Service slug (from allowlist)"
+          },
+          "state_path": {
+            "type": "string",
+            "description": "Terraform state directory path"
+          },
+          "terraform_module": {
+            "type": "string",
+            "description": "Terraform module name (optional)"
+          }
+        },
+        "required": [
+          "service",
+          "state_path"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Services detected with state directories"
+    },
+    "latest_evidence": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z0-9_-]+$": {
+          "type": "object",
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "description": "Latest evidence run ID for this service"
+            },
+            "path": {
+              "type": "string",
+              "description": "Evidence pack path"
+            }
+          },
+          "required": [
+            "run_id",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "description": "Mapping of service to latest evidence metadata"
+    },
+    "mount_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "container_vmid": {
+            "type": "integer",
+            "description": "Container VMID where mount was checked",
+            "minimum": 100
+          },
+          "mount_path": {
+            "type": "string",
+            "description": "Expected mount path (e.g., /media/video)"
+          },
+          "mounted": {
+            "type": "boolean",
+            "description": "True if mount path exists in /proc/mounts"
+          },
+          "read_only": {
+            "type": "boolean",
+            "description": "True if mount has 'ro' option (only present if mounted is true)"
+          },
+          "source": {
+            "type": "string",
+            "description": "Mount source (e.g., NFS share, optional)"
+          }
+        },
+        "required": [
+          "container_vmid",
+          "mount_path",
+          "mounted"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Mount validation checks (optional, service-specific)"
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Non-fatal errors during snapshot collection",
+      "default": []
+    }
+  },
+  "required": [
+    "generated_at",
+    "environment",
+    "containers",
+    "services"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "generated_at": "2026-01-09T08:05:00Z",
+      "environment": "lab",
+      "containers": [
+        {
+          "vmid": 200,
+          "hostname": "immich-lab",
+          "status": "running",
+          "ipv4": "192.168.1.50"
+        },
+        {
+          "vmid": 201,
+          "hostname": "jellyfin-lab",
+          "status": "running",
+          "ipv4": "192.168.1.51"
+        }
+      ],
+      "services": [
+        {
+          "service": "immich",
+          "state_path": "/var/lib/homelab-proxmox/state/services/immich",
+          "terraform_module": "module.immich_lxc"
+        },
+        {
+          "service": "jellyfin",
+          "state_path": "/var/lib/homelab-proxmox/state/services/jellyfin",
+          "terraform_module": "module.jellyfin_lxc"
+        }
+      ],
+      "latest_evidence": {
+        "immich": {
+          "run_id": "20260109T075500Z-apply-lab-immich-abc123",
+          "path": "/var/lib/homelab-proxmox/artifacts/service-deploy-runs/20260109T075500Z-apply-lab-immich-abc123"
+        },
+        "jellyfin": {
+          "run_id": "20260109T074000Z-apply-lab-jellyfin-def456",
+          "path": "/var/lib/homelab-proxmox/artifacts/service-deploy-runs/20260109T074000Z-apply-lab-jellyfin-def456"
+        }
+      },
+      "mount_checks": [
+        {
+          "container_vmid": 200,
+          "mount_path": "/media/video",
+          "mounted": true,
+          "read_only": true,
+          "source": "192.168.1.109:/volume1/video"
+        },
+        {
+          "container_vmid": 201,
+          "mount_path": "/media/video",
+          "mounted": true,
+          "read_only": true,
+          "source": "192.168.1.109:/volume1/video"
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

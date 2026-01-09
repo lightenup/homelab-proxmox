@@ -11,6 +11,7 @@ Auto-generated from all feature plans. Last updated: 2026-01-04
 - Filesystem evidence packs (artifacts/*), no databases (020-rebuild-acceptance-hardening)
 - Bash (5.x), Terraform (1.x), Ansible (2.x), Python (3.x), GitHub Actions (YAML) + Terraform `telmate/proxmox` provider + existing `terraform/modules/lxc_service`, Ansible, `jq`, SSH/rsync, `act` (local CI simulation) (022-lxc-gated-deploy)
 - Local Terraform state on runner; filesystem evidence packs on PVE under `/var/lib/homelab-proxmox/artifacts/<runs-dir>/<run_id>` (022-lxc-gated-deploy)
+- Bash 5.x (Proxmox host scripts), GitHub Actions YAML (workflow definitions), Python 3.x (evidence verification) (024-pipeline-promotion-ux)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -46,6 +47,7 @@ specs/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 024-pipeline-promotion-ux: Added Bash 5.x (Proxmox host scripts), GitHub Actions YAML (workflow definitions), Python 3.x (evidence verification)
 - 022-lxc-gated-deploy: Added Bash (5.x), Terraform (1.x), Ansible (2.x), Python (3.x), GitHub Actions (YAML) + Terraform `telmate/proxmox` provider + existing `terraform/modules/lxc_service`, Ansible, `jq`, SSH/rsync, `act` (local CI simulation)
 - 020-rebuild-acceptance-hardening: Added Bash (scripts), Python 3.x (verify_evidence.py), Ansible 2.16+ (roles/playbooks) + Ansible core modules, Proxmox CLI (qm/pct), Python stdlib only for verify mutations
 
