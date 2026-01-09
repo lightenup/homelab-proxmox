@@ -316,14 +316,14 @@ jobs:
               continue-on-error: true
               env:
                   ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
-                PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
+                  PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
                   PROXMOX_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
               run: |
                   set -euo pipefail
 
                   service="${{ github.event.inputs.service }}"
 
-                token_secret="${PROXMOX_API_TOKEN_SECRET:-${PROXMOX_TOKEN_SECRET:-}}"
+                  token_secret="${PROXMOX_API_TOKEN_SECRET:-${PROXMOX_TOKEN_SECRET:-}}"
 
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
@@ -517,14 +517,14 @@ jobs:
               id: apply_on_pve
               env:
                   ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
-                PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
+                  PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
                   PROXMOX_TOKEN_SECRET: ${{ secrets.PROXMOX_TOKEN_SECRET }}
               run: |
                   set -euo pipefail
 
                   service="${{ github.event.inputs.service }}"
 
-                token_secret="${PROXMOX_API_TOKEN_SECRET:-${PROXMOX_TOKEN_SECRET:-}}"
+                  token_secret="${PROXMOX_API_TOKEN_SECRET:-${PROXMOX_TOKEN_SECRET:-}}"
 
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
