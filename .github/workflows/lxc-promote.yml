@@ -366,6 +366,28 @@ jobs:
               if: always()
               run: ./scripts/lab/ci-verify.sh evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
 
+            - name: Summarize PROD plan failure (preflight + plan tail)
+              if: steps.plan_on_pve.outcome != 'success'
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  test -n "${RUN_ID}"
+
+                  echo "ERROR: PROD plan failed on PVE. Showing evidence excerpts." >&2
+
+                  echo "--- evidence/prod/${RUN_ID}/preflight.txt (tail) ---" >&2
+                  tail -n 120 "evidence/prod/${RUN_ID}/preflight.txt" 2>/dev/null || true
+
+                  echo "--- evidence/prod/${RUN_ID}/reports/plan/plan.txt (tail) ---" >&2
+                  tail -n 200 "evidence/prod/${RUN_ID}/reports/plan/plan.txt" 2>/dev/null || true
+
+            - name: Upload PROD plan evidence
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: prod-plan-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
+                  path: evidence/prod/
+
             - name: Detect destructive blast radius
               id: detect_destructive
               if: steps.plan_on_pve.outcome == 'success'
