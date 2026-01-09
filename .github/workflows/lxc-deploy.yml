@@ -1,6 +1,6 @@
 name: DEPRECATED - LXC Deploy (Gated)
 
-"on":
+on:
   workflow_dispatch:
     inputs:
       environment:
