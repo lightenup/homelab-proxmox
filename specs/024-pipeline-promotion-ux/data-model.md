@@ -466,14 +466,12 @@ on:
 | `service` | choice | Yes | Service to promote (from allowlist) |
 | `confirm_destructive_lab` | string | Conditional | Required when LAB plan is destructive |
 | `confirm_destructive_prod` | string | Conditional | Required when PROD plan is destructive |
-| `hotfix_override` | boolean | Conditional | Required when running from main branch |
 
 ### Validation Rules
 
 1. **Service validation**: Must exist in `scripts/lab/service-scope-allowlist.json`
 2. **LAB destructive confirmation**: When LAB plan shows `destructive: true`, must equal `"apply-lab-destructive"`
 3. **PROD destructive confirmation**: When PROD plan shows `destructive: true`, must equal `"deploy-prod-destructive"`
-4. **Hotfix override**: When `github.ref == 'refs/heads/main'`, must be `true`
 
 ### Workflow YAML
 
@@ -500,11 +498,6 @@ on:
         description: "Required when PROD plan is destructive: 'deploy-prod-destructive'"
         required: false
         type: string
-      hotfix_override:
-        description: "Required confirmation for hotfix on main branch"
-        required: false
-        type: boolean
-        default: false
 ```
 
 ---

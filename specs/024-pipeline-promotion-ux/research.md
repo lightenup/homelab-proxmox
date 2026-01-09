@@ -529,78 +529,6 @@ This prevents concurrent promotions of the same service while allowing different
 
 ---
 
-## R8: Hotfix Path Design
-
-### Decision
-**Require explicit boolean `hotfix_override: true` input combined with `environment: prod` approval gate when `github.ref` is `refs/heads/main`. Feature branches do not require hotfix override.**
-
-This allows hotfixes on main while maintaining approval requirements and creating an audit trail.
-
-### Rationale
-1. **Branch detection**: `github.ref == 'refs/heads/main'` identifies main branch runs
-2. **Explicit intent**: Boolean input forces operator to acknowledge hotfix mode
-3. **Approval preserved**: Even with override, PROD still requires environment approval
-4. **Audit trail**: GitHub Actions log shows hotfix_override value and approval events
-5. **Feature branch clarity**: Non-main branches don't need override (normal workflow)
-
-### Alternatives Considered
-1. **Confirmation string instead of boolean**: Rejected because boolean is clearer in UI
-2. **No override on main (block completely)**: Rejected because legitimate hotfixes need a path
-3. **Bypass approval for hotfix**: Rejected because it weakens safety controls
-
-### Implementation Notes
-
-**Promote workflow inputs**:
-
-```yaml
-on:
-  workflow_dispatch:
-    inputs:
-      service:
-        type: choice
-        # ...
-      hotfix_override:
-        description: "Required confirmation for hotfix on main branch"
-        type: boolean
-        required: false
-        default: false
-```
-
-**Hotfix gate in apply_prod job**:
-
-```yaml
-- name: Hotfix confirmation gate
-  run: |
-    set -euo pipefail
-    
-    # Check if on main branch
-    if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-      hotfix_override="${{ github.event.inputs.hotfix_override }}"
-      
-      # Require explicit override for main branch PROD deploys
-      if [[ "${hotfix_override}" != "true" ]]; then
-        echo "ERROR: PROD deploy on main requires hotfix_override=true" >&2
-        echo "This is a safety gate to prevent accidental hotfixes." >&2
-        echo "If this is intentional, rerun workflow with hotfix_override=true" >&2
-        exit 1
-      fi
-      
-      echo "⚠️  HOTFIX MODE: Deploying to PROD from main branch"
-      echo "Approval gate still required (environment: prod)"
-    else
-      echo "Running from feature branch: ${{ github.ref }}"
-      echo "Hotfix override not required"
-    fi
-```
-
-**Audit trail**:
-- Workflow run shows `hotfix_override` input value in "Run details"
-- Job log includes "⚠️ HOTFIX MODE" warning when override used
-- Approval event logged with reviewer identity
-- Evidence pack includes branch name in metadata
-
----
-
 ## Summary
 
 All research tasks complete. Key decisions:
@@ -612,7 +540,5 @@ All research tasks complete. Key decisions:
 5. **R5**: JSON snapshot with `pct` commands and mount checks
 6. **R6**: Additive evidence profile fields (no version bump)
 7. **R7**: Linear job dependency chain with approval gate
-8. **R8**: Boolean hotfix override with branch detection
-
 **Ready for Phase 1 (Design)**: All technical approaches validated and documented.
 

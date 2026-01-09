@@ -11,8 +11,7 @@ This feature improves the CI/CD pipeline UX for LXC container deployments by:
 1. Replacing free-text workflow inputs with bounded choices (service selector from allowlist, boolean flags)
 2. Enforcing a mandatory LAB → approval gate → PROD promotion flow to prevent accidental production-only deploys
 3. Automating production tfvars provisioning and validation on the Proxmox host without committing secrets to the repository
-4. Adding an explicit hotfix path for main branch deployments with required confirmation and approval
-5. Generating LAB inventory snapshot artifacts (JSON format) that capture container state, service evidence pointers, and mount validation
+4. Generating LAB inventory snapshot artifacts (JSON format) that capture container state, service evidence pointers, and mount validation
 
 The technical approach uses GitHub Actions workflow splits (separate LAB-only and Promote workflows), GitHub Environment protection for PROD approval gates, Bash-based tfvars templating with secret injection from GitHub Secrets, and evidence-based verification with offline validation of all artifacts including redacted tfvars provisioning proofs and LAB snapshots.
 
@@ -285,17 +284,6 @@ No changes to Terraform modules, Ansible roles, or repository layout. All new fu
 
 **Decision needed**: Job graph structure for promotion workflow
 
-#### R8: Hotfix Path Design
-**Question**: How to implement a safe hotfix path for main branch without weakening prerequisite gates?
-
-**Research areas**:
-- Branch name detection in workflows (`github.ref` patterns)
-- Explicit override input patterns (confirmation strings, boolean flags)
-- Combining override input with approval gate (both must pass)
-- Audit trail considerations (how to make hotfix runs highly visible)
-
-**Decision needed**: Hotfix input design and gate combination strategy
-
 ### Research Output
 
 Create `specs/024-pipeline-promotion-ux/research.md` with the following structure for each research task:
@@ -380,9 +368,7 @@ Extract entities and relationships from the feature specification:
   - `service`: choice (generated from allowlist keys)
   - `confirm_destructive_lab`: string (required when LAB plan destructive)
   - `confirm_destructive_prod`: string (required when PROD plan destructive)
-  - `hotfix_override`: boolean (required when running from main branch)
 - **Validation rules**:
-  - Hotfix override requires explicit boolean confirmation
   - Destructive confirmations must match expected strings per environment
 
 ### D2: API Contracts (`contracts/`)
@@ -441,10 +427,6 @@ File: `contracts/workflow-promote.schema.json`
       "enum": ["", "deploy-prod-destructive"],
       "description": "Required when PROD plan is destructive"
     },
-    "hotfix_override": {
-      "type": "boolean",
-      "description": "Required confirmation when running from main branch"
-    }
   },
   "required": ["service"]
 }
@@ -591,10 +573,9 @@ Create `specs/024-pipeline-promotion-ux/quickstart.md` with operator documentati
 2. **Prerequisites**: GitHub permissions, Proxmox access, secrets configuration
 3. **LAB Deploy Workflow**: How to run plan-only and plan+apply for LAB
 4. **Promote Workflow**: How to promote LAB → PROD with approval
-5. **Hotfix Path**: When and how to use hotfix override on main
-6. **Destructive Changes**: Understanding destructive confirmations
-7. **LAB Snapshot**: How to download and interpret snapshot artifacts
-8. **Troubleshooting**: Common issues and remediation steps
+5. **Destructive Changes**: Understanding destructive confirmations
+6. **LAB Snapshot**: How to download and interpret snapshot artifacts
+7. **Troubleshooting**: Common issues and remediation steps
 
 ### D4: Agent Context Update
 
@@ -624,8 +605,7 @@ When generating `tasks.md`, organize tasks into these categories:
 #### Category 1: Workflow Splitting
 - **T001**: Create `lxc-deploy-lab.yml` workflow with bounded inputs (service choice, apply boolean)
 - **T002**: Create `lxc-promote.yml` workflow with LAB→PROD job sequence and approval gate
-- **T003**: Add hotfix override logic to promote workflow for main branch runs
-- **T004**: Deprecate or maintain existing `lxc-deploy.yml` for backward compatibility
+- **T003**: Remove the legacy `lxc-deploy.yml` workflow once new workflows are proven
 
 #### Category 2: tfvars Provisioning
 - **T005**: Create `scripts/lab/lib/tfvars.sh` library with provisioning functions
@@ -650,7 +630,6 @@ When generating `tasks.md`, organize tasks into these categories:
 - **T018**: Update `docs/` with operator runbook for new workflows
 - **T019**: Test LAB deploy workflow with plan-only and apply modes
 - **T020**: Test promote workflow with approval gate and destructive confirmations
-- **T021**: Test hotfix override path on main branch
 - **T022**: Test tfvars provisioning and validation in PROD runs
 - **T023**: Verify LAB snapshot format and artifact upload
 
@@ -666,10 +645,9 @@ Each task should include acceptance criteria that can be verified:
 ### Rollout Plan
 
 1. Develop and test new workflows on feature branch
-2. Keep existing `lxc-deploy.yml` active during transition
-3. Document migration path for operators
-4. Run parallel validation (old vs new workflow) for one service
-5. Deprecate old workflow once new workflows proven
+2. Document migration path for operators
+3. Run validation on one service
+4. Remove old workflow once new workflows proven
 
 ---
 

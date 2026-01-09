@@ -3,7 +3,7 @@
 **Feature Branch**: `024-pipeline-promotion-ux`  
 **Created**: 2026-01-09  
 **Status**: Draft  
-**Input**: User description: "Improve CI pipeline dispatcher UX, enforce LAB→PROD promotion with approval, automate prod.tfvars provisioning/validation on the Proxmox host without committing secrets, add safe hotfix path, and generate a LAB inventory snapshot artifact in evidence + GitHub Actions artifacts."
+**Input**: User description: "Improve CI pipeline dispatcher UX, enforce LAB→PROD promotion with approval, automate prod.tfvars provisioning/validation on the Proxmox host without committing secrets, and generate a LAB inventory snapshot artifact in evidence + GitHub Actions artifacts."
 
 ## Problem Statement
 
@@ -12,10 +12,10 @@ The current single-service LXC deploy workflow is effective but has operational 
 - Workflow dispatch UX is cluttered (free-text inputs where bounded choices exist; redundant inputs that do not apply to every mode).
 - Promotion is not enforced: a PROD deploy can be triggered without an earlier LAB run in the same workflow execution.
 - Production runs fail due to manual tfvars provisioning and secret rotation drift on the Proxmox host.
-- Prerequisite gating assumes feature branches and blocks hotfix workflows on main.
+- Prerequisite gating assumes feature branches and can block promotion runs from main.
 - It is hard to answer “what’s currently in LAB” without manual inspection (pct list/config, SSH in guests).
 
-This feature introduces a clearer dispatcher UX, a mandatory promotion pipeline (LAB → approval → PROD), automated/validated production variables provisioning on the Proxmox host, a safe hotfix override path, and a lightweight LAB snapshot included in evidence and uploaded as a GitHub Actions artifact.
+This feature introduces a clearer dispatcher UX, a mandatory promotion pipeline (LAB → approval → PROD), automated/validated production variables provisioning on the Proxmox host, and a lightweight LAB snapshot included in evidence and uploaded as a GitHub Actions artifact.
 
 ## Goals
 
@@ -39,10 +39,10 @@ This feature introduces a clearer dispatcher UX, a mandatory promotion pipeline 
 - Capture proof in evidence (redacted summary + hash) and never emit the secret.
 - Keep Terraform state local on the Proxmox host.
 
-### D) Hotfix path without weakening safety
+### D) Promote from any branch
 
 - Prerequisite gating MUST not require a feature branch by default.
-- Add an explicit hotfix override path for main that requires confirmation and an approval gate.
+- Promotion runs MUST not require any special override input; operators rely on destructive confirmations and the protected production approval gate.
 
 ### E) LAB inventory snapshot artifact
 
@@ -117,18 +117,18 @@ As an operator, I want PROD deployments to automatically provision and validate 
 
 ---
 
-### User Story 4 - Hotfix on main with explicit override (Priority: P2)
+### User Story 4 - Promote from any branch (Priority: P2)
 
-As an operator, I want to execute a hotfix run from main without bypassing safety controls, using an explicit override and approvals.
+As an operator, I want to promote from either a feature branch or main without an extra override checkbox, while still keeping the existing safety controls.
 
-**Why this priority**: Hotfixes should be possible, but must remain deliberate and auditable.
+**Why this priority**: Removing special-case UX reduces operator confusion while keeping the existing approval and destructive-change gates.
 
-**Independent Test**: Can be tested by dispatching the hotfix path from main; it should require confirmation and an approval gate before PROD changes.
+**Independent Test**: Dispatch the promote workflow from `main` and from a feature branch; both should proceed normally and still require an approval gate before PROD changes.
 
 **Acceptance Scenarios**:
 
-1. **Given** the workflow is triggered from main, **When** I do not provide the hotfix override confirmation, **Then** the run is blocked.
-2. **Given** the hotfix override confirmation is provided and approval is granted, **When** the workflow runs, **Then** the run produces evidence and respects destructive-change gating.
+1. **Given** the workflow is triggered from `main`, **When** it runs, **Then** it proceeds without requiring a special override input and still requires production approval before PROD.
+2. **Given** the workflow is triggered from a feature branch, **When** it runs, **Then** it behaves the same and still requires production approval before PROD.
 
 ---
 
@@ -151,7 +151,6 @@ As an operator, I want a snapshot artifact that summarizes LAB containers, servi
 - tfvars provisioning succeeds but secrets are placeholder/empty: workflow must fail before plan/apply.
 - Snapshot generation is partially available (some containers not accessible): snapshot should still be created with per-item errors captured.
 - Destructive plan detected in LAB or PROD: workflow must require explicit destructive confirmation for that environment before apply.
-- Hotfix override attempted from main without approval: workflow should be blocked.
 
 ## Workflow UX Design
 
@@ -162,7 +161,7 @@ Because the pipeline dispatcher cannot dynamically hide inputs based on other in
 1. `LXC Deploy (LAB)`
 2. `LXC Promote (LAB → PROD)`
 
-Optional (if needed for hotfix clarity): a dedicated `LXC Hotfix (main)` workflow or a clearly separated dispatch mode within promote.
+
 
 ### Dispatcher Inputs
 
@@ -177,7 +176,6 @@ Optional (if needed for hotfix clarity): a dedicated `LXC Hotfix (main)` workflo
 - `service`: choice (generated from allowlist)
 - `confirm_destructive_lab`: choice/boolean (only required if LAB plan is destructive)
 - `confirm_destructive_prod`: choice/boolean (only required if PROD plan is destructive)
-- `hotfix_override` (optional): boolean/choice requiring explicit confirmation when running from main
 
 Notes:
 
@@ -228,14 +226,6 @@ Where:
 
 No secrets are stored in evidence.
 
-## Hotfix Path Design
-
-- Prerequisite checks must not assume a feature branch.
-- When running from main, PROD-affecting operations require:
-  - an explicit hotfix override input confirmation
-  - and a GitHub Environment approval gate
-- All existing guardrails remain: no -target, service scope allowlist, destructive confirmations, host-path bind mount rejection.
-
 ## LAB Inventory Snapshot Design
 
 ### Snapshot Contents (Minimum)
@@ -278,7 +268,7 @@ Optional enhancements (later story):
 - **FR-006**: The system MUST validate the Proxmox token id equals `terraform@pve!terraform-token` before PROD apply.
 - **FR-007**: The system MUST validate the Proxmox token secret is non-empty and non-placeholder before PROD apply.
 - **FR-008**: The system MUST record a redacted summary and hash of the rendered prod.tfvars in the evidence pack.
-- **FR-009**: The system MUST allow a hotfix path from main only with explicit override confirmation and an approval gate.
+- **FR-009**: The system MUST allow promotion runs from any branch without a special override input, while still enforcing destructive confirmations and production approval gating.
 - **FR-010**: The system MUST generate a LAB inventory snapshot during plan/apply runs and store it in the evidence pack.
 - **FR-011**: The system MUST upload the LAB snapshot as a GitHub Actions artifact for quick access.
 - **FR-012**: The system MUST keep all existing guardrails (no -target, service allowlist, host-path bind mount rejection, offline evidence verification).
@@ -309,15 +299,14 @@ Optional enhancements (later story):
 - tfvars provisioning tests:
   - Start with missing prod.tfvars on the Proxmox host and confirm provisioning proof exists.
   - Start with invalid token id and confirm run is blocked with evidence.
-- Hotfix tests:
-  - Attempt a main-branch run without override: must block.
-  - Attempt with override + approval: must proceed.
+- Branch behavior tests:
+  - Trigger promote from `main`: must proceed normally and still require PROD approval.
+  - Trigger promote from a feature branch: must proceed normally and still require PROD approval.
 - Snapshot tests:
   - Snapshot exists in evidence pack and as artifact.
   - Snapshot includes required fields and errors are captured when checks cannot run.
 
 ## Rollback Plan
 
-- Keep the existing single-service deploy workflow available until the new workflows are proven.
 - Revert to the previous workflow(s) if promotion gating blocks necessary operations.
 - If tfvars provisioning causes unexpected failures, allow a temporary bypass that still records evidence and requires approvals.
