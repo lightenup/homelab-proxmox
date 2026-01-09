@@ -20,10 +20,10 @@ name: LXC Deploy (LAB)
                 type: boolean
                 default: false
             confirm_destructive:
-              description: "Only when plan has replace/destroy: check to allow apply"
-              required: false
-              type: boolean
-              default: false
+                description: "Only when plan has replace/destroy: check to allow apply"
+                required: false
+                type: boolean
+                default: false
 
 jobs:
     plan:

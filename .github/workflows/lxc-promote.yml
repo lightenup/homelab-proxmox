@@ -15,15 +15,15 @@ name: LXC Promote (LAB → PROD)
                     - monitoring
                     - reverse_proxy
             confirm_destructive_lab:
-              description: "Required when LAB plan is destructive: check to allow apply"
-              required: false
-              type: boolean
-              default: false
+                description: "Required when LAB plan is destructive: check to allow apply"
+                required: false
+                type: boolean
+                default: false
             confirm_destructive_prod:
-              description: "Required when PROD plan is destructive: check to allow apply"
-              required: false
-              type: boolean
-              default: false
+                description: "Required when PROD plan is destructive: check to allow apply"
+                required: false
+                type: boolean
+                default: false
             hotfix_override:
                 description: "Hotfix override (required when running from main branch)"
                 required: true
