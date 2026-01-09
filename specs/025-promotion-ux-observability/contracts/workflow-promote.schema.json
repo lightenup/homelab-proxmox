@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/025/workflow-promote.json",
+  "type": "object",
+  "title": "LXC Promote (LAB → PROD) Workflow Inputs",
+  "description": "Schema for the promotion workflow dispatcher inputs for spec 025.",
+  "properties": {
+    "service": {
+      "type": "string",
+      "enum": [
+        "adguard",
+        "homeassistant",
+        "immich",
+        "jellyfin",
+        "monitoring",
+        "reverse_proxy"
+      ],
+      "description": "Service to promote (must match the repo allowlist)."
+    },
+    "confirm_destructive_lab": {
+      "type": "string",
+      "enum": [
+        "",
+        "apply-lab-destructive"
+      ],
+      "default": "",
+      "description": "Required when LAB plan is destructive (replace/destroy)."
+    },
+    "confirm_destructive_prod": {
+      "type": "string",
+      "enum": [
+        "",
+        "deploy-prod-destructive"
+      ],
+      "default": "",
+      "description": "Required when PROD plan is destructive (replace/destroy)."
+    }
+  },
+  "required": [
+    "service"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "service": "immich",
+      "confirm_destructive_lab": "",
+      "confirm_destructive_prod": ""
+    },
+    {
+      "service": "jellyfin",
+      "confirm_destructive_lab": "apply-lab-destructive",
+      "confirm_destructive_prod": "deploy-prod-destructive"
+    }
+  ]
+}

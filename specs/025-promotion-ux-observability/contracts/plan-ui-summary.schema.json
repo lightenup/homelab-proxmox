@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homelab-proxmox/schemas/025/plan-ui-summary.json",
+  "type": "object",
+  "title": "Plan UI Summary",
+  "description": "Bounded plan summary intended to be rendered in CI job summaries/annotations.",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1.0.0"
+      ]
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "lab",
+        "prod"
+      ]
+    },
+    "service": {
+      "type": "string"
+    },
+    "destructive": {
+      "type": "boolean"
+    },
+    "confirmation_token_required": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "When destructive=true, the exact token required to proceed; otherwise null."
+    },
+    "counts": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "integer", "minimum": 0 },
+        "update": { "type": "integer", "minimum": 0 },
+        "replace": { "type": "integer", "minimum": 0 },
+        "destroy": { "type": "integer", "minimum": 0 }
+      },
+      "required": [
+        "create",
+        "update",
+        "replace",
+        "destroy"
+      ],
+      "additionalProperties": false
+    },
+    "resources_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "resources_shown": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "address": { "type": "string" },
+          "actions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "class": {
+            "type": "string",
+            "enum": [
+              "create",
+              "update",
+              "replace",
+              "destroy",
+              "read",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "address",
+          "actions",
+          "class"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "description": "Pointers to where the durable evidence for this run is stored.",
+      "properties": {
+        "pve_runs_dir": { "type": "string" },
+        "pve_run_id_dir": { "type": "string" }
+      },
+      "required": [
+        "pve_runs_dir",
+        "pve_run_id_dir"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id",
+    "environment",
+    "service",
+    "destructive",
+    "confirmation_token_required",
+    "counts",
+    "resources_total",
+    "resources_shown",
+    "truncated",
+    "resources",
+    "evidence"
+  ],
+  "additionalProperties": false
+}
