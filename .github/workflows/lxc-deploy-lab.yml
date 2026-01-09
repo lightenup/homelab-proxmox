@@ -97,7 +97,8 @@ jobs:
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1t lab-${service}-* 2>/dev/null | head -1" | tr -d '\r\n')"
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"lab-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%/}"
                   RUN_ID="${RUN_ID%:}"
                   test -n "${RUN_ID}"
                   echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
@@ -229,7 +230,8 @@ jobs:
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1t lab-${service}-* 2>/dev/null | head -1" | tr -d '\r\n')"
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"lab-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%/}"
                   RUN_ID="${RUN_ID%:}"
                   test -n "${RUN_ID}"
                   echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
