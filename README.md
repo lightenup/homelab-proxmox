@@ -55,7 +55,11 @@ proxmox_api_token_secret = "YOUR_SECRET_HERE"
 This repo includes bounded-input GitHub Actions workflows for safely deploying a single service:
 
 - `.github/workflows/lxc-deploy-lab.yml` — LAB-only plan or plan+apply.
-- `.github/workflows/lxc-promote.yml` — LAB plan+apply, then promote to PROD behind a protected `prod` environment approval gate.
+- `.github/workflows/lxc-promote-lab.yml` — LAB-only promote (plan+apply), no PROD steps.
+- `.github/workflows/lxc-promote-prod.yml` — PROD promotion pipeline (explicit `ref` checkout → LAB apply → best-effort confidence suite → PROD plan → `prod` environment approval → PROD apply). If LAB/suite fails, PROD plan still runs; PROD apply requires `allow_override_failed_lab_gate=true`.
+
+Legacy (to be deprecated):
+- `.github/workflows/lxc-promote.yml` — combined LAB → PROD workflow.
 
 Notes:
 - For PROD runs, `prod.tfvars` is rendered on the Proxmox host and a redacted proof is included in the evidence pack (secrets are never written to the repo).

@@ -1,5 +1,18 @@
 # Operations Manual
 
+## Service Promotion Workflows
+
+Preferred day-to-day deployment path is via the bounded GitHub Actions promotion workflows:
+
+- **LAB-only**: `.github/workflows/lxc-promote-lab.yml` (plan+apply to LAB; never touches PROD)
+- **PROD pipeline**: `.github/workflows/lxc-promote-prod.yml` (explicit `ref` checkout → LAB apply → best-effort confidence suite → PROD plan → `prod` environment approval → PROD apply from saved plan)
+
+Operational notes:
+
+- The PROD pipeline always attempts to generate a PROD plan (even if LAB deploy or the confidence suite fails).
+- PROD apply is blocked until the GitHub Environment approval is granted (`environment: prod`).
+- PROD apply uses the saved plan RUN_ID from the plan stage (`--from-plan-run-id <prod_plan_run_id>`).
+
 ## Proxmox CI Posture
 
 - CI user only: all SSH/rsync from workflows must target `ci@pve` with non-interactive sudo; root SSH is disallowed.

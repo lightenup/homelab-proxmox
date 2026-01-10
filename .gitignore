@@ -52,6 +52,9 @@ artifacts/019-lab/
 artifacts/lab-runs/
 artifacts/service-deploy-runs/
 
+# Local workflow evidence (extracted packs)
+evidence/
+
 # Node (tooling)
 node_modules/
 dist/

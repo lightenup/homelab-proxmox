@@ -1,0 +1,314 @@
+name: LXC Promote (LAB)
+
+on:
+    workflow_dispatch:
+        inputs:
+            service:
+                description: "Service to promote"
+                required: true
+                type: choice
+                options:
+                    - adguard
+                    - homeassistant
+                    - immich
+                    - jellyfin
+                    - monitoring
+                    - reverse_proxy
+            confirm_destructive_lab:
+                description: "Required when LAB plan is destructive: set to 'apply-lab-destructive'"
+                required: false
+                type: string
+                default: ""
+
+jobs:
+    plan_lab:
+        name: Plan (LAB)
+        runs-on: [self-hosted]
+        outputs:
+            run_id: ${{ steps.capture_run_id.outputs.run_id }}
+            destructive: ${{ steps.detect_destructive.outputs.destructive }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Fail fast on forbidden inputs
+              run: |
+                  set -euo pipefail
+                  vals=(
+                    "${{ github.event.inputs.service }}"
+                  )
+                  for v in "${vals[@]}"; do
+                    if [[ "${v}" == *"-target"* ]]; then
+                      echo "ERROR: Forbidden target-like input detected (-target)." >&2
+                      exit 1
+                    fi
+                  done
+
+            - name: Allowlist runtime validation
+              run: |
+                  set -euo pipefail
+                  service="${{ github.event.inputs.service }}"
+                  jq -e --arg s "${service}" 'has($s)' ./scripts/lab/service-scope-allowlist.json >/dev/null
+
+            - name: Sync repo to PVE
+              run: |
+                  set -euo pipefail
+                  rsync -az --delete \
+                    --exclude '.git' \
+                    --exclude 'terraform/.terraform/' \
+                    --exclude 'terraform/.terraform.lock.hcl' \
+                    --exclude 'terraform/terraform.tfstate' \
+                    --exclude 'terraform/terraform.tfstate.backup' \
+                    --exclude 'scripts/lab/artifacts/' \
+                    --exclude 'artifacts/' \
+                    ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
+
+            - name: Plan on PVE (LAB)
+              id: plan_on_pve
+              continue-on-error: true
+              env:
+                  ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+              run: |
+                  set -euo pipefail
+
+                  service="${{ github.event.inputs.service }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+                    ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy plan --environment lab --service '${service}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+                  else
+                    ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy plan --environment lab --service '${service}'"
+                  fi
+
+            - name: Capture RUN_ID (LAB plan)
+              id: capture_run_id
+              if: always()
+              run: |
+                  set -euo pipefail
+                  service="${{ github.event.inputs.service }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"lab-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%/}"
+                  RUN_ID="${RUN_ID%:}"
+                  test -n "${RUN_ID}"
+                  echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+                  echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+            - name: Fetch evidence pack (LAB plan)
+              if: always()
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  test -n "${RUN_ID}"
+                  ./scripts/lab/fetch_evidence_pack.sh --environment lab --run-id "${RUN_ID}" >/dev/null
+
+            - name: Verify evidence pack (offline)
+              if: always()
+              run: ./scripts/lab/ci-verify.sh evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+
+            - name: Generate LAB plan UI summary JSON
+              if: steps.plan_on_pve.outcome == 'success'
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  python3 ./scripts/lab/plan_ui_summary.py \
+                    --blast-radius "evidence/lab/${RUN_ID}/blast-radius.json" \
+                    --output "evidence/lab/${RUN_ID}/plan-ui-summary.json" \
+                    --limit 50
+
+            - name: Publish LAB plan summary to run UI
+              if: steps.plan_on_pve.outcome == 'success'
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  ./scripts/lab/render_github_summary.sh "evidence/lab/${RUN_ID}/plan-ui-summary.json" >>"$GITHUB_STEP_SUMMARY"
+
+            - name: Detect destructive blast radius
+              id: detect_destructive
+              if: steps.plan_on_pve.outcome == 'success'
+              run: |
+                  set -euo pipefail
+                  python3 - <<'PY'
+                  import json
+                  import os
+
+                  run_id = os.environ.get('RUN_ID')
+                  if not run_id:
+                      raise SystemExit('Missing RUN_ID')
+
+                  path = os.path.join('evidence', 'lab', run_id, 'blast-radius.json')
+                  with open(path, 'r', encoding='utf-8') as f:
+                      doc = json.load(f)
+
+                  destructive = bool(doc.get('destructive'))
+                  with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+                      out.write(f"destructive={'true' if destructive else 'false'}\n")
+
+                  print(f"destructive={destructive}")
+                  PY
+
+            - name: Enforce LAB destructive confirmation
+              if: |
+                  steps.plan_on_pve.outcome == 'success' &&
+                  steps.detect_destructive.outputs.destructive == 'true' &&
+                  github.event.inputs.confirm_destructive_lab != 'apply-lab-destructive'
+              run: |
+                  ./scripts/lab/render_github_annotations.sh \
+                    --level error \
+                    --title "LAB destructive plan blocked" \
+                    --message "LAB plan is destructive (replace/destroy). Re-run with confirm_destructive_lab=apply-lab-destructive to proceed."
+                  echo "ERROR: LAB plan is destructive (replace/destroy)." >&2
+                  echo "Re-run with confirm_destructive_lab=apply-lab-destructive to proceed." >&2
+                  exit 1
+
+            - name: Fail job if LAB plan failed
+              if: steps.plan_on_pve.outcome != 'success'
+              run: |
+                  echo "ERROR: LAB plan failed" >&2
+                  exit 1
+
+            - name: Summarize LAB plan outcome
+              if: always()
+              run: |
+                  set -euo pipefail
+                  outcome="${{ steps.plan_on_pve.outcome }}"
+                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+
+                  if [[ "${outcome}" != "success" ]]; then
+                    ./scripts/lab/render_github_annotations.sh \
+                      --level error \
+                      --title "LAB plan failed" \
+                      --message "LAB plan failed. See evidence pack for details (RUN_ID=${run_id})."
+                    {
+                      echo "## LAB plan failed"
+                      echo "- RUN_ID: \`${run_id}\`"
+                      echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/service-deploy-runs/${run_id}\`"
+                    } >>"$GITHUB_STEP_SUMMARY"
+
+                    bash ./scripts/lab/render_failure_evidence.sh \
+                      --evidence-dir "evidence/lab/${run_id}" \
+                      --max-lines 120 >>"$GITHUB_STEP_SUMMARY" || true
+                  fi
+
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: lab-plan-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
+                  path: evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+
+    apply_lab:
+        name: Apply (LAB)
+        runs-on: [self-hosted]
+        needs: [plan_lab]
+        concurrency:
+            group: lxc-promote-lab-${{ github.event.inputs.service }}
+            cancel-in-progress: false
+        outputs:
+            run_id: ${{ steps.capture_run_id.outputs.run_id }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Allowlist runtime validation
+              run: |
+                  set -euo pipefail
+                  service="${{ github.event.inputs.service }}"
+                  jq -e --arg s "${service}" 'has($s)' ./scripts/lab/service-scope-allowlist.json >/dev/null
+
+            - name: Sync repo to PVE
+              run: |
+                  set -euo pipefail
+                  rsync -az --delete \
+                    --exclude '.git' \
+                    --exclude 'terraform/.terraform/' \
+                    --exclude 'terraform/.terraform.lock.hcl' \
+                    --exclude 'terraform/terraform.tfstate' \
+                    --exclude 'terraform/terraform.tfstate.backup' \
+                    --exclude 'scripts/lab/artifacts/' \
+                    --exclude 'artifacts/' \
+                    ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
+
+            - name: Apply on PVE (LAB)
+              id: apply_on_pve
+              env:
+                  ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+              run: |
+                  set -euo pipefail
+
+                  service="${{ github.event.inputs.service }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+                    ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+                  else
+                    ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'"
+                  fi
+
+            - name: Capture RUN_ID (LAB apply)
+              id: capture_run_id
+              if: always()
+              run: |
+                  set -euo pipefail
+                  service="${{ github.event.inputs.service }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"lab-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%/}"
+                  RUN_ID="${RUN_ID%:}"
+                  test -n "${RUN_ID}"
+                  echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+                  echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+            - name: Fetch evidence pack (LAB apply)
+              if: always()
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  test -n "${RUN_ID}"
+                  ./scripts/lab/fetch_evidence_pack.sh --environment lab --run-id "${RUN_ID}" >/dev/null
+
+            - name: Verify evidence pack (offline)
+              if: always()
+              run: ./scripts/lab/ci-verify.sh evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+
+            - name: Summarize LAB apply outcome
+              if: always()
+              run: |
+                  set -euo pipefail
+                  outcome="${{ steps.apply_on_pve.outcome }}"
+                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+
+                  if [[ "${outcome}" != "success" ]]; then
+                    ./scripts/lab/render_github_annotations.sh \
+                      --level error \
+                      --title "LAB apply failed" \
+                      --message "LAB apply failed. See evidence pack for details (RUN_ID=${run_id})."
+                    {
+                      echo "## LAB apply failed"
+                      echo "- RUN_ID: \`${run_id}\`"
+                      echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/service-deploy-runs/${run_id}\`"
+                    } >>"$GITHUB_STEP_SUMMARY"
+
+                    bash ./scripts/lab/render_failure_evidence.sh \
+                      --evidence-dir "evidence/lab/${run_id}" \
+                      --max-lines 120 >>"$GITHUB_STEP_SUMMARY" || true
+                  fi
+
+            - name: Fail job if LAB apply failed
+              if: steps.apply_on_pve.outcome != 'success'
+              run: |
+                  echo "ERROR: LAB apply failed" >&2
+                  exit 1
+
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: lab-apply-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
+                  path: evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
