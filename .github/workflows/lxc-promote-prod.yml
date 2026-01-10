@@ -351,7 +351,7 @@ jobs:
     plan_prod:
         name: Plan (PROD)
         runs-on: [self-hosted]
-        needs: [setup, apply_lab, confidence_suite]
+        needs: [setup]
         if: always()
         outputs:
             run_id: ${{ steps.capture_run_id.outputs.run_id }}
@@ -620,6 +620,7 @@ jobs:
         steps:
             - name: Awaiting approval
               run: |
+                  echo "If this job did not pause for approval, ensure the 'prod' environment has required reviewers configured in repo Settings → Environments." 
                   echo "Approval granted. Proceeding to PROD apply stage."
 
     apply_prod:
