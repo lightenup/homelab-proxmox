@@ -12,6 +12,11 @@ venv/
 !terraform.tfvars.example
 .terraform.lock.hcl
 
+# Terraform (GitHub workspace)
+terraform/github/.terraform/
+terraform/github/.terraform.lock.hcl
+terraform/github/github.tfvars
+
 # Ansible
 ansible/inventories/generated/
 ansible/playbooks/artifacts/
@@ -51,6 +56,9 @@ artifacts/healthcheck/
 artifacts/019-lab/
 artifacts/lab-runs/
 artifacts/service-deploy-runs/
+
+# Local workflow evidence (extracted packs)
+evidence/
 
 # Node (tooling)
 node_modules/

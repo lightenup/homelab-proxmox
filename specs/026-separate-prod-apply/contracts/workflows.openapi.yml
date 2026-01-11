@@ -1,0 +1,95 @@
+openapi: 3.0.3
+info:
+  title: Homelab Proxmox Workflow Dispatch Contracts (Spec 026)
+  version: 1.0.0
+  description: |
+    Documentation-only contracts describing the workflow_dispatch inputs/outputs for the
+    split LAB/PROD promotion workflows. These are not runtime HTTP APIs.
+
+paths:
+  /actions/lxc-promote-lab/dispatch:
+    post:
+      summary: Trigger LAB promote (plan+apply LAB only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LabPromoteRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunAccepted'
+
+  /actions/lxc-promote-prod/dispatch:
+    post:
+      summary: Trigger PROD promotion pipeline (LAB deploy + confidence + PROD plan + approval + PROD apply)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProdPromoteRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunAccepted'
+
+components:
+  schemas:
+    Service:
+      type: string
+      description: Service slug; must be allowlisted.
+      enum: [adguard, homeassistant, immich, jellyfin, monitoring, reverse_proxy]
+
+    LabPromoteRequest:
+      type: object
+      additionalProperties: false
+      required: [service]
+      properties:
+        service:
+          $ref: '#/components/schemas/Service'
+        confirm_destructive_lab:
+          type: string
+          description: Required when LAB plan is destructive.
+          example: apply-lab-destructive
+
+    ProdPromoteRequest:
+      type: object
+      additionalProperties: false
+      required: [ref, service]
+      properties:
+        ref:
+          type: string
+          description: Git ref (branch/tag/SHA) to run the pipeline against; the workflow checks out this ref and enforces strict SHA alignment.
+        service:
+          $ref: '#/components/schemas/Service'
+        allow_override_failed_lab_gate:
+          type: boolean
+          description: When true, allows PROD apply to proceed even if LAB deploy or confidence suite failed (still requires `environment: prod` approval).
+          default: false
+        confirm_destructive_lab:
+          type: string
+          description: Required when LAB plan is destructive.
+          example: apply-lab-destructive
+        confirm_destructive_prod:
+          type: string
+          description: Required when PROD plan/apply is destructive, unless `allow_override_failed_lab_gate=true`.
+          example: deploy-prod-destructive
+
+    RunAccepted:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        notes:
+          type: string
+          description: Human-readable information about where to observe progress.

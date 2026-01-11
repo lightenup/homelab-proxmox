@@ -1,0 +1,650 @@
+name: LXC Promote (PROD)
+
+on:
+    workflow_dispatch:
+        inputs:
+            ref:
+                description: "Git ref (branch/tag/SHA) to promote; workflow checks out this ref"
+                required: true
+                type: string
+            service:
+                description: "Service to promote"
+                required: true
+                type: choice
+                options:
+                    - adguard
+                    - homeassistant
+                    - immich
+                    - jellyfin
+                    - monitoring
+                    - reverse_proxy
+            allow_override_failed_lab_gate:
+                description: "Allow proceeding to PROD apply if LAB deploy or confidence suite fails"
+                required: false
+                type: boolean
+                default: false
+            confirm_destructive_lab:
+                description: "Required when LAB plan is destructive: set to 'apply-lab-destructive'"
+                required: false
+                type: string
+                default: ""
+            confirm_destructive_prod:
+                description: "Required when PROD plan is destructive: set to 'deploy-prod-destructive' (unless override enabled)"
+                required: false
+                type: string
+                default: ""
+
+jobs:
+    setup:
+        name: Setup (ref + validations)
+        runs-on: [self-hosted]
+        outputs:
+            checked_sha: ${{ steps.capture_sha.outputs.checked_sha }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.inputs.ref }}
+
+            - name: Fail fast on forbidden inputs
+              run: |
+                  set -euo pipefail
+                  vals=(
+                    "${{ github.event.inputs.service }}"
+                    "${{ github.event.inputs.ref }}"
+                  )
+                  for v in "${vals[@]}"; do
+                    if [[ "${v}" == *"-target"* ]]; then
+                      echo "ERROR: Forbidden target-like input detected (-target)." >&2
+                      exit 1
+                    fi
+                  done
+
+            - name: Allowlist runtime validation
+              run: |
+                  set -euo pipefail
+                  service="${{ github.event.inputs.service }}"
+                  jq -e --arg s "${service}" 'has($s)' ./scripts/lab/service-scope-allowlist.json >/dev/null
+
+            - name: Capture checked-out SHA
+              id: capture_sha
+              run: |
+                  set -euo pipefail
+                  sha="$(git rev-parse HEAD)"
+                  echo "checked_sha=${sha}" >>"$GITHUB_OUTPUT"
+                  echo "CHECKED_SHA=${sha}" >>"$GITHUB_ENV"
+
+    apply_lab:
+        name: Apply (LAB)
+        runs-on: [self-hosted]
+        needs: [setup]
+        outputs:
+            run_id: ${{ steps.capture_run_id.outputs.run_id }}
+            ok: ${{ steps.outcome.outputs.ok }}
+            sha_ok: ${{ steps.sha_check.outputs.sha_ok }}
+        concurrency:
+            group: lxc-promote-prod-lab-${{ github.event.inputs.service }}
+            cancel-in-progress: false
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.inputs.ref }}
+
+            - name: Sync repo to PVE
+              run: |
+                  set -euo pipefail
+                  rsync -az --delete \
+                    --exclude '.git' \
+                    --exclude 'terraform/.terraform/' \
+                    --exclude 'terraform/.terraform.lock.hcl' \
+                    --exclude 'terraform/terraform.tfstate' \
+                    --exclude 'terraform/terraform.tfstate.backup' \
+                    --exclude 'scripts/lab/artifacts/' \
+                    --exclude 'artifacts/' \
+                    ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
+
+            - name: Apply on PVE (LAB)
+              id: apply_on_pve
+              continue-on-error: true
+              run: |
+                  set -euo pipefail
+
+                  service="${{ github.event.inputs.service }}"
+                  ref="${{ github.event.inputs.ref }}"
+                  checked_sha="${{ needs.setup.outputs.checked_sha }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${ref}' GIT_REF_NAME='${ref}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'"
+
+            - name: Capture RUN_ID (LAB apply)
+              id: capture_run_id
+              if: always()
+              run: |
+                  set -euo pipefail
+                  service="${{ github.event.inputs.service }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"lab-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%/}"
+                  RUN_ID="${RUN_ID%:}"
+                  test -n "${RUN_ID}"
+                  echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+            - name: Fetch evidence pack (LAB apply)
+              if: always()
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  test -n "${RUN_ID}"
+                  ./scripts/lab/fetch_evidence_pack.sh --environment lab --run-id "${RUN_ID}" >/dev/null
+
+            - name: Verify evidence pack (offline)
+              if: always()
+              run: ./scripts/lab/ci-verify.sh evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+
+            - name: Validate LAB apply evidence SHA
+              id: sha_check
+              if: always()
+              run: |
+                  set -euo pipefail
+
+                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+                  checked_sha="${{ needs.setup.outputs.checked_sha }}"
+                  prov="evidence/lab/${run_id}/provenance.json"
+
+                  sha_ok=false
+                  got=""
+                  if [[ -f "${prov}" ]]; then
+                    got="$(jq -r '.git_sha // empty' "${prov}" 2>/dev/null || true)"
+                  fi
+
+                  if [[ -n "${got}" ]]; then
+                    if [[ "${checked_sha}" == "${got}" || "${checked_sha}" == "${got}"* || "${got}" == "${checked_sha}"* ]]; then
+                      sha_ok=true
+                    fi
+                  fi
+
+                  echo "sha_ok=${sha_ok}" >>"$GITHUB_OUTPUT"
+
+                  if [[ "${sha_ok}" != "true" ]]; then
+                    ./scripts/lab/render_github_annotations.sh \
+                      --level error \
+                      --title "LAB apply provenance SHA mismatch" \
+                      --message "LAB apply evidence git SHA did not match checked-out SHA. expected=${checked_sha} got=${got:-missing}"
+                  fi
+
+            - name: Record LAB apply outcome
+              id: outcome
+              if: always()
+              run: |
+                  set -euo pipefail
+                  ok=false
+                  if [[ "${{ steps.apply_on_pve.outcome }}" == "success" && "${{ steps.sha_check.outputs.sha_ok }}" == "true" ]]; then
+                    ok=true
+                  fi
+                  echo "ok=${ok}" >>"$GITHUB_OUTPUT"
+
+            - name: Summarize LAB apply outcome
+              if: always()
+              run: |
+                  set -euo pipefail
+                  outcome="${{ steps.apply_on_pve.outcome }}"
+                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+
+                  if [[ "${outcome}" != "success" ]]; then
+                    ./scripts/lab/render_github_annotations.sh \
+                      --level error \
+                      --title "LAB apply failed" \
+                      --message "LAB apply failed. See evidence pack for details (RUN_ID=${run_id})."
+                    {
+                      echo "## LAB apply failed"
+                      echo "- RUN_ID: \`${run_id}\`"
+                      echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/service-deploy-runs/${run_id}\`"
+                    } >>"$GITHUB_STEP_SUMMARY"
+
+                    bash ./scripts/lab/render_failure_evidence.sh \
+                      --evidence-dir "evidence/lab/${run_id}" \
+                      --max-lines 120 >>"$GITHUB_STEP_SUMMARY" || true
+                  fi
+
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: prod-pipeline-lab-apply-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
+                  path: evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+
+    confidence_suite:
+        name: Confidence suite (best-effort)
+        runs-on: [self-hosted]
+        needs: [setup, apply_lab]
+        if: always()
+        outputs:
+            run_id: ${{ steps.capture_run_id.outputs.run_id }}
+            ok: ${{ steps.outcome.outputs.ok }}
+            sha_ok: ${{ steps.sha_check.outputs.sha_ok }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.inputs.ref }}
+
+            - name: Sync repo to PVE
+              run: |
+                  set -euo pipefail
+                  rsync -az --delete \
+                    --exclude '.git' \
+                    --exclude 'scripts/lab/artifacts/' \
+                    --exclude 'artifacts/' \
+                    ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
+
+            - name: Run confidence suite on PVE
+              id: suite_on_pve
+              continue-on-error: true
+              run: |
+                  set -euo pipefail
+
+                  checked_sha="${{ needs.setup.outputs.checked_sha }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ./pve-lab confidence"
+
+            - name: Capture RUN_ID (confidence suite)
+              id: capture_run_id
+              if: always()
+              run: |
+                  set -euo pipefail
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "ls -1td /var/lib/homelab-proxmox/artifacts/lab-runs/*/ 2>/dev/null | head -1 | xargs -n1 basename" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%/}"
+                  RUN_ID="${RUN_ID%:}"
+                  test -n "${RUN_ID}"
+                  echo "run_id=${RUN_ID}" >>"$GITHUB_OUTPUT"
+
+            - name: Fetch evidence pack (confidence suite)
+              if: always()
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  test -n "${RUN_ID}"
+                  ARTIFACT_RUNS_DIR=lab-runs ./scripts/lab/fetch_evidence_pack.sh --environment lab --run-id "${RUN_ID}" >/dev/null
+
+            - name: Verify evidence pack (offline)
+              if: always()
+              run: ./scripts/lab/ci-verify.sh evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+
+            - name: Validate confidence suite evidence SHA
+              id: sha_check
+              if: always()
+              run: |
+                  set -euo pipefail
+
+                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+                  checked_sha="${{ needs.setup.outputs.checked_sha }}"
+                  prov="evidence/lab/${run_id}/provenance.json"
+
+                  sha_ok=false
+                  got=""
+                  if [[ -f "${prov}" ]]; then
+                    got="$(jq -r '.git.commit // empty' "${prov}" 2>/dev/null || true)"
+                  fi
+
+                  if [[ -n "${got}" ]]; then
+                    if [[ "${checked_sha}" == "${got}" || "${checked_sha}" == "${got}"* || "${got}" == "${checked_sha}"* ]]; then
+                      sha_ok=true
+                    fi
+                  fi
+
+                  echo "sha_ok=${sha_ok}" >>"$GITHUB_OUTPUT"
+
+                  if [[ "${sha_ok}" != "true" ]]; then
+                    ./scripts/lab/render_github_annotations.sh \
+                      --level error \
+                      --title "Confidence suite provenance SHA mismatch" \
+                      --message "Confidence suite evidence git commit did not match checked-out SHA. expected=${checked_sha} got=${got:-missing}"
+                  fi
+
+            - name: Record confidence suite outcome
+              id: outcome
+              if: always()
+              run: |
+                  set -euo pipefail
+                  ok=false
+                  if [[ "${{ steps.suite_on_pve.outcome }}" == "success" && "${{ steps.sha_check.outputs.sha_ok }}" == "true" ]]; then
+                    ok=true
+                  fi
+                  echo "ok=${ok}" >>"$GITHUB_OUTPUT"
+
+            - name: Summarize confidence suite outcome
+              if: always()
+              run: |
+                  set -euo pipefail
+                  outcome="${{ steps.suite_on_pve.outcome }}"
+                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+                  if [[ "${outcome}" != "success" ]]; then
+                    ./scripts/lab/render_github_annotations.sh \
+                      --level error \
+                      --title "Confidence suite failed" \
+                      --message "Confidence suite failed. See evidence pack for details (RUN_ID=${run_id})."
+                    {
+                      echo "## Confidence suite failed"
+                      echo "- RUN_ID: \`${run_id}\`"
+                      echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/lab-runs/${run_id}\`"
+                    } >>"$GITHUB_STEP_SUMMARY"
+
+                    bash ./scripts/lab/render_failure_evidence.sh \
+                      --evidence-dir "evidence/lab/${run_id}" \
+                      --max-lines 120 >>"$GITHUB_STEP_SUMMARY" || true
+                  fi
+
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: prod-pipeline-confidence-evidence-${{ steps.capture_run_id.outputs.run_id }}
+                  path: evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+
+    plan_prod:
+        name: Plan (PROD)
+        runs-on: [self-hosted]
+        needs: [setup]
+        if: always()
+        outputs:
+            run_id: ${{ steps.capture_run_id.outputs.run_id }}
+            ok: ${{ steps.outcome.outputs.ok }}
+            sha_ok: ${{ steps.sha_check.outputs.sha_ok }}
+            destructive: ${{ steps.plan_flags.outputs.destructive }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.inputs.ref }}
+
+            - name: Sync repo to PVE
+              run: |
+                  set -euo pipefail
+                  rsync -az --delete \
+                    --exclude '.git' \
+                    --exclude 'terraform/.terraform/' \
+                    --exclude 'terraform/.terraform.lock.hcl' \
+                    --exclude 'terraform/terraform.tfstate' \
+                    --exclude 'terraform/terraform.tfstate.backup' \
+                    --exclude 'scripts/lab/artifacts/' \
+                    --exclude 'artifacts/' \
+                    ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
+
+            - name: Plan on PVE (PROD)
+              id: plan_on_pve
+              continue-on-error: true
+              run: |
+                  set -euo pipefail
+
+                  service="${{ github.event.inputs.service }}"
+                  ref="${{ github.event.inputs.ref }}"
+                  checked_sha="${{ needs.setup.outputs.checked_sha }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${ref}' GIT_REF_NAME='${ref}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy plan --environment prod --service '${service}'"
+
+            - name: Capture RUN_ID (PROD plan)
+              id: capture_run_id
+              if: always()
+              run: |
+                  set -euo pipefail
+                  service="${{ github.event.inputs.service }}"
+
+                  ssh_target="ci@${PROXMOX_HOST:-pve}"
+                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"prod-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+                  RUN_ID="${RUN_ID%/}"
+                  RUN_ID="${RUN_ID%:}"
+                  test -n "${RUN_ID}"
+                  echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+            - name: Fetch evidence pack (PROD plan)
+              if: always()
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  test -n "${RUN_ID}"
+                  ./scripts/lab/fetch_evidence_pack.sh --environment prod --run-id "${RUN_ID}" >/dev/null
+
+            - name: Verify evidence pack (offline)
+              if: always()
+              run: ./scripts/lab/ci-verify.sh evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
+
+            - name: Validate PROD plan evidence SHA
+              id: sha_check
+              if: always()
+              run: |
+                  set -euo pipefail
+
+                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+                  checked_sha="${{ needs.setup.outputs.checked_sha }}"
+                  prov="evidence/prod/${run_id}/provenance.json"
+
+                  sha_ok=false
+                  got=""
+                  if [[ -f "${prov}" ]]; then
+                    got="$(jq -r '.git_sha // empty' "${prov}" 2>/dev/null || true)"
+                  fi
+
+                  if [[ -n "${got}" ]]; then
+                    if [[ "${checked_sha}" == "${got}" || "${checked_sha}" == "${got}"* || "${got}" == "${checked_sha}"* ]]; then
+                      sha_ok=true
+                    fi
+                  fi
+
+                  echo "sha_ok=${sha_ok}" >>"$GITHUB_OUTPUT"
+
+                  if [[ "${sha_ok}" != "true" ]]; then
+                    ./scripts/lab/render_github_annotations.sh \
+                      --level error \
+                      --title "PROD plan provenance SHA mismatch" \
+                      --message "PROD plan evidence git SHA did not match checked-out SHA. expected=${checked_sha} got=${got:-missing}"
+                  fi
+
+            - name: Compute PROD plan flags (destructive)
+              id: plan_flags
+              if: always()
+              run: |
+                  set -euo pipefail
+                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+                  blast="evidence/prod/${run_id}/blast-radius.json"
+
+                  destructive=false
+                  if [[ -f "${blast}" ]]; then
+                    destructive="$(jq -r '.destructive // false' "${blast}" 2>/dev/null || echo false)"
+                  fi
+                  if [[ "${destructive}" != "true" ]]; then
+                    destructive=false
+                  fi
+                  echo "destructive=${destructive}" >>"$GITHUB_OUTPUT"
+
+            - name: Generate PROD plan UI summary JSON
+              if: steps.plan_on_pve.outcome == 'success'
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  python3 ./scripts/lab/plan_ui_summary.py \
+                    --blast-radius "evidence/prod/${RUN_ID}/blast-radius.json" \
+                    --output "evidence/prod/${RUN_ID}/plan-ui-summary.json" \
+                    --limit 50
+
+            - name: Publish PROD plan summary to run UI
+              if: steps.plan_on_pve.outcome == 'success'
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+                  ./scripts/lab/render_github_summary.sh "evidence/prod/${RUN_ID}/plan-ui-summary.json" >>"$GITHUB_STEP_SUMMARY"
+
+            - name: Record PROD plan outcome
+              id: outcome
+              if: always()
+              run: |
+                  set -euo pipefail
+                  ok=false
+                  if [[ "${{ steps.plan_on_pve.outcome }}" == "success" && "${{ steps.sha_check.outputs.sha_ok }}" == "true" ]]; then
+                    ok=true
+                  fi
+                  echo "ok=${ok}" >>"$GITHUB_OUTPUT"
+
+            - name: Fail job if PROD plan failed or SHA mismatched
+              if: steps.plan_on_pve.outcome != 'success' || steps.sha_check.outputs.sha_ok != 'true'
+              run: |
+                  echo "ERROR: PROD plan failed or evidence SHA mismatched" >&2
+                  exit 1
+
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: prod-pipeline-prod-plan-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
+                  path: evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
+
+    summarize_before_approval:
+        name: Summary (before approval)
+        runs-on: [self-hosted]
+        needs: [setup, apply_lab, confidence_suite, plan_prod]
+        if: always()
+        outputs:
+            lab_ok: ${{ steps.compute_gate.outputs.lab_ok }}
+            suite_ok: ${{ steps.compute_gate.outputs.suite_ok }}
+            lab_gate_failed: ${{ steps.compute_gate.outputs.lab_gate_failed }}
+            sha_all_ok: ${{ steps.compute_gate.outputs.sha_all_ok }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.inputs.ref }}
+
+            - name: Compute LAB gate state
+              id: compute_gate
+              run: |
+                  set -euo pipefail
+                  lab_ok="${{ needs.apply_lab.outputs.ok }}"
+                  suite_ok="${{ needs.confidence_suite.outputs.ok }}"
+
+                  lab_sha_ok="${{ needs.apply_lab.outputs.sha_ok }}"
+                  suite_sha_ok="${{ needs.confidence_suite.outputs.sha_ok }}"
+                  plan_sha_ok="${{ needs.plan_prod.outputs.sha_ok }}"
+
+                  lab_gate_failed=false
+                  if [[ "${lab_ok}" != "true" || "${suite_ok}" != "true" ]]; then
+                    lab_gate_failed=true
+                  fi
+
+                  sha_all_ok=false
+                  if [[ "${lab_sha_ok}" == "true" && "${suite_sha_ok}" == "true" && "${plan_sha_ok}" == "true" ]]; then
+                    sha_all_ok=true
+                  fi
+
+                  echo "lab_ok=${lab_ok}" >>"$GITHUB_OUTPUT"
+                  echo "suite_ok=${suite_ok}" >>"$GITHUB_OUTPUT"
+                  echo "lab_gate_failed=${lab_gate_failed}" >>"$GITHUB_OUTPUT"
+                  echo "sha_all_ok=${sha_all_ok}" >>"$GITHUB_OUTPUT"
+
+            - name: Publish combined run summary
+              if: always()
+              run: |
+                  set -euo pipefail
+
+                  service="${{ github.event.inputs.service }}"
+                  ref="${{ github.event.inputs.ref }}"
+                  checked_sha="${{ needs.setup.outputs.checked_sha }}"
+
+                  lab_run_id="${{ needs.apply_lab.outputs.run_id }}"
+                  suite_run_id="${{ needs.confidence_suite.outputs.run_id }}"
+                  prod_plan_run_id="${{ needs.plan_prod.outputs.run_id }}"
+
+                  lab_ok="${{ needs.apply_lab.outputs.ok }}"
+                  suite_ok="${{ needs.confidence_suite.outputs.ok }}"
+                  lab_gate_failed="${{ steps.compute_gate.outputs.lab_gate_failed }}"
+
+                  lab_sha_ok="${{ needs.apply_lab.outputs.sha_ok }}"
+                  suite_sha_ok="${{ needs.confidence_suite.outputs.sha_ok }}"
+                  plan_sha_ok="${{ needs.plan_prod.outputs.sha_ok }}"
+                  sha_all_ok="${{ steps.compute_gate.outputs.sha_all_ok }}"
+
+                  destructive="${{ needs.plan_prod.outputs.destructive }}"
+                  override="${{ github.event.inputs.allow_override_failed_lab_gate }}"
+
+                  {
+                    echo "## PROD promotion pipeline (pre-approval)"
+                    echo "- Service: \`${service}\`"
+                    echo "- Ref: \`${ref}\`"
+                    echo "- Checked-out SHA: \`${checked_sha}\`"
+                    echo "- LAB apply RUN_ID: \`${lab_run_id}\` (ok=${lab_ok})"
+                    echo "- Confidence suite RUN_ID: \`${suite_run_id}\` (ok=${suite_ok})"
+                    echo "- PROD plan RUN_ID (plan reference): \`${prod_plan_run_id}\`"
+                    echo "- SHA alignment (lab/suite/plan): ${lab_sha_ok}/${suite_sha_ok}/${plan_sha_ok}"
+                    echo "- PROD plan destructive: ${destructive:-unknown}"
+                  } >>"$GITHUB_STEP_SUMMARY"
+
+                  if [[ "${lab_gate_failed}" == "true" ]]; then
+                    {
+                      echo ""
+                      echo "### LAB gate failed"
+                      echo "LAB deploy and/or confidence suite failed. PROD plan is still available above."
+                      echo "To allow PROD apply, re-run with allow_override_failed_lab_gate=true (and still approve the PROD environment)."
+                    } >>"$GITHUB_STEP_SUMMARY"
+                  fi
+
+                  if [[ "${sha_all_ok}" != "true" ]]; then
+                    {
+                      echo ""
+                      echo "### SHA alignment failed"
+                      echo "One or more stages produced evidence that does not match the checked-out SHA."
+                      echo "Approval/apply will be blocked until this is resolved."
+                    } >>"$GITHUB_STEP_SUMMARY"
+                  fi
+
+                  if [[ "${destructive}" == "true" && "${override}" != "true" ]]; then
+                    {
+                      echo ""
+                      echo "### Destructive PROD plan"
+                      echo "This PROD plan is destructive. To proceed you must set confirm_destructive_prod=deploy-prod-destructive (unless override is enabled)."
+                    } >>"$GITHUB_STEP_SUMMARY"
+                  fi
+
+                  {
+                    echo ""
+                    echo "### Next step: manual PROD apply"
+                    echo "This repo's billing plan does not support GitHub Environment required reviewers, so we cannot pause interactively in-workflow."
+                    echo "To deploy, run the 'LXC Apply (PROD)' workflow with:"
+                    echo "- promotion_run_id: ${{ github.run_id }}"
+                  } >>"$GITHUB_STEP_SUMMARY"
+
+            - name: Write promotion metadata (for manual apply workflow)
+              if: always()
+              run: |
+                  set -euo pipefail
+                  mkdir -p promotion-metadata
+                  cat > promotion-metadata/promotion-metadata.json <<'JSON'
+                  {
+                    "promotion_run_id": "${{ github.run_id }}",
+                    "service": "${{ github.event.inputs.service }}",
+                    "ref": "${{ github.event.inputs.ref }}",
+                    "checked_sha": "${{ needs.setup.outputs.checked_sha }}",
+                    "lab_run_id": "${{ needs.apply_lab.outputs.run_id }}",
+                    "suite_run_id": "${{ needs.confidence_suite.outputs.run_id }}",
+                    "lab_ok": "${{ needs.apply_lab.outputs.ok }}",
+                    "suite_ok": "${{ needs.confidence_suite.outputs.ok }}",
+                    "lab_gate_failed": "${{ steps.compute_gate.outputs.lab_gate_failed }}",
+                    "sha_all_ok": "${{ steps.compute_gate.outputs.sha_all_ok }}",
+                    "prod_plan_run_id": "${{ needs.plan_prod.outputs.run_id }}",
+                    "prod_plan_ok": "${{ needs.plan_prod.outputs.ok }}",
+                    "prod_plan_sha_ok": "${{ needs.plan_prod.outputs.sha_ok }}",
+                    "prod_plan_destructive": "${{ needs.plan_prod.outputs.destructive }}"
+                  }
+                  JSON
+
+            - uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: prod-promotion-metadata
+                  path: promotion-metadata/promotion-metadata.json

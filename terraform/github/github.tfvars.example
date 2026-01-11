@@ -1,0 +1,14 @@
+# Copy to github.tfvars (DO NOT COMMIT) and fill in values.
+# Export a token before running:
+#   export GITHUB_TOKEN=... (repo admin token)
+
+github_owner = "lightenup"
+repository   = "homelab-proxmox"
+
+# environment_name = "prod"
+# protected_branches_only = true
+# custom_branch_policies  = false
+
+# Uncomment if your GitHub plan supports environment required reviewers:
+# reviewer_users = ["lightenup"]
+# reviewer_teams = ["my-team-slug"]
