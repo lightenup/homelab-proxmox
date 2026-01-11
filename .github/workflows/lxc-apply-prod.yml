@@ -1,0 +1,257 @@
+name: LXC Apply (PROD)
+
+on:
+  workflow_dispatch:
+    inputs:
+      promotion_run_id:
+        description: "GitHub Actions run id from the corresponding 'LXC Promote (PROD)' run (see its summary)"
+        required: true
+        type: string
+      allow_override_failed_lab_gate:
+        description: "Allow proceeding even if LAB deploy or confidence suite failed in the promotion run"
+        required: false
+        type: boolean
+        default: false
+      confirm_destructive_prod:
+        description: "Required when PROD plan is destructive: set to 'deploy-prod-destructive' (unless override enabled)"
+        required: false
+        type: string
+        default: ""
+      confirm_apply_prod:
+        description: "Safety confirm: set to 'deploy-prod' to execute PROD apply"
+        required: true
+        type: string
+
+jobs:
+  apply_prod:
+    name: Apply (PROD)
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch promotion metadata artifact
+        id: fetch_meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.inputs.promotion_run_id }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "${RUN_ID}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: promotion_run_id must be a numeric run id" >&2
+            exit 1
+          fi
+
+          mkdir -p promotion-metadata
+
+          # List artifacts for the referenced run
+          artifacts_json="$(curl -sSf \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${API_URL}/repos/${REPO}/actions/runs/${RUN_ID}/artifacts")"
+
+          artifact_id="$(echo "${artifacts_json}" | jq -r '.artifacts[] | select(.name=="prod-promotion-metadata") | .id' | head -n 1)"
+
+          if [[ -z "${artifact_id}" || "${artifact_id}" == "null" ]]; then
+            echo "ERROR: Could not find artifact 'prod-promotion-metadata' for run_id=${RUN_ID}." >&2
+            echo "Ensure the promotion workflow completed and uploaded the metadata artifact." >&2
+            exit 1
+          fi
+
+          curl -sSfL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${API_URL}/repos/${REPO}/actions/artifacts/${artifact_id}/zip" \
+            -o promotion-metadata/meta.zip
+
+          unzip -q promotion-metadata/meta.zip -d promotion-metadata/
+
+          meta_file="promotion-metadata/promotion-metadata.json"
+          if [[ ! -f "${meta_file}" ]]; then
+            echo "ERROR: promotion-metadata.json not found in downloaded artifact" >&2
+            ls -la promotion-metadata || true
+            exit 1
+          fi
+
+          echo "meta_file=${meta_file}" >>"$GITHUB_OUTPUT"
+
+      - name: Load promotion metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          meta_file="${{ steps.fetch_meta.outputs.meta_file }}"
+
+          service="$(jq -r '.service' "${meta_file}")"
+          ref="$(jq -r '.ref' "${meta_file}")"
+          checked_sha="$(jq -r '.checked_sha' "${meta_file}")"
+          prod_plan_run_id="$(jq -r '.prod_plan_run_id' "${meta_file}")"
+          lab_gate_failed="$(jq -r '.lab_gate_failed' "${meta_file}")"
+          sha_all_ok="$(jq -r '.sha_all_ok' "${meta_file}")"
+          destructive="$(jq -r '.prod_plan_destructive' "${meta_file}")"
+
+          for v in service ref checked_sha prod_plan_run_id lab_gate_failed sha_all_ok destructive; do
+            if [[ -z "${!v}" || "${!v}" == "null" ]]; then
+              echo "ERROR: Missing ${v} in promotion metadata" >&2
+              cat "${meta_file}" >&2
+              exit 1
+            fi
+          done
+
+          echo "service=${service}" >>"$GITHUB_OUTPUT"
+          echo "ref=${ref}" >>"$GITHUB_OUTPUT"
+          echo "checked_sha=${checked_sha}" >>"$GITHUB_OUTPUT"
+          echo "prod_plan_run_id=${prod_plan_run_id}" >>"$GITHUB_OUTPUT"
+          echo "lab_gate_failed=${lab_gate_failed}" >>"$GITHUB_OUTPUT"
+          echo "sha_all_ok=${sha_all_ok}" >>"$GITHUB_OUTPUT"
+          echo "destructive=${destructive}" >>"$GITHUB_OUTPUT"
+
+          {
+            echo "## PROD apply (manual)"
+            echo "- Promotion run id: \`${{ github.event.inputs.promotion_run_id }}\`"
+            echo "- Service: \`${service}\`"
+            echo "- Ref: \`${ref}\`"
+            echo "- Checked-out SHA: \`${checked_sha}\`"
+            echo "- PROD plan RUN_ID: \`${prod_plan_run_id}\`"
+            echo "- LAB gate failed: ${lab_gate_failed}"
+            echo "- SHA alignment ok: ${sha_all_ok}"
+            echo "- PROD plan destructive: ${destructive}"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce apply confirmation
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event.inputs.confirm_apply_prod }}" != "deploy-prod" ]]; then
+            echo "ERROR: Missing/incorrect confirm_apply_prod. Set confirm_apply_prod=deploy-prod to proceed." >&2
+            exit 1
+          fi
+
+      - name: Enforce SHA alignment requirement
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.meta.outputs.sha_all_ok }}" != "true" ]]; then
+            echo "ERROR: SHA alignment failed in promotion run; refusing to apply." >&2
+            exit 1
+          fi
+
+      - name: Enforce override semantics
+        run: |
+          set -euo pipefail
+
+          lab_gate_failed="${{ steps.meta.outputs.lab_gate_failed }}"
+          override="${{ github.event.inputs.allow_override_failed_lab_gate }}"
+
+          if [[ "${lab_gate_failed}" == "true" && "${override}" != "true" ]]; then
+            echo "ERROR: LAB deploy and/or confidence suite failed; override not enabled." >&2
+            echo "Re-run this workflow with allow_override_failed_lab_gate=true to proceed." >&2
+            exit 1
+          fi
+
+      - name: Enforce destructive confirmation semantics
+        run: |
+          set -euo pipefail
+
+          override="${{ github.event.inputs.allow_override_failed_lab_gate }}"
+          destructive="${{ steps.meta.outputs.destructive }}"
+          confirm_destructive_prod="${{ github.event.inputs.confirm_destructive_prod }}"
+
+          if [[ "${override}" == "true" ]]; then
+            exit 0
+          fi
+
+          if [[ "${destructive}" == "true" ]]; then
+            if [[ "${confirm_destructive_prod}" != "deploy-prod-destructive" ]]; then
+              echo "ERROR: PROD plan is destructive; missing/incorrect confirm_destructive_prod." >&2
+              echo "Set confirm_destructive_prod=deploy-prod-destructive to proceed (or enable override)." >&2
+              exit 1
+            fi
+          fi
+
+      - name: Allowlist runtime validation
+        run: |
+          set -euo pipefail
+          service="${{ steps.meta.outputs.service }}"
+          jq -e --arg s "${service}" 'has($s)' ./scripts/lab/service-scope-allowlist.json >/dev/null
+
+      - name: Sync repo to PVE
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'terraform/.terraform/' \
+            --exclude 'terraform/.terraform.lock.hcl' \
+            --exclude 'terraform/terraform.tfstate' \
+            --exclude 'terraform/terraform.tfstate.backup' \
+            --exclude 'scripts/lab/artifacts/' \
+            --exclude 'artifacts/' \
+            ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
+
+      - name: Apply on PVE (PROD, from saved plan)
+        id: apply_on_pve
+        env:
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          service="${{ steps.meta.outputs.service }}"
+          ref="${{ steps.meta.outputs.ref }}"
+          checked_sha="${{ steps.meta.outputs.checked_sha }}"
+          plan_run_id="${{ steps.meta.outputs.prod_plan_run_id }}"
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+          else
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'"
+          fi
+
+      - name: Capture RUN_ID (PROD apply)
+        id: capture_run_id
+        if: always()
+        run: |
+          set -euo pipefail
+          service="${{ steps.meta.outputs.service }}"
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"prod-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+          RUN_ID="${RUN_ID%/}"
+          RUN_ID="${RUN_ID%:}"
+          test -n "${RUN_ID}"
+          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch evidence pack (PROD apply)
+        if: always()
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
+          test -n "${RUN_ID}"
+          ./scripts/lab/fetch_evidence_pack.sh --environment prod --run-id "${RUN_ID}" >/dev/null
+
+      - name: Verify evidence pack (offline)
+        if: always()
+        run: ./scripts/lab/ci-verify.sh evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
+
+      - name: Validate apply used the saved plan reference
+        if: always()
+        run: |
+          set -euo pipefail
+          apply_run_id="${{ steps.capture_run_id.outputs.run_id }}"
+          plan_run_id="${{ steps.meta.outputs.prod_plan_run_id }}"
+          prov="evidence/prod/${apply_run_id}/provenance.json"
+          test -f "${prov}"
+          used="$(jq -r '.plan_source_run_id // empty' "${prov}" 2>/dev/null || true)"
+          if [[ "${used}" != "${plan_run_id}" ]]; then
+            echo "ERROR: PROD apply did not record plan_source_run_id correctly. expected=${plan_run_id} got=${used:-missing}" >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prod-apply-evidence-${{ steps.meta.outputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
+          path: evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
