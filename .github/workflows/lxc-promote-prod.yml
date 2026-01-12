@@ -1,5 +1,4 @@
-name: LXC Promote (PROD)
-
+name: Prod 1 - LXC Promote
 on:
     workflow_dispatch:
         inputs:

@@ -1,4 +1,4 @@
-name: LXC Promote (LAB)
+name: Lab 1 - LXC Promote
 
 on:
     workflow_dispatch:
