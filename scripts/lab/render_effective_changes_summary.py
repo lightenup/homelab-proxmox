@@ -176,13 +176,31 @@ def main() -> int:
             status = apply_summary.get("status", "")
             reason = apply_summary.get("reason", "")
             hint = apply_summary.get("hint", "")
+            source_path = apply_summary.get("source_path", "")
+            source_file = apply_summary.get("source_file", "")
+            source_func = apply_summary.get("source_func", "")
+            source_line = apply_summary.get("source_line", "")
             if status or reason:
-                msg = "- Apply status:"
+                parts: List[str] = []
                 if status:
-                    msg += f" status={status}"
+                    parts.append(f"status={status}")
                 if reason:
-                    msg += f" reason={reason}"
-                print(msg)
+                    parts.append(f"reason={reason}")
+                print(f"- Apply status: {' '.join(parts)}")
+
+            # If we have source context, print it in a compact way.
+            loc = ""
+            if source_file and source_line:
+                loc = f"{source_file}:{source_line}"
+            elif source_path and source_line:
+                loc = f"{source_path}:{source_line}"
+            elif source_path:
+                loc = source_path
+
+            if loc:
+                extra = f" (func={source_func})" if source_func else ""
+                print(f"- Failure location: `{loc}`{extra}")
+
             if hint:
                 print(f"- Hint: `{hint}`")
 
