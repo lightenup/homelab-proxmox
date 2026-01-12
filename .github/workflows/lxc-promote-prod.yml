@@ -549,6 +549,27 @@ jobs:
               with:
                   ref: ${{ github.event.inputs.ref }}
 
+            - name: Fetch evidence packs (for summary)
+              if: always()
+              run: |
+                  set -euo pipefail
+
+                  lab_run_id="${{ needs.apply_lab.outputs.run_id }}"
+                  suite_run_id="${{ needs.confidence_suite.outputs.run_id }}"
+                  prod_plan_run_id="${{ needs.plan_prod.outputs.run_id }}"
+
+                  if [[ -n "${lab_run_id}" ]]; then
+                    ./scripts/lab/fetch_evidence_pack.sh --environment lab --run-id "${lab_run_id}" >/dev/null || true
+                  fi
+
+                  if [[ -n "${suite_run_id}" ]]; then
+                    ARTIFACT_RUNS_DIR=lab-runs ./scripts/lab/fetch_evidence_pack.sh --environment lab --run-id "${suite_run_id}" >/dev/null || true
+                  fi
+
+                  if [[ -n "${prod_plan_run_id}" ]]; then
+                    ./scripts/lab/fetch_evidence_pack.sh --environment prod --run-id "${prod_plan_run_id}" >/dev/null || true
+                  fi
+
             - name: Compute LAB gate state
               id: compute_gate
               run: |
@@ -611,6 +632,13 @@ jobs:
                     echo "- SHA alignment (lab/suite/plan): ${lab_sha_ok}/${suite_sha_ok}/${plan_sha_ok}"
                     echo "- PROD plan destructive: ${destructive:-unknown}"
                   } >>"$GITHUB_STEP_SUMMARY"
+
+                  # Approval-friendly effective change summary from evidence packs.
+                  python3 ./scripts/lab/render_effective_changes_summary.py \
+                    --service "${service}" \
+                    --lab-evidence "evidence/lab/${lab_run_id}" \
+                    --prod-plan-evidence "evidence/prod/${prod_plan_run_id}" \
+                    >>"$GITHUB_STEP_SUMMARY" || true
 
                   if [[ "${lab_gate_failed}" == "true" ]]; then
                     {
