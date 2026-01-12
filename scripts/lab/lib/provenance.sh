@@ -33,10 +33,19 @@ capture_git_status() {
     pushd "$git_dir" >/dev/null
     
     local git_commit
-    git_commit="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+    if [[ -n "${GIT_SHA:-}" && "${GIT_SHA}" =~ ^[0-9a-fA-F]{7,64}$ ]]; then
+        git_commit="${GIT_SHA}"
+    else
+        git_commit="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+    fi
     
     local git_branch
-    git_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
+    # Allow CI to override branch name as well (useful when git metadata is missing).
+    if [[ -n "${GIT_REF_NAME:-}" ]]; then
+        git_branch="${GIT_REF_NAME}"
+    else
+        git_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
+    fi
     
     local git_dirty="false"
     if ! git diff-index --quiet HEAD -- 2>/dev/null; then

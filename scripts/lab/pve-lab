@@ -56,6 +56,7 @@ NC='\033[0m' # No Color
 
 # Global Artifact Dir (set in cmd_run)
 ARTIFACT_DIR=""
+OUTPUT_REDIRECTED="false"
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
@@ -1217,8 +1218,12 @@ cmd_run() {
     # Set Global ARTIFACT_DIR for logging
     export ARTIFACT_DIR="$artifact_dir"
     
-    # Redirect output to log file and stdout
-    exec > >(tee -a "$log_file") 2>&1
+    # Redirect output to log file and stdout (only once per process)
+    if [[ "${OUTPUT_REDIRECTED}" != "true" ]]; then
+        exec > >(tee -a "$log_file") 2>&1
+        OUTPUT_REDIRECTED="true"
+        export OUTPUT_REDIRECTED
+    fi
     
     log_info "Starting Lab Run: $run_id"
     log_info "Artifacts: $artifact_dir"
@@ -1582,6 +1587,61 @@ cmd_safety_suite() {
 
 cmd_confidence_suite() {
     log_info "Running Confidence Suite (Full Validation)..."
+
+    # Ensure we have a single evidence pack for the full suite, even if the safety step fails.
+    if [[ -z "${RUN_ID:-}" || -z "${ARTIFACT_DIR:-}" ]]; then
+        ensure_artifact_root
+        mkdir -p "${ARTIFACT_BASE}"
+
+        # Locking (flock) to avoid overlapping runs while the suite is executing.
+        exec 200>"$LOCK_FILE"
+        if [[ "${SKIP_LOCK:-false}" != "true" ]]; then
+            if ! flock -n 200; then
+                log_error "Another instance is running (Lock: $LOCK_FILE). Aborting."
+                exit 1
+            fi
+        fi
+
+        local run_id
+        run_id="$(create_evidence_pack "$ARTIFACT_BASE")"
+        export RUN_ID="$run_id"
+        export ARTIFACT_DIR="${ARTIFACT_BASE}/${run_id}"
+        export EVIDENCE_DIR="${ARTIFACT_BASE}/${run_id}"
+
+        evidence_init "$run_id" "confidence"
+        local artifact_dir="$EVIDENCE_ROOT"
+        local log_file="$artifact_dir/run.log"
+
+        init_jsonl_events "$artifact_dir/logs/events.jsonl"
+
+        # Redirect output early so safety-step logs land in this evidence pack.
+        if [[ "${OUTPUT_REDIRECTED}" != "true" ]]; then
+            exec > >(tee -a "$log_file") 2>&1
+            OUTPUT_REDIRECTED="true"
+            export OUTPUT_REDIRECTED
+        fi
+
+        # Emit a parseable run id for CI log scraping.
+        if [[ "${CI_EMIT_RUN_ID:-0}" == "1" ]]; then
+            printf 'RUN_ID=%s\n' "$run_id"
+        fi
+
+        log_info "Starting Lab Run: $run_id"
+        log_info "Artifacts: $artifact_dir"
+
+        log_info "=== Capturing Provenance ==="
+        check_git_dirty "$SCRIPT_DIR/.."
+
+        local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+        generate_provenance \
+            "$artifact_dir/provenance.json" \
+            "confidence" \
+            "$ssh_target" \
+            "suite=confidence" \
+            "run_id=$run_id"
+
+        log_info "Provenance captured: provenance.json"
+    fi
     
     # 1. Safety Suite
     if ! cmd_safety_suite; then

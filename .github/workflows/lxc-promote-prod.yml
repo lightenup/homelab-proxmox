@@ -238,7 +238,7 @@ jobs:
         needs: [setup, apply_lab]
         if: always()
         outputs:
-            run_id: ${{ steps.capture_run_id.outputs.run_id }}
+            run_id: ${{ steps.suite_on_pve.outputs.run_id }}
             ok: ${{ steps.outcome.outputs.ok }}
             sha_ok: ${{ steps.sha_check.outputs.sha_ok }}
         steps:
@@ -261,38 +261,46 @@ jobs:
               run: |
                   set -euo pipefail
 
+                  ref="${{ github.event.inputs.ref }}"
                   checked_sha="${{ needs.setup.outputs.checked_sha }}"
 
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ./pve-lab confidence"
+                  log_file="${RUNNER_TEMP}/confidence-suite-${GITHUB_RUN_ID}.log"
+                  rm -f "${log_file}" || true
 
-            - name: Capture RUN_ID (confidence suite)
-              id: capture_run_id
-              if: always()
-              run: |
-                  set -euo pipefail
-                  ssh_target="ci@${PROXMOX_HOST:-pve}"
-                  ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+                  set +e
+                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && CI_EMIT_RUN_ID=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=lab-runs ./pve-lab confidence" 2>&1 | tee "${log_file}"
+                  rc=${PIPESTATUS[0]}
+                  set -e
 
-                  RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "ls -1td /var/lib/homelab-proxmox/artifacts/lab-runs/*/ 2>/dev/null | head -1 | xargs -n1 basename" | tr -d '\r\n')"
-                  RUN_ID="${RUN_ID%/}"
-                  RUN_ID="${RUN_ID%:}"
-                  test -n "${RUN_ID}"
-                  echo "run_id=${RUN_ID}" >>"$GITHUB_OUTPUT"
+                  run_id="$(grep -E '^RUN_ID=' "${log_file}" | tail -1 | cut -d= -f2- | tr -d '\r\n')"
+                  echo "run_id=${run_id}" >>"$GITHUB_OUTPUT"
+
+                  exit ${rc}
 
             - name: Fetch evidence pack (confidence suite)
               if: always()
               run: |
                   set -euo pipefail
-                  RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
-                  test -n "${RUN_ID}"
+                  RUN_ID="${{ steps.suite_on_pve.outputs.run_id }}"
+                  if [[ -z "${RUN_ID}" ]]; then
+                    echo "No RUN_ID captured for confidence suite; skipping evidence fetch."
+                    exit 0
+                  fi
                   ARTIFACT_RUNS_DIR=lab-runs ./scripts/lab/fetch_evidence_pack.sh --environment lab --run-id "${RUN_ID}" >/dev/null
 
             - name: Verify evidence pack (offline)
               if: always()
-              run: ./scripts/lab/ci-verify.sh evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+              run: |
+                  set -euo pipefail
+                  RUN_ID="${{ steps.suite_on_pve.outputs.run_id }}"
+                  if [[ -z "${RUN_ID}" ]]; then
+                    echo "No RUN_ID captured for confidence suite; skipping offline verification."
+                    exit 0
+                  fi
+                  ./scripts/lab/ci-verify.sh "evidence/lab/${RUN_ID}"
 
             - name: Validate confidence suite evidence SHA
               id: sha_check
@@ -300,13 +308,16 @@ jobs:
               run: |
                   set -euo pipefail
 
-                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+                  run_id="${{ steps.suite_on_pve.outputs.run_id }}"
                   checked_sha="${{ needs.setup.outputs.checked_sha }}"
-                  prov="evidence/lab/${run_id}/provenance.json"
+                  prov=""
+                  if [[ -n "${run_id}" ]]; then
+                    prov="evidence/lab/${run_id}/provenance.json"
+                  fi
 
                   sha_ok=false
                   got=""
-                  if [[ -f "${prov}" ]]; then
+                  if [[ -n "${prov}" && -f "${prov}" ]]; then
                     got="$(jq -r '.git.commit // empty' "${prov}" 2>/dev/null || true)"
                   fi
 
@@ -322,7 +333,7 @@ jobs:
                     ./scripts/lab/render_github_annotations.sh \
                       --level error \
                       --title "Confidence suite provenance SHA mismatch" \
-                      --message "Confidence suite evidence git commit did not match checked-out SHA. expected=${checked_sha} got=${got:-missing}"
+                      --message "Confidence suite evidence git commit did not match checked-out SHA. expected=${checked_sha} got=${got:-missing} run_id=${run_id:-missing}"
                   fi
 
             - name: Record confidence suite outcome
@@ -341,7 +352,7 @@ jobs:
               run: |
                   set -euo pipefail
                   outcome="${{ steps.suite_on_pve.outcome }}"
-                  run_id="${{ steps.capture_run_id.outputs.run_id }}"
+                  run_id="${{ steps.suite_on_pve.outputs.run_id }}"
                   if [[ "${outcome}" != "success" ]]; then
                     ./scripts/lab/render_github_annotations.sh \
                       --level error \
@@ -359,10 +370,10 @@ jobs:
                   fi
 
             - uses: actions/upload-artifact@v4
-              if: always()
+              if: ${{ always() && steps.suite_on_pve.outputs.run_id != '' }}
               with:
-                  name: prod-pipeline-confidence-evidence-${{ steps.capture_run_id.outputs.run_id }}
-                  path: evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+                  name: prod-pipeline-confidence-evidence-${{ steps.suite_on_pve.outputs.run_id }}
+                  path: evidence/lab/${{ steps.suite_on_pve.outputs.run_id }}
 
     plan_prod:
         name: Plan (PROD)
