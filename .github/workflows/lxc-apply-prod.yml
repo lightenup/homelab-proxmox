@@ -1,5 +1,9 @@
 name: Prod 2 - LXC Apply
 
+permissions:
+  contents: read
+  actions: read
+
 on:
   workflow_dispatch:
     inputs:
