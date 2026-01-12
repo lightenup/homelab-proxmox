@@ -940,6 +940,32 @@ cmd_test() {
     fi
 }
 
+acquire_lock_or_die() {
+    # Uses FD 200 for the global harness lock.
+    # Default behavior is non-blocking (fail fast).
+    # Set LOCK_WAIT_SECONDS to wait up to N seconds for the lock.
+    exec 200>"$LOCK_FILE"
+    if [[ "${SKIP_LOCK:-false}" == "true" ]]; then
+        return 0
+    fi
+
+    local wait_seconds
+    wait_seconds="${LOCK_WAIT_SECONDS:-0}"
+
+    if [[ "${wait_seconds}" =~ ^[0-9]+$ ]] && [[ "${wait_seconds}" -gt 0 ]]; then
+        log_info "Waiting up to ${wait_seconds}s for lab harness lock: ${LOCK_FILE}"
+        if ! flock -w "${wait_seconds}" 200; then
+            log_error "Another instance is running (Lock: $LOCK_FILE). Timeout waiting for lock."
+            exit 1
+        fi
+    else
+        if ! flock -n 200; then
+            log_error "Another instance is running (Lock: $LOCK_FILE). Aborting."
+            exit 1
+        fi
+    fi
+}
+
 ingest_ansible_reports() {
     local evidence_dir="$1"
     local report_pattern="$evidence_dir/reports/assertions.*.json"
@@ -1184,13 +1210,7 @@ cmd_run() {
     # Locking (flock)
     ensure_artifact_root
     mkdir -p "${ARTIFACT_BASE}"
-    exec 200>"$LOCK_FILE"
-    if [[ "${SKIP_LOCK:-false}" != "true" ]]; then
-        if ! flock -n 200; then
-            log_error "Another instance is running (Lock: $LOCK_FILE). Aborting."
-            exit 1
-        fi
-    fi
+    acquire_lock_or_die
     
     local run_id
     if [[ -n "${RUN_ID:-}" && -n "${ARTIFACT_DIR:-}" ]]; then
@@ -1596,13 +1616,7 @@ cmd_confidence_suite() {
         mkdir -p "${ARTIFACT_BASE}"
 
         # Locking (flock) to avoid overlapping runs while the suite is executing.
-        exec 200>"$LOCK_FILE"
-        if [[ "${SKIP_LOCK:-false}" != "true" ]]; then
-            if ! flock -n 200; then
-                log_error "Another instance is running (Lock: $LOCK_FILE). Aborting."
-                exit 1
-            fi
-        fi
+        acquire_lock_or_die
 
         local run_id
         run_id="$(create_evidence_pack "$ARTIFACT_BASE")"
