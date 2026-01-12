@@ -73,6 +73,22 @@ jobs:
                   echo "checked_sha=${sha}" >>"$GITHUB_OUTPUT"
                   echo "CHECKED_SHA=${sha}" >>"$GITHUB_ENV"
 
+            - name: Publish recent commits (ref helper)
+              run: |
+                  set -euo pipefail
+                  ref="${{ github.event.inputs.ref }}"
+                  sha="${{ steps.capture_sha.outputs.checked_sha }}"
+                  {
+                    echo "## Ref context"
+                    echo "- Ref input: \`${ref}\`"
+                    echo "- Checked-out SHA: \`${sha}\`"
+                    echo ""
+                    echo "### Recent commits (top 10)"
+                    echo "\`\`\`"
+                    git --no-pager log -n 10 --date=short --decorate=short --pretty=format:'%h %ad %s'
+                    echo "\`\`\`"
+                  } >>"$GITHUB_STEP_SUMMARY"
+
     apply_lab:
         name: Apply (LAB)
         runs-on: [self-hosted]
@@ -115,7 +131,7 @@ jobs:
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${ref}' GIT_REF_NAME='${ref}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'"
+                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'"
 
             - name: Capture RUN_ID (LAB apply)
               id: capture_run_id
@@ -389,7 +405,7 @@ jobs:
                   ssh_target="ci@${PROXMOX_HOST:-pve}"
                   ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${ref}' GIT_REF_NAME='${ref}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy plan --environment prod --service '${service}'"
+                  ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy plan --environment prod --service '${service}'"
 
             - name: Capture RUN_ID (PROD plan)
               id: capture_run_id

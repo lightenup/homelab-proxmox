@@ -71,6 +71,13 @@
 
 ---
 
+## Phase 7: Operator UX + Provenance Robustness
+
+- [X] T022 [US2] Add a bounded "recent commits" list (SHA + subject) to the PROD promotion run summary in .github/workflows/lxc-promote-prod.yml to make selecting `ref` easier.
+- [X] T023 [US3] Ensure service-deploy evidence provenance records the checked-out git SHA even when PVE cannot infer it from git metadata (e.g., `git_sha=unknown`); pass GIT_SHA from .github/workflows/lxc-promote-prod.yml into remote pve-service-deploy plan/apply.
+
+---
+
 ## Dependencies & Execution Order
 
 ### User Story Dependencies
