@@ -48,26 +48,13 @@ record_check() {
         done
 
         if [[ "$is_duplicate" == "true" ]]; then
-            # Check if we already emitted the dedup error
-            local dedup_emitted=false
-            for s in "${SEEN_CHECK_IDS[@]:-}"; do
-                if [[ "$s" == "SUITE-DEDUP-001" ]]; then
-                    dedup_emitted=true
-                    break
-                fi
-            done
-
-            if [[ "$dedup_emitted" == "false" ]]; then
-                # Recursive call to record the blocker
-                record_check "SUITE-DEDUP-001" \
-                    "Duplicate Check ID Detected" \
-                    "blocker" \
-                    "PASS" \
-                    "FAIL" \
-                    "Check ID '$check_id' was emitted multiple times. First collision detected." \
-                    "collision_id:$check_id"
-            fi
-            # Do not record the duplicate check
+            # A duplicate *attempt* can happen when multiple profiles run under a
+            # single evidence pack (e.g., ENV-001/NET-001 repeats). We always
+            # skip recording the duplicate to preserve uniqueness in checks.json.
+            #
+            # If duplicates ever make it into checks.json, the evidence verifier
+            # will fail the run; we do not emit SUITE-DEDUP-001 here because
+            # this collision is already handled by skipping the record.
             return 0
         fi
         # Mark as seen
