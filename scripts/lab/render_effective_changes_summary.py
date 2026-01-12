@@ -107,6 +107,18 @@ def _extract_play_recap_lines(text: str, limit: int = 10) -> List[str]:
     return recap
 
 
+def _extract_ansible_error_tail(text: str, limit: int = 6) -> List[str]:
+    lines = [l.rstrip() for l in text.splitlines() if l.strip()]
+    hits: List[str] = []
+    patterns = ("UNREACHABLE!", "FAILED!", "fatal:", "ERROR!", "SSH")
+    for line in reversed(lines):
+        if any(p in line for p in patterns):
+            hits.append(line)
+            if len(hits) >= limit:
+                break
+    return list(reversed(hits))
+
+
 def _extract_ansible_recaps(evidence_dir: Path, service: str) -> Tuple[List[str], List[str]]:
     bootstrap = evidence_dir / "reports" / "apply" / "ansible-bootstrap.txt"
     svc = evidence_dir / "reports" / "apply" / f"ansible-{service}.txt"
@@ -212,6 +224,9 @@ def main() -> int:
 
         b_recap, s_recap = _extract_ansible_recaps(lab_dir, service)
 
+        bootstrap_path = lab_dir / "reports" / "apply" / "ansible-bootstrap.txt"
+        service_path = lab_dir / "reports" / "apply" / f"ansible-{service}.txt"
+
         if b_recap:
             print("- Ansible bootstrap recap:")
             print("```")
@@ -219,7 +234,17 @@ def main() -> int:
                 print(line)
             print("```")
         else:
-            print("- Ansible bootstrap recap: (not found)")
+            if bootstrap_path.is_file():
+                print("- Ansible bootstrap recap: (no PLAY RECAP found)")
+                err = _extract_ansible_error_tail(_read_text(bootstrap_path))
+                if err:
+                    print("  Recent errors:")
+                    print("```")
+                    for line in err:
+                        print(line)
+                    print("```")
+            else:
+                print("- Ansible bootstrap recap: (not found)")
 
         if s_recap:
             print(f"- Ansible {service} recap:")
@@ -228,7 +253,17 @@ def main() -> int:
                 print(line)
             print("```")
         else:
-            print(f"- Ansible {service} recap: (not found)")
+            if service_path.is_file():
+                print(f"- Ansible {service} recap: (no PLAY RECAP found)")
+                err = _extract_ansible_error_tail(_read_text(service_path))
+                if err:
+                    print("  Recent errors:")
+                    print("```")
+                    for line in err:
+                        print(line)
+                    print("```")
+            else:
+                print(f"- Ansible {service} recap: (not found)")
 
     # PROD plan (planned changes)
     print("\n#### PROD plan (Terraform)")

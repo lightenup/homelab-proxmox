@@ -88,6 +88,15 @@ emit_file_excerpt "Vault check stderr (tail)" "${evidence_dir%/}/reports/apply/v
 # Always include some preflight context; it's usually the most actionable.
 emit_file_excerpt "Preflight (tail)" "${evidence_dir%/}/preflight.txt" "tail"
 
+# Ansible output is often the key for rc=4 failures; keep it bounded.
+for af in "${evidence_dir%/}"/reports/apply/ansible-*.txt; do
+  if [[ -f "${af}" ]]; then
+    emit_file_excerpt "Ansible output (tail)" "${af}" "tail"
+  fi
+done
+
+emit_file_excerpt "Inventory generation (tail)" "${evidence_dir%/}/reports/apply/update-inventory.txt" "tail"
+
 # Healthcheck output can be very actionable but should stay bounded.
 for hc in "${evidence_dir%/}"/reports/healthcheck/*.txt; do
   if [[ -f "${hc}" ]]; then
