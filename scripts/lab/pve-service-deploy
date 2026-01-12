@@ -1291,7 +1291,9 @@ cmd_apply() {
             die "terraform state pull failed (rc=${state_rc}) or returned empty output; see ${state_pull_stderr}"
         fi
 
-        ansible_inventory_json="$(printf '%s' "${state_json}" | SERVICE="${SERVICE}" python3 -c '
+        local inv_from_state_stderr="${EVIDENCE_ROOT}/reports/apply/ansible-inventory-from-state.stderr.txt"
+        local inv_from_state_rc=0
+        if ! ansible_inventory_json="$(printf '%s' "${state_json}" | SERVICE="${SERVICE}" python3 -c '
 import json
 import os
 import sys
@@ -1331,7 +1333,22 @@ for res in doc.get("resources") or []:
 
 print(f"Could not find proxmox_lxc network ip in state for module={module_addr}", file=sys.stderr)
 sys.exit(3)
-')"
+')" 2>"${inv_from_state_stderr}"; then
+            inv_from_state_rc=$?
+        fi
+
+        if [[ ${inv_from_state_rc} -ne 0 || -z "${ansible_inventory_json}" ]]; then
+            {
+                echo "status=failure"
+                echo "reason=failed to derive ansible inventory from terraform state"
+                echo "hint=see reports/apply/terraform-state-pull.stderr.txt and reports/apply/ansible-inventory-from-state.stderr.txt"
+                echo "inventory_from_state_rc=${inv_from_state_rc}"
+            } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+            emit_error "${RUN_ID}" "failed to derive ansible inventory from terraform state"
+            run_offline_verify
+            trap - ERR
+            return 1
+        fi
     fi
 
     printf '%s\n' "${ansible_inventory_json}" >"${EVIDENCE_ROOT}/reports/apply/ansible-inventory.json"

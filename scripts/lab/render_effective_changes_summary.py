@@ -60,6 +60,24 @@ def _extract_tf_apply_summary(evidence_dir: Path) -> Optional[str]:
     return None
 
 
+def _parse_kv_file(path: Path) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    if not path.is_file():
+        return out
+    for raw in _read_text(path).splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip()
+        if k:
+            out[k] = v
+    return out
+
+
 def _extract_play_recap_lines(text: str, limit: int = 10) -> List[str]:
     lines = text.splitlines()
     idx = -1
@@ -153,6 +171,21 @@ def main() -> int:
     if not lab_dir or not lab_dir.is_dir():
         print("- Evidence: (missing)")
     else:
+        apply_summary = _parse_kv_file(lab_dir / "reports" / "apply" / "summary.txt")
+        if apply_summary:
+            status = apply_summary.get("status", "")
+            reason = apply_summary.get("reason", "")
+            hint = apply_summary.get("hint", "")
+            if status or reason:
+                msg = "- Apply status:"
+                if status:
+                    msg += f" status={status}"
+                if reason:
+                    msg += f" reason={reason}"
+                print(msg)
+            if hint:
+                print(f"- Hint: `{hint}`")
+
         tf_apply = _extract_tf_apply_summary(lab_dir)
         if tf_apply:
             print(f"- Terraform apply: `{tf_apply}`")
