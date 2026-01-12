@@ -642,7 +642,15 @@ cmd_plan() {
     on_plan_error() {
         local rc="$1"
         local line="$2"
+        local src="${BASH_SOURCE[0]:-unknown}"
+        local func="${FUNCNAME[1]:-unknown}"
         write_plan_summary "blocked" "error rc=${rc} at line ${line}"
+        {
+            echo "source_path=${src}"
+            echo "source_file=${src##*/}"
+            echo "source_func=${func}"
+            echo "source_line=${line}"
+        } >>"${EVIDENCE_ROOT}/reports/plan/summary.txt" 2>/dev/null || true
         emit_error "${RUN_ID}" "error rc=${rc} at line ${line}"
         run_offline_verify || true
     }
@@ -943,9 +951,15 @@ cmd_apply() {
     on_apply_error() {
         local rc="$1"
         local line="$2"
+        local src="${BASH_SOURCE[0]:-unknown}"
+        local func="${FUNCNAME[1]:-unknown}"
         {
             echo "status=failure"
             echo "reason=error rc=${rc} at line ${line}"
+            echo "source_path=${src}"
+            echo "source_file=${src##*/}"
+            echo "source_func=${func}"
+            echo "source_line=${line}"
         } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
         emit_error "${RUN_ID}" "error rc=${rc} at line ${line}"
         run_offline_verify || true
