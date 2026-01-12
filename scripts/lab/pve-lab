@@ -1538,10 +1538,12 @@ cmd_safety_suite() {
         # Mock pve_exec
         pve_exec() {
             local cmd="$*"
-            # Mock qm config
-            if [[ "$cmd" == "qm config 9999" ]]; then
+            # Mock qm config. In normal operation check_safety calls:
+            #   pve_exec "$QM_CMD config <vmid>"
+            # where QM_CMD defaults to: sudo -n /usr/sbin/qm
+            if [[ "$cmd" == *" config 9999" ]]; then
                 echo "name: prod-vm-9999" # Missing tags
-            elif [[ "$cmd" == "qm config 9010" ]]; then
+            elif [[ "$cmd" == *" config 9010" ]]; then
                 echo "name: lab-pve-9010"
                 echo "$IDENTITY_TAG_KEY=$IDENTITY_TAG_VAL"
                 echo "RunId=test"
