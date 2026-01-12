@@ -1755,7 +1755,7 @@ sys.exit(3)
         --ssh-common-args "${ssh_common_args}" \
         -u root \
         -e ansible_user=root \
-        | tee "${EVIDENCE_ROOT}/reports/apply/ansible-bootstrap.txt"
+        2>&1 | tee "${EVIDENCE_ROOT}/reports/apply/ansible-bootstrap.txt"
 
     # Configure inside the LXC
     local playbook="${REPO_ROOT}/ansible/playbooks/${SERVICE}.yml"
@@ -1768,7 +1768,7 @@ sys.exit(3)
         -e "evidence_dir=${EVIDENCE_ROOT}" \
         -e "run_id=${RUN_ID}" \
         -e "profile_id=${PROFILE_ID}" \
-        | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
+        2>&1 | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
 
     # Healthcheck (uses ansible-inventory + host_vars)
     local hc="${REPO_ROOT}/scripts/healthcheck/${SERVICE}.sh"
