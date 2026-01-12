@@ -56,6 +56,7 @@ source "$SCRIPT_DIR/lib/provenance.sh"
 
 # Test check recording
 CHECKS_ARRAY=()
+SEEN_CHECK_IDS=()
 record_check "TEST-001" "Test check" "low" "PASS" "PASS" "Test reason" "test.log"
 if [[ ${#CHECKS_ARRAY[@]} -eq 1 ]]; then
     log_pass "Check recording: Created check entry"
@@ -141,6 +142,7 @@ echo "-----------------------------------"
 
 # Create checks
 CHECKS_ARRAY=()
+SEEN_CHECK_IDS=()
 record_check "TEST-001" "First test" "low" "PASS" "PASS" "Test 1 passed" "test1.log"
 record_check "TEST-002" "Second test" "medium" "PASS" "FAIL" "Test 2 failed" "test2.log"
 
