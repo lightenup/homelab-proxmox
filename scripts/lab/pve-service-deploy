@@ -932,6 +932,15 @@ cmd_apply() {
         unset ANSIBLE_VAULT_PASSWORD
     fi
 
+    # If no vault secret was provided by the caller, prefer a persistent password
+    # file on PVE (keeps secrets out of GitHub Actions).
+    if [[ -z "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]]; then
+        local pve_vault_pw_file_default="${PVE_VAULT_PASSWORD_FILE:-/var/lib/homelab-proxmox/vault/.ansible_vault_pass}"
+        if [[ -f "${pve_vault_pw_file_default}" ]]; then
+            export ANSIBLE_VAULT_PASSWORD_FILE="${pve_vault_pw_file_default}"
+        fi
+    fi
+
     # Optional: support vault-id formatted vault files while still using a single password.
     # If your vault files include a vault-id (e.g. $ANSIBLE_VAULT;...;AES256;homelab),
     # Ansible needs an identity list mapping that vault-id to the password file.
@@ -1427,12 +1436,30 @@ sys.exit(3)
 
     # Fail fast with a clear error if the vault password cannot decrypt the expected vault.
     # This avoids confusing downstream failures during inventory parsing or playbook execution.
+    local expected_vault_file="${REPO_ROOT}/ansible/group_vars/all/vault.yml"
+    if [[ -f "${expected_vault_file}" ]]; then
+        # If the repo (or linked PVE vault) contains an encrypted vault file but we
+        # have no secret configured, fail early with actionable guidance.
+        if head -n 1 "${expected_vault_file}" 2>/dev/null | grep -q '^\$ANSIBLE_VAULT' && [[ -z "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]]; then
+            {
+                echo "Vault secret required but not configured."
+                echo "This run encountered an Ansible vault-encrypted file: ${expected_vault_file}"
+                echo "Provide one of:"
+                echo "  - ANSIBLE_VAULT_PASSWORD (env), or"
+                echo "  - ANSIBLE_VAULT_PASSWORD_FILE (path), or"
+                echo "  - Create a persistent PVE vault password file at: /var/lib/homelab-proxmox/vault/.ansible_vault_pass (mode 0600, owned by ci)"
+                echo "Note: do not print the password in logs."
+            } >"${EVIDENCE_ROOT}/reports/apply/vault-check.stderr.txt"
+            echo "vault_check_rc=2" >"${EVIDENCE_ROOT}/reports/apply/vault-check.txt"
+            die "ansible vault password missing; see reports/apply/vault-check.stderr.txt"
+        fi
+    fi
+
     if [[ -n "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]]; then
         if [[ ! -f "${ANSIBLE_VAULT_PASSWORD_FILE}" ]]; then
             die "ANSIBLE_VAULT_PASSWORD_FILE is set but does not exist: ${ANSIBLE_VAULT_PASSWORD_FILE}"
         fi
 
-        local expected_vault_file="${REPO_ROOT}/ansible/group_vars/all/vault.yml"
         if [[ ! -f "${expected_vault_file}" ]]; then
             {
                 echo "Missing expected vault file: ${expected_vault_file}"
