@@ -9,6 +9,18 @@
       ansible.builtin.set_fact:
         assertion_results: []
 
+    - name: Detect cloud-init presence
+      ansible.builtin.stat:
+        path: /var/lib/cloud
+      register: cloud_init_dir
+
+    - name: Wait for cloud-init to finish (if present)
+      ansible.builtin.wait_for:
+        path: /var/lib/cloud/instance/boot-finished
+        state: present
+        timeout: 600
+      when: cloud_init_dir.stat.exists
+
     - name: Ensure basic packages are installed
       ansible.builtin.apt:
         name:
@@ -18,6 +30,11 @@
           - vim
         state: present
         update_cache: true
+        lock_timeout: 300
+      register: apt_bootstrap_packages
+      retries: 3
+      delay: 10
+      until: apt_bootstrap_packages is succeeded
 
     - name: Verify hostname
       ansible.builtin.assert:
