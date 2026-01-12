@@ -1,4 +1,4 @@
-name: LXC Apply (PROD)
+name: Prod 2 - LXC Apply
 
 on:
   workflow_dispatch:
