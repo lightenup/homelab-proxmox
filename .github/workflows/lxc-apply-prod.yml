@@ -1,5 +1,9 @@
 name: Prod 2 - LXC Apply
 
+permissions:
+  contents: read
+  actions: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -30,7 +34,10 @@ jobs:
       - name: Fetch promotion metadata artifact
         id: fetch_meta
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Some org/repo policies restrict GITHUB_TOKEN from reading artifacts of other runs.
+          # If you hit 403, create a fine-grained PAT with Actions: Read (and Contents: Read)
+          # and store it as GH_ACTIONS_READ_TOKEN.
+          GH_TOKEN: ${{ secrets.GH_ACTIONS_READ_TOKEN || github.token }}
           API_URL: ${{ github.api_url }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.event.inputs.promotion_run_id }}
@@ -44,11 +51,29 @@ jobs:
 
           mkdir -p promotion-metadata
 
-          # List artifacts for the referenced run
-          artifacts_json="$(curl -sSf \
+          # List artifacts for the referenced run (capture status/body for better diagnostics)
+          tmp_body="$(mktemp -t artifacts.body.XXXXXX)"
+          http_code="$(curl -sS -o "${tmp_body}" -w "%{http_code}" \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            "${API_URL}/repos/${REPO}/actions/runs/${RUN_ID}/artifacts")"
+            "${API_URL}/repos/${REPO}/actions/runs/${RUN_ID}/artifacts" || true)"
+
+          if [[ "${http_code}" != "200" ]]; then
+            echo "ERROR: Failed to list artifacts for run_id=${RUN_ID} (HTTP ${http_code})." >&2
+            echo "Response body (truncated):" >&2
+            head -c 2000 "${tmp_body}" >&2 || true
+
+            if [[ "${http_code}" == "403" ]]; then
+              echo "" >&2
+              echo "Likely cause: this workflow's token cannot access Actions artifacts from other runs." >&2
+              echo "Fix: create a fine-grained PAT with 'Actions: Read' + 'Contents: Read' for this repo" >&2
+              echo "and save it as repository secret GH_ACTIONS_READ_TOKEN, then re-run." >&2
+            fi
+
+            exit 1
+          fi
+
+          artifacts_json="$(cat "${tmp_body}")"
 
           artifact_id="$(echo "${artifacts_json}" | jq -r '.artifacts[] | select(.name=="prod-promotion-metadata") | .id' | head -n 1)"
 
@@ -58,11 +83,18 @@ jobs:
             exit 1
           fi
 
-          curl -sSfL \
+          tmp_zip_body="$(mktemp -t artifacts.zip.body.XXXXXX)"
+          zip_code="$(curl -sS -L -o promotion-metadata/meta.zip -w "%{http_code}" \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            "${API_URL}/repos/${REPO}/actions/artifacts/${artifact_id}/zip" \
-            -o promotion-metadata/meta.zip
+            "${API_URL}/repos/${REPO}/actions/artifacts/${artifact_id}/zip" || true)"
+
+          if [[ "${zip_code}" != "200" ]]; then
+            echo "ERROR: Failed to download artifact id=${artifact_id} (HTTP ${zip_code})." >&2
+            # If GitHub returned JSON error, it will be in the zip path; show a small snippet.
+            head -c 2000 promotion-metadata/meta.zip >&2 || true
+            exit 1
+          fi
 
           unzip -q promotion-metadata/meta.zip -d promotion-metadata/
 
