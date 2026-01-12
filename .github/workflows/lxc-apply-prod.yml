@@ -27,8 +27,6 @@ jobs:
     name: Apply (PROD)
     runs-on: [self-hosted]
     steps:
-      - uses: actions/checkout@v4
-
       - name: Fetch promotion metadata artifact
         id: fetch_meta
         env:
@@ -119,6 +117,22 @@ jobs:
             echo "- PROD plan destructive: ${destructive}"
           } >>"$GITHUB_STEP_SUMMARY"
 
+      - name: Checkout promoted SHA
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.meta.outputs.checked_sha }}
+
+      - name: Validate checkout matches promotion SHA
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          expected="${{ steps.meta.outputs.checked_sha }}"
+          if [[ "${actual}" != "${expected}" ]]; then
+            echo "ERROR: Local checkout SHA mismatch. expected=${expected} got=${actual}" >&2
+            exit 1
+          fi
+
       - name: Enforce apply confirmation
         run: |
           set -euo pipefail
@@ -177,7 +191,9 @@ jobs:
       - name: Sync repo to PVE
         run: |
           set -euo pipefail
-          rsync -az --delete \
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          rsync -az --delete -e "ssh ${ssh_opts}" \
             --exclude '.git' \
             --exclude 'terraform/.terraform/' \
             --exclude 'terraform/.terraform.lock.hcl' \
@@ -203,9 +219,9 @@ jobs:
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
           if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
           else
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox && git fetch --all --tags --prune && git checkout --force '${checked_sha}' && git reset --hard '${checked_sha}'; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'"
           fi
 
       - name: Capture RUN_ID (PROD apply)
@@ -221,11 +237,17 @@ jobs:
           RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"prod-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
           RUN_ID="${RUN_ID%/}"
           RUN_ID="${RUN_ID%:}"
-          test -n "${RUN_ID}"
+
+          if [[ -z "${RUN_ID}" ]]; then
+            echo "No PROD apply run dir found (apply may have failed before creating evidence)." >&2
+            echo "run_id=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch evidence pack (PROD apply)
-        if: always()
+        if: always() && steps.capture_run_id.outputs.run_id != ''
         run: |
           set -euo pipefail
           RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
@@ -233,11 +255,11 @@ jobs:
           ./scripts/lab/fetch_evidence_pack.sh --environment prod --run-id "${RUN_ID}" >/dev/null
 
       - name: Verify evidence pack (offline)
-        if: always()
+        if: always() && steps.capture_run_id.outputs.run_id != ''
         run: ./scripts/lab/ci-verify.sh evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
 
       - name: Validate apply used the saved plan reference
-        if: always()
+        if: always() && steps.capture_run_id.outputs.run_id != ''
         run: |
           set -euo pipefail
           apply_run_id="${{ steps.capture_run_id.outputs.run_id }}"
@@ -251,7 +273,7 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.capture_run_id.outputs.run_id != ''
         with:
           name: prod-apply-evidence-${{ steps.meta.outputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
           path: evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
