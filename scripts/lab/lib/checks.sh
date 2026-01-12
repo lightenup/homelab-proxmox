@@ -21,6 +21,22 @@ record_check() {
     shift 6
     local evidence_refs=("$@")
 
+    # Ensure suite-level dedup check is treated as "already emitted" after first record.
+    # Otherwise, every subsequent duplicate check_id collision would recursively emit
+    # another SUITE-DEDUP-001 entry, creating duplicates in checks.json.
+    if [[ "$check_id" == "SUITE-DEDUP-001" ]]; then
+        local already_seen=false
+        for seen_id in "${SEEN_CHECK_IDS[@]:-}"; do
+            if [[ "$seen_id" == "SUITE-DEDUP-001" ]]; then
+                already_seen=true
+                break
+            fi
+        done
+        if [[ "$already_seen" == false ]]; then
+            SEEN_CHECK_IDS+=("SUITE-DEDUP-001")
+        fi
+    fi
+
     # DEDUP LOGIC: Check for duplicates (unless it's the dedup check itself)
     if [[ "$check_id" != "SUITE-DEDUP-001" ]]; then
         local is_duplicate=false
@@ -63,6 +79,9 @@ record_check() {
     
     # Get context from environment or defaults
     local source="${CURRENT_SOURCE:-harness}"
+    if [[ "$check_id" == "SUITE-DEDUP-001" ]]; then
+        source="harness"
+    fi
     # Align dedup check to catalog-defined phase regardless of current phase
     local phase
     if [[ "$check_id" == "SUITE-DEDUP-001" ]]; then
