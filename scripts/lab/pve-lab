@@ -944,6 +944,14 @@ acquire_lock_or_die() {
     # Uses FD 200 for the global harness lock.
     # Default behavior is non-blocking (fail fast).
     # Set LOCK_WAIT_SECONDS to wait up to N seconds for the lock.
+
+    # If we already acquired the lock in this process, do not reopen FD 200.
+    # Re-opening the FD would drop the existing lock and can cause flaky failures
+    # inside the confidence suite (which calls cmd_run multiple times).
+    if [[ "${LOCK_ACQUIRED:-false}" == "true" ]]; then
+        return 0
+    fi
+
     exec 200>"$LOCK_FILE"
     if [[ "${SKIP_LOCK:-false}" == "true" ]]; then
         return 0
@@ -964,6 +972,8 @@ acquire_lock_or_die() {
             exit 1
         fi
     fi
+
+    LOCK_ACQUIRED=true
 }
 
 ingest_ansible_reports() {
