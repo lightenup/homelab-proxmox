@@ -68,6 +68,12 @@ check_git_dirty() {
     local git_dir="${1:-.}"
     
     pushd "$git_dir" >/dev/null
+
+    # If we're not in a git work tree (e.g., rsync without .git), skip quietly.
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        popd >/dev/null
+        return 0
+    fi
     
     if ! git diff-index --quiet HEAD -- 2>/dev/null; then
         echo "⚠️  WARNING: Git working tree is dirty (uncommitted changes detected)" >&2
