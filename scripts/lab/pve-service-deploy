@@ -132,8 +132,31 @@ sha256_file() {
 }
 
 git_sha_short() {
+    local full
+    full="$(git_sha_full)"
+    if [[ "${full}" != "unknown" && "${full}" =~ ^[0-9a-fA-F]{8,40}$ ]]; then
+        echo "${full:0:8}"
+        return 0
+    fi
+
     if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         git -C "${REPO_ROOT}" rev-parse --short=8 HEAD 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
+}
+
+git_sha_full() {
+    # Prefer an explicitly provided SHA (CI can pass this even if .git is not synced).
+    if [[ -n "${GIT_SHA:-}" ]]; then
+        if [[ "${GIT_SHA}" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+            echo "${GIT_SHA}"
+            return 0
+        fi
+    fi
+
+    if command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo "unknown"
     else
         echo "unknown"
     fi
@@ -214,8 +237,11 @@ EOF
 init_evidence_pack() {
     ensure_artifact_root
 
-    local sha
-    sha="$(git_sha_short)"
+    local sha_short
+    sha_short="$(git_sha_short)"
+
+    local sha_full
+    sha_full="$(git_sha_full)"
 
     local branch
     branch="$(git_branch_name)"
@@ -225,7 +251,7 @@ init_evidence_pack() {
 
     # Structured RUN_ID: deterministic components + UTC timestamp for uniqueness.
     # Resulting format: <env>-<service>-<sha8>-YYYYMMDD-HHMMSS
-    export RUN_ID_PREFIX="${ENVIRONMENT:-lab}-${SERVICE:-unknown}-${sha}"
+    export RUN_ID_PREFIX="${ENVIRONMENT:-lab}-${SERVICE:-unknown}-${sha_short}"
     RUN_ID="$(create_evidence_pack "$(artifact_runs_path)")"
     EVIDENCE_ROOT="$(artifact_run_path "${RUN_ID}")"
 
@@ -262,7 +288,8 @@ EOF
     "profile_id": "${PROFILE_ID}",
     "environment": "${ENVIRONMENT}",
     "service": "${SERVICE}",
-    "git_sha": "${sha}",
+    "git_sha": "${sha_full}",
+    "git_sha_short": "${sha_short}",
     "git_branch": "${branch}",
     "git_dirty": "${dirty}",
     "trigger_ref": "${trigger_ref}",

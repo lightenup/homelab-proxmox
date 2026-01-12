@@ -121,6 +121,7 @@ As an operator, I want production apply to use a saved production plan reference
   - the LAB deploy evidence pointer(s)
   - the confidence suite evidence pointer(s)
   - the PROD plan summary and the plan reference
+- **FR-014a**: The production promotion workflow MUST publish a short, bounded list of recent commits (SHAs + subjects) for the checked-out ref in the run summary to help operators choose a `ref` for future runs.
 - **FR-015**: On failures, the run summary MUST include a short excerpt of the most relevant error context (bounded) and clear next steps.
 - **FR-016**: The system MUST not print secrets in logs or summaries.
 - **FR-017**: The production promotion workflow MUST accept an explicit git ref input (e.g., branch/tag/SHA), MUST checkout that ref for execution, and MUST enforce the strict git SHA alignment checks against the checked-out SHA.
