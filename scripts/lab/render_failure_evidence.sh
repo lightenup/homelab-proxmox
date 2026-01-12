@@ -76,8 +76,21 @@ emit_file_excerpt() {
   echo ""
 }
 
-# Prefer the compact structured reason file when present.
-emit_file_excerpt "Error reason" "${evidence_dir%/}/reports/plan/summary.txt" "cat"
+# Prefer compact structured reason files when present.
+emit_file_excerpt "Error reason (plan)" "${evidence_dir%/}/reports/plan/summary.txt" "cat"
+emit_file_excerpt "Error reason (apply)" "${evidence_dir%/}/reports/apply/summary.txt" "cat"
+
+# Common apply-time diagnostics (bounded).
+emit_file_excerpt "Terraform state pull stderr (tail)" "${evidence_dir%/}/reports/apply/terraform-state-pull.stderr.txt" "tail"
+emit_file_excerpt "Ansible inventory-from-state stderr (tail)" "${evidence_dir%/}/reports/apply/ansible-inventory-from-state.stderr.txt" "tail"
+emit_file_excerpt "Vault check stderr (tail)" "${evidence_dir%/}/reports/apply/vault-check.stderr.txt" "tail"
 
 # Always include some preflight context; it's usually the most actionable.
 emit_file_excerpt "Preflight (tail)" "${evidence_dir%/}/preflight.txt" "tail"
+
+# Healthcheck output can be very actionable but should stay bounded.
+for hc in "${evidence_dir%/}"/reports/healthcheck/*.txt; do
+  if [[ -f "${hc}" ]]; then
+    emit_file_excerpt "Healthcheck (tail)" "${hc}" "tail"
+  fi
+done
