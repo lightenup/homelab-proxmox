@@ -1798,17 +1798,65 @@ sys.exit(3)
         2>&1 | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
 
     # Healthcheck (uses ansible-inventory + host_vars)
+    local hc_enabled="true"
+    local hc_reason=""
+    if command -v ansible-inventory >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+        local inv_json=""
+        inv_json="$(ansible-inventory -i "${inventory_file}" --host "${SERVICE}" 2>/dev/null || true)"
+        if [[ -n "${inv_json}" ]]; then
+            hc_enabled="$(jq -r '(.healthcheck_enabled // true) | tostring' <<<"${inv_json}" 2>/dev/null || echo 'true')"
+            hc_reason="$(jq -r '.healthcheck_reason // empty' <<<"${inv_json}" 2>/dev/null || true)"
+        fi
+    fi
+
     local hc="${REPO_ROOT}/scripts/healthcheck/${SERVICE}.sh"
+    local hc_json="${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.json"
+    local hc_txt="${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.txt"
+    : >"${hc_txt}"
+
+    if [[ "${hc_enabled}" == "false" ]]; then
+        {
+            echo "healthcheck: skipped (healthcheck_enabled=false)"
+            if [[ -n "${hc_reason}" ]]; then
+                echo "reason: ${hc_reason}"
+            fi
+        } | tee -a "${hc_txt}"
+        cat >"${hc_json}" <<EOF
+{
+  "schema_version": "1.0.0",
+  "run_id": "${RUN_ID}",
+  "environment": "${ENVIRONMENT}",
+  "service": "${SERVICE}",
+  "ok": true,
+  "status": "skipped",
+  "reason": "${hc_reason}"
+}
+EOF
+        popd >/dev/null
+
+        {
+            echo "status=success"
+            echo "terraform_plan_exitcode=${plan_rc}"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+
+        emit_phase_complete "${RUN_ID}" "apply"
+        run_offline_verify
+        trap - ERR
+        if [[ -n "${vault_pw_file}" ]]; then
+            rm -f "${vault_pw_file}" || true
+        fi
+        if [[ ${#linked_vault_files[@]} -gt 0 ]]; then
+            rm -f "${linked_vault_files[@]}" || true
+        fi
+        return 0
+    fi
+
     if [[ ! -x "${hc}" ]]; then
         die "missing healthcheck script for service=${SERVICE}: ${hc}"
     fi
 
     # Services may briefly return 503 right after first start (package install + systemd).
     # Treat healthcheck as a readiness probe with a bounded retry window.
-    local hc_json="${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.json"
-    local hc_txt="${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.txt"
-    : >"${hc_txt}"
-
     local hc_timeout_seconds="${HEALTHCHECK_TIMEOUT_SECONDS:-180}"
     local hc_retry_seconds="${HEALTHCHECK_RETRY_SECONDS:-5}"
     local hc_waited=0
