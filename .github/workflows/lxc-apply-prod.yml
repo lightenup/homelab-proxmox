@@ -116,12 +116,11 @@ jobs:
           service="$(jq -r '.service' "${meta_file}")"
           ref="$(jq -r '.ref' "${meta_file}")"
           checked_sha="$(jq -r '.checked_sha' "${meta_file}")"
-          prod_plan_run_id="$(jq -r '.prod_plan_run_id' "${meta_file}")"
           lab_gate_failed="$(jq -r '.lab_gate_failed' "${meta_file}")"
           sha_all_ok="$(jq -r '.sha_all_ok' "${meta_file}")"
           destructive="$(jq -r '.prod_plan_destructive' "${meta_file}")"
 
-          for v in service ref checked_sha prod_plan_run_id lab_gate_failed sha_all_ok destructive; do
+          for v in service ref checked_sha lab_gate_failed sha_all_ok destructive; do
             if [[ -z "${!v}" || "${!v}" == "null" ]]; then
               echo "ERROR: Missing ${v} in promotion metadata" >&2
               cat "${meta_file}" >&2
@@ -132,7 +131,6 @@ jobs:
           echo "service=${service}" >>"$GITHUB_OUTPUT"
           echo "ref=${ref}" >>"$GITHUB_OUTPUT"
           echo "checked_sha=${checked_sha}" >>"$GITHUB_OUTPUT"
-          echo "prod_plan_run_id=${prod_plan_run_id}" >>"$GITHUB_OUTPUT"
           echo "lab_gate_failed=${lab_gate_failed}" >>"$GITHUB_OUTPUT"
           echo "sha_all_ok=${sha_all_ok}" >>"$GITHUB_OUTPUT"
           echo "destructive=${destructive}" >>"$GITHUB_OUTPUT"
@@ -143,7 +141,6 @@ jobs:
             echo "- Service: \`${service}\`"
             echo "- Ref: \`${ref}\`"
             echo "- Checked-out SHA: \`${checked_sha}\`"
-            echo "- PROD plan RUN_ID: \`${prod_plan_run_id}\`"
             echo "- LAB gate failed: ${lab_gate_failed}"
             echo "- SHA alignment ok: ${sha_all_ok}"
             echo "- PROD plan destructive: ${destructive}"
@@ -235,7 +232,7 @@ jobs:
             --exclude 'artifacts/' \
             ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
 
-      - name: Apply on PVE (PROD, from saved plan)
+      - name: Apply on PVE (PROD)
         id: apply_on_pve
         env:
           ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
@@ -245,15 +242,14 @@ jobs:
           service="${{ steps.meta.outputs.service }}"
           ref="${{ steps.meta.outputs.ref }}"
           checked_sha="${{ steps.meta.outputs.checked_sha }}"
-          plan_run_id="${{ steps.meta.outputs.prod_plan_run_id }}"
 
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
           if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
           else
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod' --from-plan-run-id '${plan_run_id}'"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod'"
           fi
 
       - name: Capture RUN_ID (PROD apply)
@@ -289,20 +285,6 @@ jobs:
       - name: Verify evidence pack (offline)
         if: always() && steps.capture_run_id.outputs.run_id != ''
         run: ./scripts/lab/ci-verify.sh evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
-
-      - name: Validate apply used the saved plan reference
-        if: always() && steps.capture_run_id.outputs.run_id != ''
-        run: |
-          set -euo pipefail
-          apply_run_id="${{ steps.capture_run_id.outputs.run_id }}"
-          plan_run_id="${{ steps.meta.outputs.prod_plan_run_id }}"
-          prov="evidence/prod/${apply_run_id}/provenance.json"
-          test -f "${prov}"
-          used="$(jq -r '.plan_source_run_id // empty' "${prov}" 2>/dev/null || true)"
-          if [[ "${used}" != "${plan_run_id}" ]]; then
-            echo "ERROR: PROD apply did not record plan_source_run_id correctly. expected=${plan_run_id} got=${used:-missing}" >&2
-            exit 1
-          fi
 
       - uses: actions/upload-artifact@v4
         if: always() && steps.capture_run_id.outputs.run_id != ''
