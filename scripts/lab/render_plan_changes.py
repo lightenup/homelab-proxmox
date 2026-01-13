@@ -71,6 +71,94 @@ def _diff_paths(before: Any, after: Any, prefix: str = "") -> set[str]:
     return paths
 
 
+def _is_sensitive_path(path: str) -> bool:
+    p = path.lower()
+    needles = (
+        "password",
+        "secret",
+        "token",
+        "private_key",
+        "api_key",
+        "vault",
+        "credential",
+        "auth",
+    )
+    return any(n in p for n in needles)
+
+
+def _parse_path(path: str) -> list[str]:
+    # Supports a subset of Terraform JSON-style paths we emit: dot segments + [idx]
+    # Example: network[0].ip -> ["network", "[0]", "ip"]
+    out: list[str] = []
+    buf = ""
+    i = 0
+    while i < len(path):
+        ch = path[i]
+        if ch == ".":
+            if buf:
+                out.append(buf)
+                buf = ""
+            i += 1
+            continue
+        if ch == "[":
+            if buf:
+                out.append(buf)
+                buf = ""
+            j = path.find("]", i)
+            if j == -1:
+                # best-effort
+                out.append(path[i:])
+                return out
+            out.append(path[i : j + 1])
+            i = j + 1
+            continue
+        buf += ch
+        i += 1
+    if buf:
+        out.append(buf)
+    return out
+
+
+def _get_by_path(root: Any, path: str) -> Any:
+    cur = root
+    for seg in _parse_path(path):
+        if seg.startswith("[") and seg.endswith("]"):
+            if not isinstance(cur, list):
+                return None
+            try:
+                idx = int(seg[1:-1])
+            except ValueError:
+                return None
+            if idx < 0 or idx >= len(cur):
+                return None
+            cur = cur[idx]
+            continue
+
+        if not isinstance(cur, dict):
+            return None
+        if seg not in cur:
+            return None
+        cur = cur[seg]
+    return cur
+
+
+def _fmt_value(value: Any) -> str:
+    # Only render simple scalar values; everything else is treated as complex.
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        # Keep output compact and single-line
+        s = value.replace("\n", "\\n")
+        if len(s) > 80:
+            s = s[:77] + "..."
+        return json.dumps(s)
+    return "<complex>"
+
+
 def _true_paths(node: Any, prefix: str = "") -> set[str]:
     """Return paths for truthy leaves in the after_unknown structure."""
     paths: set[str] = set()
@@ -151,6 +239,20 @@ def main() -> int:
                 for path in sorted(paths)[: max(0, args.max_paths)]:
                     if lines_emitted >= args.max_lines:
                         break
+
+                    if not _is_sensitive_path(path):
+                        b = _get_by_path(before, path)
+                        a = _get_by_path(after, path)
+                        fb = _fmt_value(b)
+                        fa = _fmt_value(a)
+
+                        # If we can confidently render both sides as scalars, show before→after.
+                        if fb != "<complex>" and fa != "<complex>" and fb != fa:
+                            print(f"  - {path}: {fb} -> {fa}")
+                            lines_emitted += 1
+                            continue
+
+                        # If after is unknown (common in TF), keep paths-only.
                     print(f"  - {path}")
                     lines_emitted += 1
 
