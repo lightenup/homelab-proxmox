@@ -96,7 +96,7 @@ jobs:
             exit 1
           fi
 
-          unzip -q promotion-metadata/meta.zip -d promotion-metadata/
+          unzip -o -q promotion-metadata/meta.zip -d promotion-metadata/
 
           meta_file="promotion-metadata/promotion-metadata.json"
           if [[ ! -f "${meta_file}" ]]; then
