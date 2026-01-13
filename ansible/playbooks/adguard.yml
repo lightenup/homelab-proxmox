@@ -1,7 +1,14 @@
 ---
-- name: Configure adguard
+
+- name: Configure base for AdGuard
   hosts: adguard
   become: true
-  gather_facts: false
   roles:
+    - lxc_base
+
+- name: Configure AdGuard (AdGuard Home via Docker)
+  hosts: adguard
+  become: true
+  roles:
+    - geerlingguy.docker
     - adguard

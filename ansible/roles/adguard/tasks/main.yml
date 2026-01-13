@@ -1,4 +1,32 @@
 ---
-- name: Placeholder for adguard role
-  ansible.builtin.debug:
-    msg: "Install and configure adguard here"
+
+- name: Ensure AdGuard Home directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ adguard_install_dir }}"
+    - "{{ adguard_conf_dir }}"
+    - "{{ adguard_work_dir }}"
+
+- name: Deploy AdGuard Home docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ adguard_install_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart adguard
+
+- name: Ensure AdGuard Home container is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ adguard_install_dir }}"
+    state: present
+    remove_orphans: true
+    pull: always
+
+- name: Wait for AdGuard Home setup UI to be reachable
+  ansible.builtin.wait_for:
+    port: "{{ adguard_port_setup }}"
+    host: "127.0.0.1"
+    delay: 2
+    timeout: 120
