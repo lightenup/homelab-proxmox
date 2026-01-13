@@ -1797,37 +1797,45 @@ sys.exit(3)
         -e "profile_id=${PROFILE_ID}" \
         2>&1 | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
 
-    # Healthcheck (uses ansible-inventory + host_vars)
+    # Healthcheck (read healthcheck_enabled directly from host_vars to avoid vault issues)
     local hc_enabled="true"
     local hc_reason=""
-    if command -v ansible-inventory >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
-        local inv_json=""
-        # Run from ansible/ directory so host_vars/ can be discovered
-        inv_json="$(cd "${REPO_ROOT}/ansible" && ansible-inventory --host "${SERVICE}" 2>/dev/null || true)"
-        if [[ -n "${inv_json}" ]]; then
-            local -a hc_lines=()
-            mapfile -t hc_lines < <(
-                python3 - <<'PY' <<<"${inv_json}" 2>/dev/null || true
-import json
+    local host_vars_file="${REPO_ROOT}/ansible/host_vars/${SERVICE}.yml"
+    
+    if [[ -f "${host_vars_file}" ]] && command -v python3 >/dev/null 2>&1; then
+        local -a hc_lines=()
+        mapfile -t hc_lines < <(
+            python3 - <<'PY' "${host_vars_file}" 2>/dev/null || true
 import sys
+import re
 
-raw = sys.stdin.read()
+# Simple YAML parser for healthcheck_enabled (avoids needing PyYAML and vault)
 enabled = True
 reason = ""
+
 try:
-    doc = json.loads(raw)
-    enabled = bool(doc.get("healthcheck_enabled", True))
-    reason = str(doc.get("healthcheck_reason", "") or "")
+    with open(sys.argv[1], 'r') as f:
+        for line in f:
+            # Skip vault-encrypted blocks
+            if '$ANSIBLE_VAULT' in line:
+                break
+            # Look for healthcheck_enabled: false/true
+            match = re.match(r'^\s*healthcheck_enabled:\s*(true|false)\s*$', line, re.IGNORECASE)
+            if match:
+                enabled = match.group(1).lower() == 'true'
+            # Look for healthcheck_reason
+            match = re.match(r'^\s*healthcheck_reason:\s*["\']?([^"\']*)["\']?\s*$', line)
+            if match:
+                reason = match.group(1)
 except Exception:
     pass
 
 sys.stdout.write("false\n" if not enabled else "true\n")
 sys.stdout.write(reason)
 PY
-            )
-            hc_enabled="${hc_lines[0]:-true}"
-            hc_reason="${hc_lines[1]:-}"
-        fi
+        )
+        hc_enabled="${hc_lines[0]:-true}"
+        hc_reason="${hc_lines[1]:-}"
     fi
 
     local hc="${REPO_ROOT}/scripts/healthcheck/${SERVICE}.sh"
