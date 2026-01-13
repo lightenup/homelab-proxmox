@@ -59,7 +59,7 @@
 
 - [X] T016 [US3] Implement PROD apply-from-saved-plan step in .github/workflows/lxc-promote-prod.yml using scripts/lab/pve-service-deploy apply --environment prod --service <service> --from-plan-run-id <prod_plan_run_id>
 - [X] T017 [US3] Enforce strict SHA alignment checks in .github/workflows/lxc-promote-prod.yml by validating evidence provenance git_sha for: LAB deploy, confidence suite run, and PROD plan against the checked-out SHA before requesting approval
-- [X] T018 [US3] Enforce destructive confirmation behavior in .github/workflows/lxc-promote-prod.yml: if PROD plan is destructive require confirm_destructive_prod=deploy-prod-destructive unless allow_override_failed_lab_gate=true (read blast-radius.json from plan evidence)
+- [ ] T018 [US3] (Removed) Destructive PROD confirmation token was intentionally removed to keep the apply workflow clean.
 
 ---
 

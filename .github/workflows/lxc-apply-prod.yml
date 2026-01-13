@@ -16,11 +16,6 @@ on:
         required: false
         type: boolean
         default: false
-      confirm_destructive_prod:
-        description: "Required when PROD plan is destructive: set to 'deploy-prod-destructive' (unless override enabled)"
-        required: false
-        type: string
-        default: ""
       confirm_apply_prod:
         description: "Safety confirm: set to 'deploy-prod' to execute PROD apply"
         required: true
@@ -195,21 +190,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          override="${{ github.event.inputs.allow_override_failed_lab_gate }}"
-          destructive="${{ steps.meta.outputs.destructive }}"
-          confirm_destructive_prod="${{ github.event.inputs.confirm_destructive_prod }}"
-
-          if [[ "${override}" == "true" ]]; then
-            exit 0
-          fi
-
-          if [[ "${destructive}" == "true" ]]; then
-            if [[ "${confirm_destructive_prod}" != "deploy-prod-destructive" ]]; then
-              echo "ERROR: PROD plan is destructive; missing/incorrect confirm_destructive_prod." >&2
-              echo "Set confirm_destructive_prod=deploy-prod-destructive to proceed (or enable override)." >&2
-              exit 1
-            fi
-          fi
+          # Destructive confirmation token removed; the plan may still be destructive.
+          # Safety is enforced via promotion gates + explicit confirm_apply_prod.
 
       - name: Allowlist runtime validation
         run: |

@@ -367,7 +367,6 @@ Extract entities and relationships from the feature specification:
 - **Fields**:
   - `service`: choice (generated from allowlist keys)
   - `confirm_destructive_lab`: string (required when LAB plan destructive)
-  - `confirm_destructive_prod`: string (required when PROD plan destructive)
 - **Validation rules**:
   - Destructive confirmations must match expected strings per environment
 
@@ -421,11 +420,6 @@ File: `contracts/workflow-promote.schema.json`
       "type": "string",
       "enum": ["", "apply-lab-destructive"],
       "description": "Required when LAB plan is destructive"
-    },
-    "confirm_destructive_prod": {
-      "type": "string",
-      "enum": ["", "deploy-prod-destructive"],
-      "description": "Required when PROD plan is destructive"
     },
   },
   "required": ["service"]

@@ -49,7 +49,7 @@ A bounded representation of planned change impact shown in the GitHub run UI.
 - `resources`: truncated list of affected resource addresses + action class.
 - `confirmation_token_required` (string | null):
   - `apply-lab-destructive` when env=lab and destructive=true
-  - `deploy-prod-destructive` when env=prod and destructive=true
+  - (Removed) no destructive confirmation token for env=prod
 
 **Source of truth**
 - Derived from `blast-radius.json` and/or `reports/plan/plan.json`.
@@ -73,7 +73,7 @@ Operator-provided input required only when destructive changes are detected.
 
 **Values (per spec)**
 - LAB: `apply-lab-destructive`
-- PROD: `deploy-prod-destructive`
+- PROD: (no destructive confirmation token)
 
 **Validation rule**
 - Tokens are only required when `destructive == true`.

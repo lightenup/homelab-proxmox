@@ -11,7 +11,6 @@ This quickstart describes how the **promotion workflow** is intended to work onc
 ### Inputs
 - `service`: the allowlisted service slug
 - `confirm_destructive_lab`: only required if the LAB plan is destructive; must equal `apply-lab-destructive`
-- `confirm_destructive_prod`: only required if the PROD plan is destructive; must equal `deploy-prod-destructive`
 
 ### Expected sequence
 1. Plan (LAB) → summary published in run UI

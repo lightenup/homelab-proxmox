@@ -78,10 +78,6 @@ components:
           type: string
           description: Required when LAB plan is destructive.
           example: apply-lab-destructive
-        confirm_destructive_prod:
-          type: string
-          description: Required when PROD plan/apply is destructive, unless `allow_override_failed_lab_gate=true`.
-          example: deploy-prod-destructive
 
     RunAccepted:
       type: object
