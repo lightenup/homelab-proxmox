@@ -1802,7 +1802,8 @@ sys.exit(3)
     local hc_reason=""
     if command -v ansible-inventory >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
         local inv_json=""
-        inv_json="$(ansible-inventory -i "${inventory_file}" --host "${SERVICE}" 2>/dev/null || true)"
+        # Run from ansible/ directory so host_vars/ can be discovered
+        inv_json="$(cd "${REPO_ROOT}/ansible" && ansible-inventory --host "${SERVICE}" 2>/dev/null || true)"
         if [[ -n "${inv_json}" ]]; then
             local -a hc_lines=()
             mapfile -t hc_lines < <(
