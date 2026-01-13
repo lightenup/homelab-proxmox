@@ -1797,15 +1797,20 @@ sys.exit(3)
         -e "profile_id=${PROFILE_ID}" \
         2>&1 | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
 
-    # Healthcheck (read healthcheck_enabled directly from host_vars to avoid vault issues)
+    # Healthcheck
+    # We intentionally read healthcheck_enabled directly from host_vars to avoid
+    # vault decryption issues (ansible-inventory loads group_vars/*/vault.yml).
+    # Also: PROD apply runs on PVE, which may not have python3 installed; so we
+    # provide a pure-bash fallback.
     local hc_enabled="true"
     local hc_reason=""
     local host_vars_file="${REPO_ROOT}/ansible/host_vars/${SERVICE}.yml"
-    
-    if [[ -f "${host_vars_file}" ]] && command -v python3 >/dev/null 2>&1; then
-        local -a hc_lines=()
-        mapfile -t hc_lines < <(
-            python3 - "${host_vars_file}" <<'PY' 2>/dev/null || true
+
+    if [[ -f "${host_vars_file}" ]]; then
+        if command -v python3 >/dev/null 2>&1; then
+            local -a hc_lines=()
+            mapfile -t hc_lines < <(
+                python3 - "${host_vars_file}" <<'PY' 2>/dev/null || true
 import sys
 import re
 
@@ -1833,9 +1838,17 @@ except Exception:
 sys.stdout.write("false\n" if not enabled else "true\n")
 sys.stdout.write(reason)
 PY
-        )
-        hc_enabled="${hc_lines[0]:-true}"
-        hc_reason="${hc_lines[1]:-}"
+            )
+            hc_enabled="${hc_lines[0]:-true}"
+            hc_reason="${hc_lines[1]:-}"
+        else
+            # Fallback: parse the YAML with grep/sed. Keep it intentionally
+            # simple: we only need two flat keys.
+            if grep -Eq '^\s*healthcheck_enabled:\s*false\s*$' "${host_vars_file}"; then
+                hc_enabled="false"
+            fi
+            hc_reason="$(sed -nE 's/^\s*healthcheck_reason:\s*["'"'"']?([^"'"'"']*)["'"'"']?\s*$/\1/p' "${host_vars_file}" | head -n 1)"
+        fi
     fi
 
     local hc="${REPO_ROOT}/scripts/healthcheck/${SERVICE}.sh"
