@@ -543,16 +543,6 @@ jobs:
                         --max-lines 120 2>/dev/null || true
                       echo "\`\`\`"
                     } >>"$GITHUB_STEP_SUMMARY"
-
-                    {
-                      echo ""
-                      echo "### Changed fields (paths only)"
-                      echo "\`\`\`"
-                    } >>"$GITHUB_STEP_SUMMARY"
-
-                    python3 ./scripts/lab/render_plan_changed_paths.py "${plan_json}" 2>/dev/null | head -n 80 >>"$GITHUB_STEP_SUMMARY" || true
-
-                    echo "\`\`\`" >>"$GITHUB_STEP_SUMMARY"
                   fi
 
             - name: Record PROD plan outcome
