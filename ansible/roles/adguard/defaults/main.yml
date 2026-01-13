@@ -1,0 +1,16 @@
+---
+# Defaults for adguard role (AdGuard Home via Docker)
+adguard_image: "adguard/adguardhome"
+adguard_image_tag: "v0.107.50"
+
+adguard_install_dir: "/opt/adguardhome"
+adguard_conf_dir: "{{ adguard_install_dir }}/conf"
+adguard_work_dir: "{{ adguard_install_dir }}/work"
+
+# Ports exposed on the LXC (host)
+# Note: AdGuard Home uses 3000 for initial setup UI and 80 for the main UI.
+adguard_port_setup: 3000
+adguard_port_http: 80
+adguard_port_dns: 53
+
+adguard_timezone: "Etc/UTC"
