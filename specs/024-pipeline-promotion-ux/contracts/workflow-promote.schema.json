@@ -25,15 +25,6 @@
       ],
       "description": "Required when LAB plan is destructive (replace/destroy)",
       "default": ""
-    },
-    "confirm_destructive_prod": {
-      "type": "string",
-      "enum": [
-        "",
-        "deploy-prod-destructive"
-      ],
-      "description": "Required when PROD plan is destructive (replace/destroy)",
-      "default": ""
     }
   },
   "required": [
@@ -43,13 +34,11 @@
   "examples": [
     {
       "service": "immich",
-      "confirm_destructive_lab": "",
-      "confirm_destructive_prod": ""
+      "confirm_destructive_lab": ""
     },
     {
       "service": "jellyfin",
-      "confirm_destructive_lab": "apply-lab-destructive",
-      "confirm_destructive_prod": "deploy-prod-destructive"
+      "confirm_destructive_lab": "apply-lab-destructive"
     }
   ]
 }

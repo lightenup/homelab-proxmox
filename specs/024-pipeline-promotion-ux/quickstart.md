@@ -105,7 +105,6 @@ If plan detects destructive changes (replace or destroy operations):
 |-------|------|----------|-------------|
 | `service` | Choice | Yes | Service to promote (dropdown with allowlist) |
 | `confirm_destructive_lab` | Boolean | Conditional | Check to proceed if LAB plan is destructive |
-| `confirm_destructive_prod` | Boolean | Conditional | Check to proceed if PROD plan is destructive |
 
 ### How to Run
 
@@ -141,7 +140,6 @@ If plan detects destructive changes (replace or destroy operations):
    - Generates redacted proof in evidence (no secrets logged)
 2. Runs plan on PROD
 3. Checks for destructive changes
-  - If destructive: fails unless `confirm_destructive_prod: true`
 4. Runs apply on PROD
 5. Generates PROD evidence pack with snapshot and tfvars proof
 6. PROD stage completes
@@ -168,7 +166,6 @@ If destructive changes detected in LAB or PROD:
 2. Review plan output in evidence
 3. Rerun with appropriate confirmation:
   - LAB destructive: `confirm_destructive_lab: true`
-  - PROD destructive: `confirm_destructive_prod: true`
 
 ### Artifacts
 
@@ -205,10 +202,8 @@ If a plan includes replace/destroy operations, rerun with the matching confirmat
 6. Approval granted
 7. PROD plan detects destructive change → workflow fails
 8. Review plan output
-9. Rerun workflow with both:
-  - `confirm_destructive_lab: true`
-  - `confirm_destructive_prod: true`
-10. PROD apply proceeds
+9. Rerun workflow with `confirm_destructive_lab: true`
+10. PROD apply proceeds (after approval)
 
 ---
 

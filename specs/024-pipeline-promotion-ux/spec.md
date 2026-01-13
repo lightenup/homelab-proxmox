@@ -175,7 +175,6 @@ Because the pipeline dispatcher cannot dynamically hide inputs based on other in
 
 - `service`: choice (generated from allowlist)
 - `confirm_destructive_lab`: choice/boolean (only required if LAB plan is destructive)
-- `confirm_destructive_prod`: choice/boolean (only required if PROD plan is destructive)
 
 Notes:
 

@@ -60,7 +60,7 @@ Every task MUST follow:
 
 **Independent Test**:
 - LAB dispatch with a destructive plan fails unless `confirm_destructive=apply-lab-destructive`.
-- PROD dispatch fails unless `confirm=deploy-prod` and, when destructive, `confirm_destructive=deploy-prod-destructive`.
+- PROD dispatch fails unless `confirm=deploy-prod`.
 
 ### Implementation
 

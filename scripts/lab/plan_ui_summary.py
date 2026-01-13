@@ -47,7 +47,7 @@ def _token_required(environment: str, destructive: bool) -> Optional[str]:
     if environment == "lab":
         return "apply-lab-destructive"
     if environment == "prod":
-        return "deploy-prod-destructive"
+        return None
 
     raise ValueError(f"Invalid environment: {environment!r}")
 

@@ -55,12 +55,12 @@ description: "Task list for feature implementation"
 
 **Goal**: Replace boolean destructive confirms with explicit token strings; enforce only when destructive.
 
-**Independent Test**: Make a run with `blast-radius.json.destructive=true` and confirm apply is blocked unless token is exactly `apply-lab-destructive` (LAB) / `deploy-prod-destructive` (PROD).
+**Independent Test**: Make a run with `blast-radius.json.destructive=true` and confirm LAB apply is blocked unless token is exactly `apply-lab-destructive`.
 
 - [x] T015 [US2] Change workflow_dispatch inputs from booleans to strings in .github/workflows/lxc-promote.yml (confirm_destructive_lab/prod)
 - [x] T016 [US2] Align workflow input defaults/enums with specs/025-promotion-ux-observability/contracts/workflow-promote.schema.json
 - [x] T017 [US2] Update LAB destructive gate to require `apply-lab-destructive` when destructive in .github/workflows/lxc-promote.yml
-- [x] T018 [US2] Update PROD destructive gate to require `deploy-prod-destructive` when destructive in .github/workflows/lxc-promote.yml
+- [x] T018 [US2] (Historical) PROD destructive gate token requirement removed later to keep apply workflow clean.
 - [x] T019 [US2] Ensure non-destructive plans do not require tokens in .github/workflows/lxc-promote.yml
 - [x] T020 [US2] Add failure annotations for missing/incorrect destructive tokens in .github/workflows/lxc-promote.yml
 

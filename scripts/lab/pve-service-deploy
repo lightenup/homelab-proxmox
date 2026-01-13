@@ -131,6 +131,64 @@ sha256_file() {
     return 1
 }
 
+ensure_ansible_galaxy_requirements() {
+    local requirements_file="${REPO_ROOT}/ansible/requirements.yml"
+    if [[ ! -f "${requirements_file}" ]]; then
+        return 0
+    fi
+
+    if ! command -v ansible-galaxy >/dev/null 2>&1; then
+        die "ansible-galaxy not found (required to install ${requirements_file})"
+    fi
+
+    local req_hash=""
+    req_hash="$(sha256_file "${requirements_file}" 2>/dev/null || true)"
+
+    local cache_dir="${HOME}/.cache/homelab-proxmox"
+    mkdir -p "${cache_dir}" || true
+
+    local marker="${cache_dir}/ansible-requirements.installed"
+    if [[ -n "${req_hash}" ]]; then
+        marker="${cache_dir}/ansible-requirements.${req_hash}.installed"
+    fi
+
+    # Best-effort caching: if the requirements file has not changed, skip re-install.
+    if [[ -f "${marker}" ]]; then
+        return 0
+    fi
+
+    local galaxy_log=""
+    if [[ -n "${EVIDENCE_ROOT:-}" ]]; then
+        galaxy_log="${EVIDENCE_ROOT}/reports/apply/ansible-galaxy.txt"
+        mkdir -p "${EVIDENCE_ROOT}/reports/apply" || true
+        {
+            echo "requirements_file=${requirements_file}"
+            echo "requirements_hash=${req_hash:-unknown}"
+        } >"${galaxy_log}" 2>/dev/null || true
+    fi
+
+    # Install both roles and collections declared in requirements.yml.
+    # Use --force so a requirements change actually updates what is installed.
+    if [[ -n "${galaxy_log}" ]]; then
+        {
+            echo "--- ansible-galaxy role install ---"
+        } >>"${galaxy_log}" || true
+        ansible-galaxy role install -r "${requirements_file}" --force 2>&1 | tee -a "${galaxy_log}"
+
+        {
+            echo "--- ansible-galaxy collection install ---"
+        } >>"${galaxy_log}" || true
+        ansible-galaxy collection install -r "${requirements_file}" --force 2>&1 | tee -a "${galaxy_log}"
+    else
+        ansible-galaxy role install -r "${requirements_file}" --force
+        ansible-galaxy collection install -r "${requirements_file}" --force
+    fi
+
+    # Clean old markers (hash may change over time)
+    rm -f "${cache_dir}/ansible-requirements."*.installed 2>/dev/null || true
+    : >"${marker}" || true
+}
+
 git_sha_short() {
     local full
     full="$(git_sha_full)"
@@ -984,6 +1042,10 @@ cmd_apply() {
     mkdir -p "${EVIDENCE_ROOT}/reports/plan"
     mkdir -p "${EVIDENCE_ROOT}/reports/apply"
     mkdir -p "${EVIDENCE_ROOT}/reports/healthcheck"
+
+    # Ensure any Ansible Galaxy dependencies (roles/collections) are present on PVE.
+    # This is required for services like AdGuard which use geerlingguy.docker and community.docker.
+    ensure_ansible_galaxy_requirements
 
     emit_phase_start "${RUN_ID}" "apply"
     emit_event "inputs" "${RUN_ID}" "environment=${ENVIRONMENT}" "service=${SERVICE}"

@@ -66,7 +66,7 @@ Update `.github/workflows/lxc-deploy.yml`:
 3. Destructive gating
    - If plan indicates replace/destroy, require:
      - LAB: `confirm_destructive=apply-lab-destructive`
-     - PROD: `confirm=deploy-prod` and `confirm_destructive=deploy-prod-destructive`
+   - PROD: `confirm=deploy-prod`
 4. Evidence handling
    - Fetch evidence pack from PVE and run offline verification (`scripts/lab/ci-verify.sh`) before marking success.
 5. Guardrails

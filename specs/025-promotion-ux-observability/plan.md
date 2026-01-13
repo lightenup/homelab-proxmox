@@ -106,7 +106,7 @@ Design sketch (for implementation once tasks.md is approved):
 3) **Destructive confirmations**
   - Use explicit string tokens (not booleans):
     - LAB: `apply-lab-destructive`
-    - PROD: `deploy-prod-destructive`
+    - PROD: no destructive confirmation token
   - Only required when `blast-radius.json.destructive == true`.
 
 4) **Saved planfile integrity (PROD)**

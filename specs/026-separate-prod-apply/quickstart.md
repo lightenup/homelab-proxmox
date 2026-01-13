@@ -22,7 +22,6 @@ Expected outcomes:
   - `service`
   - `allow_override_failed_lab_gate`: optional checkbox; only relevant if LAB deploy or confidence suite fails
   - `confirm_destructive_lab`: required only when LAB plan is destructive (`apply-lab-destructive`)
-  - `confirm_destructive_prod`: required only when the PROD plan/apply is destructive (`deploy-prod-destructive`) unless override is enabled
 
 Expected outcomes:
 - The workflow deploys to LAB first.
@@ -62,8 +61,7 @@ cat > /tmp/act-workflow-dispatch.json <<'JSON'
     "service": "monitoring",
     "ref": "main",
     "allow_override_failed_lab_gate": "false",
-    "confirm_destructive_lab": "",
-    "confirm_destructive_prod": ""
+    "confirm_destructive_lab": ""
   }
 }
 JSON

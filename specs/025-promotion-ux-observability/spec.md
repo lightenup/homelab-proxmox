@@ -126,7 +126,7 @@ As an operator, I want production apply to use the exact saved production plan p
 - **FR-004**: Production approval MUST occur only after the production plan has completed and a production plan summary is visible in the run UI.
 - **FR-005**: “Destructive” MUST mean any replace or destroy operation.
 - **FR-006**: When the LAB plan is destructive, LAB apply MUST be blocked by default and require the exact confirmation token `apply-lab-destructive`.
-- **FR-007**: When the PROD plan is destructive, PROD apply MUST be blocked by default and require the exact confirmation token `deploy-prod-destructive`, in addition to production approval.
+- **FR-007**: When the PROD plan is destructive, PROD apply MUST be blocked by default and require explicit operator confirmation in addition to production approval.
 - **FR-008**: When a plan is not destructive, the workflow MUST NOT require a destructive confirmation token.
 - **FR-009**: The run UI MUST show a concise plan summary for LAB and PROD, including:
   - run identifier

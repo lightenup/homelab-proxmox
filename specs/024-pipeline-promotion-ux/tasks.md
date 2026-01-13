@@ -66,7 +66,7 @@
 - [x] T017 [P] [US2] Add allowlist runtime validation step in `.github/workflows/lxc-promote.yml` using `scripts/lab/service-scope-allowlist.json`
 - [x] T018 [US2] Implement job graph (LAB plan/apply → approval gate → PROD plan/apply) in `.github/workflows/lxc-promote.yml`
 - [x] T019 [US2] Add production approval gate to PROD stage in `.github/workflows/lxc-promote.yml` (protected `prod` environment)
-- [x] T020 [US2] Implement destructive confirmation handling for LAB and PROD in `.github/workflows/lxc-promote.yml` using `confirm_destructive_lab` and `confirm_destructive_prod`
+- [x] T020 [US2] Implement destructive confirmation handling for LAB in `.github/workflows/lxc-promote.yml` using `confirm_destructive_lab`
 - [x] T021 [US2] Upload separate LAB and PROD evidence artifacts in `.github/workflows/lxc-promote.yml` (include stage + service + run id)
 
 **Checkpoint**: US2 enforces LAB→approval→PROD promotion.
