@@ -127,6 +127,28 @@ jobs:
                   RUN_ID="${{ steps.capture_run_id.outputs.run_id }}"
                   ./scripts/lab/render_github_summary.sh "evidence/lab/${RUN_ID}/plan-ui-summary.json" >>"$GITHUB_STEP_SUMMARY"
 
+                  plan_json="evidence/lab/${RUN_ID}/reports/plan/plan.json"
+                  if [[ -f "${plan_json}" ]]; then
+                    {
+                      echo ""
+                      echo "## Planned Terraform changes (LAB)"
+                      echo "(From saved plan evidence; addresses + action only)"
+                      echo ""
+                      echo "\`\`\`"
+                      jq -r '
+                        def sym:
+                          if . == ["create"] then "+"
+                          elif . == ["update"] then "~"
+                          elif . == ["delete"] then "-"
+                          elif (. | index("create") != null) and (. | index("delete") != null) then "-/+"
+                          else (join("/"))
+                          end;
+                        .resource_changes[]? | "\(.change.actions|sym) \(.address)"
+                      ' "${plan_json}" 2>/dev/null | head -n 80
+                      echo "\`\`\`"
+                    } >>"$GITHUB_STEP_SUMMARY"
+                  fi
+
             - name: Detect destructive blast radius
               id: detect_destructive
               if: steps.plan_on_pve.outcome == 'success'
