@@ -1800,12 +1800,32 @@ sys.exit(3)
     # Healthcheck (uses ansible-inventory + host_vars)
     local hc_enabled="true"
     local hc_reason=""
-    if command -v ansible-inventory >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    if command -v ansible-inventory >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
         local inv_json=""
         inv_json="$(ansible-inventory -i "${inventory_file}" --host "${SERVICE}" 2>/dev/null || true)"
         if [[ -n "${inv_json}" ]]; then
-            hc_enabled="$(jq -r '(.healthcheck_enabled // true) | tostring' <<<"${inv_json}" 2>/dev/null || echo 'true')"
-            hc_reason="$(jq -r '.healthcheck_reason // empty' <<<"${inv_json}" 2>/dev/null || true)"
+            local -a hc_lines=()
+            mapfile -t hc_lines < <(
+                python3 - <<'PY' <<<"${inv_json}" 2>/dev/null || true
+import json
+import sys
+
+raw = sys.stdin.read()
+enabled = True
+reason = ""
+try:
+    doc = json.loads(raw)
+    enabled = bool(doc.get("healthcheck_enabled", True))
+    reason = str(doc.get("healthcheck_reason", "") or "")
+except Exception:
+    pass
+
+sys.stdout.write("false\n" if not enabled else "true\n")
+sys.stdout.write(reason)
+PY
+            )
+            hc_enabled="${hc_lines[0]:-true}"
+            hc_reason="${hc_lines[1]:-}"
         fi
     fi
 

@@ -132,21 +132,26 @@ jobs:
                     {
                       echo ""
                       echo "## Planned Terraform changes (LAB)"
-                      echo "(From saved plan evidence; addresses + action only)"
+                      echo "(From saved plan evidence; no values printed)"
                       echo ""
                       echo "\`\`\`"
-                      jq -r '
-                        def sym:
-                          if . == ["create"] then "+"
-                          elif . == ["update"] then "~"
-                          elif . == ["delete"] then "-"
-                          elif (. | index("create") != null) and (. | index("delete") != null) then "-/+"
-                          else (join("/"))
-                          end;
-                        .resource_changes[]? | "\(.change.actions|sym) \(.address)"
-                      ' "${plan_json}" 2>/dev/null | head -n 80
+                      python3 ./scripts/lab/render_plan_changes.py \
+                        --plan-json "${plan_json}" \
+                        --max-resources 50 \
+                        --max-paths 12 \
+                        --max-lines 120 2>/dev/null || true
                       echo "\`\`\`"
                     } >>"$GITHUB_STEP_SUMMARY"
+
+                    {
+                      echo ""
+                      echo "### Changed fields (paths only)"
+                      echo "\`\`\`"
+                    } >>"$GITHUB_STEP_SUMMARY"
+
+                    python3 ./scripts/lab/render_plan_changed_paths.py "${plan_json}" 2>/dev/null | head -n 80 >>"$GITHUB_STEP_SUMMARY" || true
+
+                    echo "\`\`\`" >>"$GITHUB_STEP_SUMMARY"
                   fi
 
             - name: Detect destructive blast radius
