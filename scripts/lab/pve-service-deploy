@@ -1797,15 +1797,43 @@ sys.exit(3)
         -e "profile_id=${PROFILE_ID}" \
         2>&1 | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
 
-    # Healthcheck (read healthcheck_enabled directly from host_vars to avoid vault issues)
+    # Healthcheck
+    # We intentionally read healthcheck_enabled directly from host_vars to avoid
+    # vault decryption issues (ansible-inventory loads group_vars/*/vault.yml).
     local hc_enabled="true"
     local hc_reason=""
     local host_vars_file="${REPO_ROOT}/ansible/host_vars/${SERVICE}.yml"
-    
-    if [[ -f "${host_vars_file}" ]] && command -v python3 >/dev/null 2>&1; then
+
+    local python_bin=""
+    if command -v python3 >/dev/null 2>&1; then
+        python_bin="$(command -v python3)"
+    elif [[ -x /usr/bin/python3 ]]; then
+        python_bin="/usr/bin/python3"
+    fi
+
+    # Capture minimal diagnostics for troubleshooting (no secrets): whether the
+    # host_vars file exists, and whether python3 is available.
+    local hc_diag_txt="${EVIDENCE_ROOT}/reports/healthcheck/${SERVICE}.diag.txt"
+    : >"${hc_diag_txt}"
+    {
+        echo "host_vars_file=${host_vars_file}"
+        if [[ -f "${host_vars_file}" ]]; then
+            echo "host_vars_file_exists=true"
+        else
+            echo "host_vars_file_exists=false"
+        fi
+        echo "python_bin=${python_bin}"
+        if [[ -n "${python_bin}" ]]; then
+            "${python_bin}" --version 2>&1 | head -n 1 | sed 's/^/python3_version=/'
+        else
+            echo "python3_version="
+        fi
+    } >>"${hc_diag_txt}" || true
+
+    if [[ -f "${host_vars_file}" ]] && [[ -n "${python_bin}" ]]; then
         local -a hc_lines=()
         mapfile -t hc_lines < <(
-            python3 - "${host_vars_file}" <<'PY' 2>/dev/null || true
+            "${python_bin}" - "${host_vars_file}" <<'PY' 2>/dev/null || true
 import sys
 import re
 
@@ -1836,6 +1864,17 @@ PY
         )
         hc_enabled="${hc_lines[0]:-true}"
         hc_reason="${hc_lines[1]:-}"
+        {
+            echo "parsed_hc_enabled=${hc_enabled}"
+            if [[ -n "${hc_reason}" ]]; then
+                echo "parsed_hc_reason_present=true"
+            else
+                echo "parsed_hc_reason_present=false"
+            fi
+        } >>"${hc_diag_txt}" || true
+    else
+        # If we can't evaluate host_vars (missing file or python3), we default to enabled.
+        echo "parsed_hc_enabled=default_true" >>"${hc_diag_txt}" || true
     fi
 
     local hc="${REPO_ROOT}/scripts/healthcheck/${SERVICE}.sh"
