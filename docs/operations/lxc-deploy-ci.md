@@ -11,8 +11,9 @@ This repository provides a gated GitHub Actions workflow for deploying a single 
 
 ## Workflow
 
-- Workflow file: `.github/workflows/lxc-deploy.yml`
+- Workflow file (LAB): `.github/workflows/lxc-deploy-lab.yml`
 - Orchestrator (runs on PVE): `scripts/lab/pve-service-deploy`
+- Optional internal toggle: set repository variable `USE_PY_RUNNER=true` to invoke the Python runner on PVE (workflow_dispatch inputs remain unchanged)
 - Evidence storage (on PVE): `/var/lib/homelab-proxmox/artifacts/service-deploy-runs/<run_id>`
 
 ## Required Secrets
@@ -143,11 +144,9 @@ Notes:
 
 The workflow supports these `workflow_dispatch` inputs:
 
-- `environment`: `lab` or `prod`
 - `service`: service slug (e.g. `jellyfin`)
-- `confirm`: required for PROD apply; must be exactly `deploy-prod`
-- `confirm_destructive`: required only when the plan contains replace/destroy (LAB only)
-	- LAB: `apply-lab-destructive`
+- `apply`: `true` to run plan+apply, `false` for plan-only
+- `confirm_destructive`: required only when the plan contains replace/destroy
 
 ## PROD Gating
 
@@ -194,6 +193,19 @@ The workflow fetches the evidence bundle from PVE and runs offline verification 
 
 - `scripts/lab/ci-verify.sh`
 
+## Real LAB validation (recommended)
+
+When changing the deploy orchestration or evidence semantics, validate against LAB with a real GitHub Actions run:
+
+1. Trigger `.github/workflows/lxc-deploy-lab.yml` with:
+	- `apply=false` (plan-only)
+	- `service=<service>`
+2. Download the evidence artifact and run offline verification:
+	- `./scripts/lab/ci-verify.sh evidence/<run_id>`
+3. Render the bounded operator summary from the evidence pack:
+	- `PYTHONPATH=python/src python3 -m homelab_proxmox_orchestrator.cli summary --evidence-pack evidence/<run_id>`
+4. Spot-check that logs/summaries do not contain secrets (vault password must never appear).
+
 ## Local runs (act)
 
 This repo supports local workflow simulation using `act`. See `docs/operations/proxmox-ci.md` for runner prerequisites and secret handling.
@@ -213,10 +225,9 @@ ${EDITOR:-nano} .act.secrets
 cat > /tmp/act-lxc-deploy-lab.json <<'JSON'
 {
 	"inputs": {
-		"environment": "lab",
 		"service": "jellyfin",
-		"confirm": "",
-		"confirm_destructive": ""
+		"apply": "false",
+		"confirm_destructive": "false"
 	}
 }
 JSON
@@ -226,18 +237,18 @@ JSON
 
 ```bash
 act workflow_dispatch \
-	-W .github/workflows/lxc-deploy.yml \
+	-W .github/workflows/lxc-deploy-lab.yml \
 	-j plan \
 	-e /tmp/act-lxc-deploy-lab.json \
 	--secret-file .act.secrets \
 	--container-options "-v $(pwd)/.act-ssh:/root/.ssh:ro"
 ```
 
-4. Run the full LAB flow (plan + apply_lab). Warning: this does real SSH to PVE and will run `apply`:
+4. Run the full LAB flow (plan + apply). Warning: this does real SSH to PVE and will run `apply`:
 
 ```bash
 act workflow_dispatch \
-	-W .github/workflows/lxc-deploy.yml \
+	-W .github/workflows/lxc-deploy-lab.yml \
 	-e /tmp/act-lxc-deploy-lab.json \
 	--secret-file .act.secrets \
 	--container-options "-v $(pwd)/.act-ssh:/root/.ssh:ro"

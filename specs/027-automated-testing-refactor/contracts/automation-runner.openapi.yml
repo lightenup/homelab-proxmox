@@ -1,0 +1,157 @@
+openapi: 3.0.3
+info:
+  title: Homelab Proxmox Automation Runner (Conceptual Contract)
+  version: 0.1.0
+  description: |
+    This OpenAPI contract describes the logical inputs/outputs for the automation runner.
+    It is a contract for CI/workflow integration and evidence-driven summaries, not a commitment
+    to expose an HTTP service.
+
+servers:
+  - url: https://example.invalid
+
+paths:
+  /runs:
+    post:
+      summary: Start a run
+      operationId: createRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+      responses:
+        '201':
+          description: Run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /runs/{runId}:
+    get:
+      summary: Get run status and summary
+      operationId: getRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Environment:
+      type: string
+      enum: [lab, prod]
+
+    Action:
+      type: string
+      enum: [plan, apply, verify]
+
+    RunRequest:
+      type: object
+      required: [service, environment, action]
+      properties:
+        service:
+          type: string
+          description: Service identifier
+        environment:
+          $ref: '#/components/schemas/Environment'
+        action:
+          $ref: '#/components/schemas/Action'
+        sourceRef:
+          type: string
+          description: Optional git ref/SHA for provenance
+        evidenceRoot:
+          type: string
+          description: Optional override of evidence root (executor-defined)
+
+    RunResponse:
+      type: object
+      required: [runId, service, environment, action, status, summary, evidence]
+      properties:
+        runId:
+          type: string
+        service:
+          type: string
+        environment:
+          $ref: '#/components/schemas/Environment'
+        action:
+          $ref: '#/components/schemas/Action'
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, canceled]
+        exitCode:
+          type: integer
+          nullable: true
+        summary:
+          $ref: '#/components/schemas/RunSummary'
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidencePointer'
+
+    EvidencePointer:
+      type: object
+      required: [label, location]
+      properties:
+        label:
+          type: string
+        location:
+          type: string
+
+    RunSummary:
+      type: object
+      required: [title, bounded, highlights, warnings, errors, nextSteps]
+      properties:
+        title:
+          type: string
+        bounded:
+          type: boolean
+        highlights:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        errors:
+          type: array
+          items:
+            type: string
+        nextSteps:
+          type: array
+          items:
+            type: string
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        details:
+          type: string
+          nullable: true

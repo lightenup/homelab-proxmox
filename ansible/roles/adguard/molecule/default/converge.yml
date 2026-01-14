@@ -1,0 +1,24 @@
+---
+- name: Converge
+  hosts: localhost
+  gather_facts: true
+  become: false
+
+  vars:
+    adguard_install_dir: "/tmp/molecule-adguardhome"
+    adguard_conf_dir: "/tmp/molecule-adguardhome/conf"
+    adguard_work_dir: "/tmp/molecule-adguardhome/work"
+
+    # Avoid privileged ports on the GitHub runner.
+    adguard_port_dns: 55353
+    adguard_port_http: 58080
+    adguard_port_setup: 53000
+
+  tasks:
+    - name: Ensure Docker is reachable
+      community.docker.docker_host_info:
+      register: docker_info
+
+    - name: Include adguard role
+      ansible.builtin.include_role:
+        name: adguard

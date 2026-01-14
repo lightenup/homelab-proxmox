@@ -1,5 +1,10 @@
 name: Lab 2 - LXC Deploy
 
+env:
+  # Optional internal toggle to call the Python runner on PVE.
+  # Set repository variable USE_PY_RUNNER=true to enable.
+  USE_PY_RUNNER: ${{ vars.USE_PY_RUNNER }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -80,11 +85,17 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
+          if [[ "${USE_PY_RUNNER:-}" == "true" ]]; then
+            remote_cmd="cd /home/ci/homelab-proxmox && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab bash scripts/lab/python.sh -m homelab_proxmox_orchestrator.cli plan --environment lab --service '${service}' --evidence-root /var/lib/homelab-proxmox/artifacts --runner-script-path ./scripts/lab/pve-service-deploy"
+          else
+            remote_cmd="cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy plan --environment lab --service '${service}'"
+          fi
+
           if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
             # Avoid placing secrets in the SSH command line; stream via stdin into a temp file.
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy plan --environment lab --service '${service}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; ${remote_cmd}; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
           else
-            ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy plan --environment lab --service '${service}'"
+            ssh ${ssh_opts} "${ssh_target}" "${remote_cmd}"
           fi
 
       - name: Capture RUN_ID
@@ -214,10 +225,16 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+          if [[ "${USE_PY_RUNNER:-}" == "true" ]]; then
+            remote_cmd="cd /home/ci/homelab-proxmox && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab bash scripts/lab/python.sh -m homelab_proxmox_orchestrator.cli apply --environment lab --service '${service}' --evidence-root /var/lib/homelab-proxmox/artifacts --runner-script-path ./scripts/lab/pve-service-deploy"
           else
-            ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'"
+            remote_cmd="cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'"
+          fi
+
+          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; ${remote_cmd}; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+          else
+            ssh ${ssh_opts} "${ssh_target}" "${remote_cmd}"
           fi
 
       - name: Capture RUN_ID
