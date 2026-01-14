@@ -1,0 +1,27 @@
+---
+- name: Verify
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  vars:
+    adguard_port_setup: 53000
+
+  tasks:
+    - name: Container is running
+      community.docker.docker_container_info:
+        name: adguardhome
+      register: c
+
+    - name: Assert container is running
+      ansible.builtin.assert:
+        that:
+          - c.exists
+          - c.container.State.Running
+
+    - name: Setup UI port is reachable
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ adguard_port_setup }}"
+        delay: 2
+        timeout: 120

@@ -1,0 +1,28 @@
+---
+- name: Destroy
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  vars:
+    adguard_install_dir: "/tmp/molecule-adguardhome"
+
+  tasks:
+    - name: Stop stack (best-effort)
+      community.docker.docker_compose_v2:
+        project_src: "{{ adguard_install_dir }}"
+        state: absent
+        remove_orphans: true
+      failed_when: false
+
+    - name: Remove container (best-effort)
+      community.docker.docker_container:
+        name: adguardhome
+        state: absent
+        force_kill: true
+      failed_when: false
+
+    - name: Remove temp install dir
+      ansible.builtin.file:
+        path: "{{ adguard_install_dir }}"
+        state: absent

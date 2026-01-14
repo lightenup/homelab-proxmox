@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 export ANSIBLE_CONFIG="${REPO_ROOT}/ansible/ansible.cfg"
+export ANSIBLE_COLLECTIONS_PATHS="${REPO_ROOT}/ansible/collections:${ANSIBLE_COLLECTIONS_PATHS:-}"
 
 LIB_DIR="${SCRIPT_DIR}/lib"
 # shellcheck source=lib/artifacts.sh
@@ -152,8 +153,22 @@ ensure_ansible_galaxy_requirements() {
         marker="${cache_dir}/ansible-requirements.${req_hash}.installed"
     fi
 
+    # If we previously installed requirements, still verify key deps exist.
+    # The cache marker can become stale if roles/collections are removed on the host.
+    local missing=false
+    if grep -q "geerlingguy.docker" "${requirements_file}" 2>/dev/null; then
+        if [[ ! -d "${REPO_ROOT}/ansible/roles/geerlingguy.docker" && ! -d "${HOME}/.ansible/roles/geerlingguy.docker" ]]; then
+            missing=true
+        fi
+    fi
+    if grep -q "community.docker" "${requirements_file}" 2>/dev/null; then
+        if [[ ! -d "${REPO_ROOT}/ansible/collections/ansible_collections/community/docker" && ! -d "${HOME}/.ansible/collections/ansible_collections/community/docker" ]]; then
+            missing=true
+        fi
+    fi
+
     # Best-effort caching: if the requirements file has not changed, skip re-install.
-    if [[ -f "${marker}" ]]; then
+    if [[ -f "${marker}" && "${missing}" != "true" ]]; then
         return 0
     fi
 
@@ -173,15 +188,17 @@ ensure_ansible_galaxy_requirements() {
         {
             echo "--- ansible-galaxy role install ---"
         } >>"${galaxy_log}" || true
-        ansible-galaxy role install -r "${requirements_file}" --force 2>&1 | tee -a "${galaxy_log}"
+        mkdir -p "${REPO_ROOT}/ansible/roles" "${REPO_ROOT}/ansible/collections" || true
+        ansible-galaxy role install -r "${requirements_file}" --roles-path "${REPO_ROOT}/ansible/roles" --force 2>&1 | tee -a "${galaxy_log}"
 
         {
             echo "--- ansible-galaxy collection install ---"
         } >>"${galaxy_log}" || true
-        ansible-galaxy collection install -r "${requirements_file}" --force 2>&1 | tee -a "${galaxy_log}"
+        ansible-galaxy collection install -r "${requirements_file}" --collections-path "${REPO_ROOT}/ansible/collections" --force 2>&1 | tee -a "${galaxy_log}"
     else
-        ansible-galaxy role install -r "${requirements_file}" --force
-        ansible-galaxy collection install -r "${requirements_file}" --force
+        mkdir -p "${REPO_ROOT}/ansible/roles" "${REPO_ROOT}/ansible/collections" || true
+        ansible-galaxy role install -r "${requirements_file}" --roles-path "${REPO_ROOT}/ansible/roles" --force
+        ansible-galaxy collection install -r "${requirements_file}" --collections-path "${REPO_ROOT}/ansible/collections" --force
     fi
 
     # Clean old markers (hash may change over time)

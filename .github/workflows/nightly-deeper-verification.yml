@@ -1,0 +1,62 @@
+name: Nightly deeper verification
+
+on:
+    schedule:
+        - cron: "0 3 * * *"
+    workflow_dispatch:
+
+jobs:
+    deeper:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Cache uv
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cache/uv
+                  key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
+
+            - name: Install nightly dependencies
+              run: |
+                  uv venv --python 3.11
+                  uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt
+
+            - name: Install Ansible Galaxy deps
+              run: |
+                  .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
+                  .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
+
+            - name: Mutation testing (mutmut)
+              run: |
+                  .venv/bin/mutmut run \
+                      --paths-to-mutate python/src/homelab_proxmox_orchestrator \
+                      --tests-dir python/tests \
+                      --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini" || true
+                  .venv/bin/mutmut results || true
+
+            - name: Molecule test (adguard)
+              run: |
+                  cd ansible/roles/adguard
+                  ../../../.venv/bin/molecule test
+
+            - name: Upload artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: nightly-deeper-artifacts
+                  path: |
+                      .mutmut-cache/
+                      .molecule/
+                      ansible/roles/adguard/.molecule/
+                      ansible/roles/adguard/molecule/
+                      python/mutmut.ini

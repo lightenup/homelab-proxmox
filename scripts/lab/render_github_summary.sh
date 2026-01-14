@@ -17,6 +17,16 @@ fi
 
 INPUT_PATH="$1"
 
+PACK_DIR="$(cd "$(dirname "$INPUT_PATH")" && pwd)"
+
+# Delegate to the Python renderer (Spec 027) using the evidence pack directory.
+# This preserves the shell script's CLI contract while allowing internal migration.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+bash "${REPO_ROOT}/scripts/lab/python.sh" -m homelab_proxmox_orchestrator.cli summary --evidence-pack "$PACK_DIR"
+exit 0
+
 python3 - <<'PY' "$INPUT_PATH"
 import json
 import sys

@@ -65,6 +65,11 @@ Legacy (to be deprecated):
 Notes:
 - For PROD runs, `prod.tfvars` is rendered on the Proxmox host and a redacted proof is included in the evidence pack (secrets are never written to the repo).
 
+Automation runner:
+- Python entrypoint (module): `PYTHONPATH=python/src python3 -m homelab_proxmox_orchestrator.cli plan|apply|verify|summary`
+- Recommended wrapper (uses repo-local `.venv` via `uv` when available): `bash scripts/lab/python.sh -m homelab_proxmox_orchestrator.cli ...`
+- LAB workflow internal toggle: set repository variable `USE_PY_RUNNER=true` to have `.github/workflows/lxc-deploy-lab.yml` invoke the Python runner on PVE via `scripts/lab/python.sh` (workflow_dispatch inputs remain unchanged)
+
 ### 1. Provision Infrastructure (Terraform)
 
 ```bash

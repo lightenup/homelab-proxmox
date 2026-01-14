@@ -1,0 +1,45 @@
+# Keep Docker build contexts small and avoid leaking local/dev artifacts.
+# (This repo doesn't currently ship a Docker image, but Molecule and other tooling
+# may use Docker in CI.)
+
+.git/
+.github/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mutmut-cache/
+.molecule/
+.coverage
+htmlcov/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.terraform.lock.hcl
+
+# Local artifacts
+artifacts/
+evidence/
+backups/
+
+# Node/tooling
+node_modules/
+dist/
+build/
+coverage/
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.tmp
+*.log
+.env*

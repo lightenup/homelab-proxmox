@@ -1,0 +1,49 @@
+name: CI
+
+on:
+    pull_request:
+    workflow_dispatch:
+
+jobs:
+    validate:
+        name: Validate
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: IaC posture checks
+              run: bash scripts/lab/ci-validate-iac.sh
+
+            - name: Verify evidence fixtures
+              run: bash scripts/lab/ci-verify.sh scripts/lab/fixtures/evidence-packs/valid
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_wrapper: false
+
+            - name: Terraform fmt/validate
+              run: bash scripts/ci/terraform-validate.sh
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Cache uv
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cache/uv
+                  key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-test.lock.txt') }}
+
+            - name: Install Python test dependencies
+              run: |
+                  uv venv --python 3.11
+                  uv pip sync --python .venv/bin/python --require-hashes python/requirements-test.lock.txt
+
+            - name: Python tests + coverage
+              run: bash scripts/ci/python-tests.sh
