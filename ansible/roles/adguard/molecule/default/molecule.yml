@@ -25,6 +25,7 @@ provisioner:
       stdout_callback: default
       bin_ansible_callbacks: True
       callbacks_enabled: profile_tasks
+      roles_path: ../..
   inventory:
     hosts:
       all:
