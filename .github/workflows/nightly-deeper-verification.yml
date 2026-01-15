@@ -48,8 +48,14 @@ jobs:
             - name: Molecule test (adguard)
               run: |
                   source .venv/bin/activate
+                                    which python
+                                    python --version
+                                    which ansible-playbook
+                                    ansible --version
+                                    python -c "import docker; print('docker sdk:', docker.__version__)"
+                                    docker version
                   cd ansible/roles/adguard
-                  molecule test
+                                    molecule --debug test
 
             - name: Upload artifacts
               if: always()
