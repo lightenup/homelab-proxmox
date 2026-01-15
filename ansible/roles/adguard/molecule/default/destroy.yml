@@ -32,3 +32,4 @@
       ansible.builtin.file:
         path: "{{ adguard_install_dir }}"
         state: absent
+      become: true
