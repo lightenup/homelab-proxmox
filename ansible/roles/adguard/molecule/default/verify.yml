@@ -6,7 +6,6 @@
 
   environment:
     DOCKER_HOST: unix:///var/run/docker.sock
-    DOCKER_TLS_VERIFY: "0"
 
   vars:
     ansible_python_interpreter: >-
