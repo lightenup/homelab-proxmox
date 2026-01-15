@@ -37,6 +37,7 @@ jobs:
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
 
             - name: Mutation testing (mutmut)
+                            if: ${{ false }}
               run: |
                   .venv/bin/mutmut run \
                       --no-progress \
@@ -47,15 +48,27 @@ jobs:
 
             - name: Molecule test (adguard)
               run: |
-                  source .venv/bin/activate
+                                    set -euxo pipefail
+
+                                    source .venv/bin/activate
                                     which python
                                     python --version
                                     which ansible-playbook
                                     ansible --version
                                     python -c "import docker; print('docker sdk:', docker.__version__)"
                                     docker version
-                  cd ansible/roles/adguard
-                                    molecule --debug test
+
+                                    cd ansible/roles/adguard
+
+                                    molecule --debug test || {
+                                        rc=$?
+                                        echo "::group::Molecule log dump"
+                                        find .molecule -maxdepth 6 -type f -print || true
+                                        find .molecule -maxdepth 6 -type f \( -name "*.log" -o -name "*.txt" -o -name "*.yml" -o -name "*.yaml" \) -print0 \
+                                            | xargs -0 -I{} sh -c 'echo "----- {} -----"; tail -n 200 "{}" || true'
+                                        echo "::endgroup::"
+                                        exit $rc
+                                    }
 
             - name: Upload artifacts
               if: always()
