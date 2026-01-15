@@ -39,6 +39,7 @@ jobs:
             - name: Mutation testing (mutmut)
               run: |
                   .venv/bin/mutmut run \
+                      --no-progress \
                       --paths-to-mutate python/src/homelab_proxmox_orchestrator \
                       --tests-dir python/tests \
                       --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini" || true
