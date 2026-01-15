@@ -1,0 +1,52 @@
+name: Lab Integration Tests (Skeleton)
+
+on:
+    workflow_dispatch:
+        inputs:
+            service:
+                description: "Service to validate"
+                required: true
+                type: choice
+                options:
+                    - adguard
+                    - homeassistant
+                    - immich
+                    - jellyfin
+                    - monitoring
+                    - reverse_proxy
+            mode:
+                description: "Integration mode"
+                required: true
+                type: choice
+                default: plan_only
+                options:
+                    - plan_only
+                    - plan_apply
+
+jobs:
+    lab:
+        name: Lab Integration (Rebuild-Critical)
+        runs-on: [self-hosted]
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Validate inputs (allowlist)
+              run: |
+                  set -euo pipefail
+                  service="${{ github.event.inputs.service }}"
+                  jq -e --arg s "${service}" 'has($s)' ./scripts/lab/service-scope-allowlist.json >/dev/null
+
+            - name: Plan/Apply via existing lab workflow
+              env:
+                  MODE: ${{ github.event.inputs.mode }}
+              run: |
+                  set -euo pipefail
+                  echo "This workflow is a skeleton."
+                  echo "Wire rebuild-critical validation here (plan-only or plan+apply) using the existing LAB harness/workflows."
+                  echo "Selected: service=${{ github.event.inputs.service }} mode=${MODE}"
+
+            - name: Next steps
+              run: |
+                  set -euo pipefail
+                  echo "TODO: Add a real lab-backed validation step (remote plan/apply + evidence fetch)."
+                  echo "Hint: patterns exist in .github/workflows/lxc-deploy-lab.yml and scripts/lab/pve-service-deploy."

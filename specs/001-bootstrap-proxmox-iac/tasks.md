@@ -8,7 +8,7 @@
 *Project initialization and configuration preparation.*
 
 - [x] T001 Create [terraform/terraform.tfvars.example](terraform/terraform.tfvars.example) with 192.168.1.x network values and SSH key placeholder
-- [x] T002 Verify or create local `terraform/prod.tfvars` (gitignored) using values from example
+- [x] T002 Verify or create local `terraform/environments/prod.tfvars` (gitignored) using values from example
 
 ## Phase 2: Foundational
 *Module updates required for the refactor.*

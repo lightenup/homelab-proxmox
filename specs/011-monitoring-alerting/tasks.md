@@ -25,8 +25,8 @@
   - **Details**: Copy immich module pattern, adjust resources (2 cores, 2GB RAM, 10GB storage)
   - **Validation**: `terraform validate` passes
 
-- [X] **[P] T002**: Update `terraform/prod.tfvars` with monitoring service ID and IP
-  - **Files**: terraform/prod.tfvars
+- [X] **[P] T002**: Update `terraform/environments/prod.tfvars` with monitoring service ID and IP
+  - **Files**: terraform/environments/prod.tfvars
   - **Details**: Add `monitoring = 204` to service_ids, add `monitoring = "192.168.1.204"` to service_ips
   - **Validation**: Values follow existing patterns
 
@@ -36,12 +36,12 @@
   - **Validation**: `terraform validate` passes
 
 - [X] **T004**: Run `terraform plan` and review proposed changes
-  - **Command**: `cd terraform && terraform plan -var-file=prod.tfvars`
+  - **Command**: `cd terraform && terraform plan -var-file=environments/prod.tfvars`
   - **Validation**: Plan shows 1 new LXC resource, no changes to existing resources
   - **⚠️ STOP POINT**: Review plan output carefully before proceeding
 
 - [X] **T005**: Run `terraform apply` to create monitoring LXC
-  - **Command**: `cd terraform && terraform apply -var-file=prod.tfvars`
+  - **Command**: `cd terraform && terraform apply -var-file=environments/prod.tfvars`
   - **Validation**: LXC 204 visible in Proxmox UI, status "running"
 
 - [X] **T006**: Verify monitoring LXC is reachable via SSH
@@ -462,8 +462,8 @@ Phase 8 (API Automation) → Phase 9 (mDNS) → Phase 10 (Integration) → Phase
 ```bash
 cd terraform
 terraform validate
-terraform plan -var-file=prod.tfvars
-terraform apply -var-file=prod.tfvars
+terraform plan -var-file=environments/prod.tfvars
+terraform apply -var-file=environments/prod.tfvars
 ```
 
 **Ansible**:

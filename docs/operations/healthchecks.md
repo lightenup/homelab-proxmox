@@ -6,16 +6,24 @@ This feature allows verifying the health of homelab services using a regression 
 
 ### CLI
 
-Run the healthcheck script directly:
+Run via the operator Taskfile:
 
 ```bash
-./scripts/healthcheck/run.sh
+task healthcheck:run
 ```
 
 **Options:**
 - `--profile <lan|tailscale>`: Select network profile (default: `lan`).
 - `--filter <substring>`: Run checks only for hosts matching the substring.
 - `--json`: Output JSON to stdout (in addition to saving to artifacts).
+
+Pass options through to the underlying runner:
+
+```bash
+task healthcheck:run -- --profile tailscale
+task healthcheck:run -- --filter immich
+task healthcheck:run -- --json
+```
 
 ### Ansible
 
@@ -52,4 +60,4 @@ healthcheck_expect_json: '{"res":"pong"}'
 
 ## Artifacts
 
-The latest run report is saved to `artifacts/healthcheck/latest.json`.
+The latest run report is saved to `artifacts/healthcheck/history/latest.json`.

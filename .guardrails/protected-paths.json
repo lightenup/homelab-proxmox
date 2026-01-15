@@ -1,0 +1,9 @@
+{
+  "protectedPathGlobs": [
+    ".specify/**",
+    "scripts/lab/**",
+    "mkdir/**"
+  ],
+  "allowLabel": "allow-protected-path-changes",
+  "notes": "CI blocks PRs that change protected paths unless the PR is explicitly labeled. This is intended to keep core harness/spec tooling/host-installed automation unchanged for feature work like 028-sunset-shell-tools."
+}

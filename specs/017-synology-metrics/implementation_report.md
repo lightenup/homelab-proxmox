@@ -157,7 +157,7 @@ All core user stories (US1, US2, US3, US5) are complete and validated. The monit
 ```bash
 # 1. Provision LXC
 cd terraform/
-terraform apply -var-file=prod.tfvars -target=module.monitoring_lxc
+terraform apply -var-file=environments/prod.tfvars -target=module.monitoring_lxc
 
 # 2. Update Ansible inventory
 ./scripts/update_ansible_inventory.sh

@@ -247,12 +247,12 @@ provision_terraform() {
     
     # Show plan
     log_info "Terraform plan:"
-    terraform plan -var-file=prod.tfvars
+    terraform plan -var-file=environments/prod.tfvars
     
     echo ""
     read -rp "Apply Terraform changes? (y/N): " apply_terraform
     if [[ "${apply_terraform}" == "y" ]]; then
-        terraform apply -var-file=prod.tfvars -auto-approve
+        terraform apply -var-file=environments/prod.tfvars -auto-approve
         log_success "Terraform provisioning complete"
     else
         log_warning "Skipping Terraform apply"

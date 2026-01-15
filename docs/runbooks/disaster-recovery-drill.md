@@ -120,7 +120,8 @@ Replace `YOUR_ACCESS_KEY_ID_FROM_BITWARDEN` and `YOUR_SECRET_KEY_FROM_BITWARDEN`
 source .env
 
 # List bucket contents
-./hetzner_list.sh DiskStation413j_1.hbk
+cd /path/to/homelab-proxmox
+task dr:hetzner:list -- DiskStation413j_1.hbk
 ```
 
 **Expected output:**
@@ -145,22 +146,18 @@ _Syno_TaskConfig
 
 **Goal**: Download _Syno_TaskConfig (1.63 KB) for connectivity test, then metadata + Pool indexes (~6 GB).
 
-### B1. Write download script
+### B1. Download tooling
 
-The `hetzner_download.sh` script is already created in the repository. Make it executable:
-
-```bash
-chmod +x hetzner_download.sh
-```
+The repository provides `task` entrypoints that invoke the DR download scripts.
 
 ### B2. Download small test file (_Syno_TaskConfig)
 
 ```bash
 # Dry-run first (safe, shows what would be downloaded)
-DOWNLOAD_DRY_RUN=true ./hetzner_download.sh "DiskStation413j_1.hbk/_Syno_TaskConfig" ~/dr-restore/test
+DOWNLOAD_DRY_RUN=true task dr:hetzner:download -- "DiskStation413j_1.hbk/_Syno_TaskConfig" ~/dr-restore/test
 
 # Actual download (1.63 KB)
-DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/_Syno_TaskConfig" ~/dr-restore/test
+DOWNLOAD_DRY_RUN=false task dr:hetzner:download -- "DiskStation413j_1.hbk/_Syno_TaskConfig" ~/dr-restore/test
 
 # Verify file size
 ls -lh ~/dr-restore/test/_Syno_TaskConfig
@@ -179,7 +176,7 @@ mkdir -p ~/dr-restore/metadata
 # Download Config, Control, Guard folders
 for folder in Config Control Guard; do
   echo "Downloading ${folder}..."
-  DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/${folder}" ~/dr-restore/metadata/
+   DOWNLOAD_DRY_RUN=false task dr:hetzner:download -- "DiskStation413j_1.hbk/${folder}" ~/dr-restore/metadata/
 done
 ```
 
@@ -187,7 +184,7 @@ done
 
 ```bash
 # List Pool folder to verify structure
-./hetzner_list.sh DiskStation413j_1.hbk/Pool | head -30
+task dr:hetzner:list -- DiskStation413j_1.hbk/Pool | head -30
 
 # Pool structure:
 # - file_pool/: Small metadata files (~0.01 GB, 229 files)
@@ -199,10 +196,10 @@ done
 mkdir -p ~/dr-restore/sample-data
 
 # file_pool (~0.01 GB, metadata)
-DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/Pool/file_pool" ~/dr-restore/sample-data/
+DOWNLOAD_DRY_RUN=false task dr:hetzner:download -- "DiskStation413j_1.hbk/Pool/file_pool" ~/dr-restore/sample-data/
 
 # chunk_index (~6 GB, indexes)
-DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/Pool/chunk_index" ~/dr-restore/sample-data/
+DOWNLOAD_DRY_RUN=false task dr:hetzner:download -- "DiskStation413j_1.hbk/Pool/chunk_index" ~/dr-restore/sample-data/
 ```
 
 **Expected**: ~6 GB download, 996 files, 5-10 minutes at 10-20 MiB/s bandwidth.
@@ -317,7 +314,7 @@ DiskStation413j_1.hbk/
 ```
 
 **2. Download Script Issue**:
-- Current script: `./hetzner_download.sh "DiskStation413j_1.hbk/Pool/0"`
+- Current script (via Taskfile): `task dr:hetzner:download -- "DiskStation413j_1.hbk/Pool/0" <target_dir>`
 - rclone flattened structure, downloaded Pool/0/X/ to backup root as X/
 - **Fix required**: Download must preserve nested paths
 
@@ -466,13 +463,13 @@ export DR_RESTORE_PATH="/mnt/dr-restore"
 The December 2025 script has been fixed to preserve directory structure.
 
 ```bash
-cd /Users/Andreas.Jacobsen/Development/private/homelab-proxmox/scripts/dr
+cd /Users/Andreas.Jacobsen/Development/private/homelab-proxmox
 
 # Download all Pool/0 subdirectories (0/ through 17/)
 # Script now preserves nested structure: Pool/0/0/, Pool/0/1/, etc.
 for i in {0..17}; do
   echo "Downloading Pool/0/$i..."
-  DOWNLOAD_DRY_RUN=false ./hetzner_download.sh \
+   DOWNLOAD_DRY_RUN=false task dr:hetzner:download -- \
     "DiskStation413j_1.hbk/Pool/0/$i" \
     "$DR_RESTORE_PATH/backup"
 done

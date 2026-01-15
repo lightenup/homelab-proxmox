@@ -87,7 +87,7 @@ module "monitoring" {
 **Variable Updates**:
 
 ```hcl
-# terraform/prod.tfvars additions
+# terraform/environments/prod.tfvars additions
 service_ids = {
   # ... existing services ...
   monitoring = 204

@@ -8,6 +8,13 @@
 
 - Limited visibility into “what’s currently in LAB” (running LXCs, IPs, health, mount status). Today this requires ad-hoc `pct list`, `pct config <id>`, and SSHing into guests.
 
+## Recent automation wins (to build on)
+
+- Task-first operator workflows via `Taskfile.yml` (single entrypoint)
+- Inventory generation, tfstate backup, and healthcheck runner migrated into Python with unit + smoke tests
+- Service lifecycle now runs via tasks (`service:add|change|remove`) instead of ad-hoc shell scripts
+- Ongoing approach: keep path-stable shims only when required; otherwise deprecate scripts and remove all references
+
 ## Why automate
 - Reduce 401 auth failures and drift from missing/placeholder secrets on PVE.
 - Eliminate manual secret pasting by sourcing TF_VAR_proxmox_api_token_* via CI secrets/KeyVault and templating prod.tfvars from a managed secret store.

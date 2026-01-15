@@ -116,8 +116,6 @@ _tfvars_provision_prod_and_write_proof() {
 		if [[ -n "${repo_root}" ]]; then
 			candidates+=("${repo_root}/terraform/environments/prod.tfvars")
 			candidates+=("${repo_root}/terraform/environments/prod.tfvars.example")
-			candidates+=("${repo_root}/terraform/prod.tfvars")
-			candidates+=("${repo_root}/terraform/prod.tfvars.example")
 		fi
 
 		local c

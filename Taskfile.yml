@@ -1,0 +1,95 @@
+version: '3'
+
+# Homelab Proxmox operator entry point.
+# This file intentionally starts with placeholders; tasks are wired up incrementally.
+
+env:
+  PYTHONPATH: python/src
+
+tasks:
+  service:add:
+    # Operator-only (day-to-day)
+    desc: Add a service
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli service add {{.CLI_ARGS}}
+
+  service:change:
+    # Operator-only (day-to-day)
+    desc: Change a service
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli service change {{.CLI_ARGS}}
+
+  service:remove:
+    # Operator-only (day-to-day)
+    desc: Remove a service
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli service remove {{.CLI_ARGS}}
+
+  inventory:update:
+    # Rebuild-critical (feeds Ansible operations)
+    desc: Regenerate/update Ansible inventory
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli inventory update {{.CLI_ARGS}}
+
+  healthcheck:run:
+    # Operator-only (day-to-day)
+    desc: Run healthcheck suite
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli healthcheck run {{.CLI_ARGS}}
+
+  terraform:validate:
+    # Rebuild-critical (safe)
+    desc: Terraform fmt/validate checks
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli terraform validate {{.CLI_ARGS}}
+
+  terraform:plan:
+    # Rebuild-critical (non-destructive)
+    desc: Terraform plan
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli terraform plan {{.CLI_ARGS}}
+
+  terraform:apply:
+    # Rebuild-critical (destructive; requires explicit confirmation)
+    desc: Terraform apply (requires CONFIRM=yes)
+    preconditions:
+      - sh: 'test "{{.CONFIRM}}" = "yes"'
+        msg: "Refusing to run terraform apply without explicit confirmation. Re-run with: task terraform:apply CONFIRM=yes -- [args]"
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli terraform apply --confirm {{.CLI_ARGS}}
+
+  deploy:lab:
+    # Rebuild-critical (integration)
+    desc: Deploy/update a service in the lab
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli deploy lab {{.CLI_ARGS}}
+
+  summary:render:
+    # Operator-only (day-to-day)
+    desc: Render a human-readable run summary
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli summary render {{.CLI_ARGS}}
+
+  dr:hetzner:list:
+    # Operator-only / maintenance
+    desc: List Hetzner backup bucket contents (DR drill)
+    cmds:
+      - bash scripts/dr/hetzner_list.sh {{.CLI_ARGS}}
+
+  dr:hetzner:download:
+    # Operator-only / maintenance
+    desc: Download Hetzner backup objects (DR drill)
+    cmds:
+      - bash scripts/dr/hetzner_download.sh {{.CLI_ARGS}}
+
+  dr:verify-restore:
+    # Operator-only / maintenance
+    desc: Verify extracted photos in a restore directory
+    cmds:
+      - bash scripts/dr/verify_restore.sh {{.CLI_ARGS}}
+
+  tailscale:test-api-access:
+    # Operator-only / maintenance
+    desc: Verify Tailscale OAuth/API access (lists first devices)
+    cmds:
+      - bash scripts/tailscale/test_api_access.sh

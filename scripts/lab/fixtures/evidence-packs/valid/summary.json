@@ -1,5 +1,11 @@
 {
   "run_id": "valid",
   "profile_id": "bootstrap",
-  "contract_version": "1.0.0"
+  "contract_version": "1.0.0",
+  "verification": {
+    "status": "PASS",
+    "report_path": "reports/verify.json",
+    "verifier_version": "1.0.0",
+    "reason": ""
+  }
 }
