@@ -17,12 +17,12 @@ provisioner:
   options:
     vvv: true
   env:
-    ANSIBLE_STDOUT_CALLBACK: yaml
+    ANSIBLE_STDOUT_CALLBACK: default
     ANSIBLE_BIN_ANSIBLE_CALLBACKS: "1"
     ANSIBLE_CALLBACKS_ENABLED: profile_tasks
   config_options:
     defaults:
-      stdout_callback: yaml
+      stdout_callback: default
       bin_ansible_callbacks: True
       callbacks_enabled: profile_tasks
   inventory:
