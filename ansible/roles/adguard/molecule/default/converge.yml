@@ -23,8 +23,8 @@
 
   tasks:
     - name: Ensure Docker is reachable
-      community.docker.docker_host_info:
-      register: docker_info
+      ansible.builtin.command: docker info
+      changed_when: false
 
     - name: Include adguard role
       ansible.builtin.include_role:
