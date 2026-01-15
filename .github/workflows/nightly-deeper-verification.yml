@@ -45,15 +45,14 @@ jobs:
                       python/mutants/
                   key: mutmut-${{ runner.os }}-py311-${{ hashFiles('python/requirements-nightly.lock.txt', 'python/mutmut.ini', 'python/pytest.ini', 'python/src/**', 'python/tests/**') }}
 
-            # Temporarily disabled for faster builds while debugging Molecule.
-            # - name: Mutation testing (mutmut)
-            #   run: |
-            #     .venv/bin/mutmut run \
-            #       --no-progress \
-            #       --paths-to-mutate python/src/homelab_proxmox_orchestrator \
-            #       --tests-dir python/tests \
-            #       --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini" || true
-            #     .venv/bin/mutmut results || true
+            - name: Mutation testing (mutmut)
+              run: |
+                  .venv/bin/mutmut run \
+                    --no-progress \
+                    --paths-to-mutate python/src/homelab_proxmox_orchestrator \
+                    --tests-dir python/tests \
+                    --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini"
+                  .venv/bin/mutmut results
 
             - name: Molecule test (adguard)
               run: |
