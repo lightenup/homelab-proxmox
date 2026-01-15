@@ -35,6 +35,16 @@ jobs:
                   .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
 
+            - name: Cache mutmut
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      .mutmut-cache/
+                      mutants/
+                      python/.mutmut-cache/
+                      python/mutants/
+                  key: mutmut-${{ runner.os }}-py311-${{ hashFiles('python/requirements-nightly.lock.txt', 'python/mutmut.ini', 'python/pytest.ini', 'python/src/**', 'python/tests/**') }}
+
             # Temporarily disabled for faster builds while debugging Molecule.
             # - name: Mutation testing (mutmut)
             #   run: |
@@ -101,6 +111,9 @@ jobs:
                   if-no-files-found: ignore
                   path: |
                       .mutmut-cache/
+                      mutants/
+                      python/.mutmut-cache/
+                      python/mutants/
                       ansible/roles/adguard/.molecule/
                       ansible/roles/adguard/molecule/
                       python/mutmut.ini
