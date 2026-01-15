@@ -543,9 +543,9 @@ molecule==25.12.0 \
     # via
     #   -r python/requirements-nightly.txt
     #   molecule-plugins
-molecule-plugins==23.7.0 \
-    --hash=sha256:5e577231c7d95d7f7dc7146f3527d4692ee30a8c0ea0e8353b15ceba75f7d28e \
-    --hash=sha256:c28b08e25c91fcc679e65d9d18d2b4bb33712aaed2fefdea72b6253c6bd19635
+molecule-plugins==25.8.12 \
+    --hash=sha256:75f32763e90275bfc24bcc0d27b9bb22ac973658bf902b2e3e8af8e2a1c32083 \
+    --hash=sha256:c5b8ceb209a5ff87326631d60408f8d08b9431b2e339dad4c620130b50279ce0
     # via -r python/requirements-nightly.txt
 mutmut==2.5.1 \
     --hash=sha256:d8fea2538805277f6290922e88881ad045002fc284d5a53c2b3915298b77f79d
