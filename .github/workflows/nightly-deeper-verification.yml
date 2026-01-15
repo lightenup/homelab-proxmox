@@ -1,6 +1,6 @@
 name: Nightly deeper verification
 
-on:
+"on":
     schedule:
         - cron: "0 3 * * *"
     workflow_dispatch:
@@ -22,8 +22,7 @@ jobs:
             - name: Cache uv
               uses: actions/cache@v4
               with:
-                  path: |
-                      ~/.cache/uv
+                  path: ~/.cache/uv
                   key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
 
             - name: Install nightly dependencies
@@ -36,48 +35,48 @@ jobs:
                   .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
 
-            - name: Mutation testing (mutmut)
-                            if: ${{ false }}
-              run: |
-                  .venv/bin/mutmut run \
-                      --no-progress \
-                      --paths-to-mutate python/src/homelab_proxmox_orchestrator \
-                      --tests-dir python/tests \
-                      --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini" || true
-                  .venv/bin/mutmut results || true
+            # Temporarily disabled for faster builds while debugging Molecule.
+            # - name: Mutation testing (mutmut)
+            #   run: |
+            #     .venv/bin/mutmut run \
+            #       --no-progress \
+            #       --paths-to-mutate python/src/homelab_proxmox_orchestrator \
+            #       --tests-dir python/tests \
+            #       --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini" || true
+            #     .venv/bin/mutmut results || true
 
             - name: Molecule test (adguard)
               run: |
-                                    set -euxo pipefail
+                  set -euxo pipefail
 
-                                    source .venv/bin/activate
-                                    which python
-                                    python --version
-                                    which ansible-playbook
-                                    ansible --version
-                                    python -c "import docker; print('docker sdk:', docker.__version__)"
-                                    docker version
+                  source .venv/bin/activate
+                  which python
+                  python --version
+                  which ansible-playbook
+                  ansible --version
+                  python -c "import docker; print('docker sdk:', docker.__version__)"
+                  docker version
 
-                                    cd ansible/roles/adguard
+                  cd ansible/roles/adguard
 
-                                    molecule --debug test || {
-                                        rc=$?
-                                        echo "::group::Molecule log dump"
-                                        find .molecule -maxdepth 6 -type f -print || true
-                                        find .molecule -maxdepth 6 -type f \( -name "*.log" -o -name "*.txt" -o -name "*.yml" -o -name "*.yaml" \) -print0 \
-                                            | xargs -0 -I{} sh -c 'echo "----- {} -----"; tail -n 200 "{}" || true'
-                                        echo "::endgroup::"
-                                        exit $rc
-                                    }
+                  molecule --debug test || {
+                    rc=$?
+                    echo "::group::Molecule log dump"
+                    find .molecule -maxdepth 6 -type f -print || true
+                    find .molecule -maxdepth 6 -type f \( -name "*.log" -o -name "*.txt" -o -name "*.yml" -o -name "*.yaml" \) -print0 \
+                      | xargs -0 -I{} sh -c 'echo "----- {} -----"; tail -n 200 "{}" || true'
+                    echo "::endgroup::"
+                    exit $rc
+                  }
 
             - name: Upload artifacts
               if: always()
               uses: actions/upload-artifact@v4
               with:
                   name: nightly-deeper-artifacts
+                  if-no-files-found: ignore
                   path: |
                       .mutmut-cache/
-                      .molecule/
                       ansible/roles/adguard/.molecule/
                       ansible/roles/adguard/molecule/
                       python/mutmut.ini
