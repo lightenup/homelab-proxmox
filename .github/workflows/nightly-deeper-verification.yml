@@ -47,8 +47,9 @@ jobs:
 
             - name: Molecule test (adguard)
               run: |
+                                    source .venv/bin/activate
                   cd ansible/roles/adguard
-                  ../../../.venv/bin/molecule test
+                                    molecule test
 
             - name: Upload artifacts
               if: always()
