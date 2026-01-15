@@ -84,14 +84,13 @@ This guide walks you through deploying a complete monitoring stack (Prometheus, 
 **Verification:**
 
 ```bash
-# Automated verification (recommended)
-./scripts/monitoring/verify-snmpv3.sh 192.168.1.109
-
-# Or manual test:
+# Manual test:
 snmpwalk -v3 -l authPriv -u monitoring -a MD5 -A "YourAuthPassword" -x AES -X "YourPrivPassword" 192.168.1.109 1.3.6.1.2.1.1.5
 
 # Expected: Returns NAS hostname
 ```
+
+Note: The full monitoring init script performs SNMP connectivity checks as part of its preflight.
 
 ## Step 2: Configure Ansible Vault Secrets
 
@@ -150,7 +149,7 @@ cat ansible/group_vars/monitoring/vault.yml
 cd terraform
 
 # Review planned changes
-terraform plan -var-file=prod.tfvars
+terraform plan -var-file=environments/prod.tfvars
 
 # Expected output:
 # - module.monitoring_lxc will be created
@@ -158,7 +157,7 @@ terraform plan -var-file=prod.tfvars
 # - IP: 192.168.1.214
 
 # Apply changes
-terraform apply -var-file=prod.tfvars
+terraform apply -var-file=environments/prod.tfvars
 
 # Type 'yes' when prompted
 
@@ -195,8 +194,9 @@ vim inventories/generated/hosts.yml
 # [monitoring]
 # monitoring ansible_host=192.168.1.214 ansible_user=root
 
-# Or use Terraform output script if available:
-# ../scripts/update_ansible_inventory.sh
+# Or regenerate inventory from Terraform outputs:
+cd /path/to/homelab-proxmox
+task inventory:update
 ```
 
 ## Step 5: Deploy Monitoring Stack with Ansible
@@ -455,12 +455,6 @@ Backups will now run daily at 3:00 AM with 30-day retention.
   - Configures NFS backups
   - Runs verification tests
 
-- **`scripts/monitoring/verify-snmpv3.sh`**: SNMPv3 connectivity verification
-  - Tests basic SNMP connectivity
-  - Validates OID accessibility (storage, CPU, memory, network)
-  - Checks Synology-specific disk health OIDs
-  - Provides detailed troubleshooting guidance
-
 - **`scripts/monitoring/smoke-test.sh`**: Service health validation
   - Tests all 4 services (Prometheus, Grafana, Alertmanager, SNMP Exporter)
   - Validates Synology target scraping
@@ -493,7 +487,7 @@ Backups will now run daily at 3:00 AM with 30-day retention.
 - Proxmox host: `ssh root@192.168.1.112`
 
 **Configuration Files:**
-- Terraform: `terraform/main.tf`, `terraform/prod.tfvars`
+- Terraform: `terraform/main.tf`, `terraform/environments/prod.tfvars`
 - Ansible playbook: `ansible/playbooks/monitoring.yml`
 - Ansible vault: `ansible/group_vars/monitoring/vault.yml`
 - Docker compose: `/opt/monitoring/docker-compose.yml` (on LXC)

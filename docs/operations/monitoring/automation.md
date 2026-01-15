@@ -55,58 +55,7 @@ cd /path/to/homelab-proxmox
 
 ---
 
-### 2. verify-snmpv3.sh - SNMPv3 Connectivity Verification
-
-**Location:** `scripts/monitoring/verify-snmpv3.sh`
-
-**Purpose:** Verify Synology SNMPv3 configuration before deploying monitoring stack.
-
-**What It Tests:**
-- Ping connectivity to NAS
-- SNMPv3 basic authentication (sysName OID)
-- Storage metrics accessibility (hrStorageTable)
-- CPU and memory metrics
-- Network interface metrics
-- Synology-specific disk health OIDs
-
-**Usage:**
-```bash
-# With default NAS IP (192.168.1.109)
-./scripts/monitoring/verify-snmpv3.sh
-
-# With custom NAS IP
-./scripts/monitoring/verify-snmpv3.sh 192.168.1.105
-
-# With environment variables (non-interactive)
-export SNMP_USERNAME="monitoring"
-export SNMP_AUTH_PROTOCOL="MD5"
-export SNMP_AUTH_PASSWORD="YourAuthPassword"
-export SNMP_PRIV_PROTOCOL="AES"
-export SNMP_PRIV_PASSWORD="YourPrivPassword"
-./scripts/monitoring/verify-snmpv3.sh
-```
-
-**Prerequisites:**
-- `snmpwalk` tool installed (`brew install net-snmp` or `apt-get install snmp`)
-- Synology SNMPv3 configured and enabled
-
-**Output:**
-```
-✓ Basic connectivity: PASS
-✓ Storage metrics: PASS
-✓ CPU/Memory metrics: OK
-✓ Network metrics: PASS
-• Synology disk OIDs: AVAILABLE (or N/A)
-```
-
-**Troubleshooting:**
-- If FAIL: Check username/password match DSM configuration
-- If timeout: Verify SNMP service is enabled in DSM
-- If N/A on disk OIDs: Normal for some NAS models
-
----
-
-### 3. smoke-test.sh - Service Health Validation
+### 2. smoke-test.sh - Service Health Validation
 
 **Location:** `scripts/monitoring/smoke-test.sh`
 
@@ -233,7 +182,7 @@ backup_subdir: "monitoring"
 
 **Documentation:** [Synology SNMP Setup Guide](../../docs/operations/monitoring/synology-snmp-setup.md)
 
-**Verification:** Use `verify-snmpv3.sh` to confirm configuration is correct
+**Verification:** Use the SNMP verification steps in the quickstart, or run the full init script which includes SNMP connectivity checks.
 
 ---
 
@@ -275,7 +224,7 @@ backup_subdir: "monitoring"
    - Configure SSH key for Proxmox
 
 2. **SNMPv3 verification fails**
-   - Run `verify-snmpv3.sh` separately
+   - Run the manual `snmpwalk` verification from the monitoring quickstart
    - Check DSM SNMP configuration
    - Verify credentials match
 
@@ -288,24 +237,6 @@ backup_subdir: "monitoring"
    - Verify vault password is correct
    - Check inventory has monitoring group
    - Run playbook with `-vvv` for debug output
-
-### verify-snmpv3.sh Fails
-
-**Common Issues:**
-
-1. **snmpwalk not found**
-   - Install: `brew install net-snmp` (macOS)
-   - Install: `apt-get install snmp` (Linux)
-
-2. **Authentication failure**
-   - Verify username in DSM matches script
-   - Verify auth protocol (MD5 vs SHA)
-   - Verify passwords match exactly
-
-3. **Timeout errors**
-   - Check SNMP service is enabled in DSM
-   - Verify network connectivity
-   - Check firewall rules
 
 ### NFS Mount Fails
 

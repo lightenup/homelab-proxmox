@@ -59,7 +59,7 @@ Operator deploys entire monitoring stack using Terraform + Ansible commands from
 
 **Acceptance Scenarios**:
 
-1. **Given** fresh Proxmox host and repo cloned, **When** operator runs `terraform apply -var-file=prod.tfvars`, **Then** monitoring LXC created with 2 vCPU / 4GB RAM / 32GB disk at `192.168.1.214`
+1. **Given** fresh Proxmox host and repo cloned, **When** operator runs `terraform apply -var-file=environments/prod.tfvars`, **Then** monitoring LXC created with 2 vCPU / 4GB RAM / 32GB disk at `192.168.1.214`
 2. **Given** LXC provisioned, **When** operator runs `ansible-playbook playbooks/monitoring.yml`, **Then** Docker installed, compose stack deployed, and all services healthy within 5 minutes
 3. **Given** stack deployed, **When** operator accesses `http://monitoring.local:3000`, **Then** Grafana loads with "Synology NAS" dashboard already visible in dashboards list (no import required)
 4. **Given** stack deployed, **When** operator checks Prometheus targets at `http://monitoring.local:9090/targets`, **Then** Synology SNMP exporter target shows "UP" state with last scrape timestamp

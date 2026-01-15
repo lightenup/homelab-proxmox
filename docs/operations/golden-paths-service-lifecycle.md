@@ -28,9 +28,9 @@ This runbook defines the "Golden Paths" for service management. Following these 
     - Run `terraform apply`.
 
 2.  **Register Service (Ansible Inventory)**
-    - Run the helper script:
+    - Run the task:
       ```bash
-      ./scripts/add-service.sh <service_name> --port <port> --path <path>
+      task service:add -- <service_name> --port <port> --path <path>
       ```
     - This creates/updates `ansible/host_vars/<service_name>.yml`.
 
@@ -41,9 +41,9 @@ This runbook defines the "Golden Paths" for service management. Following these 
       ```
 
 4.  **Verify**
-    - Run the healthcheck runner:
+    - Run the healthcheck suite:
       ```bash
-      python3 scripts/healthcheck/healthcheck.py --filter <service_name>
+      task healthcheck:run -- --filter <service_name>
       ```
     - Ensure status is `PASS`.
 
@@ -54,9 +54,9 @@ This runbook defines the "Golden Paths" for service management. Following these 
 ### Procedure
 
 1.  **Update Configuration**
-    - Use the helper script:
+    - Use the task:
       ```bash
-      ./scripts/change-service.sh <service_name> --port <new_port>
+      task service:change -- <service_name> --port <new_port>
       ```
     - Or manually edit `ansible/host_vars/<service_name>.yml`.
 
@@ -69,7 +69,7 @@ This runbook defines the "Golden Paths" for service management. Following these 
 3.  **Verify**
     - Run verification:
       ```bash
-      python3 scripts/healthcheck/healthcheck.py --filter <service_name>
+  task healthcheck:run -- --filter <service_name>
       ```
 
 ### Rollback
@@ -83,9 +83,9 @@ This runbook defines the "Golden Paths" for service management. Following these 
 ### Procedure
 
 1.  **Remove from Inventory**
-    - Run the helper script:
+    - Run the task:
       ```bash
-      ./scripts/remove-service.sh <service_name>
+      task service:remove -- <service_name>
       ```
     - This removes the healthcheck configuration. You may also need to remove the file if the service is fully gone.
 
@@ -96,7 +96,7 @@ This runbook defines the "Golden Paths" for service management. Following these 
 3.  **Verify Cleanup**
     - Run drift detection to ensure no zombies remain:
       ```bash
-      python3 scripts/healthcheck/healthcheck.py --check-drift
+  task healthcheck:run -- --check-drift
       ```
 
 ## 4. Drift Detection
@@ -106,7 +106,7 @@ This runbook defines the "Golden Paths" for service management. Following these 
 ### Procedure
 - Run the drift check:
   ```bash
-  python3 scripts/healthcheck/healthcheck.py --check-drift
+  task healthcheck:run -- --check-drift
   ```
 - **GAP**: Service is in inventory but unreachable (Zombie). -> Remove from inventory or fix infra.
 - **Schema Error**: `host_vars` has invalid keys. -> Fix the YAML file.

@@ -47,6 +47,12 @@ ansible-playbook playbooks/tailscale.yml --tags audit
 ```
 Expected output: All assertions pass.
 
+### 4. (Optional) OAuth/API Access Check
+
+From repo root:
+```bash
+TS_OAUTH_CLIENT_ID=... TS_OAUTH_SECRET=... task tailscale:test-api-access
+```
+
 ## ACL Management
 See [Tailscale ACL Management](tailscale-acl.md).
-gitm

@@ -1,8 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # scripts/tailscale/test_api_access.sh
 # Usage: TS_OAUTH_CLIENT_ID=... TS_OAUTH_SECRET=... ./test_api_access.sh
 
-set -e
+set -euo pipefail
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: jq is not installed."
+  echo "Install with: brew install jq (macOS) or apt install jq (Debian/Ubuntu)"
+  exit 1
+fi
 
 if [ -z "$TS_OAUTH_CLIENT_ID" ] || [ -z "$TS_OAUTH_SECRET" ]; then
   echo "Error: TS_OAUTH_CLIENT_ID and TS_OAUTH_SECRET must be set."

@@ -26,7 +26,7 @@ Per plan.md: Infrastructure automation project with Terraform and Ansible at rep
 **Purpose**: Terraform module configuration and Ansible role scaffolding
 
 - [X] T001 Add monitoring LXC configuration to terraform/main.tf (module call with 2 vCPU, 4GB RAM, 32GB disk, IP 192.168.1.214)
-- [X] T002 Add monitoring LXC variables to terraform/prod.tfvars (hostname, IP, resources)
+- [X] T002 Add monitoring LXC variables to terraform/environments/prod.tfvars (hostname, IP, resources)
 - [X] T003 [P] Create ansible/group_vars/monitoring/ directory and vars.yml with default config (Prometheus 2.48, Grafana 10.2, retention 15d, scrape interval 30s)
 - [X] T004 [P] Create ansible/group_vars/monitoring/vault.yml with encrypted secrets (Grafana admin password, SMTP credentials, SNMPv3 credentials)
 - [X] T005 [P] Create ansible/playbooks/monitoring.yml orchestration playbook (imports monitoring_stack role)

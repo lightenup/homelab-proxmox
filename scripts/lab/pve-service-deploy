@@ -590,13 +590,7 @@ resolve_tfvars_relpath() {
 
     local candidates=(
         "environments/${env}.tfvars"
-        "${env}.tfvars"
     )
-
-    # Back-compat: existing repo currently has terraform/prod.tfvars.
-    if [[ "$env" == "prod" ]]; then
-        candidates+=("prod.tfvars")
-    fi
 
     local candidate
     for candidate in "${candidates[@]}"; do

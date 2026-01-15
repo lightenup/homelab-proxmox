@@ -18,7 +18,14 @@ See:
 - **Terraform** >= 1.5.7
 - **Ansible** >= 2.10
 - **Proxmox VE** 8.x
-- A `prod.tfvars` file (see `terraform/terraform.tfvars.example`) with your Proxmox credentials.
+- **go-task** (the `task` command)
+- A `terraform/environments/prod.tfvars` file (see `terraform/terraform.tfvars.example`) with your Proxmox credentials.
+
+Install `task`:
+
+```bash
+brew install go-task/tap/go-task
+```
 
 ### Proxmox User Setup
 
@@ -41,7 +48,7 @@ To allow Terraform to manage resources, create a dedicated API user and token:
     *   Role: `Administrator` (or `PVEAdmin` if available/sufficient)
     *   Propagate: Checked
 
-Update your local `terraform/prod.tfvars`:
+Update your local `terraform/environments/prod.tfvars`:
 
 ```hcl
 proxmox_api_token_id     = "terraform@pve!terraform-token"
@@ -76,8 +83,8 @@ Automation runner:
 cd terraform
 terraform init
 terraform validate
-terraform plan -var-file=prod.tfvars
-# terraform apply -var-file=prod.tfvars
+terraform plan -var-file=environments/prod.tfvars
+# terraform apply -var-file=environments/prod.tfvars
 ```
 
 ### 2. Configure Services (Ansible)
@@ -85,7 +92,7 @@ terraform plan -var-file=prod.tfvars
 First, generate the inventory from Terraform state:
 
 ```bash
-./scripts/update_ansible_inventory.sh
+task inventory:update
 ```
 
 Then run the playbooks:
