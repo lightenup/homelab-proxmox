@@ -4,6 +4,12 @@
   gather_facts: true
   become: false
 
+  environment:
+    DOCKER_HOST: unix:///var/run/docker.sock
+    DOCKER_CONTEXT: ""
+    DOCKER_TLS_VERIFY: ""
+    DOCKER_CERT_PATH: ""
+
   vars:
     ansible_python_interpreter: >-
       {{ (lookup('env', 'VIRTUAL_ENV') ~ '/bin/python') if lookup('env', 'VIRTUAL_ENV') else ansible_playbook_python }}
