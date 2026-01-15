@@ -31,6 +31,7 @@ provisioner:
         hosts:
           localhost:
             ansible_connection: local
+            ansible_python_interpreter: python
 
   playbooks:
     converge: converge.yml
