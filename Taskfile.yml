@@ -73,23 +73,20 @@ tasks:
   dr:hetzner:list:
     # Operator-only / maintenance
     desc: List Hetzner backup bucket contents (DR drill)
+    dir: scripts/dr
     cmds:
-      - bash scripts/dr/hetzner_list.sh {{.CLI_ARGS}}
+      - bash ./hetzner_list.sh {{.CLI_ARGS}}
 
   dr:hetzner:download:
     # Operator-only / maintenance
     desc: Download Hetzner backup objects (DR drill)
+    dir: scripts/dr
     cmds:
-      - bash scripts/dr/hetzner_download.sh {{.CLI_ARGS}}
+      - bash ./hetzner_download.sh {{.CLI_ARGS}}
 
   dr:verify-restore:
     # Operator-only / maintenance
     desc: Verify extracted photos in a restore directory
+    dir: scripts/dr
     cmds:
-      - bash scripts/dr/verify_restore.sh {{.CLI_ARGS}}
-
-  tailscale:test-api-access:
-    # Operator-only / maintenance
-    desc: Verify Tailscale OAuth/API access (lists first devices)
-    cmds:
-      - bash scripts/tailscale/test_api_access.sh
+      - bash ./verify_restore.sh {{.CLI_ARGS}}
