@@ -6,19 +6,33 @@ dependency:
     requirements-file: ../../requirements.yml
 
 driver:
-  name: delegated
+  name: default
 
 platforms:
   - name: localhost
 
 provisioner:
   name: ansible
+  log: true
+  options:
+    vvv: true
+  env:
+    ANSIBLE_STDOUT_CALLBACK: default
+    ANSIBLE_BIN_ANSIBLE_CALLBACKS: "1"
+    ANSIBLE_CALLBACKS_ENABLED: profile_tasks
+  config_options:
+    defaults:
+      stdout_callback: default
+      bin_ansible_callbacks: True
+      callbacks_enabled: profile_tasks
+      roles_path: ../..
   inventory:
     hosts:
       all:
         hosts:
           localhost:
             ansible_connection: local
+            ansible_python_interpreter: python
 
   playbooks:
     converge: converge.yml

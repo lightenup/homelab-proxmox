@@ -4,7 +4,13 @@
   gather_facts: true
   become: false
 
+  environment:
+    DOCKER_HOST: unix:///var/run/docker.sock
+
   vars:
+    ansible_python_interpreter: >-
+      {{ (lookup('env', 'VIRTUAL_ENV') ~ '/bin/python') if lookup('env', 'VIRTUAL_ENV') else ansible_playbook_python }}
+
     adguard_install_dir: "/tmp/molecule-adguardhome"
     adguard_conf_dir: "/tmp/molecule-adguardhome/conf"
     adguard_work_dir: "/tmp/molecule-adguardhome/work"
@@ -16,8 +22,8 @@
 
   tasks:
     - name: Ensure Docker is reachable
-      community.docker.docker_host_info:
-      register: docker_info
+      ansible.builtin.command: docker info
+      changed_when: false
 
     - name: Include adguard role
       ansible.builtin.include_role:

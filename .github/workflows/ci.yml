@@ -1,6 +1,6 @@
 name: CI
 
-on:
+"on":
   pull_request:
   workflow_dispatch:
 
@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Guardrail: protected paths must not change
+      - name: "Guardrail: protected paths must not change"
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:

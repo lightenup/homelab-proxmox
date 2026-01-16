@@ -4,7 +4,13 @@
   gather_facts: false
   become: false
 
+  environment:
+    DOCKER_HOST: unix:///var/run/docker.sock
+
   vars:
+    ansible_python_interpreter: >-
+      {{ (lookup('env', 'VIRTUAL_ENV') ~ '/bin/python') if lookup('env', 'VIRTUAL_ENV') else ansible_playbook_python }}
+
     adguard_install_dir: "/tmp/molecule-adguardhome"
 
   tasks:
@@ -26,3 +32,4 @@
       ansible.builtin.file:
         path: "{{ adguard_install_dir }}"
         state: absent
+      become: true

@@ -1,6 +1,6 @@
 name: Nightly deeper verification
 
-on:
+"on":
     schedule:
         - cron: "0 3 * * *"
     workflow_dispatch:
@@ -22,8 +22,7 @@ jobs:
             - name: Cache uv
               uses: actions/cache@v4
               with:
-                  path: |
-                      ~/.cache/uv
+                  path: ~/.cache/uv
                   key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
 
             - name: Install nightly dependencies
@@ -36,27 +35,91 @@ jobs:
                   .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
 
+            - name: Cache mutmut
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      .mutmut-cache/
+                      mutants/
+                      python/.mutmut-cache/
+                      python/mutants/
+                  key: mutmut-${{ runner.os }}-py311-${{ hashFiles('python/requirements-nightly.lock.txt', 'python/mutmut.ini', 'python/pytest.ini', 'python/src/**', 'python/tests/**') }}
+
             - name: Mutation testing (mutmut)
               run: |
                   .venv/bin/mutmut run \
-                      --paths-to-mutate python/src/homelab_proxmox_orchestrator \
-                      --tests-dir python/tests \
-                      --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini" || true
-                  .venv/bin/mutmut results || true
+                    --CI \
+                    --no-progress \
+                    --paths-to-mutate python/src/homelab_proxmox_orchestrator \
+                    --tests-dir python/tests \
+                    --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini"
+                  .venv/bin/mutmut results
+                  echo "::group::Mutmut survivors/timeouts"
+                  .venv/bin/mutmut result-ids survived || true
+                  .venv/bin/mutmut result-ids timeout || true
+                  .venv/bin/mutmut result-ids suspicious || true
+                  echo "::endgroup::"
 
             - name: Molecule test (adguard)
               run: |
+                  set -euxo pipefail
+
+                  source .venv/bin/activate
+                  which python
+                  python --version
+                  which ansible-playbook
+                  ansible --version
+                  python -c "import docker; print('docker sdk:', docker.__version__)"
+                  docker version
+
                   cd ansible/roles/adguard
-                  ../../../.venv/bin/molecule test
+
+                  # Force Molecule to place ephemeral state/logs in-repo so we can dump/upload them.
+                  export MOLECULE_EPHEMERAL_DIRECTORY="$PWD/.molecule"
+                  mkdir -p "$MOLECULE_EPHEMERAL_DIRECTORY"
+
+                  molecule --debug test || {
+                    rc=$?
+                    echo "::group::Molecule log dump"
+                    echo "MOLECULE_EPHEMERAL_DIRECTORY=$MOLECULE_EPHEMERAL_DIRECTORY"
+                    echo "PWD=$PWD"
+
+                    ls -la "$MOLECULE_EPHEMERAL_DIRECTORY" || true
+                    find "$MOLECULE_EPHEMERAL_DIRECTORY" -maxdepth 8 -type f -print || true
+                    find "$MOLECULE_EPHEMERAL_DIRECTORY" -maxdepth 8 -type f \( -name "*.log" -o -name "*.txt" -o -name "*.yml" -o -name "*.yaml" \) -print0 \
+                      | xargs -0 -I{} sh -c 'echo "----- {} -----"; tail -n 200 "{}" || true'
+
+                    # Also dump common fallback locations used by Molecule/Ansible on GitHub runners.
+                    if [ -d "$HOME/.cache/molecule" ]; then
+                      echo "::group::~/.cache/molecule (tail)"
+                      find "$HOME/.cache/molecule" -maxdepth 6 -type f \( -name "*.log" -o -name "*.txt" -o -name "*.yml" -o -name "*.yaml" \) -print0 \
+                        | xargs -0 -I{} sh -c 'echo "----- {} -----"; tail -n 200 "{}" || true'
+                      echo "::endgroup::"
+                    fi
+
+                    if [ -d "$HOME/.ansible/tmp" ]; then
+                      echo "::group::~/.ansible/tmp (molecule inventories)"
+                      find "$HOME/.ansible/tmp" -maxdepth 3 -type f -name inventory -print0 \
+                        | xargs -0 -I{} sh -c 'echo "----- {} -----"; tail -n 200 "{}" || true'
+                      echo "::endgroup::"
+                    fi
+
+                    echo "::endgroup::"
+                    exit $rc
+                  }
 
             - name: Upload artifacts
               if: always()
               uses: actions/upload-artifact@v4
               with:
                   name: nightly-deeper-artifacts
+                  if-no-files-found: ignore
+                  include-hidden-files: true
                   path: |
                       .mutmut-cache/
-                      .molecule/
+                      mutants/
+                      python/.mutmut-cache/
+                      python/mutants/
                       ansible/roles/adguard/.molecule/
                       ansible/roles/adguard/molecule/
                       python/mutmut.ini
