@@ -1,9 +1,14 @@
 name: Nightly deeper verification
 
-"on":
-    schedule:
-        - cron: "0 3 * * *"
-    workflow_dispatch:
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      run_on_pve:
+        description: "Run heavy steps on PVE via SSH"
+        type: boolean
+        default: true
 
 jobs:
   deeper:
@@ -33,6 +38,14 @@ jobs:
                   path: ~/.cache/uv
                   key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
 
+            - name: Install rsync/ssh (PVE remote)
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  if ! command -v rsync >/dev/null 2>&1; then
+                    sudo apt-get update
+                    sudo apt-get install -y rsync openssh-client
+                  fi
+
             - name: Install nightly dependencies
               run: |
                   uv venv --python 3.11
@@ -42,6 +55,19 @@ jobs:
               run: |
                   .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
+
+            - name: Ensure artifact root on PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  SSH_USER=ci PROXMOX_HOST=pve ./scripts/lab/guardrails.sh ensure-artifacts
+
+            - name: Sync repo to PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  rsync -az --delete \
+                    --exclude '.git' \
+                    --exclude 'artifacts/' \
+                    ./ ci@pve:/home/ci/homelab-proxmox/
 
             - name: Debug runner + mounts
               run: |
@@ -60,6 +86,7 @@ jobs:
                   ls -la /mnt/nas || true
 
             - name: Prepare mutmut shared cache
+              if: ${{ !inputs.run_on_pve }}
               run: |
                   set -euo pipefail
 
@@ -80,7 +107,20 @@ jobs:
                   rm -f .mutmut-cache
                   ln -sfn "$cache_path" .mutmut-cache
 
+            - name: Mutation testing (mutmut) on PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  ssh ci@pve "cd /home/ci/homelab-proxmox && \
+                    .venv/bin/mutmut run \
+                      --CI \
+                      --no-progress \
+                      --paths-to-mutate python/src/homelab_proxmox_orchestrator \
+                      --tests-dir python/tests \
+                      --runner \"env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini -n auto\" && \
+                    .venv/bin/mutmut results"
+
             - name: Mutation testing (mutmut)
+              if: ${{ !inputs.run_on_pve }}
               run: |
                   .venv/bin/mutmut run \
                     --CI \
