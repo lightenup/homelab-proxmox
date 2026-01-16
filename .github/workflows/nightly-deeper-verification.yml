@@ -87,7 +87,7 @@ jobs:
                     --no-progress \
                     --paths-to-mutate python/src/homelab_proxmox_orchestrator \
                     --tests-dir python/tests \
-                    --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini"
+                    --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini -n auto"
                   .venv/bin/mutmut results
                   echo "::group::Mutmut survivors/timeouts"
                   .venv/bin/mutmut result-ids survived || true
