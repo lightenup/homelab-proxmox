@@ -5,15 +5,20 @@ on:
     - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
+      run_mutmut:
+        description: "Run mutmut (skip for Molecule-only)"
+        type: boolean
+        default: false
       run_on_pve:
         description: "Run heavy steps on PVE via SSH"
         type: boolean
         default: true
 
 jobs:
-  deeper:
-    runs-on: [self-hosted]
-    steps:
+    deeper:
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_mutmut }}
+        runs-on: [self-hosted]
+        steps:
             - uses: actions/checkout@v4
 
             - name: Setup Python (GitHub-hosted only)
@@ -68,6 +73,30 @@ jobs:
                     --exclude '.git' \
                     --exclude 'artifacts/' \
                     ./ ci@pve:/home/ci/homelab-proxmox/
+
+            - name: Prepare mutmut shared cache on PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  cache_branch="${GITHUB_REF_NAME:-unknown}"
+                  ssh ci@pve bash -s -- "$cache_branch" <<'EOF'
+                  set -euo pipefail
+                  cache_branch="$1"
+                  cache_root="/mnt/nas/homelab_ci/mutmut-cache"
+                  cache_path="$cache_root/$cache_branch"
+                  if [ ! -d "/mnt/nas/homelab_ci" ]; then
+                    echo "::error::Shared cache mount missing at /mnt/nas/homelab_ci on PVE."
+                    exit 1
+                  fi
+                  mkdir -p "$cache_root"
+                  if ! touch "$cache_path"; then
+                    echo "::error::Shared cache path is not writable on PVE: $cache_path"
+                    exit 1
+                  fi
+                  cd /home/ci/homelab-proxmox
+                  rm -f .mutmut-cache
+                  ln -sfn "$cache_path" .mutmut-cache
+                  ls -la .mutmut-cache
+                  EOF
 
             - name: Prepare Python venv on PVE
               if: ${{ inputs.run_on_pve }}
@@ -151,6 +180,47 @@ jobs:
                   .venv/bin/mutmut result-ids suspicious || true
                   echo "::endgroup::"
 
+            - name: Upload artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: nightly-deeper-artifacts
+                  if-no-files-found: ignore
+                  include-hidden-files: true
+                  path: |
+                      .mutmut-cache
+                      mutants/
+                      python/mutmut.ini
+
+    molecule-adguard:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Cache uv
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/uv
+                  key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
+
+            - name: Install nightly dependencies
+              run: |
+                  uv venv --python 3.11
+                  uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt
+
+            - name: Install Ansible Galaxy deps
+              run: |
+                  .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
+                  .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
+
             - name: Molecule test (adguard)
               run: |
                   set -euxo pipefail
@@ -199,16 +269,13 @@ jobs:
                     exit $rc
                   }
 
-            - name: Upload artifacts
+            - name: Upload Molecule artifacts
               if: always()
               uses: actions/upload-artifact@v4
               with:
-                  name: nightly-deeper-artifacts
+                  name: molecule-adguard-artifacts
                   if-no-files-found: ignore
                   include-hidden-files: true
                   path: |
-                      .mutmut-cache
-                      mutants/
                       ansible/roles/adguard/.molecule/
                       ansible/roles/adguard/molecule/
-                      python/mutmut.ini
