@@ -48,11 +48,17 @@ jobs:
             - name: Mutation testing (mutmut)
               run: |
                   .venv/bin/mutmut run \
+                    --CI \
                     --no-progress \
                     --paths-to-mutate python/src/homelab_proxmox_orchestrator \
                     --tests-dir python/tests \
                     --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini"
                   .venv/bin/mutmut results
+                  echo "::group::Mutmut survivors/timeouts"
+                  .venv/bin/mutmut result-ids survived || true
+                  .venv/bin/mutmut result-ids timeout || true
+                  .venv/bin/mutmut result-ids suspicious || true
+                  echo "::endgroup::"
 
             - name: Molecule test (adguard)
               run: |
@@ -108,6 +114,7 @@ jobs:
               with:
                   name: nightly-deeper-artifacts
                   if-no-files-found: ignore
+                  include-hidden-files: true
                   path: |
                       .mutmut-cache/
                       mutants/
