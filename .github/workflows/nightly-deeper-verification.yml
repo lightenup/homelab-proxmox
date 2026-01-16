@@ -16,7 +16,6 @@ on:
 
 jobs:
     deeper:
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_mutmut }}
         runs-on: [self-hosted]
         steps:
             - uses: actions/checkout@v4
