@@ -77,8 +77,12 @@ jobs:
                       curl -LsSf https://astral.sh/uv/install.sh | sh; \
                     fi; \
                     export PATH="$HOME/.local/bin:$PATH"; \
+                    if ! command -v python3.11 >/dev/null 2>&1; then \
+                      uv python install 3.11; \
+                    fi; \
                     cd /home/ci/homelab-proxmox && \
-                    uv venv --python 3.11 && \
+                    uv venv --python 3.11; \
+                    .venv/bin/python --version; \
                     uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt'
 
             - name: Debug runner + mounts
@@ -123,13 +127,13 @@ jobs:
               if: ${{ inputs.run_on_pve }}
               run: |
                   ssh ci@pve "cd /home/ci/homelab-proxmox && \
-                    .venv/bin/mutmut run \
+                    .venv/bin/python -m mutmut run \
                       --CI \
                       --no-progress \
                       --paths-to-mutate python/src/homelab_proxmox_orchestrator \
                       --tests-dir python/tests \
                       --runner \"env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini -n auto\" && \
-                    .venv/bin/mutmut results"
+                    .venv/bin/python -m mutmut results"
 
             - name: Mutation testing (mutmut)
               if: ${{ !inputs.run_on_pve }}
