@@ -69,6 +69,13 @@ jobs:
                     --exclude 'artifacts/' \
                     ./ ci@pve:/home/ci/homelab-proxmox/
 
+            - name: Prepare Python venv on PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  ssh ci@pve "cd /home/ci/homelab-proxmox && \
+                    uv venv --python 3.11 && \
+                    uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt"
+
             - name: Debug runner + mounts
               run: |
                   set -euo pipefail
