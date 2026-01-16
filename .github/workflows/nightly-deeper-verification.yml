@@ -6,9 +6,9 @@ name: Nightly deeper verification
     workflow_dispatch:
 
 jobs:
-    deeper:
+  deeper:
     runs-on: [self-hosted]
-        steps:
+    steps:
             - uses: actions/checkout@v4
 
             - name: Setup Python
