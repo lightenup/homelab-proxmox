@@ -18,6 +18,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-04
 - Files on PVE host (Terraform state local on PVE; evidence packs under `/var/lib/homelab-proxmox/artifacts/...`) (026-separate-prod-apply)
 - Python 3.x (existing repo subproject in `python/`) + Runtime: Python stdlib (preferred), existing repo utilities. Dev/test: `pytest`, `mutmut` (028-sunset-shell-tools)
 - Local filesystem repo artifacts; Terraform/Ansible state/artifacts as already implemented (no new state system introduced) (028-sunset-shell-tools)
+- Python 3.11 (mutmut/pytest tooling), shell scripts for automation + mutmut, pytest, uv, GitHub Actions (029-mutmut-shared-cache)
+- NAS NFS share mounted on PVE at `/mnt/nas/homelab_ci` (per-branch cache subdirs) (029-mutmut-shared-cache)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -53,9 +55,9 @@ specs/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 029-mutmut-shared-cache: Added Python 3.11 (mutmut/pytest tooling), shell scripts for automation + mutmut, pytest, uv, GitHub Actions
 - 028-sunset-shell-tools: Added Python 3.x (existing repo subproject in `python/`) + Runtime: Python stdlib (preferred), existing repo utilities. Dev/test: `pytest`, `mutmut`
 - 026-separate-prod-apply: Added Bash + Python 3 (repo scripts), YAML (GitHub Actions), Terraform (HCL), Ansible (YAML) + GitHub Actions (workflow_dispatch, environments), Terraform CLI, Ansible, Proxmox (PVE) host, existing repo scripts under `scripts/lab/*`
-- 026-separate-prod-apply: Added Bash + Python 3 (runner-provided) + GitHub Actions YAML
 
 
 <!-- MANUAL ADDITIONS START -->

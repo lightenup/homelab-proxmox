@@ -35,15 +35,26 @@ jobs:
                   .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
 
-            - name: Cache mutmut
-              uses: actions/cache@v4
-              with:
-                  path: |
-                      .mutmut-cache/
-                      mutants/
-                      python/.mutmut-cache/
-                      python/mutants/
-                  key: mutmut-${{ runner.os }}-py311-${{ hashFiles('python/requirements-nightly.lock.txt', 'python/mutmut.ini', 'python/pytest.ini', 'python/src/**', 'python/tests/**') }}
+            - name: Prepare mutmut shared cache
+              run: |
+                  set -euo pipefail
+
+                  cache_root="/mnt/nas/homelab_ci/mutmut-cache"
+                  cache_path="$cache_root/${GITHUB_REF_NAME:-unknown}"
+
+                  if [ ! -d "/mnt/nas/homelab_ci" ]; then
+                    echo "::error::Shared cache mount missing at /mnt/nas/homelab_ci. Mount the NAS share and ensure it is writable."
+                    exit 1
+                  fi
+
+                  mkdir -p "$cache_root"
+                  if ! touch "$cache_path"; then
+                    echo "::error::Shared cache path is not writable: $cache_path"
+                    exit 1
+                  fi
+
+                  rm -f .mutmut-cache
+                  ln -sfn "$cache_path" .mutmut-cache
 
             - name: Mutation testing (mutmut)
               run: |
@@ -116,10 +127,8 @@ jobs:
                   if-no-files-found: ignore
                   include-hidden-files: true
                   path: |
-                      .mutmut-cache/
+                      .mutmut-cache
                       mutants/
-                      python/.mutmut-cache/
-                      python/mutants/
                       ansible/roles/adguard/.molecule/
                       ansible/roles/adguard/molecule/
                       python/mutmut.ini
