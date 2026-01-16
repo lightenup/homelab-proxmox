@@ -15,9 +15,49 @@ on:
         default: true
 
 jobs:
-    deeper:
-        runs-on: [self-hosted]
-        steps:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      reason: ${{ steps.gate.outputs.reason }}
+    steps:
+      - name: Decide whether to run
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "reason=not-main" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/nightly-deeper-verification.yml/runs?branch=main&status=success&per_page=1"
+          last_sha=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "$api" \
+            | python -c 'import json,sys; data=json.load(sys.stdin); runs=data.get("workflow_runs", []); print(runs[0]["head_sha"] if runs else "")')
+
+          if [ -z "$last_sha" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=first-run" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$last_sha" = "$GITHUB_SHA" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no-new-commits" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "reason=new-commits" >> "$GITHUB_OUTPUT"
+
+  deeper:
+    needs: gate
+    if: ${{ needs.gate.outputs.run == 'true' }}
+    runs-on: [self-hosted]
+    steps:
             - uses: actions/checkout@v4
 
             - name: Setup Python (GitHub-hosted only)
@@ -191,9 +231,11 @@ jobs:
                       mutants/
                       python/mutmut.ini
 
-    molecule-adguard:
-        runs-on: ubuntu-latest
-        steps:
+  molecule-adguard:
+    needs: gate
+    if: ${{ needs.gate.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
             - uses: actions/checkout@v4
 
             - name: Setup Python
