@@ -35,6 +35,22 @@ jobs:
                   .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
 
+            - name: Debug runner + mounts
+              run: |
+                  set -euo pipefail
+                  echo "Runner name: ${RUNNER_NAME:-unknown}"
+                  echo "Runner OS: ${RUNNER_OS:-unknown}"
+                  echo "Runner arch: ${RUNNER_ARCH:-unknown}"
+                  uname -a
+                  echo "--- /etc/os-release ---"
+                  cat /etc/os-release || true
+                  echo "--- mounts (grep nas) ---"
+                  mount | grep -i nas || true
+                  echo "--- /mnt ---"
+                  ls -la /mnt || true
+                  echo "--- /mnt/nas ---"
+                  ls -la /mnt/nas || true
+
             - name: Prepare mutmut shared cache
               run: |
                   set -euo pipefail
