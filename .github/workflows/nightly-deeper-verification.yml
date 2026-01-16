@@ -11,10 +11,18 @@ jobs:
     steps:
             - uses: actions/checkout@v4
 
-            - name: Setup Python
+            - name: Setup Python (GitHub-hosted only)
+              if: ${{ contains(runner.name, 'GitHub Actions') }}
               uses: actions/setup-python@v5
               with:
                   python-version: "3.11"
+
+            - name: Validate system Python (self-hosted)
+              if: ${{ !contains(runner.name, 'GitHub Actions') }}
+              run: |
+                  set -euo pipefail
+                  python3 --version
+                  python3 -c "import sys; assert sys.version_info[:2] >= (3, 11), sys.version"
 
             - name: Setup uv
               uses: astral-sh/setup-uv@v3
