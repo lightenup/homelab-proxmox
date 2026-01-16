@@ -72,9 +72,14 @@ jobs:
             - name: Prepare Python venv on PVE
               if: ${{ inputs.run_on_pve }}
               run: |
-                  ssh ci@pve "cd /home/ci/homelab-proxmox && \
+                  ssh ci@pve 'set -euo pipefail; \
+                    if ! command -v uv >/dev/null 2>&1; then \
+                      curl -LsSf https://astral.sh/uv/install.sh | sh; \
+                    fi; \
+                    export PATH="$HOME/.local/bin:$PATH"; \
+                    cd /home/ci/homelab-proxmox && \
                     uv venv --python 3.11 && \
-                    uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt"
+                    uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt'
 
             - name: Debug runner + mounts
               run: |
