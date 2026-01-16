@@ -1,14 +1,241 @@
 name: Nightly deeper verification
 
-"on":
-    schedule:
-        - cron: "0 3 * * *"
-    workflow_dispatch:
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      run_mutmut:
+        description: "Run mutmut (skip for Molecule-only)"
+        type: boolean
+        default: false
+      run_on_pve:
+        description: "Run heavy steps on PVE via SSH"
+        type: boolean
+        default: true
 
 jobs:
-    deeper:
-        runs-on: ubuntu-latest
-        steps:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      reason: ${{ steps.gate.outputs.reason }}
+    steps:
+      - name: Decide whether to run
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "reason=not-main" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/nightly-deeper-verification.yml/runs?branch=main&status=success&per_page=1"
+          last_sha=$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "$api" \
+            | python -c 'import json,sys; data=json.load(sys.stdin); runs=data.get("workflow_runs", []); print(runs[0]["head_sha"] if runs else "")')
+
+          if [ -z "$last_sha" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=first-run" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$last_sha" = "$GITHUB_SHA" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no-new-commits" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "reason=new-commits" >> "$GITHUB_OUTPUT"
+
+  deeper:
+    needs: gate
+    if: ${{ needs.gate.outputs.run == 'true' }}
+    runs-on: [self-hosted]
+    steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Python (GitHub-hosted only)
+              if: ${{ contains(runner.name, 'GitHub Actions') }}
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Validate system Python (self-hosted)
+              if: ${{ !contains(runner.name, 'GitHub Actions') }}
+              run: |
+                  set -euo pipefail
+                  python3 --version
+                  python3 -c "import sys; assert sys.version_info[:2] >= (3, 11), sys.version"
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Cache uv
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/uv
+                  key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
+
+            - name: Install rsync/ssh (PVE remote)
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  if ! command -v rsync >/dev/null 2>&1; then
+                    sudo apt-get update
+                    sudo apt-get install -y rsync openssh-client
+                  fi
+
+            - name: Install nightly dependencies
+              run: |
+                  uv venv --python 3.11
+                  uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt
+
+            - name: Install Ansible Galaxy deps
+              run: |
+                  .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
+                  .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
+
+            - name: Ensure artifact root on PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  SSH_USER=ci PROXMOX_HOST=pve ./scripts/lab/guardrails.sh ensure-artifacts
+
+            - name: Sync repo to PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  rsync -az --delete \
+                    --exclude '.git' \
+                    --exclude 'artifacts/' \
+                    ./ ci@pve:/home/ci/homelab-proxmox/
+
+            - name: Prepare mutmut shared cache on PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  cache_branch="${GITHUB_REF_NAME:-unknown}"
+                  ssh ci@pve bash -s -- "$cache_branch" <<'EOF'
+                  set -euo pipefail
+                  cache_branch="$1"
+                  cache_root="/mnt/nas/homelab_ci/mutmut-cache"
+                  cache_path="$cache_root/$cache_branch"
+                  if [ ! -d "/mnt/nas/homelab_ci" ]; then
+                    echo "::error::Shared cache mount missing at /mnt/nas/homelab_ci on PVE."
+                    exit 1
+                  fi
+                  mkdir -p "$cache_root"
+                  if ! touch "$cache_path"; then
+                    echo "::error::Shared cache path is not writable on PVE: $cache_path"
+                    exit 1
+                  fi
+                  cd /home/ci/homelab-proxmox
+                  rm -f .mutmut-cache
+                  ln -sfn "$cache_path" .mutmut-cache
+                  ls -la .mutmut-cache
+                  EOF
+
+            - name: Prepare Python venv on PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  ssh ci@pve 'set -euo pipefail; \
+                    if ! command -v uv >/dev/null 2>&1; then \
+                      curl -LsSf https://astral.sh/uv/install.sh | sh; \
+                    fi; \
+                    export PATH="$HOME/.local/bin:$PATH"; \
+                    if ! command -v python3.11 >/dev/null 2>&1; then \
+                      uv python install 3.11; \
+                    fi; \
+                    cd /home/ci/homelab-proxmox && \
+                    uv venv --python 3.11; \
+                    .venv/bin/python --version; \
+                    uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt'
+
+            - name: Debug runner + mounts
+              run: |
+                  set -euo pipefail
+                  echo "Runner name: ${RUNNER_NAME:-unknown}"
+                  echo "Runner OS: ${RUNNER_OS:-unknown}"
+                  echo "Runner arch: ${RUNNER_ARCH:-unknown}"
+                  uname -a
+                  echo "--- /etc/os-release ---"
+                  cat /etc/os-release || true
+                  echo "--- mounts (grep nas) ---"
+                  mount | grep -i nas || true
+                  echo "--- /mnt ---"
+                  ls -la /mnt || true
+                  echo "--- /mnt/nas ---"
+                  ls -la /mnt/nas || true
+
+            - name: Prepare mutmut shared cache
+              if: ${{ !inputs.run_on_pve }}
+              run: |
+                  set -euo pipefail
+
+                  cache_root="/mnt/nas/homelab_ci/mutmut-cache"
+                  cache_path="$cache_root/${GITHUB_REF_NAME:-unknown}"
+
+                  if [ ! -d "/mnt/nas/homelab_ci" ]; then
+                    echo "::error::Shared cache mount missing at /mnt/nas/homelab_ci. Mount the NAS share and ensure it is writable."
+                    exit 1
+                  fi
+
+                  mkdir -p "$cache_root"
+                  if ! touch "$cache_path"; then
+                    echo "::error::Shared cache path is not writable: $cache_path"
+                    exit 1
+                  fi
+
+                  rm -f .mutmut-cache
+                  ln -sfn "$cache_path" .mutmut-cache
+
+            - name: Mutation testing (mutmut) on PVE
+              if: ${{ inputs.run_on_pve }}
+              run: |
+                  ssh ci@pve "cd /home/ci/homelab-proxmox && \
+                    .venv/bin/python -m mutmut run \
+                      --CI \
+                      --no-progress \
+                      --paths-to-mutate python/src/homelab_proxmox_orchestrator \
+                      --tests-dir python/tests \
+                      --runner \"env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini -n auto\" && \
+                    .venv/bin/python -m mutmut results"
+
+            - name: Mutation testing (mutmut)
+              if: ${{ !inputs.run_on_pve }}
+              run: |
+                  .venv/bin/mutmut run \
+                    --CI \
+                    --no-progress \
+                    --paths-to-mutate python/src/homelab_proxmox_orchestrator \
+                    --tests-dir python/tests \
+                    --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini -n auto"
+                  .venv/bin/mutmut results
+                  echo "::group::Mutmut survivors/timeouts"
+                  .venv/bin/mutmut result-ids survived || true
+                  .venv/bin/mutmut result-ids timeout || true
+                  .venv/bin/mutmut result-ids suspicious || true
+                  echo "::endgroup::"
+
+            - name: Upload artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: nightly-deeper-artifacts
+                  if-no-files-found: ignore
+                  include-hidden-files: true
+                  path: |
+                      .mutmut-cache
+                      mutants/
+                      python/mutmut.ini
+
+  molecule-adguard:
+    needs: gate
+    if: ${{ needs.gate.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
             - uses: actions/checkout@v4
 
             - name: Setup Python
@@ -34,31 +261,6 @@ jobs:
               run: |
                   .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
-
-            - name: Cache mutmut
-              uses: actions/cache@v4
-              with:
-                  path: |
-                      .mutmut-cache/
-                      mutants/
-                      python/.mutmut-cache/
-                      python/mutants/
-                  key: mutmut-${{ runner.os }}-py311-${{ hashFiles('python/requirements-nightly.lock.txt', 'python/mutmut.ini', 'python/pytest.ini', 'python/src/**', 'python/tests/**') }}
-
-            - name: Mutation testing (mutmut)
-              run: |
-                  .venv/bin/mutmut run \
-                    --CI \
-                    --no-progress \
-                    --paths-to-mutate python/src/homelab_proxmox_orchestrator \
-                    --tests-dir python/tests \
-                    --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini"
-                  .venv/bin/mutmut results
-                  echo "::group::Mutmut survivors/timeouts"
-                  .venv/bin/mutmut result-ids survived || true
-                  .venv/bin/mutmut result-ids timeout || true
-                  .venv/bin/mutmut result-ids suspicious || true
-                  echo "::endgroup::"
 
             - name: Molecule test (adguard)
               run: |
@@ -108,18 +310,13 @@ jobs:
                     exit $rc
                   }
 
-            - name: Upload artifacts
+            - name: Upload Molecule artifacts
               if: always()
               uses: actions/upload-artifact@v4
               with:
-                  name: nightly-deeper-artifacts
+                  name: molecule-adguard-artifacts
                   if-no-files-found: ignore
                   include-hidden-files: true
                   path: |
-                      .mutmut-cache/
-                      mutants/
-                      python/.mutmut-cache/
-                      python/mutants/
                       ansible/roles/adguard/.molecule/
                       ansible/roles/adguard/molecule/
-                      python/mutmut.ini
