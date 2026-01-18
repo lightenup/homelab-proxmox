@@ -334,7 +334,7 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; task healthcheck:run -- --json --no-notify"
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; task healthcheck:run"
           ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; python3 -c 'import json; from pathlib import Path; p=Path(\"artifacts/healthcheck/history/latest.json\"); p.exists() or (_ for _ in ()).throw(SystemExit(\"Missing latest healthcheck output\")); results=json.loads(p.read_text(encoding=\"utf-8\")); gaps=[r for r in results if r.get(\"status\")==\"GAP\"]; gaps and (_ for _ in ()).throw(SystemExit(\"GAP entries detected: \" + \",\".join(sorted({r.get(\"hostname\",\"unknown\") for r in gaps})))) ; print(\"No GAP entries detected.\")'"
 
       - name: Idempotency check (delete)
