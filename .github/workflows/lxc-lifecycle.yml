@@ -315,7 +315,12 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; ENVIRONMENT=${environment} TFVARS_DIR=/var/lib/homelab-proxmox/tfvars ANSIBLE_VAULT_PASSWORD=\"${ANSIBLE_VAULT_PASSWORD}\" task lifecycle:verify"
+          remote_cmd="cd /home/ci/homelab-proxmox; ENVIRONMENT=${environment} TFVARS_DIR=/var/lib/homelab-proxmox/tfvars task lifecycle:verify"
+          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; ${remote_cmd}; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+          else
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; ${remote_cmd}"
+          fi
 
       - name: Removal checks (delete)
         if: github.event.inputs.action == 'delete'
@@ -338,7 +343,11 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; ANSIBLE_VAULT_PASSWORD=\"${ANSIBLE_VAULT_PASSWORD}\" task healthcheck:run"
+          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox; task healthcheck:run; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+          else
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; task healthcheck:run"
+          fi
           ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; python3 -c 'import json; from pathlib import Path; p=Path(\"artifacts/healthcheck/history/latest.json\"); p.exists() or (_ for _ in ()).throw(SystemExit(\"Missing latest healthcheck output\")); results=json.loads(p.read_text(encoding=\"utf-8\")); gaps=[r for r in results if r.get(\"status\")==\"GAP\"]; gaps and (_ for _ in ()).throw(SystemExit(\"GAP entries detected: \" + \",\".join(sorted({r.get(\"hostname\",\"unknown\") for r in gaps})))) ; print(\"No GAP entries detected.\")'"
 
       - name: Idempotency check (delete)
