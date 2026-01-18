@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import sys
 
 from .exec import run_checked
@@ -22,6 +23,71 @@ def _eprint(msg: str) -> None:
 
 def _strip_cidr(value: str) -> str:
     return value.split("/", 1)[0]
+
+
+def _read_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def _strip_comments(line: str) -> str:
+    if "#" in line:
+        return line.split("#", 1)[0]
+    return line
+
+
+def _extract_service_ips(text: str) -> dict[str, str]:
+    services: dict[str, str] = {}
+    in_map = False
+    depth = 0
+
+    for raw_line in text.splitlines():
+        line = _strip_comments(raw_line).rstrip()
+        if not line.strip():
+            continue
+
+        if not in_map:
+            if re.match(r"^\s*service_ips\s*=\s*{\s*$", line):
+                in_map = True
+                depth = 1
+            continue
+
+        depth += line.count("{")
+        depth -= line.count("}")
+        if depth <= 0:
+            in_map = False
+            continue
+
+        match = re.match(r"^\s*([A-Za-z0-9_-]+)\s*=\s*\"([^\"]+)\"\s*$", line)
+        if not match:
+            match = re.match(r"^\s*([A-Za-z0-9_-]+)\s*=\s*'([^']+)'\s*$", line)
+        if match:
+            services[match.group(1)] = match.group(2)
+
+    return services
+
+
+def _resolve_tfvars_path(*, repo_root: Path) -> Path | None:
+    tfvars_path = os.environ.get("TFVARS_PATH", "").strip()
+    if tfvars_path:
+        p = Path(tfvars_path)
+        if p.exists():
+            return p
+
+    env = os.environ.get("ENVIRONMENT", "").strip()
+    tfvars_dir = os.environ.get("TFVARS_DIR", "").strip()
+    if env and tfvars_dir:
+        candidate = Path(tfvars_dir) / f"{env}.tfvars"
+        if candidate.exists():
+            return candidate
+
+    if env:
+        candidate = repo_root / "terraform" / "environments" / f"{env}.tfvars"
+        if candidate.exists():
+            return candidate
+
+    return None
 
 
 def render_inventory_yaml(*, services: dict[str, str], ssh_private_key_file: str | None) -> str:
@@ -68,10 +134,18 @@ def _load_tf_output_json(*, repo_root: Path) -> str:
         cwd=str(repo_root),
         env=dict(os.environ),
     )
-    if res.returncode != 0:
+    if res.returncode == 0 and res.stdout.strip():
+        return res.stdout
+
+    tfvars_path = _resolve_tfvars_path(repo_root=repo_root)
+    if tfvars_path is None:
         raise RuntimeError("terraform output failed")
 
-    return res.stdout
+    services = _extract_service_ips(_read_text(tfvars_path))
+    if not services:
+        raise RuntimeError("terraform output failed")
+
+    return json.dumps({"services": services}, sort_keys=True)
 
 
 def update_inventory(*, repo_root: Path) -> Path:

@@ -115,6 +115,13 @@ def run_healthcheck(
         cmd_args.extend(["--inventory", inventory])
 
     env = dict(os.environ)
+    if not env.get("ANSIBLE_VAULT_PASSWORD_FILE", "").strip():
+        default_vault_path = env.get(
+            "PVE_VAULT_PASSWORD_FILE",
+            "/var/lib/homelab-proxmox/vault/.ansible_vault_pass",
+        )
+        if Path(default_vault_path).exists():
+            env["ANSIBLE_VAULT_PASSWORD_FILE"] = default_vault_path
     env.update(_load_env_file(scripts_dir / ".env"))
 
     res = run_checked(cmd_args + list(rest), cwd=str(repo_root), env=env)

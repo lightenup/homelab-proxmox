@@ -1361,6 +1361,25 @@ cmd_apply() {
         fi
     fi
 
+    if [[ "${ACTION:-}" == "delete" ]]; then
+        {
+            echo "status=success"
+            echo "terraform_plan_exitcode=${plan_rc}"
+            echo "note=skipped inventory/ansible/healthcheck for delete action"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+
+        emit_phase_complete "${RUN_ID}" "apply"
+        run_offline_verify
+        trap - ERR
+        if [[ -n "${vault_pw_file}" ]]; then
+            rm -f "${vault_pw_file}" || true
+        fi
+        if [[ ${#linked_vault_files[@]} -gt 0 ]]; then
+            rm -f "${linked_vault_files[@]}" || true
+        fi
+        return 0
+    fi
+
     # Prefer root output when present, else fall back to module output from state.
     local ansible_inventory_json=""
     local inventory_rc=0
@@ -1842,25 +1861,6 @@ sys.exit(3)
         else
             echo "status=already-correct" >>"${mp_report}"
         fi
-    fi
-
-    if [[ "${ACTION:-}" == "delete" ]]; then
-        {
-            echo "status=success"
-            echo "terraform_plan_exitcode=${plan_rc}"
-            echo "note=skipped ansible/bootstrap/healthcheck for delete action"
-        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
-
-        emit_phase_complete "${RUN_ID}" "apply"
-        run_offline_verify
-        trap - ERR
-        if [[ -n "${vault_pw_file}" ]]; then
-            rm -f "${vault_pw_file}" || true
-        fi
-        if [[ ${#linked_vault_files[@]} -gt 0 ]]; then
-            rm -f "${linked_vault_files[@]}" || true
-        fi
-        return 0
     fi
 
     # Bootstrap the host (as root) so the 'ansible' user exists and is trusted.

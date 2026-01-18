@@ -313,7 +313,7 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; task lifecycle:verify"
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; ENVIRONMENT=${environment} TFVARS_DIR=/var/lib/homelab-proxmox/tfvars task lifecycle:verify"
 
       - name: Removal checks (delete)
         if: github.event.inputs.action == 'delete'
