@@ -6,7 +6,8 @@ Scripts for disaster recovery drill execution - proving Immich photo backup reco
 
 - **rclone** installed ([installation guide](https://rclone.org/install/))
 - **Bitwarden CLI** (optional, for automated credential retrieval)
-- Disk space: ~100-150 GB for metadata + sample data extraction
+- Disk space: free space >= 2× rclone size estimate for the full backup set
+- Dedicated DR share mounted on PVE: `/mnt/nas/homelab_dr_test`
 
 ## Setup
 
@@ -70,6 +71,9 @@ DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/_Syno_TaskCo
 
 # Download metadata folders
 ./hetzner_download.sh "DiskStation413j_1.hbk/Config" ~/dr-restore/metadata/
+
+# Download Pool data (preserves nested structure under Pool/)
+DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "DiskStation413j_1.hbk/Pool" /mnt/nas/homelab_dr_test/drill-YYYYMMDD
 ```
 
 ### verify_restore.sh
@@ -140,5 +144,6 @@ Completed drill reports are stored in `drill-reports/` (gitignored). Use the tem
 
 ## Related Documentation
 
-- **Runbook**: [docs/runbooks/disaster-recovery-drill.md](../../docs/runbooks/disaster-recovery-drill.md)
-- **Specification**: [specs/012-disaster-recovery-drill/](../../specs/012-disaster-recovery-drill/)
+- **Primary Runbook**: [docs/runbooks/dr-drill-playbook.md](../../docs/runbooks/dr-drill-playbook.md)
+- **Legacy Runbook**: [docs/runbooks/disaster-recovery-drill.md](../../docs/runbooks/disaster-recovery-drill.md)
+- **Specification**: [specs/030-dr-drill-playbook/spec.md](../../specs/030-dr-drill-playbook/spec.md)
