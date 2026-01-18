@@ -1,0 +1,373 @@
+name: LXC Lifecycle
+
+env:
+  USE_PY_RUNNER: ${{ vars.USE_PY_RUNNER }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to update"
+        required: true
+        type: string
+      action:
+        description: "Lifecycle action"
+        required: true
+        type: choice
+        options:
+          - add
+          - change
+          - delete
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - lab
+          - prod
+      confirm_destructive_tag:
+        description: "Required if plan is destructive: tag pointing at this commit"
+        required: false
+        type: string
+      confirm_data_delete:
+        description: "Required for delete: set to 'delete-data' to allow data deletion"
+        required: false
+        type: string
+      confirm_apply_prod:
+        description: "Required for prod apply: set to 'deploy-prod'"
+        required: false
+        type: string
+
+jobs:
+  plan:
+    name: Plan (Lifecycle)
+    runs-on: [self-hosted]
+    outputs:
+      run_id: ${{ steps.capture_run_id.outputs.run_id }}
+      destructive: ${{ steps.detect_destructive.outputs.destructive }}
+    env:
+      ENVIRONMENT: ${{ github.event.inputs.environment }}
+      SERVICE: ${{ github.event.inputs.service }}
+      ACTION: ${{ github.event.inputs.action }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail fast on forbidden inputs
+        run: |
+          set -euo pipefail
+          vals=(
+            "${{ github.event.inputs.service }}"
+          )
+          for v in "${vals[@]}"; do
+            if [[ "${v}" == *"-target"* ]]; then
+              echo "ERROR: Forbidden target-like input detected (-target)." >&2
+              exit 1
+            fi
+          done
+
+      - name: Allowlist runtime validation
+        run: |
+          set -euo pipefail
+          service="${{ github.event.inputs.service }}"
+          jq -e --arg s "${service}" 'has($s)' ./scripts/lab/service-scope-allowlist.json >/dev/null
+
+      - name: Sync repo to PVE
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'terraform/.terraform/' \
+            --exclude 'terraform/.terraform.lock.hcl' \
+            --exclude 'terraform/terraform.tfstate' \
+            --exclude 'terraform/terraform.tfstate.backup' \
+            --exclude 'scripts/lab/artifacts/' \
+            --exclude 'artifacts/' \
+            ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
+
+      - name: Plan on PVE
+        id: plan_on_pve
+        continue-on-error: true
+        env:
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          service="${{ github.event.inputs.service }}"
+          environment="${{ github.event.inputs.environment }}"
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          remote_cmd="cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=${environment} ./pve-service-deploy plan --environment ${environment} --service '${service}'"
+
+          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; ${remote_cmd}; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+          else
+            ssh ${ssh_opts} "${ssh_target}" "${remote_cmd}"
+          fi
+
+      - name: Capture RUN_ID
+        id: capture_run_id
+        if: always()
+        run: |
+          set -euo pipefail
+          service="${{ github.event.inputs.service }}"
+          environment="${{ github.event.inputs.environment }}"
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"${environment}-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+          RUN_ID="${RUN_ID%/}"
+          RUN_ID="${RUN_ID%:}"
+          test -n "${RUN_ID}"
+          echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+          echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch evidence pack
+        if: always()
+        run: |
+          set -euo pipefail
+          ./scripts/lab/fetch_evidence_pack.sh \
+            --environment "${{ github.event.inputs.environment }}" \
+            --run-id "${{ steps.capture_run_id.outputs.run_id }}" >/dev/null
+
+      - name: Verify evidence pack (offline)
+        if: always()
+        run: ./scripts/lab/ci-verify.sh evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}
+
+      - name: Detect destructive blast radius
+        id: detect_destructive
+        if: steps.plan_on_pve.outcome == 'success'
+        run: |
+          set -euo pipefail
+          plan_path="evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}/blast-radius.json"
+          python3 - <<'PY'
+          import json
+          import os
+
+          path = os.environ["PLAN_PATH"]
+          with open(path, 'r', encoding='utf-8') as f:
+              doc = json.load(f)
+
+          destructive = bool(doc.get('destructive'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f"destructive={'true' if destructive else 'false'}\n")
+
+          print(f"destructive={destructive}")
+          PY
+        env:
+          PLAN_PATH: evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}/blast-radius.json
+
+      - name: Fail job if plan failed
+        if: steps.plan_on_pve.outcome != 'success'
+        run: |
+          echo "ERROR: lifecycle plan failed" >&2
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lifecycle-plan-evidence-${{ github.event.inputs.environment }}-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
+          path: evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}
+
+  apply:
+    name: Apply (Lifecycle)
+    runs-on: [self-hosted]
+    needs: [plan]
+    if: needs.plan.result == 'success'
+    env:
+      ENVIRONMENT: ${{ github.event.inputs.environment }}
+      SERVICE: ${{ github.event.inputs.service }}
+      ACTION: ${{ github.event.inputs.action }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Allowlist runtime validation
+        run: |
+          set -euo pipefail
+          service="${{ github.event.inputs.service }}"
+          jq -e --arg s "${service}" 'has($s)' ./scripts/lab/service-scope-allowlist.json >/dev/null
+
+      - name: Enforce destructive confirmation (tag)
+        if: needs.plan.outputs.destructive == 'true'
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.confirm_destructive_tag }}"
+          if [[ -z "${tag}" ]]; then
+            echo "ERROR: Plan is destructive. Provide confirm_destructive_tag pointing at this commit." >&2
+            exit 1
+          fi
+          git fetch --tags --force
+          if ! git rev-parse "${tag}" >/dev/null 2>&1; then
+            echo "ERROR: Tag '${tag}' not found." >&2
+            exit 1
+          fi
+          tag_sha="$(git rev-list -n 1 "${tag}")"
+          head_sha="$(git rev-parse HEAD)"
+          if [[ "${tag_sha}" != "${head_sha}" ]]; then
+            echo "ERROR: Tag '${tag}' does not point at the current commit." >&2
+            exit 1
+          fi
+
+      - name: Enforce prod apply confirmation
+        if: github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event.inputs.confirm_apply_prod }}" != "deploy-prod" ]]; then
+            echo "ERROR: PROD apply requires confirm_apply_prod=deploy-prod" >&2
+            exit 1
+          fi
+
+      - name: Enforce data deletion confirmation
+        if: github.event.inputs.action == 'delete'
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event.inputs.confirm_data_delete }}" != "delete-data" ]]; then
+            echo "ERROR: delete action requires confirm_data_delete=delete-data" >&2
+            exit 1
+          fi
+
+      - name: Sync repo to PVE
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'terraform/.terraform/' \
+            --exclude 'terraform/.terraform.lock.hcl' \
+            --exclude 'terraform/terraform.tfstate' \
+            --exclude 'terraform/terraform.tfstate.backup' \
+            --exclude 'scripts/lab/artifacts/' \
+            --exclude 'artifacts/' \
+            ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
+
+      - name: Apply on PVE
+        id: apply_on_pve
+        env:
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          service="${{ github.event.inputs.service }}"
+          environment="${{ github.event.inputs.environment }}"
+          plan_run_id="${{ needs.plan.outputs.run_id }}"
+          confirm=""
+          allow_prod=""
+
+          if [[ "${environment}" == "prod" ]]; then
+            confirm="deploy-prod"
+            allow_prod="ALLOW_PROD_APPLY=1"
+          fi
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          remote_cmd="cd /home/ci/homelab-proxmox/scripts/lab && ${allow_prod} ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=${environment} ./pve-service-deploy apply --environment ${environment} --service '${service}' --from-plan-run-id '${plan_run_id}'"
+          if [[ -n "${confirm}" ]]; then
+            remote_cmd+=" --confirm ${confirm}"
+          fi
+
+          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; ${remote_cmd}; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+          else
+            ssh ${ssh_opts} "${ssh_target}" "${remote_cmd}"
+          fi
+
+      - name: Capture RUN_ID
+        id: capture_run_id
+        if: always()
+        run: |
+          set -euo pipefail
+          service="${{ github.event.inputs.service }}"
+          environment="${{ github.event.inputs.environment }}"
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"${environment}-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+          RUN_ID="${RUN_ID%/}"
+          RUN_ID="${RUN_ID%:}"
+          if [[ -n "${RUN_ID}" ]]; then
+            echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+            echo "run_id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch evidence pack
+        if: always() && steps.capture_run_id.outputs.run_id != ''
+        run: |
+          set -euo pipefail
+          ./scripts/lab/fetch_evidence_pack.sh \
+            --environment "${{ github.event.inputs.environment }}" \
+            --run-id "${{ steps.capture_run_id.outputs.run_id }}" >/dev/null
+
+      - name: Verify evidence pack (offline)
+        if: always() && steps.capture_run_id.outputs.run_id != ''
+        run: ./scripts/lab/ci-verify.sh evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}
+
+      - name: Lifecycle verification (inventory + drift)
+        if: always()
+        run: |
+          set -euo pipefail
+          service="${{ github.event.inputs.service }}"
+          environment="${{ github.event.inputs.environment }}"
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; task lifecycle:verify"
+
+      - name: Removal checks (delete)
+        if: github.event.inputs.action == 'delete'
+        run: |
+          set -euo pipefail
+          service="${{ github.event.inputs.service }}"
+          environment="${{ github.event.inputs.environment }}"
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; python3 scripts/lifecycle/remove_checks.py --service '${service}' --environment '${environment}' --delete-data --confirm-data-delete delete-data"
+
+      - name: Healthcheck GAP/Zombie guard
+        if: always()
+        run: |
+          set -euo pipefail
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; task healthcheck:run -- --json --no-notify"
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; python3 -c 'import json; from pathlib import Path; p=Path(\"artifacts/healthcheck/history/latest.json\"); p.exists() or (_ for _ in ()).throw(SystemExit(\"Missing latest healthcheck output\")); results=json.loads(p.read_text(encoding=\"utf-8\")); gaps=[r for r in results if r.get(\"status\")==\"GAP\"]; gaps and (_ for _ in ()).throw(SystemExit(\"GAP entries detected: \" + \",\".join(sorted({r.get(\"hostname\",\"unknown\") for r in gaps})))) ; print(\"No GAP entries detected.\")'"
+
+      - name: Idempotency check (delete)
+        if: github.event.inputs.action == 'delete'
+        run: |
+          set -euo pipefail
+          service="${{ github.event.inputs.service }}"
+          environment="${{ github.event.inputs.environment }}"
+
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=${environment} ./pve-service-deploy plan --environment ${environment} --service '${service}'"
+
+          RUN_ID="$(ssh ${ssh_opts} "${ssh_target}" "cd /var/lib/homelab-proxmox/artifacts/service-deploy-runs && ls -1td \"${environment}-${service}-\"*/ 2>/dev/null | head -1 | sed 's:/*$::'" | tr -d '\r\n')"
+          RUN_ID="${RUN_ID%/}"
+          RUN_ID="${RUN_ID%:}"
+
+          ./scripts/lab/fetch_evidence_pack.sh --environment "${environment}" --run-id "${RUN_ID}" >/dev/null
+
+          summary_path="evidence/${environment}/${RUN_ID}/reports/plan/summary.txt"
+          if [[ ! -f "${summary_path}" ]]; then
+            echo "ERROR: Missing plan summary at ${summary_path}" >&2
+            exit 1
+          fi
+          if ! grep -q '^intent=no-op' "${summary_path}"; then
+            echo "ERROR: Idempotency check failed (plan not no-op)." >&2
+            cat "${summary_path}" >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.capture_run_id.outputs.run_id != ''
+        with:
+          name: lifecycle-apply-evidence-${{ github.event.inputs.environment }}-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
+          path: evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}

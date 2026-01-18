@@ -1,8 +1,0 @@
----
-# Healthcheck Configuration (Feature 018b)
-healthcheck_url:
-  scheme: http
-  port: 80
-  path: /
-healthcheck_profile: both
-healthcheck_enabled: true

@@ -1,0 +1,127 @@
+openapi: 3.0.3
+info:
+  title: LXC Lifecycle Pipeline Contract
+  version: 1.0.0
+  description: Conceptual contract for lifecycle planning, apply, confirmation, and verification.
+servers:
+  - url: https://example.invalid
+paths:
+  /lifecycle/plan:
+    post:
+      summary: Create a lifecycle plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanRequest'
+      responses:
+        '200':
+          description: Plan created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanResponse'
+  /lifecycle/confirm-destroy:
+    post:
+      summary: Confirm destructive changes using label/tag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmDestroyRequest'
+      responses:
+        '204':
+          description: Confirmation accepted
+  /lifecycle/apply:
+    post:
+      summary: Apply a previously generated plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyRequest'
+      responses:
+        '200':
+          description: Apply completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyResponse'
+  /lifecycle/verify:
+    post:
+      summary: Verify inventory and healthcheck drift
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '200':
+          description: Verification results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResponse'
+components:
+  schemas:
+    PlanRequest:
+      type: object
+      required: [service, action]
+      properties:
+        service:
+          type: string
+        action:
+          type: string
+          enum: [add, change, delete]
+    PlanResponse:
+      type: object
+      properties:
+        plan_artifact:
+          type: string
+        includes_destructive:
+          type: boolean
+    ConfirmDestroyRequest:
+      type: object
+      required: [service, label_or_tag]
+      properties:
+        service:
+          type: string
+        label_or_tag:
+          type: string
+    ApplyRequest:
+      type: object
+      required: [service, plan_artifact]
+      properties:
+        service:
+          type: string
+        plan_artifact:
+          type: string
+    ApplyResponse:
+      type: object
+      properties:
+        apply_artifact:
+          type: string
+        status:
+          type: string
+          enum: [success, failed]
+    VerifyRequest:
+      type: object
+      required: [service]
+      properties:
+        service:
+          type: string
+    VerifyResponse:
+      type: object
+      properties:
+        inventory_clean:
+          type: boolean
+        healthcheck_clean:
+          type: boolean
+        gaps:
+          type: array
+          items:
+            type: string
