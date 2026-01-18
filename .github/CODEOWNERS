@@ -1,0 +1,6 @@
+# Maintainer ownership (update list as needed).
+# This file defines the maintainer group without paid GitHub features.
+
+/.github/workflows/lxc-lifecycle.yml @lightenup
+/docs/operations.md @lightenup
+/docs/operations/golden-paths-service-lifecycle.md @lightenup

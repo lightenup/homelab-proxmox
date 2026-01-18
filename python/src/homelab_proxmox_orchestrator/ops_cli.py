@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     service = sub.add_parser("service")
     service_sub = service.add_subparsers(dest="service_cmd", required=True)
-    for cmd in ("add", "change", "remove"):
+    for cmd in ("add", "change", "remove", "delete"):
         p_cmd = service_sub.add_parser(cmd)
         p_cmd.add_argument("args", nargs=argparse.REMAINDER, help="Args forwarded to legacy script")
 

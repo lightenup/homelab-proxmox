@@ -23,7 +23,7 @@ tasks:
     # Operator-only (day-to-day)
     desc: Remove a service
     cmds:
-      - python3 -m homelab_proxmox_orchestrator.ops_cli service remove {{.CLI_ARGS}}
+      - python3 -m homelab_proxmox_orchestrator.ops_cli service remove --verify {{.CLI_ARGS}}
 
   inventory:update:
     # Rebuild-critical (feeds Ansible operations)
@@ -57,6 +57,28 @@ tasks:
         msg: "Refusing to run terraform apply without explicit confirmation. Re-run with: task terraform:apply CONFIRM=yes -- [args]"
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli terraform apply --confirm {{.CLI_ARGS}}
+
+  lifecycle:plan:
+    # Rebuild-critical (safe)
+    desc: LXC lifecycle plan (plan-only, evidence capture)
+    cmds:
+      - scripts/lifecycle/terraform_plan_apply.sh plan --environment {{.ENVIRONMENT}} --service {{.SERVICE}} {{.CLI_ARGS}}
+
+  lifecycle:apply:
+    # Rebuild-critical (destructive; requires explicit confirmation)
+    desc: LXC lifecycle apply (uses plan evidence)
+    preconditions:
+      - sh: 'test "{{.CONFIRM}}" = "yes"'
+        msg: "Refusing to run lifecycle:apply without explicit confirmation. Re-run with: task lifecycle:apply CONFIRM=yes -- [args]"
+    cmds:
+      - scripts/lifecycle/terraform_plan_apply.sh apply --environment {{.ENVIRONMENT}} --service {{.SERVICE}} --from-plan-run-id {{.PLAN_RUN_ID}} {{.CLI_ARGS}}
+
+  lifecycle:verify:
+    # Rebuild-critical (verification)
+    desc: LXC lifecycle verification (inventory + healthcheck drift)
+    cmds:
+      - python3 -m homelab_proxmox_orchestrator.ops_cli inventory update
+      - python3 -m homelab_proxmox_orchestrator.ops_cli healthcheck run -- --check-drift
 
   deploy:lab:
     # Rebuild-critical (integration)
