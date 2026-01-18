@@ -1,5 +1,7 @@
 # Disaster Recovery Drill Runbook
 
+> **Current playbook**: For the PVE → NAS → DSM drill, use the dedicated runbook at [docs/runbooks/dr-drill-playbook.md](docs/runbooks/dr-drill-playbook.md) and report template at [docs/runbooks/dr-drill-report-template.md](docs/runbooks/dr-drill-report-template.md).
+
 **Purpose**: Prove Immich photo backup recovery from Hetzner Object Storage without Synology NAS or Proxmox infrastructure.
 
 **Last Updated**: December 21, 2025  
