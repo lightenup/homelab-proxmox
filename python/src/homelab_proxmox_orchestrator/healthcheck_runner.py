@@ -136,6 +136,17 @@ def run_healthcheck(
             os.chmod(temp_pw_path, 0o600)
             env["ANSIBLE_VAULT_PASSWORD_FILE"] = temp_pw_path
 
+    if env.get("ANSIBLE_VAULT_PASSWORD_FILE", "").strip() and not env.get(
+        "ANSIBLE_VAULT_IDENTITY_LIST", ""
+    ).strip():
+        vault_id = env.get("VAULT_ID", "").strip() or env.get("ENVIRONMENT", "").strip()
+        vault_file = env["ANSIBLE_VAULT_PASSWORD_FILE"]
+        default_entry = f"default@{vault_file}"
+        if vault_id and vault_id != "default":
+            env["ANSIBLE_VAULT_IDENTITY_LIST"] = f"{default_entry},{vault_id}@{vault_file}"
+        else:
+            env["ANSIBLE_VAULT_IDENTITY_LIST"] = default_entry
+
     env.update(_load_env_file(scripts_dir / ".env"))
 
     try:
