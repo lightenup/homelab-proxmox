@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 import sys
+import tempfile
 
 from .exec import run_checked
 
@@ -115,6 +116,7 @@ def run_healthcheck(
         cmd_args.extend(["--inventory", inventory])
 
     env = dict(os.environ)
+    temp_pw_path: str | None = None
     if not env.get("ANSIBLE_VAULT_PASSWORD_FILE", "").strip():
         default_vault_path = env.get(
             "PVE_VAULT_PASSWORD_FILE",
@@ -122,9 +124,28 @@ def run_healthcheck(
         )
         if Path(default_vault_path).exists():
             env["ANSIBLE_VAULT_PASSWORD_FILE"] = default_vault_path
+
+    if not env.get("ANSIBLE_VAULT_PASSWORD_FILE", "").strip():
+        raw_pw = env.get("ANSIBLE_VAULT_PASSWORD", "").strip()
+        if raw_pw:
+            handle = tempfile.NamedTemporaryFile(prefix="ansible-vault-", delete=False)
+            temp_pw_path = handle.name
+            handle.write(raw_pw.encode("utf-8"))
+            handle.flush()
+            handle.close()
+            os.chmod(temp_pw_path, 0o600)
+            env["ANSIBLE_VAULT_PASSWORD_FILE"] = temp_pw_path
+
     env.update(_load_env_file(scripts_dir / ".env"))
 
-    res = run_checked(cmd_args + list(rest), cwd=str(repo_root), env=env)
+    try:
+        res = run_checked(cmd_args + list(rest), cwd=str(repo_root), env=env)
+    finally:
+        if temp_pw_path:
+            try:
+                Path(temp_pw_path).unlink()
+            except FileNotFoundError:
+                pass
 
     if res.stdout:
         sys.stdout.write(res.stdout)
