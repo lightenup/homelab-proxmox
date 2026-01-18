@@ -317,9 +317,9 @@ jobs:
 
           remote_cmd="cd /home/ci/homelab-proxmox; ENVIRONMENT=${environment} TFVARS_DIR=/var/lib/homelab-proxmox/tfvars task lifecycle:verify"
           if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; ${remote_cmd}; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; vault_file=/var/lib/homelab-proxmox/vault/.ansible_vault_pass; if [[ -f \"\${vault_file}\" ]]; then export ANSIBLE_VAULT_PASSWORD_FILE=\"\${vault_file}\"; ${remote_cmd}; else pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; ${remote_cmd}; rm -f \"\${pwfile}\"; fi" <<<"${ANSIBLE_VAULT_PASSWORD}"
           else
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; ${remote_cmd}"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; vault_file=/var/lib/homelab-proxmox/vault/.ansible_vault_pass; if [[ -f \"\${vault_file}\" ]]; then export ANSIBLE_VAULT_PASSWORD_FILE=\"\${vault_file}\"; fi; ${remote_cmd}"
           fi
 
       - name: Removal checks (delete)
@@ -344,9 +344,9 @@ jobs:
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
           if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox; task healthcheck:run; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; vault_file=/var/lib/homelab-proxmox/vault/.ansible_vault_pass; if [[ -f \"\${vault_file}\" ]]; then export ANSIBLE_VAULT_PASSWORD_FILE=\"\${vault_file}\"; cd /home/ci/homelab-proxmox; task healthcheck:run; else pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox; task healthcheck:run; rm -f \"\${pwfile}\"; fi" <<<"${ANSIBLE_VAULT_PASSWORD}"
           else
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; task healthcheck:run"
+            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; vault_file=/var/lib/homelab-proxmox/vault/.ansible_vault_pass; if [[ -f \"\${vault_file}\" ]]; then export ANSIBLE_VAULT_PASSWORD_FILE=\"\${vault_file}\"; fi; cd /home/ci/homelab-proxmox; task healthcheck:run"
           fi
           ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; python3 -c 'import json; from pathlib import Path; p=Path(\"artifacts/healthcheck/history/latest.json\"); p.exists() or (_ for _ in ()).throw(SystemExit(\"Missing latest healthcheck output\")); results=json.loads(p.read_text(encoding=\"utf-8\")); gaps=[r for r in results if r.get(\"status\")==\"GAP\"]; gaps and (_ for _ in ()).throw(SystemExit(\"GAP entries detected: \" + \",\".join(sorted({r.get(\"hostname\",\"unknown\") for r in gaps})))) ; print(\"No GAP entries detected.\")'"
 
