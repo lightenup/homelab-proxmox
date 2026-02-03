@@ -22,6 +22,8 @@ fi
 echo "=== Backup Restore Verification ==="
 echo "Path: ${RESTORE_PATH}"
 echo ""
+echo "Note: macOS can verify directly from the NAS mount (e.g. /Volumes/nas/homelab_dr_test/...)."
+echo ""
 
 # Count total files
 echo "[1/4] Counting files..."

@@ -6,6 +6,8 @@
 - Align local/CI Terraform runs with the correct var-file: ensure prod.tfvars exists on PVE before triggering prod apply.
 - Work around prerequisite checks expecting a feature branch (currently blocks check-prerequisites on main) when doing hotfixes.
 
+- Copy scripts/dr into a dedicated `~/dr-drill-sources/` folder on PVE so long-running drills aren’t overwritten by rsync/builds.
+
 - Limited visibility into “what’s currently in LAB” (running LXCs, IPs, health, mount status). Today this requires ad-hoc `pct list`, `pct config <id>`, and SSHing into guests.
 
 ## Recent automation wins (to build on)
@@ -26,3 +28,5 @@
 	- per-service evidence pointers (latest run id / evidence dir)
 	- workload checks summary (e.g., `/media/video` mounted RO for Jellyfin)
 	- quick links/paths to state (`/var/lib/homelab-proxmox/state/services/<service>/terraform.tfstate`) and evidence packs
+
+- Package the DR scripts (and templates) into a portable bundle (versioned tarball or task) to make drills more mobile and avoid manual copy steps.

@@ -50,6 +50,37 @@ This runbook validates that encrypted Immich photo backups stored in Hetzner Obj
    - **Disk space: 400-500 GB free** (365 GB backup + extracted photos + working space)
    - **Recommendation**: Use external drive or dedicated VM for drill
 
+   ### macOS: Mount the NAS share via automounter (optional)
+
+   If validating from a Mac, mount the NAS share with `autofs`:
+
+   1) Add the map in `/etc/auto_nfs`:
+
+   ```bash
+   /Volumes/nas/homelab_ci  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_ci
+   /Volumes/nas/homelab_dr_test  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_dr_test
+   ```
+
+   2) Ensure `/etc/auto_master` includes:
+
+   ```bash
+   /-    auto_nfs          -nobrowse
+   ```
+
+   3) Reload automount and verify:
+
+   ```bash
+   sudo automount -vc
+   ls -la /Volumes/nas
+   ```
+
+   4) Create the DR target folder if needed:
+
+   ```bash
+   mkdir -p /Volumes/nas/homelab_dr_test
+   chmod -R 777 /Volumes/nas/homelab_dr_test
+   ```
+
 ### Credentials Required (from Bitwarden)
 
 Retrieve the following from Bitwarden before starting:

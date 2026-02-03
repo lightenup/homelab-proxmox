@@ -40,7 +40,6 @@ ansible/playbooks/artifacts/
 # Disaster Recovery drill files (local only)
 scripts/dr/rclone.conf
 scripts/dr/*.env
-scripts/dr/drill-reports/
 
 # IDE / OS
 .DS_Store

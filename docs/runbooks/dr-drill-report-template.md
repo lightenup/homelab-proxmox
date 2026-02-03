@@ -3,6 +3,9 @@
 **Drill ID**: 
 **Date**: 
 **Operator(s)**: 
+**Execution Host**: 
+**Working Directory**: 
+**tmux Session**: 
 
 ## Summary
 
@@ -30,6 +33,7 @@
 - Logs/commands output:
 - Screenshots:
 - Hash reports:
+- rclone.log path:
 
 ## Issues / Blockers
 

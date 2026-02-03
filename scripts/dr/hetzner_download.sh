@@ -90,6 +90,8 @@ if [[ "${SOURCE_PATH}" == *"Pool/"* ]]; then
     "--stats" "10s"
     "--transfers" "4"
     "--checkers" "8"
+    "--log-file" "rclone.log"
+    "--log-level" "INFO"
   )
   echo "NOTE: Preserving directory structure for Pool download"
   echo "      Target will be: ${ACTUAL_TARGET}/${SOURCE_PATH}/"
@@ -104,6 +106,8 @@ else
     "--stats" "10s"
     "--transfers" "4"
     "--checkers" "8"
+    "--log-file" "rclone.log"
+    "--log-level" "INFO"
   )
 fi
 
