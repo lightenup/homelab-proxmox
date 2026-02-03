@@ -1,8 +1,8 @@
 # Implementation Plan: Minimal Monitoring & Alerting
 
-**Feature**: 011-monitoring-alerting  
-**Created**: December 20, 2025  
-**Status**: Draft  
+**Feature**: 011-monitoring-alerting
+**Created**: December 20, 2025
+**Status**: Draft
 **Updated**: December 20, 2025 (after spec clarifications)
 
 ## Overview
@@ -18,7 +18,7 @@ This plan outlines the technical approach for implementing a minimal, self-hoste
 **Choice**: Use Uptime Kuma for monitoring dashboard with email (SMTP) notifications.
 
 **Rationale**:
-- **Uptime Kuma**: 
+- **Uptime Kuma**:
   - Simple, modern web UI with minimal configuration
   - Supports 90+ notification integrations including SMTP email
   - Self-hosted, no external dependencies for core functionality
@@ -52,33 +52,33 @@ This plan outlines the technical approach for implementing a minimal, self-hoste
 # terraform/main.tf additions
 module "monitoring" {
   source = "./modules/lxc_service"
-  
+
   node_name    = var.proxmox_node
   lxc_id       = var.service_ids["monitoring"]
   lxc_hostname = "monitoring"
   lxc_ip       = var.service_ips["monitoring"]
   lxc_gateway  = var.lxc_gateway
-  
+
   # Minimal resources for monitoring stack
   cores  = 2
   memory = 2048  # 2GB RAM
-  
+
   rootfs_storage = var.lxc_storage_pool
   rootfs_size    = "10G"
-  
+
   # Debian 12 template (consistent with other services)
   ostemplate = "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"
-  
+
   # Unprivileged container (Docker compatible)
   unprivileged = true
-  
+
   # Start on boot
   onboot = true
-  
+
   # Network configuration
   nameserver = var.lxc_nameserver
   searchdomain = var.lxc_searchdomain
-  
+
   # SSH key for ansible user
   ssh_public_keys = var.ssh_public_keys
 }
@@ -212,7 +212,7 @@ WantedBy=multi-user.target
 - name: Deploy monitoring stack
   hosts: monitoring
   become: true
-  
+
   roles:
     - geerlingguy.docker
     - monitoring_stack
@@ -261,19 +261,19 @@ monitoring_targets:
     interval: 60
     retries: 3
     accepted_statuscodes: ["200-299"]
-    
+
   - name: "Reverse Proxy"
     type: "http"
     url: "http://proxy.local:80"
     interval: 60
     retries: 3
-    
+
   - name: "Immich Photos"
     type: "http"
     url: "http://immich.local:2283"
     interval: 60
     retries: 3
-    
+
   - name: "Home Assistant"
     type: "http"
     url: "http://homeassistant.local:8123"
@@ -418,7 +418,7 @@ smtp_to: "admin@example.com"
 5. **Create monitors**: Loop through monitoring_targets, POST to /api/monitor for each service
 6. **Verify configuration**: GET /api/monitor to confirm all monitors exist
 
-**Idempotency**: 
+**Idempotency**:
 - Admin setup skipped if account already exists (check /api/status)
 - Monitors checked by name before creation (GET /api/monitor, compare by name)
 - SMTP notification updated if already exists (PUT instead of POST)
@@ -461,7 +461,7 @@ smtp_to: "admin@example.com"
 1. **Dashboard Access**: Browse to http://monitoring.local:3001 from LAN device
 2. **Authentication**: Login with admin credentials from vault
 3. **Monitor Status**: Verify all 4 monitors show UP status (green)
-4. **Notification Test**: 
+4. **Notification Test**:
    - Stop Immich service: `systemctl stop immich` (on immich LXC)
    - Wait 2 minutes for down threshold
    - Check email inbox for DOWN notification
@@ -491,7 +491,7 @@ ansible-playbook playbooks/monitoring.yml  # Should show changed=0
 
 If monitoring stack causes issues:
 
-1. **Disable Monitoring**: 
+1. **Disable Monitoring**:
    ```bash
    systemctl stop monitoring-stack
    systemctl disable monitoring-stack

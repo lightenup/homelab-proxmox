@@ -1,8 +1,8 @@
 # Feature Specification: Proxmox CI hardening
 
-**Feature Branch**: `021-proxmox-ci-hardening`  
-**Created**: 2026-01-02  
-**Status**: Draft  
+**Feature Branch**: `021-proxmox-ci-hardening`
+**Created**: 2026-01-02
+**Status**: Draft
 **Input**: "Move proxmox-apply to pi-ci runner using ci@pve with least-privilege sudo, fix rsync/artifacts, harden scripts, and stabilize provisioning with debug evidence."
 
 ## Clarifications

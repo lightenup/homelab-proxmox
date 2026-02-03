@@ -33,12 +33,12 @@
 
 - name: Check if Immich LXC config exists
   ansible.builtin.stat:
-    path: /etc/pve/lxc/213.conf
+    path: "/etc/pve/lxc/{{ immich_vmid | default(101) }}.conf"
   register: immich_lxc_conf
 
 - name: Add bind mount for Immich LXC
   ansible.builtin.lineinfile:
-    path: /etc/pve/lxc/213.conf
+    path: "/etc/pve/lxc/{{ immich_vmid | default(101) }}.conf"
     regexp: '^mp0:'
     line: 'mp0: /mnt/nas/homelab_immich,mp=/mnt/immich'
     state: present
@@ -46,5 +46,5 @@
   when: immich_lxc_conf.stat.exists
 
 - name: Restart Immich LXC to apply mount
-  ansible.builtin.command: pct reboot 213
+  ansible.builtin.command: "pct reboot {{ immich_vmid | default(101) }}"
   when: immich_mount.changed

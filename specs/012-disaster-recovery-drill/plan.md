@@ -1,8 +1,8 @@
 # Implementation Plan: Disaster Recovery Drill
 
-**Feature**: `012-disaster-recovery-drill`  
-**Created**: December 21, 2025  
-**Status**: Draft  
+**Feature**: `012-disaster-recovery-drill`
+**Created**: December 21, 2025
+**Status**: Draft
 **Updated**: December 21, 2025
 
 ## Overview

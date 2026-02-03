@@ -88,4 +88,3 @@ ansible/
 |-----------|------------|-------------------------------------|
 | Custom Script | Ansible's native Terraform inventory plugins can be complex/slow | Simple JSON parsing via `jq` is faster and sufficient for this scale |
 | Two Playbooks | Need to transition from root (provisioning) to ansible (config) | Single playbook requires complex privilege escalation handling per task |
-

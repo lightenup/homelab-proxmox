@@ -160,8 +160,8 @@ backup_subdir: "monitoring"
 4. ✅ Wait ~15 minutes
 5. ✅ Done!
 
-**Time Savings:** ~40 minutes → ~20 minutes (50% reduction)  
-**Error Reduction:** Eliminates manual typos, syntax errors, missed steps  
+**Time Savings:** ~40 minutes → ~20 minutes (50% reduction)
+**Error Reduction:** Eliminates manual typos, syntax errors, missed steps
 **Reproducibility:** Same process every time, documented in code
 
 ---

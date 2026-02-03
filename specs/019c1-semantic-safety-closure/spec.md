@@ -1,8 +1,8 @@
 # Feature Specification: Lab Harness Semantic & Safety Closure
 
-**Feature Branch**: `019c1-semantic-safety-closure`  
-**Created**: December 31, 2025  
-**Status**: Draft  
+**Feature Branch**: `019c1-semantic-safety-closure`
+**Created**: December 31, 2025
+**Status**: Draft
 **Depends On**: 019a (lab foundation), 019b (tier2 PVE), 019b1 (hardening), 019c (confidence suite)
 
 ## Overview
@@ -299,13 +299,13 @@ As an operator already using `--tier` and `--tier2-mode` flags, I can continue u
 
 - **Profile**: Named validation intent with declared prerequisites, steps, and checks
   - Attributes: profile_id, display_name, tier, mode, safety_level, prerequisites, checks
-  
+
 - **Check**: Validation unit with stable identity and clear pass/fail criteria
   - Attributes: check_id, title, severity, expected, result, reason, evidence_refs, timestamp
-  
+
 - **Evidence Pack**: Structured directory containing run artifacts and provenance
   - Contains: evidence_manifest.json, checks.json, provenance.json, summary.json, logs/, reports/
-  
+
 - **Provenance**: Run context including environment, versions, parameters
   - Attributes: controller (os, bash_version, ansible_version, git_commit, git_dirty), target (pveversion, kernel, distro), profile, parameters
 
@@ -443,4 +443,3 @@ This catalog defines the initial set of checks. New checks may be added followin
   - Migration guide from legacy flags to profiles
 - Example console output showing check summary
 - Example JSON artifacts with annotations
-

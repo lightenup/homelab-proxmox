@@ -1,7 +1,7 @@
 # Data Model: Pipeline Promotion UX
 
-**Branch**: `024-pipeline-promotion-ux`  
-**Date**: 2026-01-09  
+**Branch**: `024-pipeline-promotion-ux`
+**Date**: 2026-01-09
 **Status**: Complete
 
 This document defines the data entities, schemas, and relationships for the Pipeline Promotion UX feature.
@@ -551,4 +551,3 @@ This data model defines 5 key entities:
 5. **Workflow Input (Promote)**: Bounded inputs for promotion workflow
 
 All entities include validation rules, schema definitions, and examples to guide implementation.
-

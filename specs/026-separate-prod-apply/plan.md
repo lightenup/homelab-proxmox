@@ -15,14 +15,14 @@ Operator UX improvements for promotion safety:
 
 ## Technical Context
 
-**Language/Version**: Bash + Python 3 (repo scripts), YAML (GitHub Actions)  
-**Primary Dependencies**: GitHub Actions (workflow_dispatch), ssh/rsync, jq, Terraform CLI (on PVE), existing scripts under `scripts/lab/*`  
-**Storage**: Files on PVE host; evidence packs under `/var/lib/homelab-proxmox/artifacts/...`  
-**Testing**: Local workflow parse validation via `act` when available; offline evidence verification via `scripts/lab/ci-verify.sh`  
-**Target Platform**: Self-hosted GitHub Actions runner(s) + Proxmox VE host accessed via SSH  
-**Project Type**: Infrastructure repo (Terraform/Ansible/scripts/workflows)  
-**Performance Goals**: N/A (human-operated deployment pipeline)  
-**Constraints**: Do not print secrets; keep summaries bounded; keep Terraform state local on PVE; preserve separation of concerns (Terraform vs Ansible)  
+**Language/Version**: Bash + Python 3 (repo scripts), YAML (GitHub Actions)
+**Primary Dependencies**: GitHub Actions (workflow_dispatch), ssh/rsync, jq, Terraform CLI (on PVE), existing scripts under `scripts/lab/*`
+**Storage**: Files on PVE host; evidence packs under `/var/lib/homelab-proxmox/artifacts/...`
+**Testing**: Local workflow parse validation via `act` when available; offline evidence verification via `scripts/lab/ci-verify.sh`
+**Target Platform**: Self-hosted GitHub Actions runner(s) + Proxmox VE host accessed via SSH
+**Project Type**: Infrastructure repo (Terraform/Ansible/scripts/workflows)
+**Performance Goals**: N/A (human-operated deployment pipeline)
+**Constraints**: Do not print secrets; keep summaries bounded; keep Terraform state local on PVE; preserve separation of concerns (Terraform vs Ansible)
 **Scale/Scope**: Single homelab deployment; a small allowlisted set of services
 
 ## Constitution Check

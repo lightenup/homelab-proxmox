@@ -1,21 +1,21 @@
 # DR Drill Report
 
-**Drill ID**: 
-**Date**: 
-**Operator(s)**: 
-**Execution Host**: 
-**Working Directory**: 
-**tmux Session**: 
+**Drill ID**:
+**Date**:
+**Operator(s)**:
+**Execution Host**:
+**Working Directory**:
+**tmux Session**:
 
 ## Summary
 
 - **Outcome**: ☐ Success ☐ Partial ☐ Failed
-- **Backup Set**: 
+- **Backup Set**:
 - **Target Share**: `/volume1/homelab_dr_test` (mounted at `/mnt/nas/homelab_dr_test`)
-- **Total Size Estimate**: 
-- **Free Space at Start**: 
-- **Time Started**: 
-- **Time Finished**: 
+- **Total Size Estimate**:
+- **Free Space at Start**:
+- **Time Started**:
+- **Time Finished**:
 
 ## Steps Completed
 
@@ -37,12 +37,12 @@
 
 ## Issues / Blockers
 
-- 
+-
 
 ## Follow-ups
 
-- 
+-
 
 ## Notes
 
-- 
+-

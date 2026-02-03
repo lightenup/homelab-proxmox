@@ -1,7 +1,7 @@
 # Monitoring Stack Upgrade Procedure
 
-**Feature**: 017-synology-metrics  
-**Purpose**: Safely upgrade Prometheus, Grafana, SNMP Exporter, or Alertmanager versions  
+**Feature**: 017-synology-metrics
+**Purpose**: Safely upgrade Prometheus, Grafana, SNMP Exporter, or Alertmanager versions
 **Requirement**: FR-028 (Version upgrade procedure)
 
 ## When to Use This Runbook

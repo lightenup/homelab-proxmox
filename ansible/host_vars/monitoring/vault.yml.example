@@ -15,11 +15,11 @@ smtp_from: "homelab-alerts@example.com"
 smtp_to: "admin@example.com"
 
 # Alternative SMTP providers (uncomment and configure as needed):
-# 
+#
 # Outlook/Office365:
 # smtp_host: "smtp.office365.com"
 # smtp_port: 587
-# 
+#
 # Self-hosted:
 # smtp_host: "mail.yourdomain.com"
 # smtp_port: 587

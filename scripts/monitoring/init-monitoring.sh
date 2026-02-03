@@ -41,7 +41,7 @@ prompt_secret() {
     local prompt_text="$1"
     local var_name="$2"
     local default_value="${3:-}"
-    
+
     if [[ -n "${default_value}" ]]; then
         read -rsp "${prompt_text} [default: ${default_value}]: " value
         echo
@@ -50,7 +50,7 @@ prompt_secret() {
         read -rsp "${prompt_text}: " value
         echo
     fi
-    
+
     eval "${var_name}='${value}'"
 }
 
@@ -58,34 +58,34 @@ prompt_value() {
     local prompt_text="$1"
     local var_name="$2"
     local default_value="${3:-}"
-    
+
     if [[ -n "${default_value}" ]]; then
         read -rp "${prompt_text} [${default_value}]: " value
         value="${value:-${default_value}}"
     else
         read -rp "${prompt_text}: " value
     fi
-    
+
     eval "${var_name}='${value}'"
 }
 
 check_prerequisites() {
     log_info "Checking prerequisites..."
-    
+
     local missing_tools=()
-    
+
     # Check for required tools
     command -v terraform >/dev/null 2>&1 || missing_tools+=("terraform")
     command -v ansible >/dev/null 2>&1 || missing_tools+=("ansible")
     command -v ansible-vault >/dev/null 2>&1 || missing_tools+=("ansible-vault")
     command -v ssh >/dev/null 2>&1 || missing_tools+=("ssh")
-    
+
     if [[ ${#missing_tools[@]} -gt 0 ]]; then
         log_error "Missing required tools: ${missing_tools[*]}"
         log_error "Install missing tools and try again"
         exit 1
     fi
-    
+
     # Check Proxmox SSH connectivity
     log_info "Checking Proxmox SSH connectivity (192.168.1.112)..."
     if ! ssh -o ConnectTimeout=5 -o BatchMode=yes root@192.168.1.112 'exit' 2>/dev/null; then
@@ -96,19 +96,19 @@ check_prerequisites() {
     else
         log_success "Proxmox SSH connectivity verified"
     fi
-    
+
     log_success "Prerequisites check passed"
 }
 
 check_snmpv3_configuration() {
     log_info "Checking Synology SNMPv3 configuration (192.168.1.109)..."
-    
+
     if ! command -v snmpwalk >/dev/null 2>&1; then
         log_warning "snmpwalk tool not installed"
         log_info "Install with: brew install net-snmp (macOS) or apt-get install snmp (Linux)"
         return 1
     fi
-    
+
     # We can't test without credentials, so just prompt user
     log_warning "SNMPv3 must be manually configured on Synology NAS"
     log_info "Required configuration:"
@@ -121,14 +121,14 @@ check_snmpv3_configuration() {
     log_info "     - Priv Protocol: AES"
     log_info "     - Priv Password: (min 8 characters)"
     log_info ""
-    
+
     read -rp "Have you configured SNMPv3 on Synology? (y/N): " snmp_configured
     if [[ "${snmp_configured}" != "y" ]]; then
         log_error "Please configure SNMPv3 on Synology before continuing"
         log_info "See: docs/operations/monitoring/synology-snmp-setup.md"
         exit 1
     fi
-    
+
     log_success "SNMPv3 configuration confirmed by operator"
 }
 
@@ -136,10 +136,10 @@ collect_secrets() {
     log_info "Collecting secrets for Ansible vault..."
     log_info "(Passwords will not be echoed to screen)"
     echo ""
-    
+
     # Grafana admin password
     prompt_secret "Enter Grafana admin password" GRAFANA_PASSWORD
-    
+
     # SMTP configuration
     echo ""
     log_info "SMTP Configuration (for alert emails)..."
@@ -149,7 +149,7 @@ collect_secrets() {
     prompt_value "SMTP username" SMTP_USERNAME "${SMTP_FROM}"
     prompt_secret "SMTP password (use App Password for Gmail)" SMTP_PASSWORD
     prompt_value "Alert recipient email" ALERT_EMAIL
-    
+
     # SNMPv3 credentials
     echo ""
     log_info "SNMPv3 Configuration (must match Synology settings)..."
@@ -158,17 +158,17 @@ collect_secrets() {
     prompt_secret "SNMP auth password (min 8 chars)" SNMP_AUTH_PASSWORD
     prompt_value "SNMP priv protocol" SNMP_PRIV_PROTOCOL "AES"
     prompt_secret "SNMP priv password (min 8 chars)" SNMP_PRIV_PASSWORD
-    
+
     echo ""
     log_success "All secrets collected"
 }
 
 create_vault_file() {
     log_info "Creating Ansible vault file..."
-    
+
     # Ensure directory exists
     mkdir -p "$(dirname "${VAULT_FILE}")"
-    
+
     # Create vault content
     cat > "${VAULT_FILE}" << EOF
 ---
@@ -196,31 +196,31 @@ snmp_auth_password: "${SNMP_AUTH_PASSWORD}"  # Min 8 characters for MD5
 snmp_priv_protocol: "${SNMP_PRIV_PROTOCOL}"  # AES or DES
 snmp_priv_password: "${SNMP_PRIV_PASSWORD}"  # Min 8 characters
 EOF
-    
+
     chmod 600 "${VAULT_FILE}"
     log_success "Vault file created at: ${VAULT_FILE}"
 }
 
 encrypt_vault_file() {
     log_info "Encrypting Ansible vault..."
-    
+
     if ! ansible-vault encrypt "${VAULT_FILE}"; then
         log_error "Failed to encrypt vault file"
         exit 1
     fi
-    
+
     log_success "Vault file encrypted successfully"
     log_warning "IMPORTANT: Remember your vault password - you'll need it for Ansible deployments"
 }
 
 verify_snmpv3_connectivity() {
     log_info "Verifying SNMPv3 connectivity to Synology..."
-    
+
     if ! command -v snmpwalk >/dev/null 2>&1; then
         log_warning "snmpwalk not available, skipping connectivity test"
         return 0
     fi
-    
+
     log_info "Testing SNMP connection..."
     if snmpwalk -v3 -l authPriv -u "${SNMP_USERNAME}" \
         -a "${SNMP_AUTH_PROTOCOL}" -A "${SNMP_AUTH_PASSWORD}" \
@@ -236,19 +236,19 @@ verify_snmpv3_connectivity() {
 
 provision_terraform() {
     log_info "Provisioning monitoring LXC with Terraform..."
-    
+
     cd "${TERRAFORM_DIR}"
-    
+
     # Initialize Terraform if needed
     if [[ ! -d ".terraform" ]]; then
         log_info "Initializing Terraform..."
         terraform init
     fi
-    
+
     # Show plan
     log_info "Terraform plan:"
     terraform plan -var-file=environments/prod.tfvars
-    
+
     echo ""
     read -rp "Apply Terraform changes? (y/N): " apply_terraform
     if [[ "${apply_terraform}" == "y" ]]; then
@@ -262,9 +262,9 @@ provision_terraform() {
 
 update_ansible_inventory() {
     log_info "Updating Ansible inventory..."
-    
+
     cd "${REPO_ROOT}"
-    
+
     # Use existing update script if available
     if [[ -x "scripts/update_ansible_inventory.sh" ]]; then
         log_info "Running inventory update script..."
@@ -272,7 +272,7 @@ update_ansible_inventory() {
     else
         # Manual inventory update
         local inventory_file="${ANSIBLE_DIR}/inventories/generated/hosts.yml"
-        
+
         if ! grep -q "\[monitoring\]" "${inventory_file}" 2>/dev/null; then
             log_info "Adding monitoring group to inventory..."
             cat >> "${inventory_file}" << 'EOF'
@@ -288,7 +288,7 @@ EOF
             log_info "Monitoring already in inventory"
         fi
     fi
-    
+
     # Test connectivity
     log_info "Testing Ansible connectivity..."
     cd "${ANSIBLE_DIR}"
@@ -301,12 +301,12 @@ EOF
 
 deploy_ansible() {
     log_info "Deploying monitoring stack with Ansible..."
-    
+
     cd "${ANSIBLE_DIR}"
-    
+
     log_info "Running playbook: playbooks/monitoring.yml"
     log_warning "You will be prompted for the vault password"
-    
+
     if ansible-playbook playbooks/monitoring.yml --ask-vault-pass; then
         log_success "Ansible deployment complete"
     else
@@ -317,9 +317,9 @@ deploy_ansible() {
 
 run_smoke_test() {
     log_info "Running smoke tests..."
-    
+
     cd "${REPO_ROOT}"
-    
+
     if [[ -x "scripts/monitoring/smoke-test.sh" ]]; then
         ./scripts/monitoring/smoke-test.sh
     else
@@ -364,17 +364,17 @@ main() {
     echo "Monitoring Stack Initialization (Feature 017)"
     echo "=========================================="
     echo ""
-    
+
     # Phase 1: Prerequisites
     check_prerequisites
     check_snmpv3_configuration
-    
+
     # Phase 2: Secrets collection
     collect_secrets
     verify_snmpv3_connectivity
     create_vault_file
     encrypt_vault_file
-    
+
     # Phase 3: Infrastructure provisioning
     if provision_terraform; then
         sleep 5  # Wait for LXC to boot
@@ -382,14 +382,14 @@ main() {
     else
         log_warning "Terraform skipped - ensure LXC exists manually"
     fi
-    
+
     # Phase 4: Application deployment
     deploy_ansible
-    
+
     # Phase 5: Verification
     sleep 10  # Wait for containers to start
     run_smoke_test
-    
+
     # Phase 6: Summary
     print_summary
 }

@@ -1,7 +1,7 @@
 # Monitoring Stack Quickstart Guide
 
-**Feature**: 017-synology-metrics  
-**Purpose**: End-to-end deployment guide from prerequisites to verification  
+**Feature**: 017-synology-metrics
+**Purpose**: End-to-end deployment guide from prerequisites to verification
 **Audience**: Homelab operators deploying Synology monitoring for the first time
 
 ## TL;DR - Fully Automated Deployment 🚀
@@ -67,7 +67,7 @@ This guide walks you through deploying a complete monitoring stack (Prometheus, 
 
 ## Step 1: Configure Synology SNMPv3
 
-**Time**: ~5 minutes  
+**Time**: ~5 minutes
 **Documentation**: [Synology SNMP Setup Guide](synology-snmp-setup.md)
 
 1. Log into Synology DSM as administrator

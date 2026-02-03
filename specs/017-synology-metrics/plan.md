@@ -1,6 +1,6 @@
 # Implementation Plan: Synology Metrics & Alerting
 
-**Branch**: `017-synology-metrics` | **Date**: 2025-12-28 | **Spec**: [spec.md](spec.md)  
+**Branch**: `017-synology-metrics` | **Date**: 2025-12-28 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `/specs/017-synology-metrics/spec.md`
 
 ## Summary
@@ -9,14 +9,14 @@ Deploy observability stack (Prometheus, Grafana, SNMP Exporter, Alertmanager) on
 
 ## Technical Context
 
-**Language/Version**: Docker Compose (stack orchestration), Bash 5.x (backup scripts), Ansible 2.14+  
-**Primary Dependencies**: Prometheus 2.48+, Grafana 10.2+, SNMP Exporter 0.25+, Alertmanager 0.26+, Docker 24+  
-**Storage**: Prometheus TSDB (Docker volume, 15-day retention), Grafana config (Docker volume), NAS backups via NFS  
-**Testing**: Smoke test playbook (validate endpoints), manual alert testing, backup/restore validation  
-**Target Platform**: Debian 12 LXC on Proxmox VE 9.x, LAN-only access (no internet exposure)  
-**Project Type**: Infrastructure automation (Terraform LXC + Ansible compose deployment)  
-**Performance Goals**: <5s scrape latency, <3s dashboard load, <2min alert delivery, <10min initial deployment  
-**Constraints**: ≤2 vCPU / 4GB RAM, 32GB disk, SNMPv3-only (no Docker on NAS), email-only alerting, secrets in vault  
+**Language/Version**: Docker Compose (stack orchestration), Bash 5.x (backup scripts), Ansible 2.14+
+**Primary Dependencies**: Prometheus 2.48+, Grafana 10.2+, SNMP Exporter 0.25+, Alertmanager 0.26+, Docker 24+
+**Storage**: Prometheus TSDB (Docker volume, 15-day retention), Grafana config (Docker volume), NAS backups via NFS
+**Testing**: Smoke test playbook (validate endpoints), manual alert testing, backup/restore validation
+**Target Platform**: Debian 12 LXC on Proxmox VE 9.x, LAN-only access (no internet exposure)
+**Project Type**: Infrastructure automation (Terraform LXC + Ansible compose deployment)
+**Performance Goals**: <5s scrape latency, <3s dashboard load, <2min alert delivery, <10min initial deployment
+**Constraints**: ≤2 vCPU / 4GB RAM, 32GB disk, SNMPv3-only (no Docker on NAS), email-only alerting, secrets in vault
 **Scale/Scope**: 1 Synology NAS (192.168.1.109), 1 monitoring LXC (192.168.1.214), 4-6 dashboard panels, 3 alert rules
 
 ## Constitution Check
@@ -472,23 +472,23 @@ monitoring_snmp_v3_priv_password: "{{ vault_snmp_v3_priv_password }}"
 ## Risk Mitigation
 
 ### R-001: SNMP OID Compatibility
-**Risk**: Dashboard breaks if Synology DSM version uses different SNMP OIDs  
+**Risk**: Dashboard breaks if Synology DSM version uses different SNMP OIDs
 **Mitigation**: Test against DSM 7.x (confirmed SNMPv3 support from operator NAS), document tested versions in prerequisite guide, provide OID troubleshooting section in runbook
 
 ### R-002: Prometheus TSDB Disk Growth
-**Risk**: Unbounded metrics storage fills 32GB LXC disk  
+**Risk**: Unbounded metrics storage fills 32GB LXC disk
 **Mitigation**: 15-day retention configured (FR-022), estimated 10GB usage per NFR-007, self-monitoring alert if disk >80% full
 
 ### R-003: Alert Delivery Failures
-**Risk**: SMTP auth fails silently, operator unaware of critical NAS issues  
+**Risk**: SMTP auth fails silently, operator unaware of critical NAS issues
 **Mitigation**: Alertmanager UI shows failed notifications (FR-017), test alert procedure in runbook (FR-031), separate Uptime Kuma monitor for monitoring stack health
 
 ### R-004: mDNS Resolution Failures
-**Risk**: `monitoring.local` hostname unresolvable, operator cannot access Grafana  
+**Risk**: `monitoring.local` hostname unresolvable, operator cannot access Grafana
 **Mitigation**: Documentation includes both mDNS and direct IP access methods, fallback to `192.168.1.214:3000`
 
 ### R-005: Monitoring Stack Downtime
-**Risk**: LXC reboot causes metrics gap, alerts not fired  
+**Risk**: LXC reboot causes metrics gap, alerts not fired
 **Mitigation**: Docker compose `restart: unless-stopped` policy (FR-014), systemd service for compose (future enhancement), separate Uptime Kuma monitor detects monitoring stack down
 
 ## Next Steps

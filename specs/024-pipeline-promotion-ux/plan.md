@@ -17,40 +17,40 @@ The technical approach uses GitHub Actions workflow splits (separate LAB-only an
 
 ## Technical Context
 
-**Language/Version**: Bash 5.x (Proxmox host scripts), GitHub Actions YAML (workflow definitions), Python 3.x (evidence verification)  
-**Primary Dependencies**: 
+**Language/Version**: Bash 5.x (Proxmox host scripts), GitHub Actions YAML (workflow definitions), Python 3.x (evidence verification)
+**Primary Dependencies**:
 - GitHub Actions (workflow_dispatch, environments, artifacts)
 - Terraform 1.x (telmate/proxmox provider for LXC resources)
 - Ansible 2.x (configuration management in LXCs)
 - rsync/ssh (repository sync to Proxmox host)
 - jq (JSON processing for snapshots and evidence)
 
-**Storage**: 
+**Storage**:
 - Terraform state: local on Proxmox host at `/var/lib/homelab-proxmox/state/services/<service>/`
 - Evidence packs: local on Proxmox host at `/var/lib/homelab-proxmox/artifacts/service-deploy-runs/<run_id>/`
 - Production tfvars: local on Proxmox host at `/var/lib/homelab-proxmox/tfvars/prod.tfvars` (gitignored, provisioned at runtime)
 - LAB snapshots: embedded in evidence packs and uploaded as GitHub Actions artifacts
 
-**Testing**: 
+**Testing**:
 - Evidence-based verification using `scripts/lab/ci-verify.sh` with offline validation against evidence profiles
 - Destructive change detection via `blast-radius.json` in evidence packs
 - Idempotency verification (second apply must produce zero-change plan)
 - Fixture-based contract validation in `scripts/lab/fixtures/evidence-packs/service-deploy-valid/`
 
-**Target Platform**: 
+**Target Platform**:
 - Proxmox VE 8.x host (runs Terraform/Ansible via SSH from GitHub Actions self-hosted runner)
 - Debian-based LXC containers (unprivileged, managed by Terraform)
 - GitHub Actions self-hosted runner (has SSH keys for `ci@pve` user)
 
 **Project Type**: Infrastructure-as-Code / CI/CD pipeline (single repository with Terraform, Ansible, scripts, workflows)
 
-**Performance Goals**: 
+**Performance Goals**:
 - Plan execution: <2 minutes for single-service LXC plan
 - Apply execution: <5 minutes for single-service LXC apply (includes Ansible configuration)
 - Evidence verification: <10 seconds offline validation per run
 - Snapshot generation: <30 seconds to collect container state
 
-**Constraints**: 
+**Constraints**:
 - Secrets MUST NOT be committed to repository (use local tfvars + GitHub Secrets)
 - Terraform state remains local on Proxmox host (no remote backend)
 - Evidence packs must be verifiable offline (no external API calls during verification)
@@ -58,7 +58,7 @@ The technical approach uses GitHub Actions workflow splits (separate LAB-only an
 - Destructive changes (replace/destroy) require explicit confirmation input
 - Service scope limited to allowlist in `scripts/lab/service-scope-allowlist.json`
 
-**Scale/Scope**: 
+**Scale/Scope**:
 - 6 services in allowlist (adguard, homeassistant, immich, jellyfin, monitoring, reverse_proxy)
 - Single Proxmox host with ~10-20 LXC containers total (LAB + PROD environments)
 - GitHub Actions workflow runs: ~5-20 per day (primarily LAB iterations)
@@ -677,7 +677,7 @@ This implementation plan provides a complete roadmap for the Pipeline Promotion 
 2. **Phase 1 (Design)**: Data model with 5 entities, 4 contract schemas, quickstart documentation, and agent context update
 3. **Phase 2 (Task Generation)**: Guidance for 23 implementation tasks across 5 categories
 
-**Branch**: `024-pipeline-promotion-ux`  
+**Branch**: `024-pipeline-promotion-ux`
 **Plan Location**: `/home/runner/work/homelab-proxmox/homelab-proxmox/specs/024-pipeline-promotion-ux/plan.md`
 
 **Next Steps**:

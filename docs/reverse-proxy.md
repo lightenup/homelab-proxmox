@@ -72,3 +72,12 @@ To proxy a new service (e.g., `homeassistant`), follow these steps:
 -   **Check Status**: `systemctl status caddy`
 -   **View Logs**: `journalctl -u caddy -f`
 -   **Validate Config**: `caddy validate --config /etc/caddy/Caddyfile`
+
+## How to Remove a Service
+
+To remove a service from the reverse proxy:
+
+1. Delete the service template in `ansible/roles/reverse_proxy/templates/<service>.caddy.j2`.
+2. Remove the corresponding task from `ansible/roles/reverse_proxy/tasks/main.yml`.
+3. Run the services playbook to apply changes.
+4. Confirm the service no longer appears in proxy routes.

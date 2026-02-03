@@ -1,8 +1,8 @@
 # Feature Specification: Sunset Shell Tools
 
-**Feature Branch**: `028-sunset-shell-tools`  
-**Created**: 2026-01-14  
-**Status**: Draft  
+**Feature Branch**: `028-sunset-shell-tools`
+**Created**: 2026-01-14
+**Status**: Draft
 **Input**: User description: "Sunset as much shell code as possible; migrate service lifecycle/CI helpers/healthchecks/operator tooling; keep core harness + host-installed content + spec tooling unchanged; consolidate and simplify; create a Taskfile; deprecate/delete legacy scripts and update docs; write tests as we go for every migration."
 
 ## Clarifications

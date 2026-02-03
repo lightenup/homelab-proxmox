@@ -237,7 +237,7 @@ class EvidenceVerifier:
         # We need to find repo root. Assuming script is in scripts/lab/
         script_dir = Path(__file__).parent
         catalog_path = script_dir / "checks.d" / "catalog.json"
-        
+
         if not catalog_path.exists():
             self.add_error(
                 "CAT-001",
@@ -245,7 +245,7 @@ class EvidenceVerifier:
                 "Ensure scripts/lab/checks.d/catalog.json exists"
             )
             return False
-            
+
         try:
             with open(catalog_path, 'r') as f:
                 self.catalog = json.load(f)
@@ -266,18 +266,18 @@ class EvidenceVerifier:
 
         # If critical files are missing, we might not be able to proceed with other checks,
         # but we try to load what we can to surface more actionable errors.
-        
+
         self.data['summary'] = self.load_json("summary.json")
         self.data['checks'] = self.load_json("checks.json")
         self.data['provenance'] = self.load_json("provenance.json")
         self.data['evidence_manifest'] = self.load_json("evidence_manifest.json")
-        
+
         # If summary is missing or invalid, we can't do much coherence checking
         if not self.data.get('summary'):
             return
 
         summary = self.data['summary']
-        
+
         contract_version = summary.get('contract_version')
         if not contract_version:
             self.add_error("CONTRACT-002", "Missing contract_version in summary.json", "Update pve-lab to inject contract_version")
@@ -367,7 +367,7 @@ class EvidenceVerifier:
                 f"Run ID mismatch: summary.run_id '{run_id}' != directory name '{dir_name}'",
                 "Rename directory to match run_id or fix summary.json"
             )
-            
+
         if self.data.get('provenance'):
             prov_run_id = self.data['provenance'].get('run_id')
             if prov_run_id and prov_run_id != run_id:
@@ -473,13 +473,13 @@ class EvidenceVerifier:
 
             source = check.get('source')
             catalog_owner = catalog_entry.get('owner')
-            
+
             if not source:
                 self.add_error("OWN-002", f"Check {check_id} missing source field", "Ensure emitter adds source field")
             else:
                 if source not in ["ansible", "harness"]:
                     self.add_error("OWN-003", f"Invalid source '{source}' for {check_id}", "Source must be 'ansible' or 'harness'")
-                
+
                 if catalog_owner == "ansible" and source != "ansible":
                     self.add_error("OWN-003", f"Owner mismatch for {check_id}: catalog says 'ansible' but source is '{source}'", "Fix source in emitter or owner in catalog")
                 elif catalog_owner == "harness" and source != "harness":
@@ -495,7 +495,7 @@ class EvidenceVerifier:
                             f"Ansible check {check_id} missing assertion report ref",
                             "Ensure ansible checks reference reports/assertions.<phase>.json"
                         )
-                
+
                 elif catalog_owner == "harness":
                     # Should not rely on assertion reports
                     has_report = any("reports/assertions" in ref for ref in evidence_refs)
@@ -565,7 +565,7 @@ class EvidenceVerifier:
 
             evidence_refs = check.get('evidence_refs', [])
             result = check.get('result')
-            
+
             # Get allow_missing_evidence from catalog
             catalog_entry = self.catalog.get(check_id, {})
             allow_missing = catalog_entry.get('allow_missing_evidence', False)
@@ -581,7 +581,7 @@ class EvidenceVerifier:
                 if clean_ref.startswith('/') or '..' in clean_ref:
                     if clean_ref.startswith('collision_id:'):
                         continue
-                        
+
                     self.add_error(
                         "REF-001",
                         f"Invalid evidence ref '{ref}' in {check_id}",
@@ -635,7 +635,7 @@ class EvidenceVerifier:
             "timestamp": datetime.now().isoformat(),
             "reasons": [reason] if reason else []
         }
-        
+
         # Write report
         report_path = self.pack_path / "reports" / "verify.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -658,7 +658,7 @@ class EvidenceVerifier:
         except Exception as exc:
             # Non-fatal; emit warning
             self.add_warning("SUMMARY-001", f"Failed to update summary.json: {exc}", "Manually add verification block to summary.json")
-        
+
         # Console Output
         print(f"Verification Status: {report_data['status']}")
         if self.errors:
@@ -666,7 +666,7 @@ class EvidenceVerifier:
             for err in self.errors:
                 print(f"  [{err['code']}] {err['message']}")
                 print(f"    -> Remediation: {err['remediation']}")
-        
+
         if self.warnings:
             print("\nWarnings:")
             for warn in self.warnings:
@@ -677,13 +677,13 @@ def main():
     parser.add_argument("pack_path", help="Path to evidence pack directory")
     parser.add_argument("--strict-catalog", action="store_true", default=True, help="Enforce strict catalog validation")
     parser.add_argument("--no-strict-catalog", action="store_false", dest="strict_catalog", help="Disable strict catalog validation")
-    
+
     args = parser.parse_args()
-    
+
     verifier = EvidenceVerifier(args.pack_path, args.strict_catalog)
     success = verifier.run()
     verifier.report()
-    
+
     sys.exit(0 if success else 1)
 
 if __name__ == "__main__":

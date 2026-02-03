@@ -57,13 +57,13 @@ Immich is deployed via Ansible using Docker Compose. To upgrade Immich to a new 
    ```bash
    # Check all containers are running and healthy
    ssh root@192.168.1.213 "cd /opt/immich-app && docker compose ps"
-   
+
    # Verify API responds
    curl -f http://192.168.1.213:2283/api/server/ping
-   
+
    # Check web UI loads
    # Navigate to http://192.168.1.213:2283
-   
+
    # Verify uploads work
    # Upload a test photo via web UI and confirm it appears in gallery
    ```

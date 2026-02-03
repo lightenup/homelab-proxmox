@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Immich v2.4.0 Upgrade
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: December 19, 2024  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: December 19, 2024
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality

@@ -3,9 +3,9 @@
   hosts: services
   gather_facts: false
   remote_user: root
-  # We must connect as root initially. 
+  # We must connect as root initially.
   # Since inventory defines ansible_user=ansible, we override it here or via CLI.
-  # But 'remote_user: root' in playbook takes precedence over inventory var? 
+  # But 'remote_user: root' in playbook takes precedence over inventory var?
   # Yes, usually. But let's be safe and assume we run with -u root.
 
   vars:

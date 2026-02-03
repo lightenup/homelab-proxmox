@@ -73,7 +73,7 @@ def get_service_config(host_vars: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "expect_json": host_vars.get("healthcheck_expect_json"),
             "verification_command": host_vars.get("healthcheck_verification_command")
         }
-    
+
     # Old Flat Structure (Fallback)
     if "healthcheck_path" in host_vars:
         return {
@@ -86,7 +86,7 @@ def get_service_config(host_vars: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "expect_json": host_vars.get("healthcheck_expect_json"),
             "verification_command": host_vars.get("healthcheck_verification_command")
         }
-        
+
     return None
 
 def get_target_ip(host_vars: Dict[str, Any], profile: str) -> Optional[str]:
@@ -107,7 +107,7 @@ def perform_check(hostname: str, host_vars: Dict[str, Any], profile: str) -> Dic
         }
 
     config = get_service_config(host_vars)
-    
+
     # If no config found, this should have been caught as GAP in main loop if enforced,
     # or we shouldn't be here. But if we are here and no config:
     if not config:
@@ -120,7 +120,7 @@ def perform_check(hostname: str, host_vars: Dict[str, Any], profile: str) -> Dic
         }
 
     svc_profile = config["profile"]
-    
+
     # Profile Compatibility Check
     # If service is 'none', it's a special case (no HTTP check)
     if svc_profile == "none":
@@ -133,10 +133,10 @@ def perform_check(hostname: str, host_vars: Dict[str, Any], profile: str) -> Dic
                 "details": "Profile 'none' but no verification command",
                 "url": "N/A"
             }
-        
+
         # Execute verification command
         try:
-            # We run the command locally. 
+            # We run the command locally.
             # Note: host_vars are already substituted by ansible-inventory if they used Jinja2
             subprocess.run(cmd, shell=True, check=True, timeout=10, capture_output=True)
             return {
@@ -183,9 +183,9 @@ def perform_check(hostname: str, host_vars: Dict[str, Any], profile: str) -> Dic
     verify_ssl = config["verify_ssl"]
     expect_status = config["expect_status"]
     expect_json_str = config["expect_json"]
-    
+
     ip = get_target_ip(host_vars, profile)
-    
+
     result = {
         "hostname": hostname,
         "target_ip": ip,
@@ -212,7 +212,7 @@ def perform_check(hostname: str, host_vars: Dict[str, Any], profile: str) -> Dic
         # Set a timeout
         with urllib.request.urlopen(req, timeout=5, context=ctx) as response:
             status_code = response.getcode()
-            
+
             if status_code != expect_status:
                 result["details"] = f"Status {status_code} != {expect_status}"
                 return result
@@ -259,7 +259,7 @@ def load_previous_history() -> Dict[str, str]:
     history_path = "artifacts/healthcheck/history/latest.json"
     if not os.path.exists(history_path):
         return {}
-    
+
     try:
         with open(history_path, 'r') as f:
             data = json.load(f)
@@ -290,17 +290,17 @@ def send_email_notification(current_results: List[Dict[str, Any]], previous_stat
         return
 
     failures = []
-    
+
     # Check for service regressions (Success -> Failure)
     for r in current_results:
         hostname = r["hostname"]
         status = r["status"]
-        
+
         if status == "SKIP":
             continue
 
-        prev_status = previous_states.get(hostname, "PASS") # Default to PASS so we don't alert on first run unless it fails? 
-        
+        prev_status = previous_states.get(hostname, "PASS") # Default to PASS so we don't alert on first run unless it fails?
+
         if status != "PASS" and prev_status == "PASS":
             failures.append(f"Service Regression: {hostname} ({r['details']})")
 
@@ -313,7 +313,7 @@ def send_email_notification(current_results: List[Dict[str, Any]], previous_stat
         return
 
     # Hooks for future integrations
-    # notify_failure(failures) 
+    # notify_failure(failures)
 
     msg = EmailMessage()
     msg.set_content("\n".join(failures))
@@ -337,13 +337,13 @@ def check_coverage(inventory: Dict[str, Any]) -> List[str]:
     Returns list of missing hosts.
     """
     missing_hosts = []
-    
+
     enforced_groups = ["services"] # Default
     if "all" in inventory and "vars" in inventory["all"]:
         enforced_groups = inventory["all"]["vars"].get("healthcheck_enforced_groups", enforced_groups)
-    
+
     hostvars = inventory.get("_meta", {}).get("hostvars", {})
-    
+
     baseline = {
         "timestamp": datetime.now().isoformat(),
         "targets": []
@@ -352,12 +352,12 @@ def check_coverage(inventory: Dict[str, Any]) -> List[str]:
     for group in enforced_groups:
         if group not in inventory:
             continue
-            
+
         hosts = inventory[group].get("hosts", [])
         for hostname in hosts:
             hv = hostvars.get(hostname, {})
             config = get_service_config(hv)
-            
+
             if not config:
                 missing_hosts.append(hostname)
             else:
@@ -366,7 +366,7 @@ def check_coverage(inventory: Dict[str, Any]) -> List[str]:
                     url = f"cmd://{config.get('verification_command', 'unknown')}"
                 else:
                     url = f"{config['scheme']}://{hv.get('ansible_host')}:{config['port']}{config['path']}"
-                
+
                 baseline["targets"].append({
                     "hostname": hostname,
                     "url": url
@@ -381,7 +381,7 @@ def check_coverage(inventory: Dict[str, Any]) -> List[str]:
 
 def validate_schema(hostname: str, host_vars: Dict[str, Any]) -> List[str]:
     errors = []
-    
+
     # Check for deprecated keys
     deprecated_keys = ["healthcheck_path", "healthcheck_port", "healthcheck_scheme"]
     found_deprecated = [k for k in deprecated_keys if k in host_vars]
@@ -398,13 +398,13 @@ def validate_schema(hostname: str, host_vars: Dict[str, Any]) -> List[str]:
             missing = [k for k in required if k not in url_obj]
             if missing:
                 errors.append(f"healthcheck_url missing required keys: {', '.join(missing)}")
-    
+
     # Check profile
     profile = host_vars.get("healthcheck_profile")
     if profile:
         if profile not in ["lan", "tailscale", "both", "none"]:
             errors.append(f"Invalid healthcheck_profile: {profile}")
-        
+
         if profile == "none":
             if not host_vars.get("healthcheck_verification_command"):
                 errors.append("healthcheck_profile is 'none' but 'healthcheck_verification_command' is missing")
@@ -425,7 +425,7 @@ def main():
     args = parser.parse_args()
 
     inventory = get_inventory(args.inventory, host=args.host[0] if args.host else None)
-    
+
     if args.check_drift:
         drift_errors = {}
         if "_meta" in inventory and "hostvars" in inventory["_meta"]:
@@ -439,7 +439,7 @@ def main():
         else:
             print("Invalid inventory format: missing _meta.hostvars", file=sys.stderr)
             sys.exit(1)
-        
+
         if drift_errors:
             print("Configuration Drift Detected:")
             for host, errs in drift_errors.items():
@@ -471,7 +471,7 @@ def main():
         sys.exit(1)
 
     results = []
-    
+
     # Add GAP results for coverage failures
     for h in coverage_failures:
         if args.filter and args.filter not in h:
@@ -489,7 +489,7 @@ def main():
     if hosts_to_check:
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             future_to_host = {
-                executor.submit(perform_check, h, resolve_host_vars(inventory, h), args.profile): h 
+                executor.submit(perform_check, h, resolve_host_vars(inventory, h), args.profile): h
                 for h in hosts_to_check
             }
             for future in concurrent.futures.as_completed(future_to_host):
@@ -519,7 +519,7 @@ def main():
             status_color = "\033[92m" if r["status"] == "PASS" else ("\033[93m" if r["status"] == "SKIP" else ("\033[96m" if r["status"] == "GAP" else "\033[91m"))
             reset_color = "\033[0m"
             print(f"{r['hostname']:<20} {status_color}{r['status']:<10}{reset_color} {r['target_ip'] or 'N/A':<15} {r['details']}")
-        
+
     # Exit 1 only if there are actual failures (not SKIPs).
     if any(r["status"] == "FAIL" for r in results):
         sys.exit(1)

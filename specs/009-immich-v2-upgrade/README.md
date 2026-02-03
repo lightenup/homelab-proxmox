@@ -213,8 +213,8 @@ For questions or issues:
 
 ---
 
-**Feature Branch**: `009-immich-v2-upgrade`  
-**Created**: December 19, 2024  
-**Status**: Ready for Deployment  
-**Risk**: Low  
+**Feature Branch**: `009-immich-v2-upgrade`
+**Created**: December 19, 2024
+**Status**: Ready for Deployment
+**Risk**: Low
 **Estimated Time**: 2.25 hours

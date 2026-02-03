@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import sys
 
+from .exec import run_checked
+from .healthcheck_runner import run_healthcheck
+from .inventory import update_inventory
 
 def _print(msg: str) -> None:
     sys.stdout.write(msg)
@@ -111,15 +116,140 @@ def change_service(*, repo_root: Path, hostname: str, cfg: ServiceConfig) -> Pat
     return add_service(repo_root=repo_root, hostname=hostname, cfg=cfg)
 
 
-def remove_service(*, repo_root: Path, hostname: str) -> Path:
+def _remove_service_from_services_playbook(*, repo_root: Path, hostname: str) -> bool:
+    playbook_path = repo_root / "ansible" / "playbooks" / "services.yml"
+    if not playbook_path.exists():
+        return False
+
+    lines = playbook_path.read_text(encoding="utf-8").splitlines()
+    new_lines: list[str] = []
+    buffer: list[str] = []
+    in_block = False
+    block_has_target = False
+
+    def _flush_block() -> None:
+        nonlocal buffer, block_has_target
+        if not block_has_target:
+            new_lines.extend(buffer)
+        buffer = []
+        block_has_target = False
+
+    for line in lines:
+        if line.startswith("- name:"):
+            if in_block:
+                _flush_block()
+            in_block = True
+            buffer = [line]
+            block_has_target = False
+            continue
+
+        if in_block:
+            buffer.append(line)
+            if re.match(rf"^\s*hosts:\s*{re.escape(hostname)}\s*$", line):
+                block_has_target = True
+            continue
+
+        new_lines.append(line)
+
+    if in_block:
+        _flush_block()
+
+    if new_lines != lines:
+        playbook_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+        return True
+
+    return False
+
+
+def remove_service(
+    *,
+    repo_root: Path,
+    hostname: str,
+    delete_host_vars: bool = True,
+    remove_from_services_playbook: bool = True,
+) -> Path:
     host_vars_file = repo_root / "ansible" / "host_vars" / f"{hostname}.yml"
     if not host_vars_file.exists():
-        raise FileNotFoundError(f"File {host_vars_file} does not exist.")
+        if remove_from_services_playbook:
+            _remove_service_from_services_playbook(repo_root=repo_root, hostname=hostname)
+        return host_vars_file
+
+    if delete_host_vars:
+        host_vars_file.unlink()
+        if remove_from_services_playbook:
+            _remove_service_from_services_playbook(repo_root=repo_root, hostname=hostname)
+        return host_vars_file
 
     content = host_vars_file.read_text(encoding="utf-8")
     content = _remove_healthcheck_config(content)
     host_vars_file.write_text(content, encoding="utf-8")
     return host_vars_file
+
+
+def _run_remove_checks(
+    *,
+    repo_root: Path,
+    hostname: str,
+    environment: str,
+    delete_data: bool,
+    confirm_data_delete: str,
+) -> None:
+    script = repo_root / "scripts" / "lifecycle" / "remove_checks.py"
+    if not script.exists():
+        raise FileNotFoundError(f"Missing removal checks script: {script}")
+
+    argv = [sys.executable, str(script), "--service", hostname, "--environment", environment]
+    if delete_data:
+        argv.append("--delete-data")
+    if confirm_data_delete:
+        argv.extend(["--confirm-data-delete", confirm_data_delete])
+
+    res = run_checked(argv, cwd=str(repo_root), env=dict(os.environ))
+    if res.stdout:
+        _print(res.stdout.rstrip("\n"))
+    if res.stderr:
+        _eprint(res.stderr.rstrip("\n"))
+    if res.returncode != 0:
+        raise RuntimeError("Removal checks failed")
+
+
+def _run_gap_check(*, output_file: Path) -> None:
+    if not output_file.exists():
+        raise FileNotFoundError(f"Missing healthcheck output: {output_file}")
+    data = json.loads(output_file.read_text(encoding="utf-8"))
+    gaps = [entry for entry in data if entry.get("status") == "GAP"]
+    if gaps:
+        names = ", ".join(sorted({entry.get("hostname", "unknown") for entry in gaps}))
+        raise RuntimeError(f"Healthcheck GAP entries detected: {names}")
+
+
+def verify_removal(
+    *,
+    repo_root: Path,
+    hostname: str,
+    environment: str,
+    delete_data: bool,
+    confirm_data_delete: str,
+) -> None:
+    inventory_file = update_inventory(repo_root=repo_root)
+    _print(f"Inventory regenerated: {inventory_file}")
+
+    drift_run = run_healthcheck(repo_root=repo_root, argv=["--check-drift"])
+    if drift_run.exit_code != 0:
+        raise RuntimeError("healthcheck:run --check-drift failed")
+
+    gap_run = run_healthcheck(repo_root=repo_root, argv=["--json", "--no-notify"])
+    if gap_run.exit_code != 0:
+        raise RuntimeError("healthcheck:run failed during GAP check")
+    _run_gap_check(output_file=gap_run.output_file)
+
+    _run_remove_checks(
+        repo_root=repo_root,
+        hostname=hostname,
+        environment=environment,
+        delete_data=delete_data,
+        confirm_data_delete=confirm_data_delete,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -144,6 +274,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     remove = sub.add_parser("remove")
     remove.add_argument("hostname")
+    remove.add_argument("--keep-host-vars", action="store_true", help="Keep host_vars file (legacy behavior)")
+    remove.add_argument("--keep-playbook-entry", action="store_true", help="Keep services.yml entry (legacy behavior)")
+    remove.add_argument("--verify", action="store_true", help="Run inventory + drift + removal checks")
+    remove.add_argument("--environment", default="all", choices=["lab", "prod", "all"])
+    remove.add_argument("--delete-data", action="store_true", help="Delete service data locations")
+    remove.add_argument("--confirm-data-delete", default="", help="Required when --delete-data is set")
+
+    delete = sub.add_parser("delete")
+    delete.add_argument("hostname")
+    delete.add_argument("--keep-host-vars", action="store_true", help="Keep host_vars file (legacy behavior)")
+    delete.add_argument("--keep-playbook-entry", action="store_true", help="Keep services.yml entry (legacy behavior)")
+    delete.add_argument("--verify", action="store_true", help="Run inventory + drift + removal checks")
+    delete.add_argument("--environment", default="all", choices=["lab", "prod", "all"])
+    delete.add_argument("--delete-data", action="store_true", help="Delete service data locations")
+    delete.add_argument("--confirm-data-delete", default="", help="Required when --delete-data is set")
 
     return p
 
@@ -187,9 +332,27 @@ def main(argv: list[str] | None = None) -> int:
             _print(f"Successfully updated {out}")
             return 0
 
-        if args.cmd == "remove":
-            out = remove_service(repo_root=repo_root, hostname=str(args.hostname))
-            _print(f"Removed healthcheck configuration from {out}")
+        if args.cmd in {"remove", "delete"}:
+            out = remove_service(
+                repo_root=repo_root,
+                hostname=str(args.hostname),
+                delete_host_vars=not bool(getattr(args, "keep_host_vars", False)),
+                remove_from_services_playbook=not bool(getattr(args, "keep_playbook_entry", False)),
+            )
+            if out.exists():
+                _print(f"Updated {out}")
+            else:
+                _print(f"Removed host vars for {args.hostname}")
+
+            if bool(getattr(args, "verify", False)):
+                verify_removal(
+                    repo_root=repo_root,
+                    hostname=str(args.hostname),
+                    environment=str(getattr(args, "environment", "all")),
+                    delete_data=bool(getattr(args, "delete_data", False)),
+                    confirm_data_delete=str(getattr(args, "confirm_data_delete", "")),
+                )
+                _print("Removal verification complete")
             return 0
 
         _eprint("Unknown command")

@@ -46,10 +46,6 @@ baz: qux
     )
 
     out = remove_service(repo_root=repo_root, hostname="svc")
-    text = out.read_text(encoding="utf-8")
 
-    assert "healthcheck_url" not in text
-    assert "healthcheck_profile" not in text
-    assert "healthcheck_expect_status" not in text
-    assert "foo: bar" in text
-    assert "baz: qux" in text
+    assert out == f
+    assert not f.exists()

@@ -23,18 +23,18 @@ record_check_from_ansible() {
     local reason="$6"
     shift 6
     local evidence_refs=("$@")
-    
+
     # Force source to ansible for this bridge
     export CURRENT_SOURCE="ansible"
 
     # Record check using harness library
     record_check "$check_id" "$title" "$severity" "$expected" "$result" "$reason" "${evidence_refs[@]}"
-    
+
     # Emit JSONL event if RUNID is set
     if [[ -n "${RUNID:-}" ]]; then
         emit_check_complete "$RUNID" "$check_id" "$result" "$reason"
     fi
-    
+
     echo "Recorded check: $check_id = $result"
 }
 
@@ -42,11 +42,11 @@ record_check_from_ansible() {
 emit_check_start_from_ansible() {
     local check_id="$1"
     local title="$2"
-    
+
     if [[ -n "${RUNID:-}" ]]; then
         emit_check_start "$RUNID" "$check_id" "$title"
     fi
-    
+
     echo "Started check: $check_id"
 }
 

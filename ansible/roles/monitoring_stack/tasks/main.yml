@@ -36,4 +36,3 @@
 - name: Verify monitoring stack
   ansible.builtin.include_tasks: verify.yml
   tags: [verify]
-

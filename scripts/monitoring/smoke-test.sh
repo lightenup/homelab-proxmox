@@ -41,9 +41,9 @@ test_endpoint() {
     local name="$1"
     local url="$2"
     local expected_code="${3:-200}"
-    
+
     log_info "Testing ${name}: ${url}"
-    
+
     if response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "${url}" 2>/dev/null); then
         if [ "${response}" -eq "${expected_code}" ]; then
             log_pass "${name} returned ${response}"
@@ -60,9 +60,9 @@ test_json_endpoint() {
     local name="$1"
     local url="$2"
     local jq_filter="$3"
-    
+
     log_info "Testing ${name}: ${url}"
-    
+
     if response=$(curl -s --max-time 5 "${url}" 2>/dev/null); then
         if echo "${response}" | jq -e "${jq_filter}" > /dev/null 2>&1; then
             log_pass "${name} JSON valid and ${jq_filter} exists"

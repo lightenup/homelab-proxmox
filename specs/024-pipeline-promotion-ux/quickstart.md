@@ -1,7 +1,7 @@
 # Quickstart: Pipeline Promotion UX
 
-**Branch**: `024-pipeline-promotion-ux`  
-**Date**: 2026-01-09  
+**Branch**: `024-pipeline-promotion-ux`
+**Date**: 2026-01-09
 **Audience**: Homelab operators and CI/CD workflow users
 
 This guide explains how to use the improved CI/CD pipeline workflows for LXC container deployments.
@@ -277,27 +277,27 @@ JSON document capturing:
 
 ### Error: "Invalid --service"
 
-**Cause**: Service not in allowlist  
+**Cause**: Service not in allowlist
 **Fix**: Check `scripts/lab/service-scope-allowlist.json` for valid services
 
 ### Error: "Plan is destructive"
 
-**Cause**: Terraform plan includes replace/destroy operations  
+**Cause**: Terraform plan includes replace/destroy operations
 **Fix**: Review plan output, then rerun with appropriate `confirm_destructive` value
 
 ### Error: "Waiting for approval"
 
-**Cause**: PROD stage waiting for required reviewer approval  
+**Cause**: PROD stage waiting for required reviewer approval
 **Fix**: Contact required reviewers; they must approve in GitHub UI
 
 ### Error: "tfvars validation failed"
 
-**Cause**: `prod.tfvars` provisioning detected invalid token ID or missing secret  
+**Cause**: `prod.tfvars` provisioning detected invalid token ID or missing secret
 **Fix**: Verify `PROXMOX_TOKEN_SECRET` is set correctly in repository secrets; check evidence for specific validation errors
 
 ### Evidence Pack Missing
 
-**Cause**: Workflow failed before evidence collection  
+**Cause**: Workflow failed before evidence collection
 **Fix**: Check workflow logs for errors in preflight checks; ensure Proxmox host is reachable
 
 ---
@@ -352,5 +352,5 @@ JSON document capturing:
 
 ---
 
-**Document Version**: 1.0  
+**Document Version**: 1.0
 **Last Updated**: 2026-01-09

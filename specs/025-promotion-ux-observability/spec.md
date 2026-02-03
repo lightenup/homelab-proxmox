@@ -1,8 +1,8 @@
 # Feature Specification: Promotion UX Observability
 
-**Feature Branch**: `025-promotion-ux-observability`  
-**Created**: 2026-01-09  
-**Status**: Draft  
+**Feature Branch**: `025-promotion-ux-observability`
+**Created**: 2026-01-09
+**Status**: Draft
 **Input**: User description: "Improve promotion workflow UX and surface plan/failure summaries in the CI run UI (job summaries and annotations), ensuring PROD approval happens after seeing Plan(PROD), destructive applies are blocked by explicit confirms, and PROD apply uses the exact saved planfile."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -11,7 +11,7 @@
   IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
   Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
   you should still have a viable MVP (Minimum Viable Product) that delivers value.
-  
+
   Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
   Think of each story as a standalone slice of functionality that can be:
   - Developed independently

@@ -1,7 +1,7 @@
 # Synology SNMP Setup Guide
 
-**Feature**: 017-synology-metrics  
-**Purpose**: Enable SNMPv3 monitoring on Synology NAS for Prometheus collection  
+**Feature**: 017-synology-metrics
+**Purpose**: Enable SNMPv3 monitoring on Synology NAS for Prometheus collection
 **Requirement**: FR-020 (Manual prerequisite documentation)
 
 ## Prerequisites
@@ -35,10 +35,10 @@
 2. Click **Create** to add a new user
 3. Configure the following:
 
-   **Username**: `monitoring`  
-   **Authentication Protocol**: `MD5`  
-   **Authentication Password**: `[Use password from ansible vault.yml: snmp_auth_password]`  
-   **Privacy Protocol**: `AES`  
+   **Username**: `monitoring`
+   **Authentication Protocol**: `MD5`
+   **Authentication Password**: `[Use password from ansible vault.yml: snmp_auth_password]`
+   **Privacy Protocol**: `AES`
    **Privacy Password**: `[Use password from ansible vault.yml: snmp_priv_password]`
 
 4. Click **OK** to save

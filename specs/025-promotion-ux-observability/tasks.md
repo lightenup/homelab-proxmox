@@ -4,7 +4,7 @@ description: "Task list for feature implementation"
 
 # Tasks: Promotion UX Observability
 
-**Input**: Design documents in `specs/025-promotion-ux-observability/`  
+**Input**: Design documents in `specs/025-promotion-ux-observability/`
 **Prerequisites**: `plan.md` (required), `spec.md` (required), `research.md`, `data-model.md`, `contracts/`
 
 **Tests**: No new automated tests were explicitly requested in the spec. Tasks focus on workflow parsing validation (`act -l`) and evidence verification (`scripts/lab/ci-verify.sh`).

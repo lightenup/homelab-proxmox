@@ -24,15 +24,15 @@ Migration is incremental (slice-by-slice), preserving current behavior and opera
   the iteration process.
 -->
 
-**Language/Version**: Python 3 (target: 3.11+) for new runner code; existing bash for orchestration remains during migration  
-**Primary Dependencies**: Runtime: Python stdlib only (initially). Dev/test: `pytest`, `mutmut`, optional `ruff`  
-**Storage**: Local filesystem artifacts and evidence packs (existing pattern)  
-**Testing**: `pytest` (unit + golden), `mutmut` (nightly mutation), `molecule` (Ansible roles), `terraform fmt/validate/test` (Terraform)  
+**Language/Version**: Python 3 (target: 3.11+) for new runner code; existing bash for orchestration remains during migration
+**Primary Dependencies**: Runtime: Python stdlib only (initially). Dev/test: `pytest`, `mutmut`, optional `ruff`
+**Storage**: Local filesystem artifacts and evidence packs (existing pattern)
+**Testing**: `pytest` (unit + golden), `mutmut` (nightly mutation), `molecule` (Ansible roles), `terraform fmt/validate/test` (Terraform)
 **Target Platform**: GitHub Actions runners (Linux), Proxmox host (PVE) remote executor, local developer machines (macOS/Linux)
-**Project Type**: Infrastructure repo with a small Python subproject + existing bash scripts  
+**Project Type**: Infrastructure repo with a small Python subproject + existing bash scripts
 **Execution Location (initial)**: Runner executes on the Proxmox host (PVE) alongside existing `scripts/lab/*` entrypoints; GitHub Actions continues to SSH into PVE (workflow UX unchanged).
-**Performance Goals**: PR validation completes <10 minutes for typical changes; summaries render in seconds and remain bounded  
-**Constraints**: No secrets in logs/summaries; bounded output; no new workflow UX; preserve evidence pack semantics; incremental migration only  
+**Performance Goals**: PR validation completes <10 minutes for typical changes; summaries render in seconds and remain bounded
+**Constraints**: No secrets in logs/summaries; bounded output; no new workflow UX; preserve evidence pack semantics; incremental migration only
 **Scale/Scope**: One repo with Terraform + Ansible + workflow automation; initially focus on runner + testing harness, then expand coverage
 
 ## Constitution Check

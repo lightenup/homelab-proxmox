@@ -1,7 +1,7 @@
 # Research: Pipeline Promotion UX
 
-**Branch**: `024-pipeline-promotion-ux`  
-**Date**: 2026-01-09  
+**Branch**: `024-pipeline-promotion-ux`
+**Date**: 2026-01-09
 **Status**: Complete
 
 This document captures research findings for the Pipeline Promotion UX feature, addressing all technical unknowns identified in Phase 0 of the implementation plan.
@@ -100,10 +100,10 @@ provision_prod_tfvars() {
     local tfvars_path="${TFVARS_DIR}/prod.tfvars"
     local temp_tfvars
     temp_tfvars="$(mktemp -t prod.tfvars.XXXXXX)"
-    
+
     # Secure temp file
     chmod 600 "${temp_tfvars}"
-    
+
     # Render template with heredoc
     cat > "${temp_tfvars}" <<EOF
 # Production Terraform variables (auto-generated)
@@ -114,14 +114,14 @@ pm_api_token_id = "terraform@pve!terraform-token"
 pm_api_token_secret = "${token_secret}"
 pm_tls_insecure = true
 EOF
-    
+
     # Create target directory if missing
     mkdir -p "$(dirname "${tfvars_path}")"
-    
+
     # Move temp to final location
     mv "${temp_tfvars}" "${tfvars_path}"
     chmod 600 "${tfvars_path}"
-    
+
     echo "Provisioned ${tfvars_path}"
 }
 ```
@@ -171,25 +171,25 @@ validate_prod_tfvars() {
     local tfvars_path="${TFVARS_DIR}/prod.tfvars"
     local validation_status="pass"
     local errors=()
-    
+
     # Check file exists
     if [[ ! -f "${tfvars_path}" ]]; then
         errors+=("File not found: ${tfvars_path}")
         validation_status="fail"
     fi
-    
+
     # Extract token ID and secret using grep/awk
     local token_id
     local token_secret
     token_id=$(grep -E '^pm_api_token_id' "${tfvars_path}" | awk -F'"' '{print $2}')
     token_secret=$(grep -E '^pm_api_token_secret' "${tfvars_path}" | awk -F'"' '{print $2}')
-    
+
     # Validate token ID
     if [[ "${token_id}" != "terraform@pve!terraform-token" ]]; then
         errors+=("Invalid token_id: expected 'terraform@pve!terraform-token', got '${token_id}'")
         validation_status="fail"
     fi
-    
+
     # Validate secret presence (non-empty, not placeholder)
     if [[ -z "${token_secret}" ]]; then
         errors+=("Secret is empty")
@@ -198,11 +198,11 @@ validate_prod_tfvars() {
         errors+=("Secret appears to be a placeholder")
         validation_status="fail"
     fi
-    
+
     # Generate hash
     local file_hash
     file_hash=$(sha256sum "${tfvars_path}" | awk '{print $1}')
-    
+
     # Generate validation proof JSON
     local proof_json
     proof_json=$(jq -n \
@@ -222,9 +222,9 @@ validate_prod_tfvars() {
             file_hash: $hash,
             validation_errors: $errors
         }')
-    
+
     echo "${proof_json}"
-    
+
     if [[ "${validation_status}" == "fail" ]]; then
         return 1
     fi
@@ -270,7 +270,7 @@ collect_containers() {
         if pct config "${vmid}" | grep -q 'net0'; then
             ipv4=$(pct config "${vmid}" | grep 'net0' | grep -oP 'ip=\K[^/,]+' || echo "")
         fi
-        
+
         jq -n \
             --argjson vmid "${vmid}" \
             --arg hostname "${hostname}" \
@@ -292,20 +292,20 @@ collect_containers() {
 collect_service_evidence() {
     local artifact_root="${ARTIFACT_ROOT}/service-deploy-runs"
     local services=()
-    
+
     # For each service in allowlist
     for service in $(jq -r 'keys[]' scripts/lab/service-scope-allowlist.json); do
         # Find latest run for this service
         local latest_run
         latest_run=$(find "${artifact_root}" -maxdepth 1 -name "*-${service}-*" -type d | sort -r | head -1)
-        
+
         if [[ -n "${latest_run}" ]]; then
             local run_id
             run_id=$(basename "${latest_run}")
             services+=("$(jq -n --arg svc "${service}" --arg run "${run_id}" --arg path "${latest_run}" '{service: $svc, run_id: $run, path: $path}')")
         fi
     done
-    
+
     printf '%s\n' "${services[@]}" | jq -s 'map({(.service): {run_id, path}}) | add'
 }
 ```
@@ -316,28 +316,28 @@ collect_service_evidence() {
 check_mounts() {
     local vmid="$1"
     local expected_mount="/media/video"
-    
+
     # Check if container is running
     if ! pct status "${vmid}" | grep -q running; then
         echo "Container ${vmid} not running, skipping mount check" >&2
         return
     fi
-    
+
     # Check mount via pct exec
     local mount_info
     mount_info=$(pct exec "${vmid}" -- grep "${expected_mount}" /proc/mounts 2>/dev/null || echo "")
-    
+
     if [[ -n "${mount_info}" ]]; then
         local source
         local options
         source=$(echo "${mount_info}" | awk '{print $1}')
         options=$(echo "${mount_info}" | awk '{print $4}')
-        
+
         local read_only=false
         if [[ "${options}" =~ ro ]]; then
             read_only=true
         fi
-        
+
         jq -n \
             --argjson vmid "${vmid}" \
             --arg mount_path "${expected_mount}" \
@@ -439,7 +439,7 @@ if metadata.get("environment") == "prod":
         with open(tfvars_proof_path) as f:
             proof = json.load(f)
         validate_json_schema(proof, "evidence-tfvars-proof.schema.json")
-        
+
         # Additional validation: status must be "pass"
         if proof.get("validation_status") != "pass":
             errors.append(f"tfvars validation failed: {proof.get('validation_errors')}")
@@ -541,4 +541,3 @@ All research tasks complete. Key decisions:
 6. **R6**: Additive evidence profile fields (no version bump)
 7. **R7**: Linear job dependency chain with approval gate
 **Ready for Phase 1 (Design)**: All technical approaches validated and documented.
-

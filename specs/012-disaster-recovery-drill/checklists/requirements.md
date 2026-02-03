@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Disaster Recovery Drill
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: December 21, 2025  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: December 21, 2025
 **Feature**: [specs/012-disaster-recovery-drill/spec.md](../spec.md)
 
 ## Content Quality
@@ -146,7 +146,7 @@ The specification is **READY FOR IMPLEMENTATION** without requiring additional c
 ## Approval Status
 
 - [x] **Content Quality**: All checks passed
-- [x] **Requirement Completeness**: All checks passed  
+- [x] **Requirement Completeness**: All checks passed
 - [x] **Feature Readiness**: All checks passed
 
 **APPROVED FOR PLANNING**: This specification is complete and ready for `/speckit.plan` phase.

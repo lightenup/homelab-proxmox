@@ -1,7 +1,7 @@
 # Proxmox Configuration Backup - Restore Runbook
 
-**Feature**: 013-proxmox-config-backup  
-**Purpose**: Step-by-step procedures for recovering from Proxmox host failure  
+**Feature**: 013-proxmox-config-backup
+**Purpose**: Step-by-step procedures for recovering from Proxmox host failure
 **Audience**: Operators performing disaster recovery
 
 ---
@@ -119,11 +119,11 @@ if [[ ! -f manifest.txt ]]; then
   echo "WARNING: No manifest found - checksums unavailable"
 else
   echo "✓ Manifest found - verifying checksums..."
-  
+
   # Verify checksums
   cd $(dirname manifest.txt)
   sha256sum -c manifest.txt
-  
+
   if [[ $? -eq 0 ]]; then
     echo "✓ All checksums verified"
   else
@@ -601,6 +601,6 @@ ansible-playbook site.yml --check --diff
 
 ---
 
-**Last Updated**: December 23, 2025  
-**Document Owner**: Infrastructure Team  
+**Last Updated**: December 23, 2025
+**Document Owner**: Infrastructure Team
 **Review Frequency**: Quarterly (with drill)

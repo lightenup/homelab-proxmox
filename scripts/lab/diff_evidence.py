@@ -32,7 +32,7 @@ class EvidenceDiff:
         # Try catalog first (SSOT), then fall back to check data if available
         if check_id in self.catalog:
             return self.catalog[check_id].get('title', 'Unknown Title')
-        
+
         # Fallback to looking in loaded packs
         # This is a bit inefficient but works for display
         for data in [self.data_b, self.data_a]:
@@ -42,7 +42,7 @@ class EvidenceDiff:
             for c in checks_list:
                 if c.get('check_id') == check_id:
                     return c.get('title', 'Unknown Title')
-        
+
         return "Unknown Title"
 
     def load_pack(self, path: Path) -> Optional[Dict[str, Any]]:
@@ -74,7 +74,7 @@ class EvidenceDiff:
         # Compare Checks
         raw_checks_a = self.data_a['checks']
         checks_list_a = raw_checks_a['checks'] if isinstance(raw_checks_a, dict) and 'checks' in raw_checks_a else raw_checks_a
-        
+
         raw_checks_b = self.data_b['checks']
         checks_list_b = raw_checks_b['checks'] if isinstance(raw_checks_b, dict) and 'checks' in raw_checks_b else raw_checks_b
 
@@ -82,11 +82,11 @@ class EvidenceDiff:
         checks_b = {c['check_id']: c for c in checks_list_b}
 
         all_ids = set(checks_a.keys()) | set(checks_b.keys())
-        
+
         new_checks = []
         missing_checks = []
         status_changes = []
-        
+
         for check_id in sorted(all_ids):
             if check_id not in checks_a:
                 new_checks.append({
@@ -116,7 +116,7 @@ class EvidenceDiff:
             "missing_checks": missing_checks,
             "status_changes": status_changes
         }
-        
+
         return True
 
     def report(self):
@@ -126,20 +126,20 @@ class EvidenceDiff:
         repo_root = Path(__file__).parent.parent.parent
         diff_dir = repo_root / "artifacts" / "lab-runs" / f"diff-{self.path_a.name}-{self.path_b.name}"
         diff_dir.mkdir(parents=True, exist_ok=True)
-        
+
         report_path = diff_dir / "reports" / "diff.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with open(report_path, 'w') as f:
             json.dump(self.diff_report, f, indent=2)
-            
+
         print(f"Diff Report generated at: {report_path}")
         print("\n=== Diff Summary ===")
         print(f"Run A: {self.path_a.name}")
         print(f"Run B: {self.path_b.name}")
         print(f"Profile: {self.diff_report['profile_id']}")
         print("")
-        
+
         if self.diff_report['status_changes']:
             print("Status Changes:")
             for change in self.diff_report['status_changes']:
@@ -148,14 +148,14 @@ class EvidenceDiff:
                 print(f"  {check_id}: {change['from']} -> {change['to']}  ({title})")
         else:
             print("No status changes.")
-            
+
         if self.diff_report['new_checks']:
             print("\nNew Checks:")
             for check in self.diff_report['new_checks']:
                 check_id = check['check_id']
                 title = self.get_title(check_id)
                 print(f"  {check_id} ({check['result']}) - {title}")
-                
+
         if self.diff_report['missing_checks']:
             print("\nMissing Checks:")
             for check in self.diff_report['missing_checks']:
@@ -167,9 +167,9 @@ def main():
     parser = argparse.ArgumentParser(description="Diff Evidence Packs")
     parser.add_argument("run_a", help="Path to first evidence pack")
     parser.add_argument("run_b", help="Path to second evidence pack")
-    
+
     args = parser.parse_args()
-    
+
     diff = EvidenceDiff(args.run_a, args.run_b)
     if diff.run():
         diff.report()

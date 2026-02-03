@@ -4,7 +4,7 @@
   become: true
   vars:
     restore_dir: "/tmp/immich-restore-drill"
-  
+
   tasks:
     - name: Find latest backup
       ansible.builtin.shell: "ls -t {{ immich_backup_path }}/immich-backup-*.tar.gz | head -n 1"
@@ -92,7 +92,7 @@
             services:
               - database
             state: present
-        
+
         - name: Wait for database to be ready
           ansible.builtin.command: docker exec immich_postgres_restore pg_isready -U postgres
           register: db_check
@@ -137,11 +137,11 @@
               ansible.builtin.command: docker logs immich_server_restore
               register: container_logs
               changed_when: false
-            
+
             - name: Display container logs
               ansible.builtin.debug:
                 var: container_logs.stdout_lines
-            
+
             - name: Fail if API check failed
               ansible.builtin.fail:
                 msg: "API check failed"
@@ -159,7 +159,7 @@
               - docker-compose.restore.yml
             state: absent
             remove_volumes: true
-        
+
         - name: Remove restore directory
           ansible.builtin.file:
             path: "{{ restore_dir }}"

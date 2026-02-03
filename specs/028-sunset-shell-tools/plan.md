@@ -17,14 +17,14 @@ Key rules baked into the plan:
 
 ## Technical Context
 
-**Language/Version**: Python 3.x (existing repo subproject in `python/`)  
-**Primary Dependencies**: Runtime: Python stdlib (preferred), existing repo utilities. Dev/test: `pytest`, `mutmut`  
-**Storage**: Local filesystem repo artifacts; Terraform/Ansible state/artifacts as already implemented (no new state system introduced)  
-**Testing**: `pytest` (unit + CLI smoke), `mutmut` (nightly), optional lab-backed integration tests in GitHub Actions  
-**Target Platform**: macOS/Linux local dev, GitHub Actions runners, Proxmox host (PVE) where harness executes  
-**Project Type**: Infrastructure repo with Terraform + Ansible + scripts + a Python tooling subproject  
-**Performance Goals**: Fast PR feedback; “Top 10 workflows” runnable within a typical operator session without excessive setup  
-**Constraints**: No secrets in logs; no breaking existing CI/IaC/harness entrypoints; incremental migration; deprecations via `scripts/deprecated/` must be reference-free  
+**Language/Version**: Python 3.x (existing repo subproject in `python/`)
+**Primary Dependencies**: Runtime: Python stdlib (preferred), existing repo utilities. Dev/test: `pytest`, `mutmut`
+**Storage**: Local filesystem repo artifacts; Terraform/Ansible state/artifacts as already implemented (no new state system introduced)
+**Testing**: `pytest` (unit + CLI smoke), `mutmut` (nightly), optional lab-backed integration tests in GitHub Actions
+**Target Platform**: macOS/Linux local dev, GitHub Actions runners, Proxmox host (PVE) where harness executes
+**Project Type**: Infrastructure repo with Terraform + Ansible + scripts + a Python tooling subproject
+**Performance Goals**: Fast PR feedback; “Top 10 workflows” runnable within a typical operator session without excessive setup
+**Constraints**: No secrets in logs; no breaking existing CI/IaC/harness entrypoints; incremental migration; deprecations via `scripts/deprecated/` must be reference-free
 **Scale/Scope**: Refactor operator tooling surface; no provider/state strategy change; avoid changing core harness scripts
 
 ## Constitution Check

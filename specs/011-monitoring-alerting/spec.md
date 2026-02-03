@@ -1,8 +1,8 @@
 # Feature Specification: Minimal Monitoring & Alerting
 
-**Feature Branch**: `011-monitoring-alerting`  
-**Created**: December 20, 2025  
-**Status**: Draft  
+**Feature Branch**: `011-monitoring-alerting`
+**Created**: December 20, 2025
+**Status**: Draft
 **Input**: "Deliver a minimal, self-hosted monitoring + alerting baseline that gives a simple dashboard for 'is it up?' and sends alerts to a phone-friendly channel when key services are down"
 
 ## Clarifications
@@ -122,22 +122,22 @@ Success criteria must be measurable, technology-agnostic, and verifiable without
 - **Monitoring LXC**: Debian-based container hosting monitoring stack
   - Attributes: Static IP (from service_ips), mDNS hostname (monitoring.local), 2GB RAM, 10GB storage
   - Role: Hosts Docker engine, Uptime Kuma container, monitoring data volumes
-  
+
 - **Uptime Kuma Instance**: Web-based uptime monitoring dashboard
   - Attributes: Port 3001 (default), SQLite database for history, web UI for configuration, basic authentication enabled
   - Authentication: Admin account created during initial setup, credentials managed via Ansible Vault
   - Monitors: HTTP(S) checks, ICMP ping checks, configurable intervals (default 60s)
   - Notifications: Supports 90+ notification types (email via SMTP for this implementation)
-  
+
 - **Monitor Configuration**: Individual service health check
   - Attributes: Name, type (HTTP/HTTPS/ping), URL/hostname, check interval, retry count, down threshold
   - Example: {"name": "Proxmox Web UI", "type": "https", "url": "https://pve.local:8006", "interval": 60, "retries": 3}
-  
+
 - **Notification Channel**: Email delivery mechanism for alerts
   - Attributes: smtp_host (server FQDN), smtp_port (587 for STARTTLS), smtp_user (authentication username), smtp_password (authentication password), smtp_from (sender email address), smtp_to (recipient email address)
   - Protocol: SMTP AUTH (PLAIN/LOGIN) over STARTTLS
   - Security: All SMTP credentials stored in Ansible Vault
-  
+
 - **Docker Compose Stack**: Container orchestration configuration
   - Attributes: Services (uptime-kuma only), volumes (data persistence), networks (bridge default)
   - Management: Started/stopped via systemd service for reliability
@@ -196,7 +196,7 @@ Prerequisites and integration points:
 
 - **Existing infrastructure**: Proxmox host (pve) with Terraform provider configured
 - **Existing services**: Core LXC services (immich, homeassistant, proxy) reachable via mDNS
-- **Existing tooling**: 
+- **Existing tooling**:
   - Terraform >= 1.5.7
   - Ansible >= 2.10
   - Dynamic inventory script: scripts/update_ansible_inventory.sh
