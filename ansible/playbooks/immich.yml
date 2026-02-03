@@ -8,6 +8,8 @@
 - name: Configure Immich
   hosts: immich
   become: true
+  vars:
+    immich_require_nas_mount: "{{ not (lab_inventory | default(false)) }}"
   roles:
     - geerlingguy.docker
     - immich

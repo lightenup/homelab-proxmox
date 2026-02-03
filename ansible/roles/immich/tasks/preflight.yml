@@ -5,9 +5,24 @@
   ansible.builtin.stat:
     path: /mnt/immich
   register: nas_mount
-  failed_when: not nas_mount.stat.exists
 
-- name: Verify NAS mount is writable
+- name: Fail if NAS mount is required and missing
+  ansible.builtin.fail:
+    msg: "Immich NAS mount missing at /mnt/immich. Ensure the host bind mount is configured before deploy."
+  when:
+    - immich_require_nas_mount | bool
+    - not nas_mount.stat.exists
+
+- name: Create local Immich mount path when NAS is optional
+  ansible.builtin.file:
+    path: /mnt/immich
+    state: directory
+    mode: '0755'
+  when:
+    - not immich_require_nas_mount | bool
+    - not nas_mount.stat.exists
+
+- name: Verify Immich storage path is writable
   ansible.builtin.file:
     path: /mnt/immich/.ansible_test
     state: touch
