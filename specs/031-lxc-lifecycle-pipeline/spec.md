@@ -1,8 +1,8 @@
 # Feature Specification: LXC Lifecycle Workflow Consolidation
 
-**Feature Branch**: `031-lxc-lifecycle-pipeline`  
-**Created**: 2026-01-18  
-**Status**: Draft  
+**Feature Branch**: `031-lxc-lifecycle-pipeline`
+**Created**: 2026-01-18
+**Status**: Draft
 **Input**: User description: "Create a spec for improving LXC lifecycle workflows by (a) formalizing full LXC removal cleanup steps and (b) consolidating add/change/delete into a single generic LXC pipeline. Include all required changes: Removal cleanup scope (must be documented and enforced): Terraform: remove LXC module/resource from main.tf or per-service root; remove from outputs.tf ansible_inventory. TF vars: remove service IP and mountpoint entries in service_ips / service_mountpoints in prod.tfvars and lab.tfvars. Inventory: run task inventory:update (uses inventory.py). Host vars: delete ansible/host_vars/<service>.yml (task service:remove currently only strips healthcheck keys in service_lifecycle.py). Ansible: remove service from services.yml and any service-specific playbooks/roles. Proxy/DNS: remove reverse proxy routes and any docs/config references (e.g., reverse-proxy.md). Healthcheck: run task healthcheck:run -- --check-drift and ensure no GAP/zombie entries remain. Data/mounts: remove service-specific NAS mounts, bind mounts, and data directories. Generic LXC pipeline changes (single workflow for add/change/delete): One workflow that always runs plan and apply, regardless of change type. If plan contains replace/destroy, require explicit confirmation gate (reuse existing destructive guard behavior). Ensure apply uses the same plan and captures evidence. Update docs to describe the unified pipeline and removal steps (e.g., golden-paths-service-lifecycle.md). Requirements + Acceptance Criteria: Removal produces no orphaned inventory/healthchecks/proxy routes. Drift detection reports no GAP/zombie entries. Pipeline runs on a single entrypoint for all LXC changes. Destructive actions are blocked without explicit confirmation. Idempotent runs do not re-create removed services. Include edge cases: partial removal, missing host_vars, failed terraform apply, failed inventory update, and destroy confirmation not provided."
 
 ## Clarifications

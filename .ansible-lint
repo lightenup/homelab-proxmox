@@ -1,0 +1,23 @@
+profile: min
+exclude_paths:
+  - .venv/
+  - artifacts/
+  - backups/
+  - docs/
+  - scripts/
+  - terraform/
+  - ansible/playbooks/adguard.yml
+  - ansible/playbooks/tailscale.yml
+  - ansible/playbooks/verify_tailscale.yml
+
+# Keep lint noise low while still enforcing common issues.
+skip_list:
+  - experimental
+  - command-instead-of-module
+  - command-instead-of-shell
+  - jinja
+  - key-order
+  - name
+  - role-name
+  - var-naming
+  - yaml

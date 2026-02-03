@@ -1,6 +1,6 @@
 # Implementation Plan: Proxmox Config Backup Automation
 
-**Branch**: `013-proxmox-config-backup` | **Date**: 2025-12-22 | **Spec**: [spec.md](./spec.md)  
+**Branch**: `013-proxmox-config-backup` | **Date**: 2025-12-22 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/013-proxmox-config-backup/spec.md`
 
 **Architecture Decision**: Choice 3, Option A - Local script runtime. Systemd timer runs bash script on PVE host. Ansible deploys/configures the script, packages, systemd units, and configuration file but is NOT the runtime.
@@ -15,8 +15,8 @@ Automate backup of Proxmox host configuration files and Infrastructure-as-Code a
 
 ## Technical Context
 
-**Language/Version**: Bash 5.x (backup script runtime), Ansible 2.15+ (deployment only)  
-**Primary Dependencies**: 
+**Language/Version**: Bash 5.x (backup script runtime), Ansible 2.15+ (deployment only)
+**Primary Dependencies**:
 - age 1.1+ (encryption)
 - zstd 1.5+ (compression)
 - nfs-common (NFS client)
@@ -24,31 +24,31 @@ Automate backup of Proxmox host configuration files and Infrastructure-as-Code a
 - flock (file locking, included in util-linux)
 - mail/sendmail (email notifications, optional)
 
-**Storage**: 
+**Storage**:
 - Staging: `/var/backups/proxmox-staging/<timestamp>/` on Proxmox host (ephemeral per-run, ~100 MB)
 - Persistent: Synology NAS `/volume1/homelab_backups/proxmox/` via NFS mount (~4 GB for 42 backups)
 - Backup format: `proxmox-backup-YYYYMMDD-HHMMSS.tar.zst.age` (compressed then encrypted)
 - Configuration: `/etc/proxmox-backup.conf` (NAS mount, age key path, retention policy, repo path)
 
-**Testing**: 
+**Testing**:
 - Manual validation: Run /usr/local/sbin/proxmox-config-backup → decrypt → verify file contents
 - Verification: /usr/local/sbin/proxmox-config-backup --verify <path> (decrypt + checksum validation)
 - Integration test: Ansible playbook `test_backup.yml` (deploy script, run manually, verify archive)
 - Restore drill: Quarterly test restore to fresh Proxmox install (separate from automation)
 
-**Target Platform**: 
+**Target Platform**:
 - Proxmox VE 8.x (Debian 12-based) on host `pve` (192.168.1.112)
 - Synology DSM 7.x NAS (192.168.1.109) with NFS service
 
 **Project Type**: Infrastructure automation (Ansible for deployment, bash script for runtime)
 
-**Performance Goals**: 
+**Performance Goals**:
 - Backup completion: <10 minutes (typical homelab: 3-5 LXCs, 10 MB Terraform state if repo defined, 50 MB Ansible repo if repo defined)
 - Archive size: <100 MB compressed+encrypted
 - Verification: <60 seconds (decrypt + list + SHA256 checksum validation)
 - Rotation scan: <30 seconds (42 files @ ~100 MB each)
 
-**Constraints**: 
+**Constraints**:
 - Script must run as root (required for /etc/pve access)
 - No secrets in plaintext in staging, logs, or script variables
 - Encryption key stored in Bitwarden (manual injection into /etc/proxmox-backup.conf, not in git)
@@ -58,7 +58,7 @@ Automate backup of Proxmox host configuration files and Infrastructure-as-Code a
 - Pre-backup rotation (fail-safe if NAS disk full)
 - Staging cleanup after successful backup (no sensitive data persists)
 
-**Scale/Scope**: 
+**Scale/Scope**:
 - Single Proxmox host (not clustered)
 - 3-10 LXC containers
 - Terraform state: <20 MB (if repo path defined)
@@ -205,7 +205,7 @@ docs/
 └── manifest.txt                 # File manifest (paths, sizes, checksums)
 ```
 
-**Structure Decision**: 
+**Structure Decision**:
 
 This is an **infrastructure automation project** with **local script runtime** (Architecture: Choice 3, Option A). The structure follows these principles:
 
@@ -820,7 +820,7 @@ ansible-playbook ansible/playbooks/test_backup.yml --extra-vars "backup_test_mod
 - ✅ Failure detection time: Measure notification latency, target <10 minutes
 - ✅ Manual execution reliability: Document any issues encountered during quarterly drills
 
-**Review Cadence**: 
+**Review Cadence**:
 - Weekly for first month (performance/reliability)
 - Monthly thereafter (operational)
 - Quarterly drill results (quality/restore validation)

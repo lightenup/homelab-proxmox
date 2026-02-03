@@ -324,8 +324,8 @@ done
 jq '.' artifacts/019-lab/lab-20251231-123456/logs/commands.jsonl
 
 # Timeline of check executions
-jq -s 'map(select(.event_type == "check_start" or .event_type == "check_complete")) | 
-  group_by(.data.check_id) | 
+jq -s 'map(select(.event_type == "check_start" or .event_type == "check_complete")) |
+  group_by(.data.check_id) |
   map({check_id: .[0].data.check_id, events: map({event_type, timestamp})})' \
   artifacts/019-lab/lab-20251231-123456/logs/commands.jsonl
 ```

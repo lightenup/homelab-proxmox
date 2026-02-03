@@ -49,4 +49,3 @@
     path: "{{ alertmanager_config_path }}"
     state: directory
     mode: '0755'
-

@@ -3,4 +3,3 @@
   ansible.builtin.apt:
     name: tailscale
     state: present
-

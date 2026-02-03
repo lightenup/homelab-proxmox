@@ -13,14 +13,14 @@ Persist mutmut cache outputs on the shared NAS mount (`/mnt/nas/homelab_ci`) usi
 
 ## Technical Context
 
-**Language/Version**: Python 3.11 (mutmut/pytest tooling), shell scripts for automation  
-**Primary Dependencies**: mutmut, pytest, uv, GitHub Actions  
-**Storage**: NAS NFS share mounted on PVE at `/mnt/nas/homelab_ci` and on developer laptops at `/Volumes/nas/homelab_ci` (per-branch cache file)  
-**Testing**: mutmut (nightly), pytest baseline; actionlint for workflow linting; act for local workflow validation  
+**Language/Version**: Python 3.11 (mutmut/pytest tooling), shell scripts for automation
+**Primary Dependencies**: mutmut, pytest, uv, GitHub Actions
+**Storage**: NAS NFS share mounted on PVE at `/mnt/nas/homelab_ci` and on developer laptops at `/Volumes/nas/homelab_ci` (per-branch cache file)
+**Testing**: mutmut (nightly), pytest baseline; actionlint for workflow linting; act for local workflow validation
 **Target Platform**: PVE host (Debian), GitHub Actions runners (Ubuntu), developer laptops (macOS/Linux)
-**Project Type**: Infrastructure repo with workflows + Python tooling  
-**Performance Goals**: Keep nightly mutation runs manageable; enable reuse via cache to avoid re-runs  
-**Constraints**: No secrets in cache; shared mount must be available; per-branch cache layout  
+**Project Type**: Infrastructure repo with workflows + Python tooling
+**Performance Goals**: Keep nightly mutation runs manageable; enable reuse via cache to avoid re-runs
+**Constraints**: No secrets in cache; shared mount must be available; per-branch cache layout
 **Scale/Scope**: Single repo, single shared cache mount
 
 ## Constitution Check

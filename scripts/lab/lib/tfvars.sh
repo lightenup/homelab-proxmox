@@ -279,4 +279,3 @@ _tfvars_provision_prod_and_write_proof() {
 	chmod 600 "${rendered_path}" 2>/dev/null || true
 	return 0
 }
-

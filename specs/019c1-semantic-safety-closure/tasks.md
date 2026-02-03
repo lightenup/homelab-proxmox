@@ -1,6 +1,6 @@
 # Tasks: Lab Harness Semantic & Safety Closure
 
-**Input**: Design documents from `/specs/019c1-semantic-safety-closure/`  
+**Input**: Design documents from `/specs/019c1-semantic-safety-closure/`
 **Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅, quickstart.md ✅
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
@@ -206,7 +206,7 @@ Phase 8: Polish (T057-T068) ← Final
 ## Implementation Strategy
 
 ### MVP Scope (Minimum Viable Product)
-**Deliver first**: User Story 1 (T001-T030)  
+**Deliver first**: User Story 1 (T001-T030)
 **Why**: Provides core value - profile-driven execution with machine-readable evidence
 
 ### Incremental Delivery Order
@@ -245,11 +245,11 @@ Phase 8: Polish (T057-T068) ← Final
 
 ## Format Validation
 
-✅ All tasks follow checklist format: `- [ ] [TaskID] [P?] [Story?] Description with file path`  
-✅ Task IDs sequential (T001-T068, plus T008a, T015a, T015b, T032a for inserted tasks)  
-✅ Story labels present for US phases ([US1]-[US5])  
-✅ No story labels for Setup/Foundational/Polish  
-✅ File paths specified in descriptions  
+✅ All tasks follow checklist format: `- [ ] [TaskID] [P?] [Story?] Description with file path`
+✅ Task IDs sequential (T001-T068, plus T008a, T015a, T015b, T032a for inserted tasks)
+✅ Story labels present for US phases ([US1]-[US5])
+✅ No story labels for Setup/Foundational/Polish
+✅ File paths specified in descriptions
 ✅ Parallel markers [P] applied to independent tasks
 
 ---

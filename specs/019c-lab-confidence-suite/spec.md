@@ -100,4 +100,3 @@ As a platform engineer, I want to run a Safety Suite of negative tests so that I
 - **SC-002**: `hypervisor-nested-workload` profile successfully verifies a nested mini-service on compatible hardware.
 - **SC-003**: Safety Suite passes 100% of negative tests (confirming guards are active).
 - **SC-004**: No residual VMs (lab or nested) remain after a full Confidence Suite run.
-

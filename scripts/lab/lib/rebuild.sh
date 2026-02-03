@@ -201,7 +201,7 @@ cmd_rebuild() {
     log_info "Phase: Baseline Host Checks"
     export CURRENT_PHASE="baseline-host"
     export CURRENT_SOURCE="harness"
-    
+
     mkdir -p "${ARTIFACT_DIR}/reports/host"
 
     if ! run_baseline_host_checks; then
@@ -213,7 +213,7 @@ cmd_rebuild() {
     # 3. Baseline Template Checks
     log_info "Phase: Baseline Template Checks"
     export CURRENT_PHASE="baseline-templates"
-    
+
     mkdir -p "${ARTIFACT_DIR}/reports/templates"
 
     local templates_valid=true
@@ -249,10 +249,10 @@ cmd_rebuild() {
 
     # 5. Suite Execution
     log_info "Phase: Suite Execution ($SUITE_PROFILE)"
-    
+
     # Call cmd_run with SKIP_LOCK=true and existing env vars
     export SKIP_LOCK=true
-    
+
     if cmd_run --profile "$SUITE_PROFILE" $([[ "$keep" == "true" ]] && echo "--keep") $([[ "$no_verify" == "true" ]] && echo "--no-verify" || echo "--verify") $([[ "$apply_sudoers" == "true" ]] && echo "--apply-sudoers"); then
         :
     else
@@ -537,7 +537,7 @@ run_baseline_host_checks() {
     local bridge_check
     bridge_check=$(host_exec "ip addr show $LAB_BRIDGE" 2>&1)
     echo "$bridge_check" > "${ARTIFACT_DIR}/reports/host/HOST-002-bridge.txt"
-    
+
     if echo "$bridge_check" | grep -q "$LAB_GATEWAY"; then
         record_check "HOST-002" "Required bridge exists and has expected gateway IP" "blocker" "PASS" "PASS" "Bridge $LAB_BRIDGE has IP $LAB_GATEWAY" "reports/host/HOST-002-bridge.txt"
     else
@@ -551,7 +551,7 @@ run_baseline_host_checks() {
     storage_check=$(host_exec "sudo -n /usr/sbin/pvesm status" 2>&1)
     local storage_rc=$?
     echo "$storage_check" > "${ARTIFACT_DIR}/reports/host/HOST-003-storage.txt"
-    
+
     if [[ $storage_rc -ne 0 ]]; then
         record_check "HOST-003" "Required storage backend exists" "blocker" "PASS" "FAIL" "pvesm status rc=$storage_rc" "reports/host/HOST-003-storage.txt"
         failed=1
@@ -566,7 +566,7 @@ run_baseline_host_checks() {
     local nested_check
     nested_check=$(host_exec "cat /sys/module/kvm_intel/parameters/nested 2>/dev/null || cat /sys/module/kvm_amd/parameters/nested 2>/dev/null")
     echo "$nested_check" > "${ARTIFACT_DIR}/reports/host/HOST-004-nested.txt"
-    
+
     if [[ "$nested_check" == "Y" || "$nested_check" == "1" ]]; then
         record_check "HOST-004" "Host nested virtualization enabled" "high" "PASS" "PASS" "Nested virtualization enabled ($nested_check)" "reports/host/HOST-004-nested.txt"
     else
@@ -585,7 +585,7 @@ run_baseline_template_checks() {
     local tpl1_status
     tpl1_status=$(host_exec "$qm_cmd status $LAB_TEMPLATE_VMID" 2>&1)
     echo "$tpl1_status" > "${ARTIFACT_DIR}/reports/templates/TPL-001-qm-status-${LAB_TEMPLATE_VMID}.txt"
-    
+
     if echo "$tpl1_status" | grep -q "status:"; then
         record_check "TPL-001" "Base template exists (VMID $LAB_TEMPLATE_VMID)" "blocker" "PASS" "PASS" "Template found" "reports/templates/TPL-001-qm-status-${LAB_TEMPLATE_VMID}.txt"
     else
@@ -597,7 +597,7 @@ run_baseline_template_checks() {
     local tpl2_status
     tpl2_status=$(host_exec "$qm_cmd status $LAB_TEMPLATE_VMID_TIER2" 2>&1)
     echo "$tpl2_status" > "${ARTIFACT_DIR}/reports/templates/TPL-002-qm-status-${LAB_TEMPLATE_VMID_TIER2}.txt"
-    
+
     if echo "$tpl2_status" | grep -q "status:"; then
         record_check "TPL-002" "Tier2 template exists (VMID $LAB_TEMPLATE_VMID_TIER2)" "blocker" "PASS" "PASS" "Template found" "reports/templates/TPL-002-qm-status-${LAB_TEMPLATE_VMID_TIER2}.txt"
     else
@@ -613,7 +613,7 @@ run_baseline_template_checks() {
         config=$(host_exec "$qm_cmd config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-003-qm-config-${vmid}.txt"
         tpl3_evidence_refs+=("reports/templates/TPL-003-qm-config-${vmid}.txt")
-        
+
         if echo "$config" | grep -q "template: 1"; then
              :
         else
@@ -635,7 +635,7 @@ run_baseline_template_checks() {
         config=$(host_exec "$qm_cmd config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-004-tags-${vmid}.txt"
         tpl4_evidence_refs+=("reports/templates/TPL-004-tags-${vmid}.txt")
-        
+
         if echo "$config" | grep -q "$IDENTITY_TAG_KEY"; then
              :
         else
@@ -657,7 +657,7 @@ run_baseline_template_checks() {
         config=$(host_exec "$qm_cmd config $vmid" 2>&1)
         echo "$config" > "${ARTIFACT_DIR}/reports/templates/TPL-005-cloudinit-${vmid}.txt"
         tpl5_evidence_refs+=("reports/templates/TPL-005-cloudinit-${vmid}.txt")
-        
+
         if echo "$config" | grep -q "ciuser:" && echo "$config" | grep -q "sshkeys:"; then
              :
         else
@@ -682,7 +682,7 @@ run_baseline_template_checks() {
         name=$(echo "$config" | grep "name:" | awk '{print $2}')
         echo "name: $name" > "${ARTIFACT_DIR}/reports/templates/TPL-006-naming-${vmid}.txt"
         tpl6_evidence_refs+=("reports/templates/TPL-006-naming-${vmid}.txt")
-        
+
         if [[ "$name" =~ ^lab-tpl- ]]; then
             :
         else
@@ -701,7 +701,7 @@ run_baseline_template_checks() {
 
 remediate_templates() {
     local rem_log="${ARTIFACT_DIR}/logs/remediation-templates.log"
-    
+
     log_info "Remediating templates..."
     emit_event "remediation_start" "$RUN_ID" "scope=templates" "target_host=${SSH_USER}@${PROXMOX_HOST}"
     mkdir -p "${ARTIFACT_DIR}/logs"

@@ -64,4 +64,3 @@ description: "Task list for feature 019d-assertion-alignment"
 - [x] T018 Verify all assertion messages follow the style guide (Check ID, Remediation)
 - [x] T019 Run full regression suite `pve-lab suite hypervisor-nested-workload` and validate Evidence Pack structure
 - [x] T020 Create implementation report with failure analysis
-

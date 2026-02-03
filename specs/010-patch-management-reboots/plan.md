@@ -1,7 +1,7 @@
 # Implementation Plan: Patch Management + Reboots
 
-**Feature Branch**: `010-patch-management-reboots`  
-**Created**: December 19, 2025  
+**Feature Branch**: `010-patch-management-reboots`
+**Created**: December 19, 2025
 **Status**: Draft
 
 ## Overview
@@ -297,37 +297,37 @@ Not automated. Manual recovery procedures documented in runbook:
 
 ### Why `apt` Module vs Shell Commands?
 
-**Decision**: Use Ansible `apt` module  
-**Rationale**: Idempotent, cross-distro compatible, better error handling  
+**Decision**: Use Ansible `apt` module
+**Rationale**: Idempotent, cross-distro compatible, better error handling
 **Alternatives Considered**: Shell `apt-get` commands (less idempotent)
 
 ### Why `/var/run/reboot-required` vs Other Methods?
 
-**Decision**: Check file existence for reboot detection  
-**Rationale**: Standard Debian/Ubuntu convention, reliable  
+**Decision**: Check file existence for reboot detection
+**Rationale**: Standard Debian/Ubuntu convention, reliable
 **Alternatives Considered**: Parse apt output (fragile), check running kernel vs installed (complex)
 
 ### Why Explicit Reboot Flag for Host?
 
-**Decision**: Require `-e allow_host_reboot=true` for pve  
-**Rationale**: Safety gate prevents accidental downtime, operator must consciously approve  
+**Decision**: Require `-e allow_host_reboot=true` for pve
+**Rationale**: Safety gate prevents accidental downtime, operator must consciously approve
 **Alternatives Considered**: Always reboot (unsafe), prompt interactively (not automatable)
 
 ### Why Serial Execution?
 
-**Decision**: `serial: 1` for services group  
-**Rationale**: Prevents all services going down simultaneously, easier troubleshooting  
+**Decision**: `serial: 1` for services group
+**Rationale**: Prevents all services going down simultaneously, easier troubleshooting
 **Alternatives Considered**: Parallel execution (faster but riskier)
 
 ### Why Two-Tier Verification (Critical vs Warning)?
 
-**Decision**: Infrastructure checks (SSH, mounts) are critical and fail playbook. Service HTTP checks log warnings only.  
-**Rationale**: 
+**Decision**: Infrastructure checks (SSH, mounts) are critical and fail playbook. Service HTTP checks log warnings only.
+**Rationale**:
 - Infrastructure failures indicate broken systems that need immediate attention
 - Services may be intentionally stopped for maintenance or troubleshooting
 - Security patching shouldn't be blocked by application-layer issues
 - Separates infrastructure health from service availability
-**Alternatives Considered**: 
+**Alternatives Considered**:
 - All checks critical (too strict - blocks patching when services down)
 - All checks warning (too loose - misses infrastructure failures)
 - Conditional checks based on previous state (too complex)

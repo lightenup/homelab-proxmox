@@ -6,7 +6,7 @@
 - name: Retrieve Kuma Push URL from monitoring host
   ansible.builtin.set_fact:
     proxmox_backup_kuma_url: "{{ hostvars['monitoring']['uptime_kuma_push_monitors']['Proxmox Backup']['pushUrl'] }}"
-  when: 
+  when:
     - proxmox_backup_kuma_url is not defined or proxmox_backup_kuma_url | length == 0
     - hostvars['monitoring']['uptime_kuma_push_monitors'] is defined
     - hostvars['monitoring']['uptime_kuma_push_monitors']['Proxmox Backup'] is defined

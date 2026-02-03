@@ -60,10 +60,10 @@ record_check() {
         # Mark as seen
         SEEN_CHECK_IDS+=("$check_id")
     fi
-    
+
     local timestamp
     timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    
+
     # Get context from environment or defaults
     local source="${CURRENT_SOURCE:-harness}"
     if [[ "$check_id" == "SUITE-DEDUP-001" ]]; then
@@ -94,7 +94,7 @@ record_check() {
 }
 EOF
 )
-    
+
     # Append to checks array
     CHECKS_ARRAY+=("$check_json")
 }
@@ -146,7 +146,7 @@ prune_checks_by_phase() {
 serialize_checks() {
     local output_file="$1"
     local checks_schema_version="1.0.0"
-    
+
     # Build checks array JSON
     local checks_json="["
     local first=true
@@ -159,7 +159,7 @@ serialize_checks() {
         checks_json+="$check"
     done
     checks_json+="]"
-    
+
     # Build final document with schema version
     cat > "$output_file" <<EOF
 {
@@ -174,16 +174,16 @@ EOF
 load_profile() {
     local profile_name="$1"
     local profile_file="${PROFILES_DIR:-scripts/lab/profiles.d}/${profile_name}.profile"
-    
+
     if [[ ! -f "$profile_file" ]]; then
         echo "ERROR: Profile file not found: $profile_file" >&2
         return 1
     fi
-    
+
     # Source the profile file
     # shellcheck source=/dev/null
     source "$profile_file"
-    
+
     # Validate required fields
     local required_fields=(
         "PROFILE_ID"
@@ -193,14 +193,14 @@ load_profile() {
         "MODE"
         "EXPECTED_DURATION_MINUTES"
     )
-    
+
     for field in "${required_fields[@]}"; do
         if [[ -z "${!field:-}" ]]; then
             echo "ERROR: Profile $profile_name missing required field: $field" >&2
             return 1
         fi
     done
-    
+
     return 0
 }
 
@@ -210,22 +210,22 @@ validate_negative_test() {
     local check_id="$1"
     local expected="$2"
     local result="$3"
-    
+
     # If expected FAIL but got PASS, this is a safety hole (ERROR condition)
     if [[ "$expected" == "FAIL" && "$result" == "PASS" ]]; then
         echo "ERROR: Negative test $check_id failed - expected FAIL but got PASS (safety hole detected)" >&2
         return 1
     fi
-    
+
     # If expected FAIL and got FAIL, this is correct (negative test passed)
     if [[ "$expected" == "FAIL" && "$result" == "FAIL" ]]; then
         return 0
     fi
-    
+
     # Normal validation for non-negative tests
     if [[ "$expected" != "$result" ]]; then
         echo "WARNING: Check $check_id mismatch - expected $expected but got $result" >&2
     fi
-    
+
     return 0
 }

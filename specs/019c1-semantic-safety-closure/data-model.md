@@ -1,6 +1,6 @@
 # Data Model: Semantic & Safety Closure
 
-**Date**: 2025-12-31  
+**Date**: 2025-12-31
 **Spec**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md) | **Research**: [research.md](./research.md)
 
 ## Overview

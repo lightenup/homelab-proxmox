@@ -1,8 +1,8 @@
 # Feature Specification: Rebuild Acceptance Gate Hardening (020)
 
-**Feature Branch**: `020-rebuild-acceptance-hardening`  
-**Created**: 2026-01-01  
-**Status**: Draft  
+**Feature Branch**: `020-rebuild-acceptance-hardening`
+**Created**: 2026-01-01
+**Status**: Draft
 **Input**: User description: "Rebuild Acceptance Gate Hardening (Teardown Determinism + Output Hygiene)"
 
 ---

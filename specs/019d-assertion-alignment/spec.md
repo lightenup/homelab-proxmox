@@ -1,8 +1,8 @@
 # Feature Specification: Assertion Alignment
 
-**Feature Branch**: `019d-assertion-alignment`  
-**Created**: December 31, 2025  
-**Status**: Draft  
+**Feature Branch**: `019d-assertion-alignment`
+**Created**: December 31, 2025
+**Status**: Draft
 **Input**: User description: "Increase fidelity and readability of Tier 1 + Tier 2 validations by moving key invariants into explicit Ansible assertions and producing machine-readable assertion evidence."
 
 ## Overview

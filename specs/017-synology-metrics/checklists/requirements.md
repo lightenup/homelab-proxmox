@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Synology Metrics & Alerting
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2025-12-28  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2025-12-28
 **Feature**: [017-synology-metrics/spec.md](../spec.md)
 
 ## Content Quality

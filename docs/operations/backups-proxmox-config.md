@@ -1,6 +1,6 @@
 # Proxmox Configuration Backup Operations
 
-**Feature**: 013-proxmox-config-backup  
+**Feature**: 013-proxmox-config-backup
 **Last Updated**: 2025-12-28
 
 ## Overview
@@ -79,7 +79,7 @@ age --version
    sudo mkdir -p /volume1/homelab_backups/proxmox
    sudo chown root:root /volume1/homelab_backups/proxmox
    sudo chmod 755 /volume1/homelab_backups/proxmox
-   
+
    # Option 2: Via DSM File Station
    # Navigate to homelab_backups → Create Folder → Name: proxmox
    ```
@@ -210,7 +210,7 @@ showmount -e 192.168.1.109
    ```bash
    ./scripts/generate_backup_keys.sh
    ```
-   
+
    This will:
    - Generate a new keypair in `ansible/secrets/age.key` (git-ignored)
    - Output the public key
@@ -600,8 +600,8 @@ The backup system is deployed using Ansible from your local development machine:
 
 **Deployment Flow**:
 ```
-Laptop (macOS) 
-  → Ansible over SSH 
+Laptop (macOS)
+  → Ansible over SSH
     → PVE Host (192.168.1.112)
       → Deploy backup script + systemd timer
       → Clone/update homelab-proxmox repo to /root/homelab-proxmox
@@ -623,9 +623,9 @@ The system is designed to transition seamlessly to GitHub Actions:
 
 **Planned Flow**:
 ```
-GitHub Push 
-  → GitHub Actions (self-hosted runner on Raspberry Pi) 
-    → Ansible over SSH 
+GitHub Push
+  → GitHub Actions (self-hosted runner on Raspberry Pi)
+    → Ansible over SSH
       → PVE Host (192.168.1.112)
         → Deploy backup script + systemd timer
         → Clone/update homelab-proxmox repo to /root/homelab-proxmox
@@ -737,6 +737,6 @@ For issues or questions:
 - Test NFS mount manually
 - Validate age key in Bitwarden
 
-**Last Updated**: 2025-12-28  
-**Feature**: 013-proxmox-config-backup  
+**Last Updated**: 2025-12-28
+**Feature**: 013-proxmox-config-backup
 **Architecture**: Choice 3, Option A (bash script runtime)

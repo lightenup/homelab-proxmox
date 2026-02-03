@@ -1,7 +1,7 @@
 # Alert Testing Procedure
 
-**Feature**: 017-synology-metrics  
-**Purpose**: Manually test Prometheus alert rules and Alertmanager email delivery  
+**Feature**: 017-synology-metrics
+**Purpose**: Manually test Prometheus alert rules and Alertmanager email delivery
 **Requirement**: FR-031 (Alert testing procedure)
 
 ## When to Use This Runbook

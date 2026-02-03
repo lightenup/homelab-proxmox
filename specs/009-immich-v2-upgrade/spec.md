@@ -1,8 +1,8 @@
 # Feature Specification: Immich v2.4.0 Upgrade
 
-**Feature Branch**: `009-immich-v2-upgrade`  
-**Created**: December 19, 2024  
-**Status**: Draft  
+**Feature Branch**: `009-immich-v2-upgrade`
+**Created**: December 19, 2024
+**Status**: Draft
 **Input**: Upgrade Immich from v1.121.0 to v2.4.0 with NAS-backed storage, fresh v2 compose layout, and Ansible automation
 
 ## Overview
@@ -15,7 +15,7 @@ Upgrade Immich photo management service from v1.121.0 to v2.4.0, implementing th
 
 - **LXC Container**: VMID 101, hostname `immich`, IP 192.168.1.213, Debian bookworm
 - **Immich Version**: v1.121.0 (pinned in `ansible/group_vars/services/vars.yml`)
-- **Storage**: 
+- **Storage**:
   - NAS export: `192.168.1.109:/volume1/homelab_immich`
   - Mounted on Proxmox host: `/mnt/nas/homelab_immich`
   - Bind-mounted into LXC: `/mnt/immich`
@@ -226,9 +226,9 @@ As an infrastructure operator, I need documented rollback procedures to restore 
 
 ### Risk: Data Loss During Upgrade
 
-**Likelihood**: Low  
-**Impact**: High  
-**Mitigation**: 
+**Likelihood**: Low
+**Impact**: High
+**Mitigation**:
 - Perform backup of existing compose directory before upgrade (automated in Ansible)
 - No user data exists currently, so data loss risk is minimal
 - Document rollback procedure in case v2 is incompatible
@@ -236,8 +236,8 @@ As an infrastructure operator, I need documented rollback procedures to restore 
 
 ### Risk: NAS Mount Unavailable
 
-**Likelihood**: Low  
-**Impact**: High  
+**Likelihood**: Low
+**Impact**: High
 **Mitigation**:
 - Add Ansible pre-flight check to verify `/mnt/immich` mount exists and is writable
 - Document manual mount verification steps
@@ -245,8 +245,8 @@ As an infrastructure operator, I need documented rollback procedures to restore 
 
 ### Risk: Configuration Mismatch with v2
 
-**Likelihood**: Medium  
-**Impact**: Medium  
+**Likelihood**: Medium
+**Impact**: Medium
 **Mitigation**:
 - Reference official upstream v2 docker-compose.yml and .env examples
 - Test deployment in isolated environment before production
@@ -255,8 +255,8 @@ As an infrastructure operator, I need documented rollback procedures to restore 
 
 ### Risk: Postgres Performance on LXC Disk
 
-**Likelihood**: Low  
-**Impact**: Medium  
+**Likelihood**: Low
+**Impact**: Medium
 **Mitigation**:
 - Decision: Use LXC local disk for Postgres (SSDs are faster than NAS for database workloads)
 - Monitor database performance after upgrade
@@ -265,8 +265,8 @@ As an infrastructure operator, I need documented rollback procedures to restore 
 
 ### Risk: Breaking Changes in v2 API
 
-**Likelihood**: Low  
-**Impact**: Medium  
+**Likelihood**: Low
+**Impact**: Medium
 **Mitigation**:
 - Mobile app compatibility verified through testing
 - API endpoint `/api/server/ping` provides health validation
@@ -306,7 +306,7 @@ The following official Immich documentation was consulted for v2 specifications:
 Based on upstream documentation and compose file comparison:
 
 1. **Simplified Architecture**: v2 eliminates the separate microservices container; immich-server now handles both API and worker tasks
-2. **Updated Images**: 
+2. **Updated Images**:
    - Postgres: `ghcr.io/immich-app/postgres:14-vectorchord0.4.3` (was `tensorchord/pgvecto-rs:pg14-v0.2.0`)
    - Redis: `docker.io/valkey/valkey:9` (was `redis:6.2-alpine`)
 3. **Volume Mapping Change**: v1 used `/usr/src/app/upload`, v2 uses `/data` mount point with UPLOAD_LOCATION env var
@@ -317,8 +317,8 @@ Based on upstream documentation and compose file comparison:
 
 ### Decision: Fresh v2 Deploy vs In-Place Migration
 
-**Decision**: Treat upgrade as fresh v2 deployment, not in-place migration  
-**Rationale**: 
+**Decision**: Treat upgrade as fresh v2 deployment, not in-place migration
+**Rationale**:
 - No user data exists in current v1 installation
 - Fresh deploy is simpler and lower risk
 - Avoids potential database migration issues
@@ -326,7 +326,7 @@ Based on upstream documentation and compose file comparison:
 
 ### Decision: Postgres on LXC Local Disk
 
-**Decision**: Store Postgres data on LXC local disk at `/opt/immich-data/postgres`  
+**Decision**: Store Postgres data on LXC local disk at `/opt/immich-data/postgres`
 **Rationale**:
 - Database performance is significantly better on local SSD vs NFS
 - Postgres recommends against network storage for data files
@@ -336,7 +336,7 @@ Based on upstream documentation and compose file comparison:
 
 ### Decision: New Library Path for v2
 
-**Decision**: Create new library path `/mnt/immich/library-v2`  
+**Decision**: Create new library path `/mnt/immich/library-v2`
 **Rationale**:
 - Clear distinction from any v1 artifacts
 - Allows keeping v1 data for rollback if needed
@@ -345,7 +345,7 @@ Based on upstream documentation and compose file comparison:
 
 ### Decision: Pin to v2.4.0 Specifically
 
-**Decision**: Use `IMMICH_VERSION=v2.4.0` not `v2` or `release`  
+**Decision**: Use `IMMICH_VERSION=v2.4.0` not `v2` or `release`
 **Rationale**:
 - Explicit version pinning prevents unexpected updates
 - Enables controlled upgrade testing in future

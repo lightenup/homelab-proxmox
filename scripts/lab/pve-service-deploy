@@ -1676,7 +1676,7 @@ sys.exit(3)
 
         {
             echo "ctid=${ctid}"
-            echo "configured_nameserver=${configured_nameserver:-}" 
+            echo "configured_nameserver=${configured_nameserver:-}"
         } >"${dns_report}"
 
         if [[ -n "${configured_nameserver}" ]]; then

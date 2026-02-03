@@ -1,8 +1,8 @@
 # Implementation Tasks: Disaster Recovery Drill
 
-**Feature**: `012-disaster-recovery-drill`  
-**Created**: December 21, 2025  
-**Updated**: December 21, 2025 (clarified)  
+**Feature**: `012-disaster-recovery-drill`
+**Created**: December 21, 2025
+**Updated**: December 21, 2025 (clarified)
 **Total Estimated Tasks**: 44
 
 ## Implementation Approach
@@ -26,7 +26,7 @@
 
 - [ ] **T001**: Add .gitignore entries for DR scripts directory
   - **Files**: `.gitignore`
-  - **Details**: 
+  - **Details**:
     ```
     # Disaster Recovery drill files (local only)
     scripts/dr/rclone.conf
@@ -52,7 +52,7 @@
 
 - [ ] **T005**: Write hetzner_list.sh script
   - **Files**: `scripts/dr/hetzner_list.sh`
-  - **Details**: 
+  - **Details**:
     - Accept optional path argument (default: bucket root)
     - Load env vars from .env if present
     - Validate required variables (RCLONE_REMOTE_NAME, HETZNER_S3_BUCKET)
@@ -62,7 +62,7 @@
 
 - [ ] **T006**: Create initial runbook with prerequisites and Bitwarden instructions
   - **Files**: `docs/runbooks/disaster-recovery-drill.md` (create initial version)
-  - **Details**: 
+  - **Details**:
     - Overview section explaining drill purpose (prove Immich photo recovery from Hetzner)
     - Prerequisites: rclone installation (Linux: apt/dnf, macOS: brew, Windows: choco/scoop)
     - Bitwarden credentials section with placeholder "[BITWARDEN_ITEM_NAME]" for Hetzner S3 access
@@ -147,7 +147,7 @@
 
 - [ ] **T015**: Identify one Pool chunk file for sample download
   - **Manual Task**: Human inspection during drill
-  - **Details**: 
+  - **Details**:
     - List Pool/ folder contents: `./scripts/dr/hetzner_list.sh DiskStation413j_1.hbk/Pool`
     - Select one chunk file (typical size 100 MB - 50 GB depending on Hyper Backup chunking)
     - Document selected chunk name in drill notes
@@ -189,7 +189,7 @@
 
 - [ ] **T025**: Install decrypt tooling (restic path)
   - **Manual Task**: Human execution during drill (if format = restic)
-  - **Command**: 
+  - **Command**:
     - Linux: `apt install restic` or `dnf install restic`
     - macO19**: Update runbook with Hyper Backup Explorer installation
   - **Files**: `docs/runbooks/disaster-recovery-drill.md`
@@ -217,7 +217,7 @@
 - [ ] **T031**: Execute decrypt/extract (borg path)
   - **Manual Task**: Human execution during drill (if format = borg)
   - **Command**: `borg extract ~/dr-restore/full::<archive-name> --target ~/dr-restore/extracted`
-  - **Details**: 
+  - **Details**:
     - List archives first: `borg list ~/dr-restore/full`
     - Extract latest archive
     - Enter encryption password when prompted (from T028)
@@ -235,7 +235,7 @@
 
 - [ ] **T022**: Retrieve encryption key from Bitwarden
   - **Manual Task**: Human execution during drill
-  - **Details**: 
+  - **Details**:
     1. Open Bitwarden vault
     2. Navigate to item "[BITWARDEN_ENCRYPTION_KEY_ITEM]"
     3. Copy encryption password to secure clipboard
@@ -343,15 +343,15 @@
     - Overall assessment: SUCCESS (Immich photos recoverable from Hetzner backup)
   - **Validation**: Verification summary clear and actionable
   - **⚠️ STOP POINT**: If photos are corrupted, unreadable, or hashes suggest issues, STOP and investigate. Potential causes: wrong encryption key, backup corruption, download errors. Do NOT declare drill successful until photos are confirmed viewable.
-    
+
     **Executed By**: [NAME]
     **Execution Date**: [YYYY-MM-DD]
     **Total Duration**: [HH:MM]
-    
+
     ### Phase A: Access Verification
     - Status: SUCCESS / FAILURE
     - Issues: [None or description]
-    
+
     ### Phase B: Download
     - Data volume downloaded: [GB]
     - Download time: [HH:MM]
@@ -390,7 +390,7 @@
     - Hetzner egress cost: [$X.XX or N/A]
     - Status: SUCCESS / FAILURE
     - Issues: [None or description]
-    
+
     ### Phase C: Decrypt & Extract
     - Backup format: Hyper Backup (confirmed)
     - Hyper Backup Explorer version: [version]
@@ -400,7 +400,7 @@
     - Lessons learned: [List]
     - Runbook improvements needed: [List]
     - Break-glass procedure: Documented (not tested in initial drill)
-    
+
     ### Next Steps
     - [ ] Rotate credentials (if exposed)
     - [ ] Implement break-glass storage (future enhancement)
@@ -413,9 +413,9 @@
   - **Details**: Add Disaster Recovery section:
     ```markdown
     ## Disaster Recovery
-    
+
     Disaster recovery procedures for Immich photo backups stored in Hetzner Object Storage.
-    
+
     - **Runbook**: [docs/runbooks/disaster-recovery-drill.md](docs/runbooks/disaster-recovery-drill.md)
     - **Scripts**: [scripts/dr/](scripts/dr/) (list, download, verify)
     - **Specification**: [specs/012-disaster-recovery-drill/](specs/012-disaster-recovery-drill/)

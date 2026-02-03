@@ -1,7 +1,7 @@
 # Monthly Patching Runbook
 
-**Feature**: 010-patch-management-reboots  
-**Owner**: Homelab Operations  
+**Feature**: 010-patch-management-reboots
+**Owner**: Homelab Operations
 **Last Updated**: December 19, 2025
 
 ## Overview
@@ -159,7 +159,7 @@ After patching completes:
    ```bash
    ssh root@pve.local  # or root@192.168.1.112
    mount | grep /mnt/nas/homelab_immich
-   
+
    ssh 192.168.1.213  # immich or immich.local
    mount | grep /mnt/immich
    ```
@@ -193,16 +193,16 @@ ansible-playbook playbooks/apt_diagnostics.yml --limit immich
      # Check current DNS
      ssh 192.168.1.213  # or immich.local
      cat /etc/resolv.conf
-     
+
      # Option A: Fix in LXC (temporary - lost on reboot)
      echo "nameserver 192.168.1.1" | sudo tee /etc/resolv.conf
      echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf
-     
+
      # Option B: Fix in Proxmox (persistent - RECOMMENDED)
      ssh root@pve.local  # or root@192.168.1.112
      pct set 101 --nameserver "192.168.1.1 8.8.8.8"
      pct stop 101 && pct start 101
-     
+
      # Verify DNS works
      ssh 192.168.1.213  # or immich.local
      nslookup deb.debian.org
@@ -216,7 +216,7 @@ ansible-playbook playbooks/apt_diagnostics.yml --limit immich
      ssh 192.168.1.213  # or immich.local
      # Check what's holding the lock
      sudo lsof /var/lib/dpkg/lock-frontend
-     
+
      # If no process found, remove stale locks
      sudo rm /var/lib/dpkg/lock-frontend
      sudo rm /var/lib/dpkg/lock

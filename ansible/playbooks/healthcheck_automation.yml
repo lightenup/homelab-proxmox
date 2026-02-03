@@ -2,7 +2,7 @@
 - name: Configure Service Health Automation
   hosts: monitoring
   become: yes
-  
+
   pre_tasks:
     - name: Load monitoring secrets (SMTP)
       include_vars:

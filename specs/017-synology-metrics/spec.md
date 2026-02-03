@@ -1,8 +1,8 @@
 # Feature Specification: Synology Metrics & Alerting
 
-**Feature Branch**: `017-synology-metrics`  
-**Created**: 2025-12-28  
-**Status**: Draft  
+**Feature Branch**: `017-synology-metrics`
+**Created**: 2025-12-28
+**Status**: Draft
 **Input**: Build observability stack (Prometheus/Grafana/Alertmanager) on dedicated LXC to monitor Synology NAS health via SNMP with email alerting
 
 ## Clarifications
@@ -230,28 +230,28 @@ Operator can safely backup/restore monitoring stack, perform controlled upgrades
 
 ## Risks & Mitigations
 
-- **R-001**: **Risk**: SNMP polling overhead impacts NAS performance  
+- **R-001**: **Risk**: SNMP polling overhead impacts NAS performance
   **Mitigation**: Use 30-second scrape intervals (not aggressive), monitor NAS CPU via dashboard, adjust interval if needed. SNMP is lightweight protocol designed for network device monitoring.
 
-- **R-002**: **Risk**: Prometheus TSDB grows unbounded, fills LXC disk  
+- **R-002**: **Risk**: Prometheus TSDB grows unbounded, fills LXC disk
   **Mitigation**: Configure 15-day retention, 32GB LXC disk sufficient for metrics volume. Monitor Prometheus disk usage via self-scrape, alert if >80% full.
 
-- **R-003**: **Risk**: Email alerts not delivered due to SMTP auth failures  
+- **R-003**: **Risk**: Email alerts not delivered due to SMTP auth failures
   **Mitigation**: Test alert procedure in documentation, validate SMTP config during deployment. Alertmanager UI shows notification failures for troubleshooting.
 
-- **R-004**: **Risk**: Synology SNMP OIDs differ between DSM versions, dashboard breaks  
+- **R-004**: **Risk**: Synology SNMP OIDs differ between DSM versions, dashboard breaks
   **Mitigation**: Document tested DSM versions, use standard OIDs from Synology MIB files. Provide troubleshooting steps to identify missing OIDs.
 
-- **R-005**: **Risk**: Operator forgets Grafana admin password, locks self out  
+- **R-005**: **Risk**: Operator forgets Grafana admin password, locks self out
   **Mitigation**: Store password in Ansible vault with retrieval instructions. Document Grafana password reset procedure via docker exec.
 
-- **R-006**: **Risk**: Monitoring stack fails during LXC reboot, metrics gap unnoticed  
+- **R-006**: **Risk**: Monitoring stack fails during LXC reboot, metrics gap unnoticed
   **Mitigation**: Docker compose restart policy (unless-stopped), systemd service for compose stack. Monitor stack health via Uptime Kuma (separate monitoring).
 
-- **R-007**: **Risk**: SNMPv2 community string leaked, unauthorized access to NAS SNMP  
+- **R-007**: **Risk**: SNMPv2 community string leaked, unauthorized access to NAS SNMP
   **Mitigation**: Use strong non-default community string in vault, restrict SNMP access to monitoring LXC IP via Synology firewall. Consider SNMPv3 for auth/encryption.
 
-- **R-008**: **Risk**: Grafana dashboard import fails, operator gets blank UI  
+- **R-008**: **Risk**: Grafana dashboard import fails, operator gets blank UI
   **Mitigation**: Use Grafana provisioning (not manual import), test dashboard JSON validity during deployment, provide sample dashboard in repo.
 
 ## Implementation Strategy

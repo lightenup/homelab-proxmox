@@ -1,8 +1,8 @@
 # Feature Specification: Decommission Host Email Notifications
 
-**Feature Branch**: `014-email-decommission`  
-**Created**: December 23, 2025  
-**Status**: Draft  
+**Feature Branch**: `014-email-decommission`
+**Created**: December 23, 2025
+**Status**: Draft
 **Input**: "Decommission PVE host email notifications and migrate to Kuma push monitoring for Proxmox backup alerting"
 
 ## Clarifications

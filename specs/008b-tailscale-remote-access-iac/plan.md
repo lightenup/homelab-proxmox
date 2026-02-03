@@ -1,7 +1,7 @@
 # Implementation Plan: Tailscale Remote Access IaC
 
-**Feature**: 008b-tailscale-remote-access-iac  
-**Goal**: Make Tailscale subnet-router + ACL setup fully reproducible from repo  
+**Feature**: 008b-tailscale-remote-access-iac
+**Goal**: Make Tailscale subnet-router + ACL setup fully reproducible from repo
 **Context**: Working Tailscale configuration exists on pve (manual setup); codifying as Infrastructure as Code
 
 ## High-Level Approach

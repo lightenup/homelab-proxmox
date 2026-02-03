@@ -5,7 +5,7 @@
   gather_facts: false
   vars:
     profile: "lan"
-  
+
   tasks:
     - name: Execute healthcheck script
       command: "scripts/healthcheck/run.sh --profile {{ profile }}"

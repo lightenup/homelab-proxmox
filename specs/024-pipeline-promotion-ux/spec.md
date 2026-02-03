@@ -1,8 +1,8 @@
 # Feature Specification: Pipeline Promotion UX
 
-**Feature Branch**: `024-pipeline-promotion-ux`  
-**Created**: 2026-01-09  
-**Status**: Draft  
+**Feature Branch**: `024-pipeline-promotion-ux`
+**Created**: 2026-01-09
+**Status**: Draft
 **Input**: User description: "Improve CI pipeline dispatcher UX, enforce LAB→PROD promotion with approval, automate prod.tfvars provisioning/validation on the Proxmox host without committing secrets, and generate a LAB inventory snapshot artifact in evidence + GitHub Actions artifacts."
 
 ## Problem Statement

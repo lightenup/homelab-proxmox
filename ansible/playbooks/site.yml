@@ -30,4 +30,3 @@
   # Purpose: Schedule automated healthchecks and drift detection
   # Dependencies: Localhost (Controller)
   tags: healthcheck
-

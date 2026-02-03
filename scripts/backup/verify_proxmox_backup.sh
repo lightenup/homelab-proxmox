@@ -96,7 +96,7 @@ verify_backup() {
         log_error "Decompression failed - corrupted archive"
         return $EXIT_DECRYPTION_FAILED
     fi
-    
+
     local file_count
     file_count=$(tar -tf "$temp_dir/backup.tar" | wc -l)
     log_info "✓ Archive contains $file_count files"
@@ -107,7 +107,7 @@ verify_backup() {
         "manifest.txt"
         "proxmox-config/storage.cfg"
     )
-    
+
     local missing_files=()
     for file in "${required_files[@]}"; do
         if ! tar -tf "$temp_dir/backup.tar" | grep -q "^\\./.*$file$"; then
@@ -136,10 +136,10 @@ verify_backup() {
             if [[ -z "$line" || "$line" =~ ^# ]]; then
                 continue
             fi
-            
+
             local expected_checksum=$(echo "$line" | awk '{print $1}')
             local file_path=$(echo "$line" | awk '{print $2}')
-            
+
             if [[ -f "$temp_dir/$file_path" ]]; then
                 local actual_checksum=$(sha256sum "$temp_dir/$file_path" | awk '{print $1}')
                 if [[ "$expected_checksum" != "$actual_checksum" ]]; then

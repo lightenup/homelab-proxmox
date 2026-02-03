@@ -1,8 +1,8 @@
 # Tasks: Proxmox Config Backup Automation
 
-**Feature**: 013-proxmox-config-backup  
-**Input**: [spec.md](./spec.md)  
-**Created**: December 22, 2025  
+**Feature**: 013-proxmox-config-backup
+**Input**: [spec.md](./spec.md)
+**Created**: December 22, 2025
 **Architecture**: Choice 3, Option A - Local script runtime (systemd → bash script)
 
 ## Format: `- [ ] [ID] [P?] [Story?] Description with file path`
@@ -274,7 +274,7 @@ Phase 1 (Setup: T001-T007) ← Role structure + manual setup documentation
             ↓
 Phase 2 (Foundational: T008-T013) ← Packages, script deployment, config (blocking)
             ↓
-Phase 3 (US1: T014-T027) ← Basic Backup → MVP COMPLETE HERE  
+Phase 3 (US1: T014-T027) ← Basic Backup → MVP COMPLETE HERE
             ↓
 Phase 4 (US2: T028-T038) ← IaC Artifacts (builds on US1 script functions)
             ↓

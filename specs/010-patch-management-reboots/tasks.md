@@ -1,8 +1,8 @@
 # Implementation Tasks: Patch Management + Reboots
 
-**Feature Branch**: `010-patch-management-reboots`  
-**Created**: December 19, 2025  
-**Status**: Draft  
+**Feature Branch**: `010-patch-management-reboots`
+**Created**: December 19, 2025
+**Status**: Draft
 **Last Updated**: December 19, 2025 (clarifications integrated)
 
 ## Clarifications Applied (2025-12-19)
@@ -72,12 +72,12 @@ These tasks incorporate the following specification clarifications:
   patch_reboot_timeout: 600
   patch_wait_for_connection_timeout: 300
   allow_host_reboot: false
-  
+
   # Verification targets (two-tier: infrastructure critical, HTTP warning-only)
   patch_verify_ssh: true
   patch_verify_mounts: true
   patch_verify_http: true
-  
+
   # HTTP endpoints (WARNING-ONLY - log failures without failing playbook)
   patch_http_endpoints:
     - name: "Immich API"
@@ -89,12 +89,12 @@ These tasks incorporate the following specification clarifications:
     - name: "Reverse Proxy"
       url: "http://192.168.1.211:80"
       host: "proxy"
-  
+
   # NFS mounts to verify
   patch_nfs_mounts:
     - path: "/mnt/nas/homelab_immich"
       host: "pve"
-  
+
   # Bind mounts to verify
   patch_bind_mounts:
     - path: "/mnt/immich"
@@ -114,10 +114,10 @@ These tasks incorporate the following specification clarifications:
   ---
   - name: "Patch Management - Update packages"
     include_tasks: update.yml
-  
+
   - name: "Patch Management - Handle reboot if needed"
     include_tasks: reboot.yml
-  
+
   - name: "Patch Management - Verify system health"
     include_tasks: verify.yml
   ```
@@ -203,7 +203,7 @@ These tasks incorporate the following specification clarifications:
     set_fact:
       should_reboot: "{{ reboot_required_file.stat.exists }}"
     when: "'services' in group_names"
-  
+
   - name: "Set reboot decision for Proxmox host (gated)"
     set_fact:
       should_reboot: "{{ reboot_required_file.stat.exists and allow_host_reboot | default(false) | bool }}"
@@ -438,11 +438,11 @@ These tasks incorporate the following specification clarifications:
       status_code: 200
     register: http_check_result
     failed_when: false
-    when: 
+    when:
       - patch_verify_http | bool
       - inventory_hostname == item.host
     loop: "{{ patch_http_endpoints }}"
-  
+
   - name: "Log HTTP check warnings"
     debug:
       msg: "WARNING: {{ item.item.name }} is unreachable - {{ item.msg | default('No response') }}"
@@ -592,14 +592,14 @@ These tasks incorporate the following specification clarifications:
 - [ ] **T054** [US5] Document phone app installation:
   ```markdown
   ## Installing Tailscale on Phone
-  
+
   ### iOS
   1. Open App Store
   2. Search "Tailscale"
   3. Install official Tailscale app
   4. Open app, tap "Sign in"
   5. Authenticate with your Tailscale account
-  
+
   ### Android
   1. Open Google Play Store
   2. Search "Tailscale"
@@ -611,7 +611,7 @@ These tasks incorporate the following specification clarifications:
 - [ ] **T055** [US5] Document tailnet verification:
   ```markdown
   ## Verifying Tailnet Membership
-  
+
   1. Open Tailscale app on phone
   2. Check status indicator (green = connected)
   3. Note your phone's Tailscale IP (usually 100.x.x.x)
@@ -622,9 +622,9 @@ These tasks incorporate the following specification clarifications:
 - [ ] **T056** [US5] Document subnet route approval:
   ```markdown
   ## Checking Subnet Route Approval
-  
+
   Your Proxmox host (pve) advertises subnet routes for 192.168.1.0/24.
-  
+
   1. Visit admin console: https://login.tailscale.com/admin/machines
   2. Find "pve" in machine list
   3. Click machine name to view details
@@ -636,22 +636,22 @@ These tasks incorporate the following specification clarifications:
 - [ ] **T057** [US5] Document address format explanation:
   ```markdown
   ## Address Formats: What Works from Phone
-  
+
   ### ✅ WORKS: Tailscale IP
   - Example: `http://100.64.0.5`
   - Direct Tailscale VPN address
   - Always works, most reliable
-  
+
   ### ✅ WORKS: MagicDNS Name
   - Example: `http://pve` or `http://immich`
   - Requires MagicDNS enabled in tailnet settings
   - Resolves to Tailscale IP automatically
-  
+
   ### ✅ WORKS: Subnet Route IP
   - Example: `http://192.168.1.213`
   - Requires subnet route approved (see above)
   - Routes through pve to reach LAN devices
-  
+
   ### ❌ DOES NOT WORK: .local mDNS
   - Example: `http://pve.local` or `http://immich.local`
   - mDNS (Multicast DNS) requires direct network access
@@ -662,29 +662,29 @@ These tasks incorporate the following specification clarifications:
 - [ ] **T058** [US5] Document troubleshooting checklist:
   ```markdown
   ## Troubleshooting Checklist
-  
+
   ### Phone Cannot Connect to Homelab
-  
+
   1. **Check Tailscale Status**
      - Open Tailscale app
      - Verify status shows "Connected"
      - Note your phone's Tailscale IP
-  
+
   2. **Verify Subnet Routes**
      - Check admin console for route approval
      - Confirm pve is online and connected
      - Verify pve advertises 192.168.1.0/24
-  
+
   3. **Test Connectivity**
      - Try pve Tailscale IP: `http://100.x.x.x`
      - Try MagicDNS: `http://pve`
      - Try subnet route: `http://192.168.1.112`
-  
+
   4. **Check ACL Rules**
      - Visit: https://login.tailscale.com/admin/acls
      - Verify your phone's tag can access pve
      - Check for any deny rules blocking access
-  
+
   5. **Restart Tailscale**
      - On phone: Force close app, reopen
      - On pve: `sudo systemctl restart tailscaled`
@@ -699,7 +699,7 @@ These tasks incorporate the following specification clarifications:
     hosts: proxmox_hosts
     gather_facts: yes
     become: yes
-    
+
     tasks:
       - name: "Check Tailscale service status"
         systemd:
@@ -707,7 +707,7 @@ These tasks incorporate the following specification clarifications:
           state: started
         check_mode: yes
         register: tailscale_service
-      
+
       - name: "Display service status"
         debug:
           msg: "Tailscale service is {{ 'running' if tailscale_service.status.ActiveState == 'active' else 'not running' }}"
@@ -719,7 +719,7 @@ These tasks incorporate the following specification clarifications:
     command: tailscale status
     register: tailscale_status
     changed_when: false
-  
+
   - name: "Display Tailscale status"
     debug:
       var: tailscale_status.stdout_lines
@@ -731,7 +731,7 @@ These tasks incorporate the following specification clarifications:
     command: tailscale ip -4
     register: tailscale_ip
     changed_when: false
-  
+
   - name: "Display Tailscale IP"
     debug:
       msg: "Tailscale IP: {{ tailscale_ip.stdout }}"
@@ -743,7 +743,7 @@ These tasks incorporate the following specification clarifications:
     command: tailscale status --json
     register: tailscale_status_json
     changed_when: false
-  
+
   - name: "Parse and display routes"
     debug:
       msg: "Advertised routes: {{ (tailscale_status_json.stdout | from_json).Self.AllowedIPs }}"

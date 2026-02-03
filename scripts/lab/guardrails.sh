@@ -90,34 +90,34 @@ ensure_ci_artifact_root() {
 run_guard_001() {
     local evidence_dir="$1"
     local runid="${2:-}"
-    
+
     echo "Running GUARD-001: Tier2 playbook rejects without lab_inventory=true" >&2
-    
+
     if [[ -n "$runid" ]]; then
         emit_check_start "$runid" "GUARD-001" "Tier2 playbook rejects without lab_inventory=true"
     fi
-    
+
     local guard_log="${evidence_dir}/reports/guard_001.log"
     mkdir -p "$(dirname "$guard_log")"
-    
+
     # Attempt to run playbook with lab_inventory=false (should fail)
     local result="SKIP"
     local reason="Guard test execution failed"
-    
+
     cd "$REPO_ROOT"
-    
+
     # Run playbook with lab_inventory=false - expect assertion failure
     if ansible-playbook ansible/playbooks/lab_tier2_pve.yml \
         -i ansible/inventories/lab/hosts.yml \
         --extra-vars "lab_inventory=false" \
         --syntax-check &>"$guard_log"; then
-        
+
         # Syntax check passed, now try actual execution (should fail at guard)
         if ansible-playbook ansible/playbooks/lab_tier2_pve.yml \
             -i ansible/inventories/lab/hosts.yml \
             --extra-vars "lab_inventory=false" \
             --check &>>"$guard_log"; then
-            
+
             # UNEXPECTED: Playbook did not reject - this is an ERROR (safety hole)
             result="PASS"
             reason="SAFETY HOLE: Playbook accepted lab_inventory=false"
@@ -130,7 +130,7 @@ run_guard_001() {
         result="SKIP"
         reason="Syntax check failed, cannot test guard"
     fi
-    
+
     # Record check with expected=FAIL
     record_check "GUARD-001" \
         "Tier2 playbook rejects execution without lab_inventory=true" \
@@ -139,11 +139,11 @@ run_guard_001() {
         "$result" \
         "$reason" \
         "reports/guard_001.log"
-        
+
     if [[ -n "$runid" ]]; then
         emit_check_complete "$runid" "GUARD-001" "$result" "$reason"
     fi
-    
+
     # Return validation result for abort logic
     # Return 0 if expected FAIL occurred, 1 if unexpected PASS (safety hole)
     if [[ "$result" == "FAIL" ]]; then
@@ -160,29 +160,29 @@ run_guard_001() {
 run_guard_002() {
     local evidence_dir="$1"
     local runid="${2:-}"
-    
+
     echo "Running GUARD-002: Playbook rejects non-lab hostname pattern" >&2
-    
+
     if [[ -n "$runid" ]]; then
         emit_check_start "$runid" "GUARD-002" "Playbook rejects non-lab hostname pattern"
     fi
-    
+
     # Create temporary inventory with bad hostname
     local tmp_dir="${evidence_dir}/tmp"
     mkdir -p "$tmp_dir"
-    
+
     local bad_inventory="${tmp_dir}/inventory_bad_hostname.yml"
     local guard_log="${evidence_dir}/reports/guard_002.log"
     mkdir -p "$(dirname "$guard_log")"
-    
+
     # Get lab VM IP from actual inventory
     local lab_ip
     lab_ip=$(grep -A5 'lab-pve-' "$REPO_ROOT/ansible/inventories/lab/hosts.yml" | grep 'ansible_host:' | head -1 | awk '{print $2}')
-    
+
     if [[ -z "$lab_ip" ]]; then
         lab_ip="10.99.0.10"  # Fallback
     fi
-    
+
     # Create temporary inventory with non-lab hostname pointing to lab IP
     cat > "$bad_inventory" <<EOF
 ---
@@ -197,22 +197,22 @@ all:
   vars:
     lab_inventory: true
 EOF
-    
+
     local result="SKIP"
     local reason="Guard test execution failed"
-    
+
     cd "$REPO_ROOT"
-    
+
     # Attempt to run with bad hostname (should fail at hostname guard)
     if ansible-playbook ansible/playbooks/lab_tier2_pve.yml \
         -i "$bad_inventory" \
         --syntax-check &>"$guard_log"; then
-        
+
         # Try actual execution with --check mode (should fail at guard)
         if ansible-playbook ansible/playbooks/lab_tier2_pve.yml \
             -i "$bad_inventory" \
             --check &>>"$guard_log"; then
-            
+
             # UNEXPECTED: Playbook did not reject bad hostname
             result="PASS"
             reason="SAFETY HOLE: Playbook accepted non-lab hostname 'not-lab-pve-01'"
@@ -225,7 +225,7 @@ EOF
         result="SKIP"
         reason="Syntax check failed, cannot test guard"
     fi
-    
+
     # Record check with expected=FAIL
     record_check "GUARD-002" \
         "Playbook rejects non-lab hostname pattern" \
@@ -234,14 +234,14 @@ EOF
         "$result" \
         "$reason" \
         "reports/guard_002.log"
-        
+
     if [[ -n "$runid" ]]; then
         emit_check_complete "$runid" "GUARD-002" "$result" "$reason"
     fi
-    
+
     # Cleanup temporary inventory
     rm -f "$bad_inventory"
-    
+
     # Return validation result
     if [[ "$result" == "FAIL" ]]; then
         return 0  # Guard worked
@@ -257,21 +257,21 @@ EOF
 run_guard_003() {
     local evidence_dir="$1"
     local runid="${2:-}"
-    
+
     echo "Running GUARD-003: Destroy safety check rejects VM without identity markers" >&2
-    
+
     if [[ -n "$runid" ]]; then
         emit_check_start "$runid" "GUARD-003" "Destroy safety check rejects VM without identity markers"
     fi
-    
+
     local guard_log="${evidence_dir}/reports/guard_003.log"
     mkdir -p "$(dirname "$guard_log")"
-    
+
     # Create synthetic qm config for a VM without lab identity markers
     local tmp_dir="${evidence_dir}/tmp"
     mkdir -p "$tmp_dir"
     local synthetic_config="${tmp_dir}/synthetic_vm_config.txt"
-    
+
     cat > "$synthetic_config" <<'EOF'
 # Synthetic VM config for GUARD-003 - VM without identity markers
 bootdisk: scsi0
@@ -288,10 +288,10 @@ smbios1: uuid=12345678-1234-1234-1234-123456789abc
 sockets: 1
 vmgenid: abcdef01-2345-6789-abcd-ef0123456789
 EOF
-    
+
     local result="SKIP"
     local reason="Guard test execution failed"
-    
+
     # Test the safety check logic by parsing the synthetic config
     # Looking for absence of lab identity markers (notes, tags, description with 'lab')
     if grep -qi "lab" "$synthetic_config" || \
@@ -308,7 +308,7 @@ EOF
         result="FAIL"
         reason="Safety check correctly would reject VM without identity markers"
     fi
-    
+
     # Record check with expected=FAIL
     record_check "GUARD-003" \
         "Destroy safety check rejects VM missing identity markers" \
@@ -317,14 +317,14 @@ EOF
         "$result" \
         "$reason" \
         "reports/guard_003.log"
-        
+
     if [[ -n "$runid" ]]; then
         emit_check_complete "$runid" "GUARD-003" "$result" "$reason"
     fi
-    
+
     # Cleanup synthetic config
     rm -f "$synthetic_config"
-    
+
     # Return validation result
     if [[ "$result" == "FAIL" ]]; then
         return 0  # Guard worked
@@ -339,12 +339,12 @@ EOF
 run_all_guardrails() {
     local evidence_dir="$1"
     local runid="${2:-}"
-    
+
     echo "=== Running Guardrail Checks (Negative Tests) ===" >&2
-    
+
     local guard_failures=0
     local safety_holes=0
-    
+
     # Run each guard and track results
     if ! run_guard_001 "$evidence_dir" "$runid"; then
         local rc=$?
@@ -354,7 +354,7 @@ run_all_guardrails() {
             ((guard_failures++))
         fi
     fi
-    
+
     if ! run_guard_002 "$evidence_dir" "$runid"; then
         local rc=$?
         if [[ $rc -eq 2 ]]; then
@@ -363,7 +363,7 @@ run_all_guardrails() {
             ((guard_failures++))
         fi
     fi
-    
+
     if ! run_guard_003 "$evidence_dir" "$runid"; then
         local rc=$?
         if [[ $rc -eq 2 ]]; then
@@ -372,12 +372,12 @@ run_all_guardrails() {
             ((guard_failures++))
         fi
     fi
-    
+
     # Cleanup tmp directory after all guards complete
     rm -rf "${evidence_dir}/tmp"
-    
+
     echo "=== Guardrail Checks Complete ===" >&2
-    
+
     # Return non-zero if any safety holes detected
     if [[ $safety_holes -gt 0 ]]; then
         echo "ERROR: $safety_holes safety hole(s) detected!" >&2
@@ -386,7 +386,7 @@ run_all_guardrails() {
         echo "WARNING: $guard_failures guard(s) could not be tested" >&2
         return 1
     fi
-    
+
     return 0
 }
 

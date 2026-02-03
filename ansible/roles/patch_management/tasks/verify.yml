@@ -8,7 +8,7 @@
   stat:
     path: "{{ item.path }}"
   register: nfs_mount_check
-  when: 
+  when:
     - patch_verify_mounts | bool
     - inventory_hostname == item.host
   loop: "{{ patch_nfs_mounts }}"
@@ -33,7 +33,7 @@
     status_code: 200
   register: http_check_result
   failed_when: false
-  when: 
+  when:
     - patch_verify_http | bool
     - inventory_hostname == item.host
   loop: "{{ patch_http_endpoints }}"

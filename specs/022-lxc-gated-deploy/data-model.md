@@ -1,6 +1,6 @@
 # Data Model: Gated LXC Deploy (Least Privilege)
 
-**Spec**: specs/022-lxc-gated-deploy/spec.md  
+**Spec**: specs/022-lxc-gated-deploy/spec.md
 **Date**: 2026-01-04
 
 This feature is primarily workflow-driven (CI/CD), so the “data model” is a set of structured inputs and artifacts rather than an application database.

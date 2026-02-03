@@ -124,7 +124,7 @@ if source "$TEST_DIR/profiles.d/test-profile.profile" 2>/dev/null; then
     else
         log_fail "Profile parsing: profile_id mismatch"
     fi
-    
+
     if [[ "$PROFILE_TIER" == "2" ]]; then
         log_pass "Profile parsing: Loads tier correctly"
     else
@@ -150,20 +150,20 @@ serialize_checks "$TEST_DIR/checks.json"
 
 if [[ -f "$TEST_DIR/checks.json" ]]; then
     log_pass "Check serialization: Created checks.json"
-    
+
     if jq -e '.checks_schema_version' "$TEST_DIR/checks.json" > /dev/null 2>&1; then
         log_pass "Check serialization: Contains schema version"
     else
         log_fail "Check serialization: Missing schema version"
     fi
-    
+
     check_count=$(jq '.checks | length' "$TEST_DIR/checks.json")
     if [[ "$check_count" == "2" ]]; then
         log_pass "Check serialization: Contains 2 checks"
     else
         log_fail "Check serialization: Check count mismatch (expected 2, got $check_count)"
     fi
-    
+
     # Verify check structure
     if jq -e '.checks[0].check_id' "$TEST_DIR/checks.json" > /dev/null 2>&1; then
         log_pass "Check serialization: Check has check_id field"
@@ -186,20 +186,20 @@ emit_phase_complete "test-run-001" "test-phase"
 
 if [[ -f "$TEST_DIR/events.jsonl" ]]; then
     log_pass "JSONL events: Created events.jsonl"
-    
+
     line_count=$(wc -l < "$TEST_DIR/events.jsonl")
     if [[ "$line_count" -ge 2 ]]; then
         log_pass "JSONL events: Contains multiple events"
     else
         log_fail "JSONL events: Too few events (expected >=2, got $line_count)"
     fi
-    
+
     if grep -q '"event_type":"phase_start"' "$TEST_DIR/events.jsonl"; then
         log_pass "JSONL events: Contains phase_start event"
     else
         log_fail "JSONL events: Missing phase_start event"
     fi
-    
+
     # Verify JSON format
     if head -1 "$TEST_DIR/events.jsonl" | jq -e '.timestamp' > /dev/null 2>&1; then
         log_pass "JSONL events: Valid JSON format with timestamp"
@@ -220,7 +220,7 @@ if [[ -x "$SCRIPT_DIR/guardrails.sh" ]]; then
     # Run guardrails in test mode
     if bash "$SCRIPT_DIR/guardrails.sh" "$TEST_DIR/guardrails-test" "test-run-002" > /dev/null 2>&1; then
         log_pass "Guardrails: Executed successfully"
-        
+
         if [[ -d "$TEST_DIR/guardrails-test/reports" ]]; then
             log_pass "Guardrails: Created reports directory"
         else
@@ -298,7 +298,7 @@ probe_lock_status "artifacts/lab-runs" "$TEST_DIR/cleanup-test/reports/lock_stat
 
 if [[ -f "$TEST_DIR/cleanup-test/reports/lock_status.json" ]]; then
     log_pass "Cleanup: Created lock_status.json"
-    
+
     if jq -e '.timestamp' "$TEST_DIR/cleanup-test/reports/lock_status.json" > /dev/null 2>&1; then
         log_pass "Cleanup: lock_status.json has valid structure"
     else

@@ -1,8 +1,8 @@
 # Feature Specification: Tailscale Remote Access IaC
 
-**Feature Branch**: `008b-tailscale-remote-access-iac`  
-**Created**: December 20, 2025  
-**Status**: Draft  
+**Feature Branch**: `008b-tailscale-remote-access-iac`
+**Created**: December 20, 2025
+**Status**: Draft
 **Input**: User description: "Make the Tailscale subnet-router + ACL setup fully reproducible from the repo"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -125,16 +125,16 @@ As a homelab user away from home, I need a verification checklist to confirm tha
 - **Proxmox Host (pve)**: Physical server running Proxmox VE that acts as the Tailscale subnet router
   - Attributes: LAN IP (192.168.1.112), Tailscale IP (100.67.156.70), subnet routes advertised (192.168.1.0/24)
   - Role: Gateway between Tailscale mesh network and local LAN
-  
+
 - **ACL Policy**: JSON configuration defining access control rules in Tailscale
   - Attributes: groups (admin users), acls (traffic rules), tagOwners (device tags)
   - Location: Committed to repo at documented path
   - Critical field: group membership using GitHub identity format (`xxx@github`)
-  
+
 - **Subnet Route**: Network route advertised by pve to Tailscale mesh
   - Attributes: CIDR (192.168.1.0/24), status (advertised/active), device (pve)
   - Enables: Remote access to all LAN services through Tailscale VPN
-  
+
 - **IP Forwarding Configuration**: System-level kernel parameters
   - Attributes: IPv4 forwarding (net.ipv4.ip_forward), IPv6 forwarding (net.ipv6.conf.all.forwarding)
   - Persistence: /etc/sysctl.d/99-tailscale-subnet-router.conf

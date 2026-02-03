@@ -1,0 +1,32 @@
+extends: default
+
+ignore: |
+  .venv/
+  artifacts/
+  backups/
+  terraform/.terraform/
+  python/.venv/
+  python/.pytest_cache/
+  python/.mypy_cache/
+  python/.ruff_cache/
+  .github/workflows/
+  ansible/roles/**/files/**
+  ansible/roles/**/templates/**
+  ansible/group_vars/**/vault.yml
+  specs/026-separate-prod-apply/contracts/workflows.openapi.yml
+
+rules:
+  braces:
+    max-spaces-inside: 1
+  document-start: disable
+  line-length:
+    max: 200
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+  truthy: disable
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
