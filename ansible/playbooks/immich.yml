@@ -9,7 +9,7 @@
   hosts: immich
   become: true
   vars:
-    immich_require_nas_mount: "{{ (environment | default('prod')) != 'lab' }}"
+    immich_require_nas_mount: "{{ (deploy_environment | default('prod')) != 'lab' }}"
   roles:
     - geerlingguy.docker
     - immich
