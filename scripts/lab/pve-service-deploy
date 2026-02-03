@@ -482,7 +482,7 @@ terraform_init_with_retry() {
     local sleep_seconds="${TERRAFORM_INIT_SLEEP_SECONDS:-5}"
     local attempt=1
 
-    TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-/var/lib/homelab-proxmox/cache/terraform/plugins}"
+    TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-${HOME}/.cache/terraform/plugins}"
     export TF_PLUGIN_CACHE_DIR
     mkdir -p "${TF_PLUGIN_CACHE_DIR}" || true
 
