@@ -6,3 +6,4 @@ immich_install_dir: "/opt/immich-app"
 immich_data_dir: "/opt/immich-data"
 immich_upload_location: "/mnt/immich/library-v2"
 immich_require_nas_mount: true
+immich_external_library_mounts: []

@@ -23,6 +23,10 @@ service_mountpoints = {
       mp     = "/mnt/immich"
       volume = "/mnt/nas/homelab_immich"
     }
+    external_photo = {
+      mp     = "/mnt/immich-external/photo"
+      volume = "/mnt/nas/photo"
+    }
   }
   jellyfin = {
     video = {
