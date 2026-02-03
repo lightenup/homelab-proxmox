@@ -1676,7 +1676,7 @@ sys.exit(3)
 
         {
             echo "ctid=${ctid}"
-            echo "configured_nameserver=${configured_nameserver:-}" 
+            echo "configured_nameserver=${configured_nameserver:-}"
         } >"${dns_report}"
 
         if [[ -n "${configured_nameserver}" ]]; then
@@ -1865,6 +1865,7 @@ sys.exit(3)
     ansible-playbook -i "${inventory_file}" "${playbook}" \
         --limit "${SERVICE}" \
         --ssh-common-args "${ssh_common_args}" \
+        -e "environment=${ENVIRONMENT}" \
         -e "evidence_dir=${EVIDENCE_ROOT}" \
         -e "run_id=${RUN_ID}" \
         -e "profile_id=${PROFILE_ID}" \
