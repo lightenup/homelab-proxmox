@@ -477,6 +477,28 @@ terraform_chdir() {
     terraform -chdir="${tf_dir}" "$@"
 }
 
+terraform_init_with_retry() {
+    local attempts="${TERRAFORM_INIT_ATTEMPTS:-3}"
+    local sleep_seconds="${TERRAFORM_INIT_SLEEP_SECONDS:-5}"
+    local attempt=1
+
+    TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-/var/lib/homelab-proxmox/cache/terraform/plugins}"
+    export TF_PLUGIN_CACHE_DIR
+    mkdir -p "${TF_PLUGIN_CACHE_DIR}" || true
+
+    while (( attempt <= attempts )); do
+        if terraform_chdir init -input=false -no-color; then
+            return 0
+        fi
+        if (( attempt == attempts )); then
+            return 1
+        fi
+        echo "[terraform-init] attempt ${attempt}/${attempts} failed; retrying in ${sleep_seconds}s" >&2
+        sleep "${sleep_seconds}"
+        attempt=$((attempt + 1))
+    done
+}
+
 set_terraform_dir_for_service() {
     local service="${1:?set_terraform_dir_for_service requires service}"
     local per_service_dir="${REPO_ROOT}/terraform/services/${service}"
@@ -825,7 +847,7 @@ cmd_plan() {
         fi
     } >"${EVIDENCE_ROOT}/reports/plan/tfvars.txt"
 
-    terraform_chdir init -input=false -no-color
+    terraform_init_with_retry
     terraform_chdir validate -no-color
     preflight_ok "terraform init+validate succeeded"
 
@@ -1131,7 +1153,7 @@ cmd_apply() {
         export TF_VAR_ssh_public_keys
     fi
 
-    terraform_chdir init -input=false -no-color
+    terraform_init_with_retry
     terraform_chdir validate -no-color
 
     local plan_source_run_id="${FROM_PLAN_RUN_ID:-}"
