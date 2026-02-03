@@ -9,6 +9,9 @@ services:
     volumes:
       - {{ immich_upload_location }}:/data
       - /etc/localtime:/etc/localtime:ro
+{% for mount in immich_external_library_mounts %}
+      - {{ mount.host_path }}:{{ mount.container_path }}{% if mount.read_only | default(true) %}:ro{% endif %}
+{% endfor %}
     env_file:
       - .env
     ports:

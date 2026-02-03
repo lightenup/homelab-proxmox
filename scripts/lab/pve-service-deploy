@@ -1864,6 +1864,58 @@ sys.exit(3)
         else
             echo "status=already-correct" >>"${mp_report}"
         fi
+
+        local host_path_photo="/mnt/nas/photo"
+        local mp_target_photo="/mnt/immich-external/photo"
+        local desired_mp1="${host_path_photo},mp=${mp_target_photo},ro=1"
+
+        {
+            echo "--- external-photo bind mount ---"
+            echo "host_path_photo=${host_path_photo}"
+            echo "container_target_photo=${mp_target_photo}"
+            echo "requested_mp1=${desired_mp1}"
+        } >>"${mp_report}"
+
+        if findmnt -n --target "${host_path_photo}" >/dev/null 2>&1; then
+            local mp1_before=""
+            mp1_before="$(sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk -F': ' '/^mp1:/ {print $2; exit}' || true)"
+
+            if [[ "${mp1_before}" != "${desired_mp1}" ]]; then
+                if sudo -n pct set "${ctid}" -mp1 "${desired_mp1}" >>"${mp_report}" 2>>"${mp_stderr}"; then
+                    {
+                        echo "--- pct config (after mp1) ---"
+                        sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
+                        echo "action=reboot"
+                    } >>"${mp_report}"
+
+                    sudo -n pct reboot "${ctid}" >>"${mp_report}" 2>>"${mp_stderr}" || true
+
+                    waited=0
+                    attempt=1
+                    while true; do
+                        if ssh -i "${lxc_key_file}" \
+                            ${ssh_common_args} \
+                            "root@${service_ip}" 'true' >/dev/null 2>&1; then
+                            break
+                        fi
+                        echo "[ssh-wait-mp1-reboot] attempt=${attempt} waited=${waited}s"
+                        if (( waited >= ssh_wait_seconds )); then
+                            die "ssh not ready on ${service_ip} after mp1 reboot (${ssh_wait_seconds}s)"
+                        fi
+                        sleep "${ssh_sleep_seconds}"
+                        waited=$((waited + ssh_sleep_seconds))
+                        attempt=$((attempt + 1))
+                    done
+                else
+                    preflight_fail "failed to set lxc mountpoint mp1"
+                    die "Failed to set LXC ${ctid} mountpoint mp1 via pct (see reports/apply/lxc-mountpoints.txt)"
+                fi
+            else
+                echo "status=mp1-already-correct" >>"${mp_report}"
+            fi
+        else
+            echo "status=mp1-skipped-host-mount-missing" >>"${mp_report}"
+        fi
     fi
 
     if [[ -n "${ctid}" && "${SERVICE}" == "immich" ]]; then

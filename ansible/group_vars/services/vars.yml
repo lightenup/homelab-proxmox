@@ -19,6 +19,10 @@ immich_port: 2283
 immich_install_dir: "/opt/immich-app"
 immich_data_dir: "/opt/immich-data"
 immich_version: "v2.4.0"
+immich_external_library_mounts:
+  - host_path: "/mnt/immich-external/photo"
+    container_path: "/mnt/immich-external/photo"
+    read_only: true
 
 # Immich Backup Configuration
 immich_backup_path: "/mnt/immich/backups"
