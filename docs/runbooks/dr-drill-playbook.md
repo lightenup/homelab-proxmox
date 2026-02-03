@@ -24,6 +24,37 @@
 - **Free space** on the NAS share is **>= 2×** the rclone size estimate for the backup set.
 - **Credentials** for Hetzner S3 and the backup encryption key available from secure storage.
 
+### macOS: Mount the NAS share via automounter (optional)
+
+If running the validation steps on macOS, mount the NAS share with `autofs`:
+
+1) Add an automounter map in `/etc/auto_nfs`:
+
+```bash
+/Volumes/nas/homelab_ci  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_ci
+/Volumes/nas/homelab_dr_test  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_dr_test
+```
+
+2) Ensure `/etc/auto_master` includes the map:
+
+```bash
+/-    auto_nfs          -nobrowse
+```
+
+3) Reload automount and verify mounts:
+
+```bash
+sudo automount -vc
+ls -la /Volumes/nas
+```
+
+4) Create the DR target folder if needed:
+
+```bash
+mkdir -p /Volumes/nas/homelab_dr_test
+chmod -R 777 /Volumes/nas/homelab_dr_test
+```
+
 ### Required configuration files (gitignored)
 
 In scripts/dr:
@@ -68,6 +99,17 @@ df -B1 /mnt/nas/homelab_dr_test | tail -1 | awk '{print $4}'
 
 If free space is < 2× size estimate, **STOP** and provision more space.
 
+### 4) (Recommended) Prepare a portable working copy
+
+To avoid rsync/CI overwriting the scripts during a long download, stage a local copy on the PVE host:
+
+```bash
+mkdir -p ~/dr-drill-sources
+cp -a /path/to/homelab-proxmox/scripts/dr ~/dr-drill-sources/
+```
+
+Use `~/dr-drill-sources/dr` for the drill steps below.
+
 ---
 
 ## Drill Steps
@@ -82,6 +124,8 @@ cp .env.example .env
 
 # Edit .env and rclone.conf with credentials from secure storage
 ```
+
+> If you staged a portable copy, run the rest of the steps from `~/dr-drill-sources/dr` instead.
 
 ### Step 2: Confirm Hetzner access
 
@@ -107,6 +151,8 @@ mkdir -p "${DRILL_ROOT}"
 
 > The download script preserves Pool subdirectory structure when `SOURCE_PATH` contains `Pool/`.
 
+**Recommended**: run the download inside a tmux session so you can detach and reattach later.
+
 ```bash
 cd /path/to/homelab-proxmox/scripts/dr
 source .env
@@ -124,6 +170,8 @@ DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "${BACKUP_PATH}/Pool" "${DRILL_ROOT
 ```
 
 **Note**: This step can take hours. Monitor disk space during the download.
+
+**Evidence**: Capture the `rclone.log` file (stored alongside the scripts) in the drill report.
 
 ### Step 5: Verify Pool structure integrity
 
@@ -155,6 +203,12 @@ mkdir -p "${EXTRACT_PATH}"
 
 # After extraction via DSM, verify integrity
 /path/to/homelab-proxmox/scripts/dr/verify_restore.sh "${EXTRACT_PATH}"
+```
+
+**macOS example (NFS mount):**
+
+```bash
+/path/to/homelab-proxmox/scripts/dr/verify_restore.sh "/Volumes/nas/homelab_dr_test/drill-YYYYMMDD/extracted"
 ```
 
 ---

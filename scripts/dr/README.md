@@ -8,6 +8,7 @@ Scripts for disaster recovery drill execution - proving Immich photo backup reco
 - **Bitwarden CLI** (optional, for automated credential retrieval)
 - Disk space: free space >= 2× rclone size estimate for the full backup set
 - Dedicated DR share mounted on PVE: `/mnt/nas/homelab_dr_test`
+- (macOS) NAS share mounted under `/Volumes/nas/homelab_dr_test` via automounter
 
 ## Setup
 
@@ -28,6 +29,34 @@ Scripts for disaster recovery drill execution - proving Immich photo backup reco
    ```bash
    source .env
    ```
+
+### macOS mounting (automounter)
+
+If running on macOS, mount the NAS share using `/etc/auto_nfs` and reload autofs:
+
+```bash
+sudo vim /etc/auto_nfs
+sudo vim /etc/auto_master
+sudo automount -vc
+```
+
+## Operational Tips
+
+- **Use tmux for long downloads** so you can detach and check progress later.
+   ```bash
+   tmux new -s rclone
+   # run downloads...
+   tmux detach
+   # later
+   tmux attach -t rclone
+   ```
+
+- **Stage a portable copy of the scripts** on the PVE host to avoid rsync overwrites:
+   ```bash
+   mkdir -p ~/dr-drill-sources
+   cp -a /path/to/homelab-proxmox/scripts/dr ~/dr-drill-sources/
+   ```
+   Run the scripts from `~/dr-drill-sources/dr` during the drill.
 
 ## Scripts
 
@@ -90,6 +119,9 @@ Verify integrity of restored backup files.
 # Verify extracted photos
 ./verify_restore.sh ~/dr-restore/extracted
 
+# Verify extracted photos on macOS NFS mount
+./verify_restore.sh "/Volumes/nas/homelab_dr_test/drill-YYYYMMDD/extracted"
+
 # Generate hash report
 ./verify_restore.sh ~/dr-restore/extracted > verification-report.txt
 ```
@@ -117,6 +149,9 @@ Environment variables for scripts. Populated from `.env.example`.
 ## Drill Reports
 
 Completed drill reports are stored in `drill-reports/` (gitignored). Use the template in the runbook to document each drill execution.
+
+Capture the download log for evidence:
+- `rclone.log` is written in the working directory alongside the scripts.
 
 ## Troubleshooting
 
