@@ -157,6 +157,11 @@ mkdir -p "${DRILL_ROOT}"
 cd /path/to/homelab-proxmox/scripts/dr
 source .env
 
+# Root metadata files (required by DSM Hyper Backup Explorer)
+DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "${BACKUP_PATH}/SynologyHyperBackup.bkpi" "${DRILL_ROOT}"
+DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "${BACKUP_PATH}/synobkpinfo.db" "${DRILL_ROOT}"
+DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "${BACKUP_PATH}/storage_statistics.db.61" "${DRILL_ROOT}"
+
 # Small metadata file (sanity check)
 DOWNLOAD_DRY_RUN=false ./hetzner_download.sh "${BACKUP_PATH}/_Syno_TaskConfig" "${DRILL_ROOT}"
 
@@ -181,6 +186,14 @@ ls -la "${DRILL_ROOT}/${BACKUP_PATH}/Pool/0/0" | head -20
 ```
 
 **Expected**: Nested `Pool/0/0`, `Pool/0/1`, etc. with `.bucket.*` and `.index.*` files present.
+
+Also confirm root metadata files exist:
+
+```bash
+ls -la "${DRILL_ROOT}/${BACKUP_PATH}/SynologyHyperBackup.bkpi" \
+  "${DRILL_ROOT}/${BACKUP_PATH}/synobkpinfo.db" \
+  "${DRILL_ROOT}/${BACKUP_PATH}/storage_statistics.db.61"
+```
 
 ### Step 6: Validate decryption in DSM Hyper Backup Explorer
 
