@@ -1,8 +1,8 @@
 # Feature Specification: Proxmox Config Backup Automation
 
-**Feature Branch**: `013-proxmox-config-backup`  
-**Created**: December 22, 2025  
-**Status**: Draft (Architecture Corrected: Choice 3, Option A)  
+**Feature Branch**: `013-proxmox-config-backup`
+**Created**: December 22, 2025
+**Status**: Draft (Architecture Corrected: Choice 3, Option A)
 **Input**: "Automate backups of Proxmox configuration and homelab IaC artifacts with encryption and rotation"
 
 **Architecture Decision**: Systemd timer runs local bash script on PVE host. Ansible deploys/configures the script, packages, and systemd units but is NOT the runtime.
@@ -314,33 +314,33 @@ As a homelab operator, I need email notifications when backups fail so I can inv
 
 ### Technical Risks
 
-- **RISK-001**: /etc/pve is clustered filesystem (cephfs) - may have race conditions during backup  
+- **RISK-001**: /etc/pve is clustered filesystem (cephfs) - may have race conditions during backup
   **Mitigation**: Implement retry logic with exponential backoff, test on single-node Proxmox first
   **Severity**: Medium - Could cause backup failures but won't corrupt data
 
-- **RISK-002**: NFS mount could become unavailable during backup  
+- **RISK-002**: NFS mount could become unavailable during backup
   **Mitigation**: Pre-backup mount validation, graceful failure with notification, preserve previous backup
   **Severity**: Low - Fails safely, notification ensures awareness
 
-- **RISK-003**: Age encryption key could be lost or Bitwarden unavailable during disaster recovery  
+- **RISK-003**: Age encryption key could be lost or Bitwarden unavailable during disaster recovery
   **Mitigation**: Document break-glass procedure (paper backup of key), quarterly key recovery drill
   **Severity**: High - Complete backup loss if key unavailable, but solvable with proper documentation
 
-- **RISK-004**: Backup size could grow unexpectedly if IaC artifacts balloon  
+- **RISK-004**: Backup size could grow unexpectedly if IaC artifacts balloon
   **Mitigation**: Monitor backup sizes, alert if >500 MB, investigate and exclude large unnecessary files
   **Severity**: Low - Disk space issue but detectable and fixable
 
 ### Operational Risks
 
-- **RISK-005**: Operator forgets to update Bitwarden encryption key after rotation  
+- **RISK-005**: Operator forgets to update Bitwarden encryption key after rotation
   **Mitigation**: Document key rotation procedure, include verification step (decrypt old backup with new key)
   **Severity**: Medium - Old backups become unrecoverable, but new backups work
 
-- **RISK-006**: Backup failures go unnoticed if email notifications are silently dropped  
+- **RISK-006**: Backup failures go unnoticed if email notifications are silently dropped
   **Mitigation**: Integrate with Uptime Kuma for backup status monitoring, test notification delivery
   **Severity**: Medium - Silent failures dangerous, but testable and fixable
 
-- **RISK-007**: Restore procedure not tested regularly, outdated at disaster time  
+- **RISK-007**: Restore procedure not tested regularly, outdated at disaster time
   **Mitigation**: Quarterly restore drill (Feature 012 style), document in runbook
   **Severity**: High - Critical failure at worst possible time, but preventable with discipline
 
@@ -348,34 +348,34 @@ As a homelab operator, I need email notifications when backups fail so I can inv
 
 ### Technical Decisions
 
-- **Q1**: Should backup include /etc/pve/priv/authorized_keys (SSH keys for inter-node communication)?  
-  **Options**: (A) Include - ensures SSH setup preserved, (B) Exclude - regenerate keys on restore for security  
+- **Q1**: Should backup include /etc/pve/priv/authorized_keys (SSH keys for inter-node communication)?
+  **Options**: (A) Include - ensures SSH setup preserved, (B) Exclude - regenerate keys on restore for security
   **Recommendation**: Include - fresh install won't have cluster keys, single-node setup means no security risk
 
-- **Q2**: Should Terraform state backup include .terraform/ directory (provider plugins)?  
-  **Options**: (A) Include - faster restore but larger backups, (B) Exclude - smaller backups but slower restore (re-download plugins)  
+- **Q2**: Should Terraform state backup include .terraform/ directory (provider plugins)?
+  **Options**: (A) Include - faster restore but larger backups, (B) Exclude - smaller backups but slower restore (re-download plugins)
   **Recommendation**: Exclude - plugins are 100+ MB, easily re-downloaded with `terraform init`, backups stay small
 
-- **Q3**: Should backup archive format be tar.gz (compatible) or tar.zst (better compression)?  
-  **Options**: (A) tar.gz - universally compatible, (B) tar.zst - 20-30% better compression, requires zstd tool  
+- **Q3**: Should backup archive format be tar.gz (compatible) or tar.zst (better compression)?
+  **Options**: (A) tar.gz - universally compatible, (B) tar.zst - 20-30% better compression, requires zstd tool
   **Recommendation**: tar.zst - modern tool, better compression, worth dependency for smaller backups
 
-- **Q4**: Should systemd timer include randomized delay to avoid peak hours?  
-  **Options**: (A) Fixed 2 AM daily, (B) Random delay 0-30 minutes after 2 AM  
+- **Q4**: Should systemd timer include randomized delay to avoid peak hours?
+  **Options**: (A) Fixed 2 AM daily, (B) Random delay 0-30 minutes after 2 AM
   **Recommendation**: Fixed 2 AM - predictable timing useful for troubleshooting, low traffic at 2 AM anyway
 
 ### Operational Decisions
 
-- **Q5**: Should success notifications be sent in addition to failure notifications?  
-  **Options**: (A) Failures only - less noise, (B) Both - confirmation backup ran, (C) Weekly summary - batch reporting  
+- **Q5**: Should success notifications be sent in addition to failure notifications?
+  **Options**: (A) Failures only - less noise, (B) Both - confirmation backup ran, (C) Weekly summary - batch reporting
   **Recommendation**: Failures only initially, add weekly summary later if desired
 
-- **Q6**: Should backup manifest be stored separately from archive for quick verification?  
-  **Options**: (A) Inside archive only - simpler, (B) Separate manifest file - faster listing without decryption  
+- **Q6**: Should backup manifest be stored separately from archive for quick verification?
+  **Options**: (A) Inside archive only - simpler, (B) Separate manifest file - faster listing without decryption
   **Recommendation**: Inside archive only - one file to manage, decryption is fast enough (<1s for metadata)
 
-- **Q7**: Should lock file be in /var/run (cleared on reboot) or /var/lock (persists)?  
-  **Options**: (A) /var/run - automatic cleanup on reboot, (B) /var/lock - survives reboot for troubleshooting  
+- **Q7**: Should lock file be in /var/run (cleared on reboot) or /var/lock (persists)?
+  **Options**: (A) /var/run - automatic cleanup on reboot, (B) /var/lock - survives reboot for troubleshooting
   **Recommendation**: /var/run - safer, prevents stale locks blocking backups after unexpected reboot
 
 ## Follow-up Features *(if applicable)*

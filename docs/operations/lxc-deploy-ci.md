@@ -21,6 +21,17 @@ This repository provides a gated GitHub Actions workflow for deploying a single 
 - `ANSIBLE_VAULT_PASSWORD`
 - Terraform Proxmox provider credentials (repo-specific; must be injected via GitHub Secrets/Environments and never committed)
 
+### Immich-specific requirements
+
+Before running the deploy workflow for Immich, ensure:
+
+- `immich_db_password` is present in the vault (typically in `group_vars/services/secrets.yml`).
+- The Immich VMID is defined as `immich_vmid: 101` in `ansible/group_vars/services/vars.yml` (used for the host-side bind mount).
+- Terraform `service_mountpoints` includes the Immich NAS mount:
+
+	- `mp = "/mnt/immich"`
+	- `volume = "/mnt/nas/homelab_immich"`
+
 ## Vault Files on PVE (Required)
 
 This repo intentionally gitignores `**/vault.yml`, so the workflow does not sync vault files to PVE.

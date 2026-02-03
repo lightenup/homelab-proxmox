@@ -13,6 +13,7 @@ docker_compose_package: docker-compose-plugin
 docker_compose_package_state: present
 
 # Immich Configuration
+immich_vmid: 101
 immich_ip: "192.168.1.213"
 immich_port: 2283
 immich_install_dir: "/opt/immich-app"

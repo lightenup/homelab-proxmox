@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Tailscale Remote Access IaC
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: December 20, 2024  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: December 20, 2024
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality

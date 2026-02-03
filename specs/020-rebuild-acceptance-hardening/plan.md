@@ -9,14 +9,14 @@ Harden rebuild into a strict acceptance gate: deterministic teardown with govern
 
 ## Technical Context
 
-**Language/Version**: Bash (scripts), Python 3.x (verify_evidence.py), Ansible 2.16+ (roles/playbooks)  
-**Primary Dependencies**: Ansible core modules, Proxmox CLI (qm/pct), Python stdlib only for verify mutations  
-**Storage**: Filesystem evidence packs (artifacts/*), no databases  
-**Testing**: Offline fixtures via scripts/lab/ci-verify.sh; manual `pve-lab rebuild --apply/--verify` runs  
-**Target Platform**: Proxmox host (Debian-based) with nested workload suite; offline runner for fixtures  
-**Project Type**: Infrastructure scripting and Ansible orchestration  
-**Performance Goals**: Deterministic teardown within bounded retries; no flaky rc=25 errors; clean console (no deprecation noise)  
-**Constraints**: No new non-stdlib deps; bounded retries (default 3) with short backoff; verification mutation via stdlib only; phase for VAL-001 = validation  
+**Language/Version**: Bash (scripts), Python 3.x (verify_evidence.py), Ansible 2.16+ (roles/playbooks)
+**Primary Dependencies**: Ansible core modules, Proxmox CLI (qm/pct), Python stdlib only for verify mutations
+**Storage**: Filesystem evidence packs (artifacts/*), no databases
+**Testing**: Offline fixtures via scripts/lab/ci-verify.sh; manual `pve-lab rebuild --apply/--verify` runs
+**Target Platform**: Proxmox host (Debian-based) with nested workload suite; offline runner for fixtures
+**Project Type**: Infrastructure scripting and Ansible orchestration
+**Performance Goals**: Deterministic teardown within bounded retries; no flaky rc=25 errors; clean console (no deprecation noise)
+**Constraints**: No new non-stdlib deps; bounded retries (default 3) with short backoff; verification mutation via stdlib only; phase for VAL-001 = validation
 **Scale/Scope**: Single lab host, single evidence pack per rebuild run, fixtures exercised offline
 
 ## Constitution Check

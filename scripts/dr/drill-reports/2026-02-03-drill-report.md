@@ -5,17 +5,17 @@
 **Operator(s)**: Andreas Jacobsen
 **Execution Host**: pve
 **Working Directory**: /mnt/nas/homelab_dr_test/drill-20260117
-**tmux Session**: 
+**tmux Session**:
 
 ## Summary
 
 - **Outcome**: ☑ Success ☐ Partial ☐ Failed
 - **Backup Set**: Hetzner Object Storage (Synology Hyper Backup)
 - **Target Share**: /volume1/homelab_dr_test (mounted at /mnt/nas/homelab_dr_test)
-- **Total Size Estimate**: 
-- **Free Space at Start**: 
-- **Time Started**: 
-- **Time Finished**: 
+- **Total Size Estimate**:
+- **Free Space at Start**:
+- **Time Started**:
+- **Time Finished**:
 
 ## Steps Completed
 
@@ -29,10 +29,10 @@
 
 ## Evidence
 
-- Logs/commands output: 
-- Screenshots: 
-- Hash reports: 
-- rclone.log path: 
+- Logs/commands output:
+- Screenshots:
+- Hash reports:
+- rclone.log path:
 
 ## Issues / Blockers
 

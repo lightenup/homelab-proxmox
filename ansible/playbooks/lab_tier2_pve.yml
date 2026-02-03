@@ -211,7 +211,7 @@
           shell: dpkg -l | grep -E 'pve-manager|pve-kernel' | wc -l
           register: pve_packages_check
           changed_when: false
-        
+
         - name: Assert PVE packages
           assert:
             that:
@@ -329,7 +329,7 @@
             - pvedaemon
             - pve-cluster
           register: pve_services
-          
+
         - name: Assert PVE services
           assert:
             that:
@@ -356,7 +356,7 @@
           command: mountpoint -q /etc/pve
           register: pmxcfs_mount
           changed_when: false
-          
+
         - name: Assert pmxcfs mounted
           assert:
             that:
@@ -382,13 +382,13 @@
           command: pvesh get /version --output-format json
           register: api_check
           changed_when: false
-          
+
         - name: Assert API reachable
           assert:
             that:
               - api_check.rc == 0
             fail_msg: "pvesh API not accessible"
-            
+
         - name: Save API response to evidence
           copy:
             content: "{{ api_check.stdout }}"
@@ -416,14 +416,14 @@
           command: pveversion
           register: pve_version_out
           changed_when: false
-          
+
         - name: Assert PVE version
           assert:
             that:
               - pve_version_out.rc == 0
               - "'pve-manager' in pve_version_out.stdout"
             fail_msg: "pveversion command failed or output missing pve-manager"
-            
+
         - name: Save pveversion output to evidence
           copy:
             content: "{{ pve_version_out.stdout }}"
@@ -454,7 +454,7 @@
           shell: getent hosts deb.debian.org
           register: dns_check
           changed_when: false
-          
+
         - name: Assert DNS resolution
           assert:
             that:
@@ -482,7 +482,7 @@
             method: HEAD
             timeout: 10
           register: inet_check
-          
+
         - name: Assert Internet connectivity
           assert:
             that:
@@ -508,14 +508,14 @@
           command: ip addr show vmbr0
           register: vmbr0_check
           changed_when: false
-          
+
         - name: Assert vmbr0 config
           assert:
             that:
               - vmbr0_check.rc == 0
               - ansible_facts['default_ipv4']['address'] in vmbr0_check.stdout
             fail_msg: "vmbr0 not configured or missing IP {{ ansible_facts['default_ipv4']['address'] }}"
-            
+
         - name: Save vmbr0 configuration to evidence
           copy:
             content: "{{ vmbr0_check.stdout }}"
@@ -546,7 +546,7 @@
             port: 22
             timeout: 10
           register: ssh_check
-          
+
         - name: Assert SSH connectivity
           assert:
             that:
@@ -586,7 +586,7 @@
                 fi
               register: kvm_nesting_check
               changed_when: false
-              
+
             - name: Assert KVM nesting
               assert:
                 that:
@@ -605,7 +605,7 @@
                   'description': 'Host KVM module supports nesting',
                   'details': 'KVM nesting enabled (' + kvm_nesting_check.stdout|trim + ')' if (kvm_nesting_check.stdout|trim in ['Y', '1']) else 'KVM nesting not enabled'
                 }] }}"
-        
+
         # NEST-002: Check /dev/kvm exists
         - name: NEST-002 - Check /dev/kvm exists
           block:
@@ -613,7 +613,7 @@
               stat:
                 path: /dev/kvm
               register: kvm_device_check
-              
+
             - name: Assert /dev/kvm exists
               assert:
                 that:
@@ -632,7 +632,7 @@
                   'description': 'Guest /dev/kvm exists and accessible',
                   'details': '/dev/kvm device found and accessible' if (kvm_device_check.stat.exists) else '/dev/kvm device not found'
                 }] }}"
-      
+
         # 1. Nested VM (KVM Smoke Test)
         - name: Create Nested VM (KVM Check)
           command: >
@@ -759,7 +759,7 @@
                   command: pct start 101
                   register: pct_start_diag
                   ignore_errors: true
-                
+
                 - name: Get journal
                   command: journalctl -u pve-container --no-pager -n 500
                   register: journal_diag
@@ -776,10 +776,10 @@
                       PCT START:
                       {{ pct_start_diag.stdout }}
                       {{ pct_start_diag.stderr }}
-                      
+
                       JOURNAL:
                       {{ journal_diag.stdout }}
-                      
+
                       TASKS:
                       {{ tasks_diag.stdout }}
                     dest: "{{ evidence_dir }}/reports/workload/WORK-002-diagnostics.txt"
@@ -822,7 +822,7 @@
             - name: Handle WORK-003 failure
               debug:
                 msg: "WORK-003 failed: {{ ansible_failed_result.msg | default('Assertion failed') }}"
-            
+
             - name: Capture WORK-003 failure evidence
               copy:
                 content: "{{ lxc_net_check.stdout }}\n{{ lxc_net_check.stderr }}"
@@ -855,7 +855,7 @@
           poll: 0
           register: lxc_service_start
           failed_when: false
-          
+
         - name: Wait for service startup
           pause:
             seconds: 3
@@ -867,7 +867,7 @@
           delay: 2
           until: net_check is success
           failed_when: false
-          
+
         # WORK-004: Service reachability from lab VM to nested LXC
         - name: WORK-004 - Verify Service Reachability
           block:

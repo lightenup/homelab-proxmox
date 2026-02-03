@@ -1,9 +1,9 @@
 # Implementation Tasks: Minimal Monitoring & Alerting
 
-**Feature**: 011-monitoring-alerting  
-**Created**: December 20, 2025  
-**Updated**: December 20, 2025 (after spec clarifications)  
-**Total Estimated Tasks**: 63  
+**Feature**: 011-monitoring-alerting
+**Created**: December 20, 2025
+**Updated**: December 20, 2025 (after spec clarifications)
+**Total Estimated Tasks**: 63
 
 ## Implementation Approach
 

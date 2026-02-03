@@ -162,15 +162,15 @@ run_test() {
     local fixture="$1"
     local name=$(basename "$fixture")
     local expected_file="$fixture/expected.txt"
-    
+
     if [[ ! -f "$expected_file" ]]; then
         # echo "WARN: Skipping $name (no expected.txt)"
         return
     fi
-    
+
     local expected
     expected=$(cat "$expected_file" | tr -d '[:space:]')
-    
+
     echo -n "Testing $name... "
 
     local tmp_root
@@ -179,7 +179,7 @@ run_test() {
 
     local tmp_fixture="$tmp_root/$name"
     cp -R "$fixture" "$tmp_fixture"
-    
+
     set +e
     python3 "${SCRIPT_DIR}/verify_evidence.py" "$tmp_fixture" >/dev/null 2>&1
     local rc=$?
@@ -206,12 +206,12 @@ run_test() {
             rc=1
         fi
     fi
-    
+
     local result="FAIL"
     if [[ $rc -eq 0 ]]; then
         result="PASS"
     fi
-    
+
     if [[ "$result" == "$expected" ]]; then
         if [[ "$expected" == "PASS" ]]; then
             echo "OK (Valid pack accepted)"

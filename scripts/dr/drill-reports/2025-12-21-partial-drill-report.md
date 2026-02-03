@@ -2,9 +2,9 @@
 
 ## Executive Summary
 
-**Status**: Partial Completion - Critical structure discovery phase  
-**Completion**: ~74% (271 GB / 365 GB required)  
-**Outcome**: Drill halted due to disk space constraints; critical findings documented for next attempt  
+**Status**: Partial Completion - Critical structure discovery phase
+**Completion**: ~74% (271 GB / 365 GB required)
+**Outcome**: Drill halted due to disk space constraints; critical findings documented for next attempt
 **Next Drill**: January 2026 with external storage (500+ GB)
 
 **Key Success**: Discovered backup structure complexity and validated DR plan gaps before real disaster.
@@ -51,8 +51,8 @@
 
 ### 1. Backup Size Underestimation ⚠️
 
-**Initial Estimate**: 15 GB (metadata + indexes)  
-**Actual Requirement**: 365 GB (complete backup with buckets)  
+**Initial Estimate**: 15 GB (metadata + indexes)
+**Actual Requirement**: 365 GB (complete backup with buckets)
 **Error Factor**: 24x underestimate
 
 **Impact**: Drill planned for laptop with 500 GB total disk, OS+apps used 160 GB, only 340 GB available. Insufficient for complete download.
@@ -92,11 +92,11 @@ DiskStation413j_1.hbk/
 
 ### 3. Download Script Flattening Issue 🐛
 
-**Problem**: `./hetzner_download.sh "DiskStation413j_1.hbk/Pool/0"`  
-→ Downloaded `Pool/0/10/` subdirectory to backup root as `/10/` (wrong structure)  
+**Problem**: `./hetzner_download.sh "DiskStation413j_1.hbk/Pool/0"`
+→ Downloaded `Pool/0/10/` subdirectory to backup root as `/10/` (wrong structure)
 → rclone copy command flattened nested paths
 
-**Expected**: `backup/DiskStation413j_1.hbk/Pool/0/10/`  
+**Expected**: `backup/DiskStation413j_1.hbk/Pool/0/10/`
 **Actual**: `backup/DiskStation413j_1.hbk/10/`
 
 **Impact**: Hyper Backup Explorer couldn't find buckets in expected location → validation failure
@@ -105,7 +105,7 @@ DiskStation413j_1.hbk/
 
 ### 4. Hyper Backup Explorer Validation 🔒
 
-**Behavior**: Tool validates ALL bucket checksums before allowing file browsing  
+**Behavior**: Tool validates ALL bucket checksums before allowing file browsing
 **Error**: "Stored data on the backup destination are corrupted"
 
 **Root Cause Analysis**:
@@ -114,10 +114,10 @@ DiskStation413j_1.hbk/
 3. Missing `.bucket.2` files in `Pool/0/0/` → validation failure
 4. Security feature prevents browsing potentially corrupted backups
 
-**Attempted Workaround**: Reorganized folder structure to match expected layout  
+**Attempted Workaround**: Reorganized folder structure to match expected layout
 **Result**: Still failed - missing data chunks, not structure issue
 
-**Second Attempt**: Downloaded 271 GB partial buckets (folders 0, 10-17)  
+**Second Attempt**: Downloaded 271 GB partial buckets (folders 0, 10-17)
 **Result**: Still failed - missing folders 1-9 critical for validation
 
 **Conclusion**: Hyper Backup Explorer requires **complete, correctly structured** backup data. No partial extraction possible.
@@ -350,6 +350,6 @@ The invested 9 hours and €0.00 in egress costs provided invaluable insights th
 
 ---
 
-**Report Prepared By**: GitHub Copilot (AI Assistant)  
-**Report Date**: December 21, 2025  
+**Report Prepared By**: GitHub Copilot (AI Assistant)
+**Report Date**: December 21, 2025
 **Next Review**: January 2026 (after complete drill attempt)

@@ -15,14 +15,14 @@ Key architectural decision (from research): Terraform provisions the LXC (existe
 
 ## Technical Context
 
-**Language/Version**: Bash (5.x), Terraform (1.x), Ansible (2.x), Python (3.x), GitHub Actions (YAML)  
-**Primary Dependencies**: Terraform `telmate/proxmox` provider + existing `terraform/modules/lxc_service`, Ansible, `jq`, SSH/rsync, `act` (local CI simulation)  
-**Storage**: Local Terraform state on runner; filesystem evidence packs on PVE under `/var/lib/homelab-proxmox/artifacts/service-deploy-runs/<run_id>`  
-**Testing**: `act` runs for workflows; offline evidence verification; CI posture validation scripts  
-**Target Platform**: Self-hosted GitHub Actions runner (Linux) + Proxmox host accessed via `ci@pve` (no root SSH)  
-**Project Type**: Infrastructure-as-Code repo (Terraform + Ansible + supporting scripts)  
-**Performance Goals**: Plan/preflight <2 minutes; LAB apply+verify <15 minutes  
-**Constraints**: No committed secrets; Terraform/Ansible separation; least-privilege SSH/sudo; offline-verifiable evidence for every run  
+**Language/Version**: Bash (5.x), Terraform (1.x), Ansible (2.x), Python (3.x), GitHub Actions (YAML)
+**Primary Dependencies**: Terraform `telmate/proxmox` provider + existing `terraform/modules/lxc_service`, Ansible, `jq`, SSH/rsync, `act` (local CI simulation)
+**Storage**: Local Terraform state on runner; filesystem evidence packs on PVE under `/var/lib/homelab-proxmox/artifacts/service-deploy-runs/<run_id>`
+**Testing**: `act` runs for workflows; offline evidence verification; CI posture validation scripts
+**Target Platform**: Self-hosted GitHub Actions runner (Linux) + Proxmox host accessed via `ci@pve` (no root SSH)
+**Project Type**: Infrastructure-as-Code repo (Terraform + Ansible + supporting scripts)
+**Performance Goals**: Plan/preflight <2 minutes; LAB apply+verify <15 minutes
+**Constraints**: No committed secrets; Terraform/Ansible separation; least-privilege SSH/sudo; offline-verifiable evidence for every run
 **Scale/Scope**: Single-service baseline example (Jellyfin) with safe parameterization for future services
 
 ## Constitution Check

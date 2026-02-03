@@ -1,0 +1,46 @@
+exclude: |
+  (?x)^(
+    \.venv/|
+    artifacts/|
+    backups/|
+    terraform/\.terraform/|
+    python/\.venv/|
+    python/\.pytest_cache/|
+    python/\.mypy_cache/|
+    python/\.ruff_cache/|
+    ansible/roles/.*/files/|
+    ansible/roles/.*/templates/|
+    ansible/group_vars/.*/vault\.yml
+  )
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+        args: ["--unsafe"]
+        exclude: ^specs/026-separate-prod-apply/contracts/workflows\.openapi\.yml$
+      - id: check-json
+        exclude: ^docs/tailscale-acl\.example\.json$
+      - id: check-toml
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ["-c", ".yamllint"]
+        files: \.(yml|yaml)$
+        exclude: ^(\.github/workflows/|specs/026-separate-prod-apply/contracts/workflows\.openapi\.yml$)
+
+  - repo: local
+    hooks:
+      - id: ansible-lint
+        name: ansible-lint (uv)
+        entry: uv run --with ansible-lint ansible-lint -c .ansible-lint
+        language: system
+        types: [yaml]
+        files: ^ansible/roles/.*\.(yml|yaml)$
+        pass_filenames: true

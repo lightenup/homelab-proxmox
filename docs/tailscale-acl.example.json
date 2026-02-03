@@ -32,12 +32,12 @@
 			"lightenup@github"  // ← EXAMPLE: Replace with actual GitHub username + @github
 		]
 	},
-	
+
 	"tagOwners": {
 		// Define who can apply tags to devices
 		"tag:proxmox": ["group:admin"]
 	},
-	
+
 	"acls": [
 		// Allow admin group to access Proxmox web UI and SSH
 		{
@@ -55,7 +55,7 @@
 			"dst":    ["192.168.1.0/24:*"]  // All ports on LAN
 		}
 	],
-	
+
 	"ssh": [
 		// Allow admin group to SSH to Proxmox hosts
 		{

@@ -17,14 +17,14 @@ Formalize full LXC removal cleanup across Terraform, Ansible, inventory, proxy/D
   the iteration process.
 -->
 
-**Language/Version**: Terraform (HCL), Ansible (YAML), Python 3.x, GitHub Actions (YAML), shell scripts  
-**Primary Dependencies**: telmate/proxmox Terraform provider, Ansible, Taskfile, GitHub Actions, Python automation scripts  
-**Storage**: Local Terraform state on PVE host; NFS mounts for service data (NAS)  
-**Testing**: `act` for workflow validation, terraform plan/apply, ansible playbook runs, healthcheck drift checks  
+**Language/Version**: Terraform (HCL), Ansible (YAML), Python 3.x, GitHub Actions (YAML), shell scripts
+**Primary Dependencies**: telmate/proxmox Terraform provider, Ansible, Taskfile, GitHub Actions, Python automation scripts
+**Storage**: Local Terraform state on PVE host; NFS mounts for service data (NAS)
+**Testing**: `act` for workflow validation, terraform plan/apply, ansible playbook runs, healthcheck drift checks
 **Target Platform**: Linux (PVE host) + GitHub Actions runners
-**Project Type**: Infrastructure automation repository  
-**Performance Goals**: N/A (operational automation)  
-**Constraints**: No paid GitHub features for approvals; destructive actions require explicit confirmation; Terraform/Ansible separation; telmate/proxmox provider only; local state  
+**Project Type**: Infrastructure automation repository
+**Performance Goals**: N/A (operational automation)
+**Constraints**: No paid GitHub features for approvals; destructive actions require explicit confirmation; Terraform/Ansible separation; telmate/proxmox provider only; local state
 **Scale/Scope**: Dozens of services/LXCs across lab/prod environments
 
 ## Constitution Check

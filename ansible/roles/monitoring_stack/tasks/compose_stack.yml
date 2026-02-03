@@ -45,4 +45,3 @@
     chdir: "{{ monitoring_base_path }}"
   register: docker_compose_result
   changed_when: "'Created' in docker_compose_result.stdout or 'Started' in docker_compose_result.stdout"
-

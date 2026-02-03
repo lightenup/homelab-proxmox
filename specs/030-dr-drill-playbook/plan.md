@@ -17,14 +17,14 @@ Create a dedicated DR drill runbook in docs/runbooks that guides operators throu
   the iteration process.
 -->
 
-**Language/Version**: Markdown for runbook + Bash (POSIX shell) for existing scripts  
-**Primary Dependencies**: rclone, DSM Hyper Backup Explorer, Hetzner S3 credentials, NFS mount tooling  
-**Storage**: Synology NAS share `/volume1/homelab_dr_test` mounted at `/mnt/nas/homelab_dr_test`  
-**Testing**: Manual DR drill execution; `scripts/dr/verify_restore.sh` validation  
-**Target Platform**: PVE host (Debian), Synology DSM 7.x  
-**Project Type**: Documentation + scripts  
-**Performance Goals**: N/A (operator-run drill)  
-**Constraints**: No secrets committed; preserve Pool directory structure; avoid modifying production data  
+**Language/Version**: Markdown for runbook + Bash (POSIX shell) for existing scripts
+**Primary Dependencies**: rclone, DSM Hyper Backup Explorer, Hetzner S3 credentials, NFS mount tooling
+**Storage**: Synology NAS share `/volume1/homelab_dr_test` mounted at `/mnt/nas/homelab_dr_test`
+**Testing**: Manual DR drill execution; `scripts/dr/verify_restore.sh` validation
+**Target Platform**: PVE host (Debian), Synology DSM 7.x
+**Project Type**: Documentation + scripts
+**Performance Goals**: N/A (operator-run drill)
+**Constraints**: No secrets committed; preserve Pool directory structure; avoid modifying production data
 **Scale/Scope**: Multi-GB/TB backup datasets; single-run operator workflow
 
 ## Constitution Check

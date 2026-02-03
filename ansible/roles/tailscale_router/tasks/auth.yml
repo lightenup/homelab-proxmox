@@ -28,7 +28,7 @@
     --advertise-routes={{ tailscale_subnet_routes }}
     {{ '--advertise-tags=' + tailscale_tags | join(',') if tailscale_tags else '' }}
     --reset
-  when: 
+  when:
     - tailscale_status.rc == 0
     - tailscale_subnet_routes is defined
   changed_when: true # We assume this changes state, or we could check prefs first

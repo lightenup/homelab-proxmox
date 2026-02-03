@@ -20,10 +20,10 @@ emit_event() {
     local event_type="$1"
     local runid="$2"
     shift 2
-    
+
     local timestamp
     timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    
+
     # Build event data JSON from key=value pairs
     local event_data="{"
     local first=true
@@ -40,17 +40,17 @@ emit_event() {
         fi
     done
     event_data+="}"
-    
+
     # Build complete event
     local event_json
     event_json=$(cat <<EOF
 {"timestamp":"$timestamp","event_type":"$event_type","runid":"$runid","data":$event_data}
 EOF
 )
-    
+
     # Emit to stderr
     echo "$event_json" >&2
-    
+
     # Append to events file if initialized
     if [[ -n "$EVENTS_FILE" && -f "$EVENTS_FILE" ]]; then
         echo "$event_json" >> "$EVENTS_FILE"

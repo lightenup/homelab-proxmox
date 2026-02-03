@@ -164,7 +164,7 @@ Phase 7 (Polish)
 
 **Within Phase 1**: T002, T003, T004, T005 can run in parallel (different files)
 
-**Within Phase 2 (US1)**: 
+**Within Phase 2 (US1)**:
 - T006, T007, T008, T010 can run in parallel (independent files)
 - T011, T012, T013, T014 must run sequentially (dependencies)
 
@@ -237,7 +237,7 @@ Phase 7 (Polish)
 ## Task Count Summary
 
 - **Phase 1 (Setup + Constitution Compliance)**: 5 tasks
-- **Phase 2 (US1 - Rebuild Proxmox)**: 10 tasks  
+- **Phase 2 (US1 - Rebuild Proxmox)**: 10 tasks
 - **Phase 3 (US3 - Verify Configuration)**: 8 tasks
 - **Phase 4 (US2 - Identity Documentation)**: 9 tasks
 - **Phase 5 (US4 - ACL Management)**: 6 tasks

@@ -1,7 +1,7 @@
 # Tasks: Decommission Host Email Notifications
 
-**Feature**: 014-email-decommission | **Branch**: `014-email-decommission`  
-**Input**: Design documents from `/specs/014-email-decommission/`  
+**Feature**: 014-email-decommission | **Branch**: `014-email-decommission`
+**Input**: Design documents from `/specs/014-email-decommission/`
 **Prerequisites**: plan.md ✅, spec.md ✅
 
 **Tests**: No formal tests requested - manual validation per user story acceptance criteria

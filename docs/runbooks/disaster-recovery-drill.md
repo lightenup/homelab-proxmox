@@ -4,11 +4,11 @@
 
 **Purpose**: Prove Immich photo backup recovery from Hetzner Object Storage without Synology NAS or Proxmox infrastructure.
 
-**Last Updated**: December 21, 2025  
-**Status**: Phase D Partial Completion - Critical structure findings documented  
+**Last Updated**: December 21, 2025
+**Status**: Phase D Partial Completion - Critical structure findings documented
 **Next Attempt**: January 2026 with external storage
 
-**Estimated Duration**: 4-6 hours (depends on download bandwidth and disk space)  
+**Estimated Duration**: 4-6 hours (depends on download bandwidth and disk space)
 **Data Scope**: Immich photos (1.73 TB original, ~355 GB Pool buckets + 9 GB metadata = **~365 GB total** required for complete extraction)
 
 ⚠️ **IMPORTANT DRILL FINDINGS (December 2025)**:
@@ -322,8 +322,8 @@ DOWNLOAD_DRY_RUN=false task dr:hetzner:download -- "DiskStation413j_1.hbk/Pool/c
 - Pool/0/1/ through Pool/0/9/ (~110 GB)
 - Other Pool bucket subdirectories
 
-**Total Downloaded**: 271 GB  
-**Total Required**: ~365 GB  
+**Total Downloaded**: 271 GB
+**Total Required**: ~365 GB
 **Completion**: ~74%
 
 ### D2. Critical Findings

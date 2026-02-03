@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Proxmox Config Backup Automation
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: December 22, 2025  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: December 22, 2025
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality

@@ -1,6 +1,6 @@
 # Implementation Report: Pipeline Promotion UX (Spec 024)
 
-**Date**: 2026-01-09  
+**Date**: 2026-01-09
 **Branch**: `024-pipeline-promotion-ux`
 
 ## Summary

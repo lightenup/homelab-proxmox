@@ -1,8 +1,8 @@
 # Feature Specification: Patch Management + Reboots (Monthly Cadence)
 
-**Feature Branch**: `010-patch-management-reboots`  
-**Created**: December 19, 2025  
-**Status**: Draft  
+**Feature Branch**: `010-patch-management-reboots`
+**Created**: December 19, 2025
+**Status**: Draft
 **Priority**: P1 (Security & Stability)
 
 ## Overview
@@ -248,8 +248,8 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 ### Risk 1: Proxmox Host Fails to Reboot
 
-**Impact**: High - All services unavailable  
-**Likelihood**: Low  
+**Impact**: High - All services unavailable
+**Likelihood**: Low
 **Mitigation**:
 - Test reboot procedure in low-traffic window
 - Document IPMI/iLO access for remote recovery
@@ -258,8 +258,8 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 ### Risk 2: NFS Mount Not Present After Reboot
 
-**Impact**: High - Immich cannot access photo library  
-**Likelihood**: Medium  
+**Impact**: High - Immich cannot access photo library
+**Likelihood**: Medium
 **Mitigation**:
 - Verification tasks explicitly check mount before declaring success
 - Document manual mount recovery procedure
@@ -267,8 +267,8 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 ### Risk 3: Container Fails to Auto-Start After Reboot
 
-**Impact**: Medium - Specific service unavailable  
-**Likelihood**: Low  
+**Impact**: Medium - Specific service unavailable
+**Likelihood**: Low
 **Mitigation**:
 - Verification checks detect missing HTTP endpoints
 - Document manual recovery: LXC start via `pct start <VMID>`, Docker container start via `docker compose up -d`
@@ -276,8 +276,8 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 ### Risk 4: Kernel Update Causes Hardware Incompatibility
 
-**Impact**: Critical - Host unbootable  
-**Likelihood**: Very Low  
+**Impact**: Critical - Host unbootable
+**Likelihood**: Very Low
 **Mitigation**:
 - Proxmox uses stable kernel releases
 - GRUB keeps previous kernels for rollback
@@ -285,8 +285,8 @@ As a homelab operator, I need documentation explaining how to access homelab ser
 
 ### Risk 5: Tailscale Mobile Access Doesn't Work
 
-**Impact**: Low - Cannot monitor remotely, but homelab still functional  
-**Likelihood**: Medium  
+**Impact**: Low - Cannot monitor remotely, but homelab still functional
+**Likelihood**: Medium
 **Mitigation**:
 - Comprehensive runbook with troubleshooting steps
 - ACL configuration documented and tested

@@ -1,6 +1,6 @@
 # Research: Semantic & Safety Closure
 
-**Date**: 2025-12-31  
+**Date**: 2025-12-31
 **Spec**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md)
 
 ## Overview
@@ -98,7 +98,7 @@ run_guard_check() {
     local check_id="$1"
     local guard_var="$2"
     local guard_value="$3"
-    
+
     # Attempt operation with guard variable unset/wrong
     if ansible-playbook playbook.yml -e "${guard_var}=${guard_value}" --check 2>&1 | grep -q "Guard failed"; then
         # Guard correctly blocked operation
@@ -113,7 +113,7 @@ run_guard_check() {
 
 **Guard Checks**:
 - **GUARD-001**: Attempt tier2 playbook with `lab_inventory=false` → assert failure expected
-- **GUARD-002**: Attempt playbook against non-lab hostname → assert failure expected  
+- **GUARD-002**: Attempt playbook against non-lab hostname → assert failure expected
 - **GUARD-003**: Attempt VM destroy without identity markers → validation check expects no matches
 
 **Alternatives Considered**:
@@ -132,11 +132,11 @@ run_guard_check() {
 # In lib/provenance.sh
 capture_git_provenance() {
     local commit dirty branch
-    
+
     if git rev-parse --git-dir >/dev/null 2>&1; then
         commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
         branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-        
+
         # Check for uncommitted changes
         if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
             dirty="true"
@@ -149,7 +149,7 @@ capture_git_provenance() {
         branch="unknown"
         dirty="false"
     fi
-    
+
     jq -n \
         --arg commit "$commit" \
         --arg branch "$branch" \
@@ -182,7 +182,7 @@ capture_git_provenance() {
   command: systemctl is-active pveproxy pvedaemon pve-cluster
   register: pve_services
   failed_when: pve_services.rc != 0
-  
+
 - name: Record PVE-002 Check
   delegate_to: localhost
   run_once: true
@@ -327,14 +327,14 @@ PHASES=(
 load_profile() {
     local profile_name="$1"
     local profile_file="$SCRIPT_DIR/profiles.d/${profile_name}.profile"
-    
+
     if [[ ! -f "$profile_file" ]]; then
         echo "ERROR: Profile not found: $profile_name" >&2
         exit 1
     fi
-    
+
     source "$profile_file"
-    
+
     # Validate required fields
     [[ -n "$PROFILE_ID" ]] || { echo "ERROR: PROFILE_ID missing"; exit 1; }
     [[ -n "$DISPLAY_NAME" ]] || { echo "ERROR: DISPLAY_NAME missing"; exit 1; }

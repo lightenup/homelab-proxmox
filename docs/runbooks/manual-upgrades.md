@@ -1,7 +1,7 @@
 # Manual Full System Upgrade Runbook
 
-**Feature**: 010-patch-management-reboots  
-**Owner**: Homelab Operations  
+**Feature**: 010-patch-management-reboots
+**Owner**: Homelab Operations
 **Last Updated**: December 19, 2025
 
 ## Overview

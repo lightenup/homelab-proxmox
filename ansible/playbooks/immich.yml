@@ -1,0 +1,13 @@
+---
+- name: Configure base for Immich
+  hosts: immich
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure Immich
+  hosts: immich
+  become: true
+  roles:
+    - geerlingguy.docker
+    - immich

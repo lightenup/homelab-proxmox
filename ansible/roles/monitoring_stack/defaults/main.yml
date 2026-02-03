@@ -54,4 +54,3 @@ alertmanager_config_path: "{{ monitoring_install_dir }}/alertmanager"
 
 # Timezone
 timezone: "Europe/Copenhagen"
-

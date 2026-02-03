@@ -1,8 +1,8 @@
 # Implementation Tasks: Immich v2.4.0 Upgrade
 
-**Feature**: 009-immich-v2-upgrade  
-**Created**: December 19, 2024  
-**Updated**: December 19, 2025  
+**Feature**: 009-immich-v2-upgrade
+**Created**: December 19, 2024
+**Updated**: December 19, 2025
 **Status**: Complete
 
 ## Overview
@@ -209,7 +209,7 @@ This task list organizes implementation work by user story (from spec.md) to ena
 - [X] T092 Verify web UI remains accessible during and after re-run
 - [X] T093 Verify uploaded photos still accessible after re-run
 
-**Test Completion Criteria**: 
+**Test Completion Criteria**:
 - [X] SC-004: Re-running playbook completes in under 2 minutes with no changes
 
 ---

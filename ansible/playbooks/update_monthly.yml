@@ -1,6 +1,6 @@
 ---
 # Monthly Patching Playbook
-# 
+#
 # Orchestrates monthly security updates and system maintenance across
 # the homelab infrastructure. Executes in two phases:
 #   1. Services (LXC containers) - serialized to avoid simultaneous outages
@@ -61,15 +61,15 @@
     - name: "Calculate playbook duration"
       set_fact:
         playbook_duration: "{{ (ansible_facts.date_time.epoch | int) - (playbook_start_time | int) }}"
-    
+
     - name: "Identify hosts with package updates"
       set_fact:
         hosts_updated: "{{ groups['all'] | map('extract', hostvars) | selectattr('packages_upgraded', 'defined') | map(attribute='inventory_hostname') | list }}"
-    
+
     - name: "Identify hosts that rebooted"
       set_fact:
         hosts_rebooted: "{{ groups['all'] | map('extract', hostvars) | selectattr('host_rebooted', 'defined') | map(attribute='inventory_hostname') | list }}"
-    
+
     - name: "Display Summary Report"
       debug:
         msg:

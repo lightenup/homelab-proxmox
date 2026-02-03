@@ -1,8 +1,8 @@
 # Feature Specification: Disaster Recovery Drill
 
-**Feature Branch**: `012-disaster-recovery-drill`  
-**Created**: December 21, 2025  
-**Status**: Draft  
+**Feature Branch**: `012-disaster-recovery-drill`
+**Created**: December 21, 2025
+**Status**: Draft
 **Input**: "Prove we can recover encrypted backups stored in Hetzner Object Storage (S3-compatible) without relying on the existing Synology NAS, and document a repeatable drill. The encryption key must be stored in Bitwarden and the procedure must be tested and documented."
 
 ## Clarifications

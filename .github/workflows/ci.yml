@@ -97,5 +97,11 @@ jobs:
           uv venv --python 3.11
           uv pip sync --python .venv/bin/python --require-hashes python/requirements-test.lock.txt
 
+      - name: Install pre-commit
+        run: uv pip install --python .venv/bin/python pre-commit
+
+      - name: Lint (pre-commit)
+        run: .venv/bin/pre-commit run --all-files
+
       - name: Python tests + coverage
         run: bash scripts/ci/python-tests.sh

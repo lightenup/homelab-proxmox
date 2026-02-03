@@ -18,7 +18,7 @@
         (2) Provide tailscale_auth_key variable via:
             - ansible-vault: ansible/group_vars/proxmox_hosts/vault.yml
             - CLI: --extra-vars "tailscale_auth_key=tskey-..."
-      
+
       Generate auth key at: https://login.tailscale.com/admin/settings/keys
       Recommended: Use reusable key with 'Devices' tag, no expiration
   when:

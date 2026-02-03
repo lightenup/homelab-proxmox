@@ -1,7 +1,7 @@
 # Monitoring Stack Restore Procedure
 
-**Feature**: 017-synology-metrics  
-**Purpose**: Restore Prometheus TSDB and Grafana dashboards from backup  
+**Feature**: 017-synology-metrics
+**Purpose**: Restore Prometheus TSDB and Grafana dashboards from backup
 **Requirement**: FR-027 (Disaster recovery procedure)
 
 ## When to Use This Runbook

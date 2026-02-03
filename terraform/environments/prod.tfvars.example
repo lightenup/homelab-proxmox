@@ -17,6 +17,21 @@ network_gateway = "192.168.20.1"
 # nameserver   = "192.168.20.210 1.1.1.1"
 # searchdomain = "home.arpa"
 
+service_mountpoints = {
+  immich = {
+    library = {
+      mp     = "/mnt/immich"
+      volume = "/mnt/nas/homelab_immich"
+    }
+  }
+  jellyfin = {
+    video = {
+      mp     = "/mnt/media/video"
+      volume = "/mnt/nas/video"
+    }
+  }
+}
+
 service_ips = {
   adguard        = "192.168.20.210/24"
   reverse_proxy  = "192.168.20.211/24"

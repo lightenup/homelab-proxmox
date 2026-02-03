@@ -1,6 +1,6 @@
 # Research: Gated LXC Deploy (Least Privilege)
 
-**Spec**: specs/022-lxc-gated-deploy/spec.md  
+**Spec**: specs/022-lxc-gated-deploy/spec.md
 **Date**: 2026-01-04
 
 ## Decisions

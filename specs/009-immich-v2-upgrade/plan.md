@@ -1,7 +1,7 @@
 # Implementation Plan: Immich v2.4.0 Upgrade
 
-**Feature**: 009-immich-v2-upgrade  
-**Created**: December 19, 2024  
+**Feature**: 009-immich-v2-upgrade
+**Created**: December 19, 2024
 **Status**: Ready for Implementation
 
 ## Overview
@@ -33,7 +33,7 @@ This plan details the step-by-step implementation for upgrading Immich from v1.1
    - Update default version to v2.4.0
    - Add `immich_upload_location: "/mnt/immich/library-v2"` for NAS-backed library
 
-**Verification**: 
+**Verification**:
 - Variables are syntactically correct YAML
 - Version pin is explicit (v2.4.0, not v2 or release)
 

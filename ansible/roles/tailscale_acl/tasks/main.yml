@@ -110,7 +110,7 @@
         status_code: 200
       delegate_to: localhost
       run_once: true
-      
+
     - name: Fail after Rollback
       ansible.builtin.fail:
         msg: "ACL application failed or caused connectivity loss. Rolled back to previous state."

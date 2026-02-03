@@ -1,7 +1,7 @@
 # Research: Mutmut cache behavior and shared cache practices
 
-**Branch**: `029-mutmut-shared-cache`  
-**Date**: 2026-01-16  
+**Branch**: `029-mutmut-shared-cache`
+**Date**: 2026-01-16
 **Status**: Complete
 
 ## Scope

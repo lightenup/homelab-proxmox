@@ -90,7 +90,7 @@ docs/
 - `disabled`: Postfix stopped, SMTP vars removed, Kuma active (reversible)
 - `removed`: Packages uninstalled, Kuma only (requires confirmation)
 
-**Rationale**: 
+**Rationale**:
 - Eliminates conflicting boolean flags
 - Clear progression path matches user story priority
 - Single source of truth prevents invalid states
@@ -435,12 +435,12 @@ rm -f /etc/msmtprc    # if exists
 
 ## Success Criteria
 
-✅ **US1**: Kuma monitoring works (success/failure push detected)  
-✅ **US2**: Email safely disabled, Postfix stopped, backup works, rollback tested  
-✅ **US3**: Packages optionally removed, confirmation required, backup still works  
-✅ **Discovery**: Detects conflicts, aborts safely  
-✅ **Idempotency**: Multiple runs produce same result  
-✅ **Documentation**: Complete runbook with troubleshooting  
+✅ **US1**: Kuma monitoring works (success/failure push detected)
+✅ **US2**: Email safely disabled, Postfix stopped, backup works, rollback tested
+✅ **US3**: Packages optionally removed, confirmation required, backup still works
+✅ **Discovery**: Detects conflicts, aborts safely
+✅ **Idempotency**: Multiple runs produce same result
+✅ **Documentation**: Complete runbook with troubleshooting
 ✅ **Rollback**: Re-enable email works (Postfix restarts, config restored)
 
 ## Next Steps

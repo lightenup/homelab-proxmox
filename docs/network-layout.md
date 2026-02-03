@@ -41,15 +41,15 @@ This is a *target* design. The physical router/switch capabilities and migration
 
 Conceptually there are 5 logical networks (VLANs):
 
-- **VLAN 10 – Management**  
+- **VLAN 10 – Management**
   Proxmox host, Synology NAS, Raspberry Pi (CI runner), router management.
-- **VLAN 20 – Services**  
+- **VLAN 20 – Services**
   LXCs / VMs providing services like Immich, AdGuard, Home Assistant, reverse proxy.
-- **VLAN 30 – LAN (Normal clients)**  
+- **VLAN 30 – LAN (Normal clients)**
   Laptops, desktops, phones, TV etc.
-- **VLAN 40 – VPN egress**  
+- **VLAN 40 – VPN egress**
   Devices whose outbound traffic should always go via VPN (dedicated SSID).
-- **VLAN 50 – IoT** (optional, but planned)  
+- **VLAN 50 – IoT** (optional, but planned)
   IoT gadgets (bulbs, switches, sensors, etc.) that Home Assistant needs to talk to.
 
 ### Logical picture
@@ -81,7 +81,7 @@ Proxmox will use a **VLAN-aware bridge** (e.g. `vmbr0`) and per-VLAN subinterfac
 
 ### 3.1 VLAN 10 – Management (`192.168.10.0/24`)
 
-**Purpose:**  
+**Purpose:**
 Keep critical infrastructure separate from user traffic and IoT noise.
 
 **Typical devices:**
@@ -101,7 +101,7 @@ Keep critical infrastructure separate from user traffic and IoT noise.
 
 ### 3.2 VLAN 20 – Services (`192.168.20.0/24`)
 
-**Purpose:**  
+**Purpose:**
 Dedicated network for homelab services.
 
 **Planned LXCs/VMs:**
@@ -124,7 +124,7 @@ Dedicated network for homelab services.
 
 ### 3.3 VLAN 30 – LAN / Normal clients (`192.168.30.0/24`)
 
-**Purpose:**  
+**Purpose:**
 Everyday devices with “normal” internet access.
 
 **Devices:**
@@ -141,7 +141,7 @@ Everyday devices with “normal” internet access.
 
 ### 3.4 VLAN 40 – VPN egress (`192.168.40.0/24`)
 
-**Purpose:**  
+**Purpose:**
 A dedicated network/SSID where **all outbound traffic is forced through VPN** (e.g. commercial VPN provider or self-hosted WireGuard).
 
 **Devices:**
@@ -156,7 +156,7 @@ A dedicated network/SSID where **all outbound traffic is forced through VPN** (e
 
 ### 3.5 VLAN 50 – IoT (`192.168.50.0/24`) – optional but planned
 
-**Purpose:**  
+**Purpose:**
 Contain “untrusted” IoT devices while still allowing Home Assistant to control them.
 
 **Devices:**
@@ -207,7 +207,7 @@ Initial plan:
   - Phone and laptops join “inside” the network.
   - Immich and Home Assistant are accessed via internal hostnames, not publicly exposed ports.
 
-- **Future option:**  
+- **Future option:**
   Expose only the **reverse proxy** to the internet via port-forward, with:
   - TLS termination,
   - Auth where necessary,

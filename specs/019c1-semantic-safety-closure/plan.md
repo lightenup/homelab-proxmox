@@ -1,6 +1,6 @@
 # Implementation Plan: Semantic & Safety Closure
 
-**Branch**: `019c1-semantic-safety-closure` | **Date**: 2025-12-31 | **Spec**: [spec.md](./spec.md)  
+**Branch**: `019c1-semantic-safety-closure` | **Date**: 2025-12-31 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `specs/019c1-semantic-safety-closure/spec.md`
 
 ## Summary
@@ -9,20 +9,20 @@ Establish first-class semantic concepts (Profiles, Checks, Evidence Packs) for t
 
 ## Technical Context
 
-**Language/Version**: Bash 5.x (existing `pve-lab` script)  
-**Primary Dependencies**: jq (JSON processing), git (provenance capture), existing Ansible playbooks  
-**Storage**: File-based evidence packs in `artifacts/019-lab/<runid>/`  
-**Testing**: Negative test harness (GUARD-* checks), integration validation via suite execution  
-**Target Platform**: macOS controller → Proxmox VE 8.x targets (Debian 13 lab VMs)  
-**Project Type**: Shell scripting enhancement + JSON schema definitions  
-**Performance Goals**: <10 minutes for `hypervisor-nested-workload` profile (95th percentile)  
+**Language/Version**: Bash 5.x (existing `pve-lab` script)
+**Primary Dependencies**: jq (JSON processing), git (provenance capture), existing Ansible playbooks
+**Storage**: File-based evidence packs in `artifacts/019-lab/<runid>/`
+**Testing**: Negative test harness (GUARD-* checks), integration validation via suite execution
+**Target Platform**: macOS controller → Proxmox VE 8.x targets (Debian 13 lab VMs)
+**Project Type**: Shell scripting enhancement + JSON schema definitions
+**Performance Goals**: <10 minutes for `hypervisor-nested-workload` profile (95th percentile)
 **Constraints**:
   - Non-destructive to production (all negative tests isolated)
   - No external dependencies (no cloud services, dashboards)
   - Backward compatible with existing `--tier`/`--tier2-mode` flags
   - Check IDs immutable (allocate new IDs for behavior changes, not versioned)
   - Artifact schemas versioned via checks_schema_version and manifest_schema_version fields
-**Scale/Scope**: 
+**Scale/Scope**:
   - 2 initial profiles (hypervisor-control-plane, hypervisor-nested-workload)
   - 24+ checks across 6 namespaces
   - 5 JSONL event types
@@ -341,7 +341,7 @@ No constitution violations. All changes align with existing architecture and bou
 
 ---
 
-**Next Steps**: 
+**Next Steps**:
 1. Execute Phase 0 research (generate research.md)
 2. Execute Phase 1 design (generate data-model.md, contracts/, quickstart.md)
 3. Update agent context with new architecture

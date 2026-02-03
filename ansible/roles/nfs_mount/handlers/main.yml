@@ -13,7 +13,7 @@
       ansible.posix.mount:
         path: "{{ nfs_mount_point }}"
         state: unmounted
-    
+
     - name: Remount NFS share
       ansible.posix.mount:
         path: "{{ nfs_mount_point }}"

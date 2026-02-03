@@ -8,7 +8,7 @@ The goal is to implement a "Rebuild Orchestrator" that validates host and templa
 ### 1. Orchestration Logic Location
 - **Decision**: Implement logic in `scripts/lab/lib/rebuild.sh` and source it in `pve-lab`.
 - **Rationale**: Follows the existing modular design of `pve-lab` (e.g., `checks.sh`, `evidence.sh`). Keeps the main script clean and maintainable.
-- **Alternatives**: 
+- **Alternatives**:
     - Implement directly in `pve-lab` (too monolithic).
     - Create a separate standalone script (duplicates common logic like logging, config).
 
