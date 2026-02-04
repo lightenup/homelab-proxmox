@@ -6,14 +6,14 @@ services:
   immich-server:
     container_name: immich_server
     image: ghcr.io/immich-app/immich-server:{{ immich_version }}
-        volumes:
-          - "{{ immich_upload_location }}:/data"
-          - "/etc/localtime:/etc/localtime:ro"
-    {% for mount in immich_external_library_mounts | default([]) %}
-    {% if mount.host_path is defined and mount.container_path is defined and (mount.host_path | length) > 0 and (mount.container_path | length) > 0 %}
+    volumes:
+      - "{{ immich_upload_location }}:/data"
+      - "/etc/localtime:/etc/localtime:ro"
+      {% for mount in immich_external_library_mounts | default([]) %}
+      {% if mount.host_path is defined and mount.container_path is defined and (mount.host_path | length) > 0 and (mount.container_path | length) > 0 %}
       - "{{ mount.host_path }}:{{ mount.container_path }}{% if mount.read_only | default(true) %}:ro{% endif %}"
-    {% endif %}
-    {% endfor %}
+      {% endif %}
+      {% endfor %}
     env_file:
       - .env
     ports:
