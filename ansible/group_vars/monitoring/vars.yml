@@ -28,10 +28,16 @@ grafana_port: 3000
 grafana_domain: "monitoring.local"
 grafana_datasource_name: "Prometheus"
 grafana_admin_user: "admin"
+grafana_admin_password: "admin"  # Override in vault for production
 
 # Telegraf configuration
 telegraf_port: 9273
 snmp_security_level: "authPriv"
+snmp_username: "snmpuser"  # Override in vault
+snmp_auth_protocol: "SHA"
+snmp_auth_password: "changeme"
+snmp_priv_protocol: "AES"
+snmp_priv_password: "changeme"
 
 # Alertmanager configuration
 alertmanager_port: 9093
@@ -39,6 +45,12 @@ alertmanager_group_wait: "30s"
 alertmanager_group_interval: "5m"
 alertmanager_repeat_interval: "4h"
 smtp_require_tls: true
+smtp_server: "smtp.example.com"  # Override in vault
+smtp_port: 587
+smtp_username: ""
+smtp_password: ""
+smtp_from_address: ""
+alert_email_recipient: ""
 
 # Backup configuration
 backup_retention_days: 30
