@@ -27,6 +27,11 @@ on:
         required: false
         type: string
         default: ""
+      run_confidence_suite:
+        description: "Run confidence suite (best-effort)"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   setup:
@@ -236,7 +241,7 @@ jobs:
     name: Confidence suite (best-effort)
     runs-on: [self-hosted]
     needs: [setup, apply_lab]
-    if: always()
+    if: ${{ github.event.inputs.run_confidence_suite == true || github.event.inputs.run_confidence_suite == 'true' }}
     outputs:
       run_id: ${{ steps.suite_on_pve.outputs.run_id }}
       ok: ${{ steps.outcome.outputs.ok }}
