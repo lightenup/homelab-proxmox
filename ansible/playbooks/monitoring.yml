@@ -4,9 +4,16 @@
   become: true
 
   pre_tasks:
-    - name: Load vault variables explicitly
-      include_vars:
+    - name: Check for monitoring vault file
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../group_vars/monitoring/vault.yml"
+      register: monitoring_vault
+      changed_when: false
+
+    - name: Load vault variables explicitly (if present)
+      ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../group_vars/monitoring/vault.yml"
+      when: monitoring_vault.stat.exists
       no_log: true
 
     - name: Load host variables explicitly

@@ -1,24 +1,47 @@
 ---
-- name: Verify Uptime Kuma container is running
+- name: Verify monitoring containers are running
   ansible.builtin.shell:
-    cmd: docker ps --filter name=uptime-kuma --format '{{"{{"}}.Status{{"}}"}}'
+    cmd: docker ps --filter name={{ item.name }} --format '{{"{{"}}.Status{{"}}"}}'
   register: container_status
   changed_when: false
   failed_when: "'Up' not in container_status.stdout"
+  loop:
+    - name: prometheus
+    - name: grafana
+    - name: telegraf
+    - name: alertmanager
 
-- name: Wait for Uptime Kuma port to be listening
+- name: Wait for monitoring ports to be listening
   ansible.builtin.wait_for:
     host: localhost
-    port: 3001
+    port: "{{ item.port }}"
     timeout: 120
     state: started
+  loop:
+    - name: prometheus
+      port: "{{ prometheus_port }}"
+    - name: grafana
+      port: "{{ grafana_port }}"
+    - name: telegraf
+      port: "{{ telegraf_port }}"
+    - name: alertmanager
+      port: "{{ alertmanager_port }}"
 
-- name: Wait for Uptime Kuma HTTP response
+- name: Wait for monitoring HTTP endpoints to respond
   ansible.builtin.uri:
-    url: http://localhost:3001
+    url: "{{ item.url }}"
     method: GET
     status_code: 200
   register: http_response
   until: http_response.status == 200
   retries: 20
   delay: 3
+  loop:
+    - name: prometheus
+      url: "http://localhost:{{ prometheus_port }}/-/ready"
+    - name: grafana
+      url: "http://localhost:{{ grafana_port }}/api/health"
+    - name: telegraf
+      url: "http://localhost:{{ telegraf_port }}/metrics"
+    - name: alertmanager
+      url: "http://localhost:{{ alertmanager_port }}/-/ready"
