@@ -87,8 +87,9 @@ For services phase execution from laptop:
 ```bash
 export USE_NAS_STATE=true
 export ENVIRONMENT=lab  # or static
-export PROXMOX_API_TOKEN_ID="root@pam!rebuild"
-export PROXMOX_API_TOKEN_SECRET="<secret>"
+# Use single quotes to avoid zsh history expansion (!)
+export PROXMOX_API_TOKEN_ID='root@pam!rebuild'
+export PROXMOX_API_TOKEN_SECRET='<secret>'
 
 task rebuild:plan -- --phase services
 ```

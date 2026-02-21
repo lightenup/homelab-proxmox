@@ -71,9 +71,9 @@ pveum user token add root@pam rebuild \
 Test the token works before using in rebuild:
 
 ```bash
-# From laptop
-export PROXMOX_API_TOKEN_ID="root@pam!rebuild"
-export PROXMOX_API_TOKEN_SECRET="<secret-from-bitwarden>"
+# From laptop (use single quotes to avoid zsh history expansion)
+export PROXMOX_API_TOKEN_ID='root@pam!rebuild'
+export PROXMOX_API_TOKEN_SECRET='<secret-from-bitwarden>'
 
 # Test API access
 curl -k \
@@ -90,16 +90,18 @@ Add to your shell profile (`.zshrc` or `.bash_profile`):
 
 ```bash
 # Proxmox API credentials for rebuild orchestrator
-export PROXMOX_API_TOKEN_ID="root@pam!rebuild"
-export PROXMOX_API_TOKEN_SECRET="<from-bitwarden>"
+# Use single quotes to avoid zsh history expansion (!)
+export PROXMOX_API_TOKEN_ID='root@pam!rebuild'
+export PROXMOX_API_TOKEN_SECRET='<from-bitwarden>'
 ```
 
 Or load from file (more secure):
 
 ```bash
 # Create ~/.proxmox-rebuild-credentials (chmod 600)
-export PROXMOX_API_TOKEN_ID="root@pam!rebuild"
-export PROXMOX_API_TOKEN_SECRET="<secret>"
+# Use single quotes to avoid zsh history expansion (!)
+export PROXMOX_API_TOKEN_ID='root@pam!rebuild'
+export PROXMOX_API_TOKEN_SECRET='<secret>'
 
 # Source in rebuild commands
 source ~/.proxmox-rebuild-credentials
