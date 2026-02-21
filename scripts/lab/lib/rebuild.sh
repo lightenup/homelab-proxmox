@@ -1002,8 +1002,13 @@ rebuild_phase_iac() {
         if (cd "${REPO_ROOT}" && task terraform:plan) >> "$summary_file" 2>&1; then
             record_check "IAC-003" "IaC drift check" "high" "PASS" "PASS" "Terraform plan completed" "reports/iac/iac-summary.txt"
         else
-            record_check "IAC-003" "IaC drift check" "high" "PASS" "FAIL" "Terraform plan failed" "reports/iac/iac-summary.txt"
-            return 1
+            if [[ "${REBUILD_MODE}" == "plan" ]]; then
+                record_check "IAC-003" "IaC drift check" "high" "PASS" "FAIL" "Terraform plan failed (non-fatal in plan mode)" "reports/iac/iac-summary.txt"
+                log_warn "IaC drift check failed (non-fatal in plan mode). See $summary_file"
+            else
+                record_check "IAC-003" "IaC drift check" "high" "PASS" "FAIL" "Terraform plan failed" "reports/iac/iac-summary.txt"
+                return 1
+            fi
         fi
     else
         record_check "IAC-003" "IaC drift check" "high" "PASS" "FAIL" "Task CLI not available" "reports/iac/iac-summary.txt"
