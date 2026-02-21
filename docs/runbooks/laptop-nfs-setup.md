@@ -15,23 +15,32 @@
 
 ## Configuration Steps
 
-### 1. Create autofs map
+> **Important**: macOS autofs uses a **direct map** (`/-`) approach where each mount
+> point is an absolute path in `/etc/auto_nfs`. Do NOT use an indirect map
+> (`/Volumes/nas  auto_nfs`) — that pattern does not work reliably on macOS.
 
-Create or edit `/etc/auto_nfs`:
+### 1. Create autofs direct map
+
+Create or edit `/etc/auto_nfs` with one line per NAS share:
 
 ```bash
 sudo tee /etc/auto_nfs <<'EOF'
-nas  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_ci
+/Volumes/nas/homelab_ci  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_ci
+/Volumes/nas/homelab_dr_test  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_dr_test
+/Volumes/nas/homelab_backups  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_backups
 EOF
 ```
 
-### 2. Register map in auto_master
+> **Warning**: Do not leave blank lines in `/etc/auto_nfs` — macOS autofs stops
+> parsing at the first blank line, silently dropping all entries after it.
 
-Edit `/etc/auto_master` and add this line:
+### 2. Register direct map in auto_master
+
+Edit `/etc/auto_master` and add this line (note the `/-` direct map key):
 
 ```bash
 # Add this line to /etc/auto_master
-/Volumes/nas    auto_nfs    -nobrowse
+/-    auto_nfs
 ```
 
 Manual edit command:
@@ -46,15 +55,17 @@ sudo nano /etc/auto_master
 sudo automount -vc
 ```
 
-Expected output:
+Expected output (one entry per mount point):
 ```
 automount: /net updated
 automount: /home updated
-automount: /Volumes/nas updated
+automount: /Volumes/nas/homelab_ci updated
+automount: /Volumes/nas/homelab_dr_test updated
+automount: /Volumes/nas/homelab_backups updated
 automount: no unmounts
 ```
 
-### 4. Verify mount
+### 4. Verify mounts
 
 ```bash
 ls -la /Volumes/nas/homelab_ci

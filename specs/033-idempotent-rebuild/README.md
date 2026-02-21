@@ -115,7 +115,7 @@ ls -l artifacts/rebuild-runs/rebuild-$(date +%Y%m%d)*
 
 ### Delta Spec Decisions
 1. NAS-backed state storage (not PVE filesystem)
-2. Environment separation: `infra_state/<lab|static>/<service>/`
+2. Environment separation: `infra_state/<lab|prod>/<service>/`
 3. Symlinks for GH Actions backward compatibility
 4. Auto-remediation for mount failures
 5. Services phase runs Terraform from laptop (not SSH delegation)

@@ -12,6 +12,10 @@ Complete the idempotent rebuild orchestrator by migrating Terraform state and An
 
 **Delta Scope**: 16 tasks (D-001 to D-016) addressing state storage, laptop-based services deployment, mount auto-remediation, and restore documentation updates.
 
+> **Naming note**: This design doc references `static` as an environment name.
+> During implementation, `static` was renamed to `prod` — the NAS directories are
+> `infra_state/lab/` and `infra_state/prod/`, and the code accepts `lab|prod`.
+
 ## Technical Context
 
 **Language/Version**: Bash (rebuild orchestrator), Python 3.x (inventory generation), Terraform 1.5.7+, Ansible 2.x

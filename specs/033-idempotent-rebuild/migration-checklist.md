@@ -316,4 +316,34 @@ If critical issues are discovered during any phase:
 **Risks**:
 - NFS performance: Monitor for slowness (target <15s Terraform plan)
 - Mount failures: Auto-remediation should handle, but monitor alerts
-- State conflicts: Ensure environment isolation (lab vs static) enforced
+- State conflicts: Ensure environment isolation (lab vs prod) enforced
+
+---
+
+## Post-Merge Pickup Items
+
+Items to complete after the PR is merged to `main`. Track in a follow-up issue.
+
+### Immediate (within 1 week of merge)
+
+1. **Trigger a real GH Actions terraform workflow** to validate symlinks work end-to-end.
+   Check SC-007 in `tasks-delta-state-storage.md` once confirmed.
+2. **Verify nightly backup** includes NAS state files — check one decrypted archive
+   for `iac-artifacts/nas-state/` contents.
+3. **Run a full `rebuild:plan`** from a clean laptop state to validate docs are accurate.
+
+### Short-term (within 30 days)
+
+4. **Monitor GH Actions** for any terraform workflow failures related to symlinked state.
+5. **Document state locking risk** — currently no locking mechanism prevents concurrent
+   Terraform runs from laptop and GH Actions modifying state simultaneously.
+   Options: Consul backend, S3+DynamoDB backend, or operational runbook rule.
+6. **Phase 2-3 integration tests** — mark migration-checklist Phase 2-3 test boxes
+   as they pass in real usage (currently code-complete but lightly tested).
+
+### Phase 5 (after 30-day soak)
+
+7. **Remove legacy symlinks** from `terraform/services/<service>/terraform.tfstate`.
+8. **Update GH Actions workflows** to set `USE_NAS_STATE=true` natively.
+9. **Remove symlink creation code** from Ansible role and migration script.
+10. **Final doc pass** — remove all symlink/backward-compat references.

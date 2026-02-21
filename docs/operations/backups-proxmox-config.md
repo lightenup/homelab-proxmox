@@ -514,6 +514,18 @@ ansible-playbook playbooks/site.yml --tags backup
 - ✅ Ansible role tasks: `ansible/roles/*/tasks/*.yml`
 - ✅ Documentation: `README.md`, `docs/operations/*.md`, `docs/runbooks/*.md`
 
+### User Story 3 - NAS-Backed State (If NAS mounted)
+
+Since spec 033, Terraform state lives on the NAS under `infra_state/{lab,prod}/`.
+The nightly backup script (D-012 integration) collects these into the archive:
+
+- ✅ Per-service Terraform state: `infra_state/<env>/<service>/terraform.tfstate`
+- ✅ Ansible inventory snapshot: `infra_state/<env>/ansible/hosts.yml`
+- ✅ Archived under `iac-artifacts/nas-state/` inside the backup tarball
+
+> **Note**: Symlinks in `terraform/services/<service>/terraform.tfstate` point to
+> the NAS paths. During restore, re-create NAS mounts before running Terraform.
+
 ### What's NOT Backed Up
 
 - ❌ LXC root filesystems (data backups handled separately)

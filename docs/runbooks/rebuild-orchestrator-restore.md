@@ -78,7 +78,7 @@ ssh pve "ls -ld /mnt/nas/homelab_ci/infra_state/{lab,prod}/"
   - LXC configurations in `lxc-configs/`
   - IaC artifacts in `iac-artifacts/` (optional, NAS state preferred)
 
-**If no backup needed**: Use `--skip-restore` flag to validate/remediate existing system
+**If no backup needed**: Use `--phase mounts --phase services --phase verify` to skip the restore and iac phases
 
 ---
 
@@ -88,25 +88,25 @@ ssh pve "ls -ld /mnt/nas/homelab_ci/infra_state/{lab,prod}/"
 
 **Reference**: [laptop-nfs-setup.md](./laptop-nfs-setup.md)
 
-**Create autofs map**:
+> **Important**: macOS autofs uses a **direct map** (`/-`) approach.
+> See [laptop-nfs-setup.md](./laptop-nfs-setup.md) for full details.
+
+**Create autofs direct map** (`/etc/auto_nfs`):
 ```bash
 sudo tee /etc/auto_nfs <<'EOF'
-nas  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_ci
+/Volumes/nas/homelab_ci  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_ci
+/Volumes/nas/homelab_dr_test  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_dr_test
+/Volumes/nas/homelab_backups  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_backups
 EOF
 ```
 
-**Register in auto_master**:
+> **Warning**: No blank lines in `/etc/auto_nfs` — macOS stops parsing at the first blank line.
+
+**Register direct map in auto_master**:
 ```bash
-# Edit /etc/auto_master and add this line:
-sudo nano /etc/auto_master
+# Add this line to /etc/auto_master:
+/-    auto_nfs
 ```
-
-Add this line:
-```
-/Volumes/nas    auto_nfs    -nobrowse
-```
-
-Save (Ctrl+O) and exit (Ctrl+X).
 
 **Reload automount**:
 ```bash
@@ -117,7 +117,9 @@ sudo automount -vc
 ```
 automount: /net updated
 automount: /home updated
-automount: /Volumes/nas updated
+automount: /Volumes/nas/homelab_ci updated
+automount: /Volumes/nas/homelab_dr_test updated
+automount: /Volumes/nas/homelab_backups updated
 automount: no unmounts
 ```
 

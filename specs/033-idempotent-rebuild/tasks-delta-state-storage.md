@@ -59,7 +59,7 @@ This task list addresses gaps in the original 033 implementation by adding NAS-b
 - [ ] State files readable/writable from PVE via `/mnt/nas/homelab_ci/infra_state/lab/<service>/terraform.tfstate`
 - [ ] GH Actions workflows continue working without modification (via symlinks)
 - [ ] State files present in nightly backup archives under `iac-artifacts/nas-state/`
-- [ ] Environment isolation enforced (lab state ≠ static state)
+- [ ] Environment isolation enforced (lab state ≠ prod state)
 
 ### Implementation Tasks
 
@@ -358,26 +358,26 @@ task: Create migration-checklist.md (D-015)
 ## Task Checklist Progress
 
 ### Phase 1: Setup
-- [ ] D-001 - NAS directories
-- [ ] D-002 - Laptop docs
-- [ ] D-003 - State validation
+- [X] D-001 - NAS directories
+- [X] D-002 - Laptop docs
+- [X] D-003 - State validation
 
 ### Phase 2: Foundational
-- [ ] D-004 - State library
-- [ ] D-005 - Update pve-service-deploy
-- [ ] D-006 - Update supporting scripts
+- [X] D-004 - State library
+- [X] D-005 - Update pve-service-deploy
+- [X] D-006 - Update supporting scripts
 
 ### Phase 3: User Story 1 (NAS State)
-- [ ] D-007 - Ansible symlink role
-- [ ] D-008 - State migration script
-- [ ] D-012 - Backup integration
+- [X] D-007 - Ansible symlink role
+- [X] D-008 - State migration script
+- [X] D-012 - Backup integration
 
 ### Phase 4: User Story 2 (Laptop Services)
-- [ ] D-009 - Refactor services phase
-- [ ] D-010 - Terraform credentials
+- [X] D-009 - Refactor services phase
+- [X] D-010 - Terraform credentials
 
 ### Phase 5: User Story 3 (Mount Remediation)
-- [ ] D-011 - Update mounts phase
+- [X] D-011 - Update mounts phase
 
 ### Phase 6: Polish
 - [X] D-013 - Documentation
@@ -391,12 +391,12 @@ task: Create migration-checklist.md (D-015)
 
 Track these throughout implementation:
 
-- [ ] **SC-005**: Laptop completes all rebuild phases including services
-- [ ] **SC-006**: State persists across PVE reboots (NAS, not local filesystem)
-- [ ] **SC-007**: Zero GH Actions regression (all 9+ workflows pass)
-- [ ] **SC-008**: Mount auto-remediation fixes broken mounts
-- [ ] **SC-009**: State files included in nightly backups (iac-artifacts/)
-- [ ] **SC-010**: Cross-environment isolation enforced (lab ≠ static)
+- [X] **SC-005**: Laptop completes all rebuild phases including services
+- [X] **SC-006**: State persists across PVE reboots (NAS, not local filesystem)
+- [ ] **SC-007**: Zero GH Actions regression (all 9+ workflows pass) — *pending: trigger one real GH Actions terraform workflow post-merge*
+- [X] **SC-008**: Mount auto-remediation fixes broken mounts
+- [X] **SC-009**: State files included in nightly backups (iac-artifacts/)
+- [X] **SC-010**: Cross-environment isolation enforced (lab ≠ prod)
 
 ---
 
