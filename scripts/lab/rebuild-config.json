@@ -1,0 +1,28 @@
+{
+  "default_environment": "lab",
+  "prod_confirm_string": "rebuild-prod",
+  "service_deploy_confirm_string": "deploy-prod",
+  "required_host_mounts": [
+    "/mnt/nas/homelab_immich",
+    "/mnt/nas/photo"
+  ],
+  "immich_bind_mounts": [
+    {
+      "mp": "mp0",
+      "path": "/mnt/immich"
+    },
+    {
+      "mp": "mp1",
+      "path": "/mnt/immich-external/photo"
+    }
+  ],
+  "immich_ctid": 101,
+  "service_allowlist_path": "scripts/lab/service-scope-allowlist.json",
+  "phases": [
+    "mounts",
+    "restore",
+    "iac",
+    "services",
+    "verify"
+  ]
+}

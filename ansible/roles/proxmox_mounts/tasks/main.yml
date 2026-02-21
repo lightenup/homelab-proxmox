@@ -6,18 +6,38 @@
     update_cache: true
     cache_valid_time: 3600
 
-- name: Ensure mount point exists
-  file:
-    path: /mnt/nas/homelab_immich
-    state: directory
-    mode: '0755'
-    owner: root
-    group: root
+- name: Define NAS NFS mounts
+  ansible.builtin.set_fact:
+    nas_nfs_mounts:
+      - path: /mnt/nas/homelab_immich
+        src: 192.168.1.109:/volume1/homelab_immich
+        opts: rw,nofail
+        purpose: "Immich photo storage"
+      - path: /mnt/nas/photo
+        src: 192.168.1.109:/volume1/photo
+        opts: ro,nofail
+        purpose: "Immich external library (read-only)"
+      - path: /mnt/nas/video
+        src: 192.168.1.109:/volume1/video
+        opts: rw,nofail
+        purpose: "Shared video library"
+      - path: /mnt/nas/homelab_ci
+        src: 192.168.1.109:/volume1/homelab_ci
+        opts: rw,nofail
+        purpose: "CI/CD artifacts and cache"
+      - path: /mnt/nas/homelab_dr_test
+        src: 192.168.1.109:/volume1/homelab_dr_test
+        opts: rw,nofail
+        purpose: "Disaster recovery testing"
 
-- name: Mount Synology NFS share
+- name: Mount NAS NFS shares
   ansible.posix.mount:
-    path: /mnt/nas/homelab_immich
-    src: 192.168.1.109:/volume1/homelab_immich
+    path: "{{ item.path }}"
+    src: "{{ item.src }}"
     fstype: nfs
-    opts: rw,nofail
+    opts: "{{ item.opts }}"
     state: mounted
+  loop: "{{ nas_nfs_mounts }}"
+  loop_control:
+    label: "{{ item.path }} ({{ item.purpose }})"
+

@@ -134,7 +134,14 @@ snapshot_collect_mount_checks() {
 write_lab_snapshot() {
     local output_path="${1:?write_lab_snapshot requires output_path}"
     local environment="${2:-${ENVIRONMENT:-lab}}"
-    local state_root="${3:-/var/lib/homelab-proxmox/state/services}"
+    local state_root
+
+    # Use state library if available
+    if command -v resolve_state_root >/dev/null 2>&1; then
+        state_root="$(ENVIRONMENT="${environment}" resolve_state_root 2>/dev/null)" || state_root="${3:-/var/lib/homelab-proxmox/state/services}"
+    else
+        state_root="${3:-/var/lib/homelab-proxmox/state/services}"
+    fi
 
     local generated_at
     generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"

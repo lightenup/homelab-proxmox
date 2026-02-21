@@ -11,7 +11,17 @@ SSH_USER="${SSH_USER:-ci}"
 SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 ARTIFACT_ROOT="/var/lib/homelab-proxmox/artifacts"
 VAULT_ROOT="/var/lib/homelab-proxmox/vault"
-STATE_ROOT="/var/lib/homelab-proxmox/state"
+
+# State root: use NAS if enabled, otherwise legacy path
+if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
+    # Source state library for dynamic resolution
+    # shellcheck source=lib/state.sh
+    source "${LIB_DIR}/state.sh" 2>/dev/null || true
+    STATE_ROOT="$(ENVIRONMENT="${ENVIRONMENT:-lab}" resolve_state_root 2>/dev/null || echo '/var/lib/homelab-proxmox/state')"
+else
+    STATE_ROOT="/var/lib/homelab-proxmox/state"
+fi
+
 TFVARS_ROOT="/var/lib/homelab-proxmox/tfvars"
 
 # Source required libraries

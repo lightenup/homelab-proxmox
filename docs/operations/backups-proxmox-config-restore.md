@@ -26,6 +26,17 @@ This runbook guides you through restoring a Proxmox VE host from encrypted confi
 
 ## Before You Begin
 
+### Rebuild Guardrails (Orchestrator)
+
+If you are using the rebuild orchestrator (task rebuild:plan / task rebuild:apply):
+
+- Lab is the default environment.
+- Prod runs require an explicit confirmation string.
+- Apply runs require an explicit confirmation string even in lab.
+- Network and fstab restores require opt-in flags (`--apply-network`, `--apply-fstab`).
+
+See [docs/operations/rebuild-orchestrator.md](docs/operations/rebuild-orchestrator.md) for usage details.
+
 ### 1. Verify Backup Availability
 
 ```bash
@@ -257,33 +268,105 @@ mount | grep nfs
 - NAS backup location: `/mnt/nas-backup`
 - NAS storage for LXC: `/mnt/nas-storage`
 
-### Step 7: Restore IaC Artifacts (Optional)
+### Step 7: Restore IaC State Files
 
-**Only if `REPO_PATH` was configured during backup**
+**⚠️ IMPORTANT**: As of spec 033-idempotent-rebuild, Terraform state and Ansible inventory are stored on NAS (`/mnt/nas/homelab_ci/infra_state/`) instead of the PVE filesystem.
 
-#### Terraform State
+#### Prerequisites
 
+- NAS mounted on restored PVE host: `/mnt/nas/homelab_ci`
+- Backup archive extracted: `/root/restore-YYYYMMDD/`
+- Verify state directories exist: `ls /mnt/nas/homelab_ci/infra_state/{lab,static}/`
+
+#### Restore Terraform State
+
+**Lab Environment**:
 ```bash
-# Navigate to Terraform directory
-cd /root/homelab-proxmox/terraform
+# Verify source data in backup
+ls /root/restore-*/iac-artifacts/nas-state/lab/*/terraform.tfstate
 
-# Backup current state (if exists)
-cp terraform.tfstate terraform.tfstate.bak 2>/dev/null || true
+# Sync all lab service state files
+rsync -av --checksum \
+  /root/restore-*/iac-artifacts/nas-state/lab/ \
+  /mnt/nas/homelab_ci/infra_state/lab/
 
-# Restore Terraform state
-cp /root/restore-*/iac/terraform/terraform.tfstate .
-
-# Verify state
-terraform show
-
-# Critical validation: Check for drift
-terraform plan
-
-# Expected: "No changes" or minimal drift
-# Address any drift before proceeding with Terraform operations
+# Verify restoration
+ls -lh /mnt/nas/homelab_ci/infra_state/lab/*/terraform.tfstate
 ```
 
-#### Ansible Inventory
+**Production Environment**:
+```bash
+# Verify source data in backup
+ls /root/restore-*/iac-artifacts/nas-state/static/*/terraform.tfstate
+
+# Sync static state separately
+rsync -av --checksum \
+  /root/restore-*/iac-artifacts/nas-state/static/ \
+  /mnt/nas/homelab_ci/infra_state/prod/
+
+# Verify restoration
+ls -lh /mnt/nas/homelab_ci/infra_state/prod/*/terraform.tfstate
+```
+
+#### Restore Ansible Inventory
+
+```bash
+# Lab inventory
+mkdir -p /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated
+cp -v /root/restore-*/iac-artifacts/nas-state/lab/ansible/inventories/generated/hosts.yml \
+  /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated/hosts.yml
+
+# Static inventory
+mkdir -p /mnt/nas/homelab_ci/infra_state/prod/ansible/inventories/generated
+cp -v /root/restore-*/iac-artifacts/nas-state/static/ansible/inventories/generated/hosts.yml \
+  /mnt/nas/homelab_ci/infra_state/prod/ansible/inventories/generated/hosts.yml
+```
+
+#### Validation
+
+Verify state files are accessible and valid:
+```bash
+# Check file ownership and permissions
+find /mnt/nas/homelab_ci/infra_state/ -type f -ls
+
+# Validate Terraform state format (example for immich)
+for env in lab static; do
+  for service_dir in /mnt/nas/homelab_ci/infra_state/$env/*/; do
+    [[ -f "${service_dir}terraform.tfstate" ]] || continue
+    service=$(basename "$service_dir")
+    if terraform show -json "${service_dir}terraform.tfstate" > /dev/null 2>&1; then
+      echo "✓ $env/$service: OK"
+    else
+      echo "✗ $env/$service: INVALID STATE"
+    fi
+  done
+done
+```
+
+**Expected Output**:
+```
+✓ lab/immich: OK
+✓ lab/monitoring: OK
+✓ lab/jellyfin: OK
+✓ static/immich: OK
+```
+
+#### Legacy State (Deprecated Path)
+
+If your backup includes legacy state at `iac-artifacts/legacy/terraform/terraform.tfstate`:
+
+```bash
+# This is the old location - should be migrated to NAS paths above
+# Only restore legacy state if NAS state is unavailable
+
+# Restore to old location (deprecated)
+mkdir -p /var/lib/homelab-proxmox/terraform
+cp /root/restore-*/iac-artifacts/legacy/terraform/terraform.tfstate \
+  /var/lib/homelab-proxmox/terraform/
+
+# Then migrate to NAS:
+# DRY_RUN=false ENVIRONMENT=lab bash scripts/lab/migrate-state-to-nas.sh
+```
 
 ```bash
 # Navigate to inventory directory

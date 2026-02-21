@@ -1,0 +1,20 @@
+---
+# Deploy state symlinks for backward compatibility
+# Task: D-007 from specs/033-idempotent-rebuild/plan-delta-state-storage.md
+
+- name: Setup Proxmox state symlinks
+  hosts: proxmox_hosts
+  become: true
+  vars:
+    # Override these variables to enable symlinks
+    # proxmox_state_symlinks_enabled: true
+    # proxmox_state_environment: lab
+    proxmox_state_services:
+      - immich
+      - monitoring
+      - reverse_proxy
+      - homeassistant
+      - jellyfin
+      - adguard
+  roles:
+    - proxmox_state_symlinks
