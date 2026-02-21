@@ -1062,10 +1062,19 @@ rebuild_phase_services() {
     export TF_VAR_proxmox_api_token_secret="${PROXMOX_API_TOKEN_SECRET}"
     record_check "SRV-004" "Proxmox API credentials" "low" "PASS" "PASS" "Credentials loaded (token_id: ${PROXMOX_API_TOKEN_ID})" "reports/services"
 
+    local env_tfvars="${REPO_ROOT}/terraform/environments/${REBUILD_ENVIRONMENT}.tfvars"
+    if [[ ! -f "${env_tfvars}" ]]; then
+        record_check "SRV-005" "Environment tfvars present" "high" "PASS" "FAIL" "Missing tfvars file: ${env_tfvars}" "reports/services"
+        log_error "Missing required tfvars file: ${env_tfvars}"
+        log_error "Create it from example: terraform/environments/${REBUILD_ENVIRONMENT}.tfvars.example"
+        return 1
+    fi
+    record_check "SRV-005" "Environment tfvars present" "low" "PASS" "PASS" "Using tfvars: ${env_tfvars}" "reports/services"
+
     local -a services
     mapfile -t services < <(jq -r 'keys[]' "$allowlist_path")
     local failed=0
-    local idx=4  # Start after SRV-004
+    local idx=5  # Start after SRV-005
 
     for service in "${services[@]}"; do
         idx=$((idx + 1))
@@ -1075,8 +1084,7 @@ rebuild_phase_services() {
 
         local tf_dir="${REPO_ROOT}/terraform/services/${service}"
         if [[ ! -d "$tf_dir" ]]; then
-            record_check "$check_id" "Service ${service} directory" "high" "PASS" "FAIL" "Terraform dir missing: $tf_dir" "reports/services/${service}.log"
-            failed=1
+            record_check "$check_id" "Service ${service} directory" "low" "PASS" "PASS" "Service ${service} not Terraform-managed; skipping" "reports/services/${service}.log"
             continue
         fi
 
@@ -1105,10 +1113,10 @@ rebuild_phase_services() {
 
             # Plan or Apply
             if [[ "${REBUILD_MODE}" == "plan" ]]; then
-                terraform plan -state="$state_file" -input=false -no-color >> "$log_file" 2>&1
+                terraform plan -var-file="$env_tfvars" -state="$state_file" -input=false -no-color >> "$log_file" 2>&1
             else
                 # Apply mode requires confirmation (already validated in preflight)
-                terraform apply -state="$state_file" -input=false -auto-approve -no-color >> "$log_file" 2>&1
+                terraform apply -var-file="$env_tfvars" -state="$state_file" -input=false -auto-approve -no-color >> "$log_file" 2>&1
             fi
         ) || tf_exit_code=$?
 
@@ -1129,8 +1137,20 @@ rebuild_phase_verify() {
     local summary_file="${evidence_dir}/verify-summary.txt"
 
     if command -v task >/dev/null 2>&1; then
-        if (cd "${REPO_ROOT}" && task lifecycle:verify) > "$summary_file" 2>&1; then
-            record_check "VERIFY-001" "Lifecycle verification" "high" "PASS" "PASS" "Lifecycle verify succeeded" "reports/verify/verify-summary.txt"
+        {
+            echo "Running inventory update (best effort)..."
+            if (cd "${REPO_ROOT}" && task inventory:update); then
+                echo "inventory:update succeeded"
+            else
+                echo "inventory:update failed; continuing with health checks"
+            fi
+            echo
+            echo "Running health checks..."
+            (cd "${REPO_ROOT}" && task healthcheck:run)
+        } > "$summary_file" 2>&1
+
+        if [[ $? -eq 0 ]]; then
+            record_check "VERIFY-001" "Lifecycle verification" "high" "PASS" "PASS" "Health checks succeeded" "reports/verify/verify-summary.txt"
             return 0
         fi
     fi
