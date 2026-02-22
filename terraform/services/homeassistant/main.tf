@@ -1,3 +1,8 @@
+locals {
+  all_mounts_homeassistant     = lookup(var.service_mountpoints, "homeassistant", {})
+  storage_mounts_homeassistant = { for k, v in local.all_mounts_homeassistant : k => v if !startswith(v.volume, "/") }
+}
+
 module "homeassistant_lxc" {
   source = "../../modules/lxc_service"
 
@@ -18,5 +23,5 @@ module "homeassistant_lxc" {
   searchdomain    = var.searchdomain
   ssh_public_keys = join("\n", var.ssh_public_keys)
 
-  mountpoints = values(lookup(var.service_mountpoints, "homeassistant", {}))
+  mountpoints = values(local.storage_mounts_homeassistant)
 }

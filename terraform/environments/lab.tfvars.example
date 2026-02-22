@@ -26,8 +26,9 @@ service_mountpoints = {
   }
   jellyfin = {
     video = {
-      mp     = "/mnt/media/video"
-      volume = "/mnt/nas/video"
+      mp       = "/media/video"
+      volume   = "/mnt/nas/video"
+      readonly = true
     }
   }
   nextcloud = {

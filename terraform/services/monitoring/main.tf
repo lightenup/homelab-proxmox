@@ -1,3 +1,8 @@
+locals {
+  all_mounts_monitoring     = lookup(var.service_mountpoints, "monitoring", {})
+  storage_mounts_monitoring = { for k, v in local.all_mounts_monitoring : k => v if !startswith(v.volume, "/") }
+}
+
 module "monitoring_lxc" {
   source = "../../modules/lxc_service"
 
@@ -18,5 +23,5 @@ module "monitoring_lxc" {
   searchdomain    = var.searchdomain
   ssh_public_keys = join("\n", var.ssh_public_keys)
 
-  mountpoints = values(lookup(var.service_mountpoints, "monitoring", {}))
+  mountpoints = values(local.storage_mounts_monitoring)
 }

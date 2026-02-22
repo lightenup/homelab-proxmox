@@ -861,6 +861,7 @@ cmd_plan() {
         fi
     } >"${EVIDENCE_ROOT}/reports/plan/tfvars.txt"
 
+    echo "[Tier 1] Planning container via Terraform..."
     terraform_init_with_retry
     terraform_chdir validate -no-color
     preflight_ok "terraform init+validate succeeded"
@@ -1167,6 +1168,7 @@ cmd_apply() {
         export TF_VAR_ssh_public_keys
     fi
 
+    echo "[Tier 1] Creating/updating container via Terraform..."
     terraform_init_with_retry
     terraform_chdir validate -no-color
 
@@ -1762,6 +1764,7 @@ sys.exit(3)
     # Proxmox API tokens cannot change certain feature flags (e.g., mount=nfs) unless
     # authenticated as root@pam. To keep least-privilege (no root SSH) while still
     # enabling in-guest NFS mounts, set the feature via local sudo+pct and record proof.
+    echo "[Tier 2] Applying feature flags via pct set..."
     if [[ -n "${ctid}" ]]; then
         local features_report="${EVIDENCE_ROOT}/reports/apply/lxc-features.txt"
         local features_stderr="${EVIDENCE_ROOT}/reports/apply/lxc-features.stderr.txt"
@@ -1821,172 +1824,14 @@ sys.exit(3)
         fi
     fi
 
-    # In-guest NFS mounts can be blocked for unprivileged LXCs (kernel userns mount restrictions)
-    # even when Proxmox features include mount=nfs. Bind-mount the already-mounted host NFS path
-    # into the container and record proof.
-    if [[ -n "${ctid}" && "${SERVICE}" == "jellyfin" ]]; then
-        local mp_report="${EVIDENCE_ROOT}/reports/apply/lxc-mountpoints.txt"
-        local mp_stderr="${EVIDENCE_ROOT}/reports/apply/lxc-mountpoints.stderr.txt"
-        local host_path="/mnt/nas/video"
-        local mp_target="/media/video"
-        local desired_mp0="${host_path},mp=${mp_target},ro=1"
-
-        {
-            echo "ctid=${ctid}"
-            echo "service=${SERVICE}"
-            echo "host_path=${host_path}"
-            echo "container_target=${mp_target}"
-            echo "requested_mp0=${desired_mp0}"
-            echo "--- host findmnt (target) ---"
-            findmnt -n -o SOURCE,FSTYPE,OPTIONS,TARGET --target "${host_path}" 2>>"${mp_stderr}" || true
-            echo "--- pct config (before) ---"
-            sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
-        } >"${mp_report}"
-
-        local mp0_before=""
-        mp0_before="$(sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk -F': ' '/^mp0:/ {print $2; exit}' || true)"
-
-        if [[ "${mp0_before}" != "${desired_mp0}" ]]; then
-            if sudo -n pct set "${ctid}" -mp0 "${desired_mp0}" >>"${mp_report}" 2>>"${mp_stderr}"; then
-                {
-                    echo "--- pct config (after) ---"
-                    sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
-                    echo "action=reboot"
-                } >>"${mp_report}"
-
-                sudo -n pct reboot "${ctid}" >>"${mp_report}" 2>>"${mp_stderr}" || true
-
-                waited=0
-                attempt=1
-                while true; do
-                    if ssh -i "${lxc_key_file}" \
-                        ${ssh_common_args} \
-                        "root@${service_ip}" 'true' >/dev/null 2>&1; then
-                        break
-                    fi
-                    echo "[ssh-wait-mp-reboot] attempt=${attempt} waited=${waited}s"
-                    if (( waited >= ssh_wait_seconds )); then
-                        die "ssh not ready on ${service_ip} after mp0 reboot (${ssh_wait_seconds}s)"
-                    fi
-                    sleep "${ssh_sleep_seconds}"
-                    waited=$((waited + ssh_sleep_seconds))
-                    attempt=$((attempt + 1))
-                done
-            else
-                preflight_fail "failed to set lxc mountpoint mp0"
-                die "Failed to set LXC ${ctid} mountpoint mp0 via pct (see reports/apply/lxc-mountpoints.txt)"
-            fi
-        else
-            echo "status=already-correct" >>"${mp_report}"
-        fi
-
-        local host_path_photo="/mnt/nas/photo"
-        local mp_target_photo="/mnt/immich-external/photo"
-        local desired_mp1="${host_path_photo},mp=${mp_target_photo},ro=1"
-
-        {
-            echo "--- external-photo bind mount ---"
-            echo "host_path_photo=${host_path_photo}"
-            echo "container_target_photo=${mp_target_photo}"
-            echo "requested_mp1=${desired_mp1}"
-        } >>"${mp_report}"
-
-        if findmnt -n --target "${host_path_photo}" >/dev/null 2>&1; then
-            local mp1_before=""
-            mp1_before="$(sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk -F': ' '/^mp1:/ {print $2; exit}' || true)"
-
-            if [[ "${mp1_before}" != "${desired_mp1}" ]]; then
-                if sudo -n pct set "${ctid}" -mp1 "${desired_mp1}" >>"${mp_report}" 2>>"${mp_stderr}"; then
-                    {
-                        echo "--- pct config (after mp1) ---"
-                        sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
-                        echo "action=reboot"
-                    } >>"${mp_report}"
-
-                    sudo -n pct reboot "${ctid}" >>"${mp_report}" 2>>"${mp_stderr}" || true
-
-                    waited=0
-                    attempt=1
-                    while true; do
-                        if ssh -i "${lxc_key_file}" \
-                            ${ssh_common_args} \
-                            "root@${service_ip}" 'true' >/dev/null 2>&1; then
-                            break
-                        fi
-                        echo "[ssh-wait-mp1-reboot] attempt=${attempt} waited=${waited}s"
-                        if (( waited >= ssh_wait_seconds )); then
-                            die "ssh not ready on ${service_ip} after mp1 reboot (${ssh_wait_seconds}s)"
-                        fi
-                        sleep "${ssh_sleep_seconds}"
-                        waited=$((waited + ssh_sleep_seconds))
-                        attempt=$((attempt + 1))
-                    done
-                else
-                    preflight_fail "failed to set lxc mountpoint mp1"
-                    die "Failed to set LXC ${ctid} mountpoint mp1 via pct (see reports/apply/lxc-mountpoints.txt)"
-                fi
-            else
-                echo "status=mp1-already-correct" >>"${mp_report}"
-            fi
-        else
-            echo "status=mp1-skipped-host-mount-missing" >>"${mp_report}"
-        fi
-    fi
-
-    if [[ -n "${ctid}" && "${SERVICE}" == "immich" ]]; then
-        local mp_report="${EVIDENCE_ROOT}/reports/apply/lxc-mountpoints.txt"
-        local mp_stderr="${EVIDENCE_ROOT}/reports/apply/lxc-mountpoints.stderr.txt"
-        local host_path="/mnt/nas/homelab_immich"
-        local mp_target="/mnt/immich"
-        local desired_mp0="${host_path},mp=${mp_target}"
-
-        {
-            echo "ctid=${ctid}"
-            echo "service=${SERVICE}"
-            echo "host_path=${host_path}"
-            echo "container_target=${mp_target}"
-            echo "requested_mp0=${desired_mp0}"
-            echo "--- host findmnt (target) ---"
-            findmnt -n -o SOURCE,FSTYPE,OPTIONS,TARGET --target "${host_path}" 2>>"${mp_stderr}" || true
-            echo "--- pct config (before) ---"
-            sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
-        } >"${mp_report}"
-
-        local mp0_before=""
-        mp0_before="$(sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk -F': ' '/^mp0:/ {print $2; exit}' || true)"
-
-        if [[ "${mp0_before}" != "${desired_mp0}" ]]; then
-            if sudo -n pct set "${ctid}" -mp0 "${desired_mp0}" >>"${mp_report}" 2>>"${mp_stderr}"; then
-                {
-                    echo "--- pct config (after) ---"
-                    sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
-                    echo "action=reboot"
-                } >>"${mp_report}"
-
-                sudo -n pct reboot "${ctid}" >>"${mp_report}" 2>>"${mp_stderr}" || true
-
-                waited=0
-                attempt=1
-                while true; do
-                    if ssh -i "${lxc_key_file}" \
-                        ${ssh_common_args} \
-                        "root@${service_ip}" 'true' >/dev/null 2>&1; then
-                        break
-                    fi
-                    echo "[ssh-wait-mp-reboot] attempt=${attempt} waited=${waited}s"
-                    if (( waited >= ssh_wait_seconds )); then
-                        die "ssh not ready on ${service_ip} after mp0 reboot (${ssh_wait_seconds}s)"
-                    fi
-                    sleep "${ssh_sleep_seconds}"
-                    waited=$((waited + ssh_sleep_seconds))
-                    attempt=$((attempt + 1))
-                done
-            else
-                preflight_fail "failed to set lxc mountpoint mp0"
-                die "Failed to set LXC ${ctid} mountpoint mp0 via pct (see reports/apply/lxc-mountpoints.txt)"
-            fi
-        else
-            echo "status=already-correct" >>"${mp_report}"
+    # Apply host-path bind mounts via pct set (Tier 2) — generic, data-driven.
+    # Reads mount definitions from service_mountpoints in tfvars; replaces the former
+    # hardcoded per-service (jellyfin, immich) blocks. Evidence written to lxc-mountpoints.txt.
+    echo "[Tier 2] Applying host-path bind mounts via pct set..."
+    if [[ -n "${ctid}" ]]; then
+        if ! apply_host_path_bind_mounts "${ctid}" "${tfvars_path}" "${service_ip}" "${lxc_key_file}" "${ssh_common_args}"; then
+            preflight_fail "bind mount application failed"
+            die "Host-path bind mount failed for service=${SERVICE} (see reports/apply/lxc-mountpoints.txt)"
         fi
     fi
 
@@ -2299,6 +2144,207 @@ enforce_bind_mount_policy() {
                 echo "Allowed prefixes: ${allowed_prefixes[*]}"
         } >"${EVIDENCE_ROOT}/reports/plan/bind-mount-guard.txt"
         return 0
+}
+
+extract_host_path_mounts() {
+    local tfvars_path="${1:?extract_host_path_mounts requires tfvars_path}"
+    local service="${2:?extract_host_path_mounts requires service}"
+    PYTHONPATH="${REPO_ROOT}/python/src" python3 -c "from homelab_proxmox_orchestrator.tfvars_mountpoints import parse_service_host_path_mounts; import json, sys; print(json.dumps(parse_service_host_path_mounts(open(sys.argv[1]).read(), sys.argv[2])))" "${tfvars_path}" "${service}"
+}
+
+validate_bind_mount_allowlist() {
+    local mounts_json="${1:?validate_bind_mount_allowlist requires mounts_json}"
+    local any_rejected=0
+    local volume
+    while IFS= read -r volume; do
+        if [[ -z "${volume}" ]]; then
+            continue
+        fi
+        if [[ "${volume}" == "/mnt/nas/"* ]]; then
+            continue
+        fi
+        echo "ERROR: Bind mount rejected — path ${volume} is outside the allowlist (/mnt/nas/); review service_mountpoints in tfvars" >&2
+        any_rejected=1
+    done < <(printf '%s' "${mounts_json}" | python3 -c "import json,sys; [print(m['volume']) for m in json.load(sys.stdin)]" 2>/dev/null || true)
+    return "${any_rejected}"
+}
+
+apply_host_path_bind_mounts() {
+    local ctid="${1:?apply_host_path_bind_mounts requires ctid}"
+    local tfvars_path="${2:?apply_host_path_bind_mounts requires tfvars_path}"
+    local service_ip="${3:?apply_host_path_bind_mounts requires service_ip}"
+    local lxc_key_file="${4:?apply_host_path_bind_mounts requires lxc_key_file}"
+    local ssh_common_args="${5:?apply_host_path_bind_mounts requires ssh_common_args}"
+
+    local mp_report="${EVIDENCE_ROOT}/reports/apply/lxc-mountpoints.txt"
+    local mp_stderr="${EVIDENCE_ROOT}/reports/apply/lxc-mountpoints.stderr.txt"
+
+    # Step 1: Get host-path mounts from tfvars via Python module (no inline heredoc duplication).
+    local mounts_json
+    mounts_json="$(extract_host_path_mounts "${tfvars_path}" "${SERVICE}")"
+
+    local mount_count=0
+    mount_count="$(printf '%s' "${mounts_json}" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)"
+
+    if [[ "${mount_count}" -eq 0 ]]; then
+        echo "No host-path bind mounts to apply for service=${SERVICE}"
+        local empty_msg="No bind mounts configured for service ${SERVICE}"
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            printf '\n%s\n' "${empty_msg}" >> "${GITHUB_STEP_SUMMARY}"
+        else
+            echo "${empty_msg}"
+        fi
+        return 0
+    fi
+
+    # Step 2: Validate against allowlist (directory-boundary prefix matching).
+    if ! validate_bind_mount_allowlist "${mounts_json}"; then
+        return 1
+    fi
+
+    mkdir -p "${EVIDENCE_ROOT}/reports/apply"
+
+    # Step 3: Capture before-state.
+    {
+        echo "ctid=${ctid}"
+        echo "service=${SERVICE}"
+        echo "--- pct config (before) ---"
+        sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
+    } >"${mp_report}"
+
+    # Step 4: Find next available mp index using POSIX-compatible awk (no GNU match() with capture groups).
+    local max_idx=""
+    max_idx="$(sudo pct config "${ctid}" 2>/dev/null | awk -F: '/^mp[0-9]/ { sub(/^mp/, "", $1); print $1 }' | sort -n | tail -1)"
+    local next_idx=0
+    if [[ -n "${max_idx}" ]]; then
+        next_idx=$(( max_idx + 1 ))
+    fi
+
+    # Iterate mounts, check idempotency, apply, and collect results.
+    local -a mount_results=()
+    local any_applied=0
+    local any_failed=0
+    local applied_count=0
+    local skipped_count=0
+    local failed_count=0
+
+    while IFS='|' read -r volume mp ro_bool; do
+        local permission="rw"
+        local ro_flag=""
+        if [[ "${ro_bool}" == "true" ]]; then
+            permission="ro"
+            ro_flag=",ro=1"
+        fi
+        local desired_arg="${volume},mp=${mp}${ro_flag}"
+
+        local result
+        # Check idempotency: skip if the exact mount arg is already in pct config.
+        if sudo pct config "${ctid}" 2>/dev/null | grep -qF "${desired_arg}"; then
+            result="skipped"
+            skipped_count=$(( skipped_count + 1 ))
+        else
+            {
+                echo "--- applying mp${next_idx}: ${desired_arg} ---"
+            } >>"${mp_report}"
+            if sudo -n pct set "${ctid}" "-mp${next_idx}" "${desired_arg}" >>"${mp_report}" 2>>"${mp_stderr}"; then
+                result="applied"
+                any_applied=1
+                applied_count=$(( applied_count + 1 ))
+                next_idx=$(( next_idx + 1 ))
+            else
+                result="failed"
+                any_failed=1
+                failed_count=$(( failed_count + 1 ))
+                echo "ERROR: Bind mount rejected — failed to apply ${desired_arg} for service=${SERVICE}; review pct set output in lxc-mountpoints.txt" >&2
+            fi
+        fi
+        mount_results+=("${volume}|${mp}|${permission}|${result}")
+    done < <(printf '%s' "${mounts_json}" | python3 -c "
+import json, sys
+mounts = json.load(sys.stdin)
+for m in mounts:
+    ro_bool = 'true' if m.get('readonly', False) else 'false'
+    print(m['volume'] + '|' + m['mp'] + '|' + ro_bool)
+" 2>/dev/null || true)
+
+    # Step 5: Reboot if any mounts were newly applied (FR-011).
+    if [[ "${any_applied}" -eq 1 ]]; then
+        {
+            echo "--- pct reboot (bind mounts applied) ---"
+            echo "action=reboot"
+        } >>"${mp_report}"
+        sudo -n pct reboot "${ctid}" >>"${mp_report}" 2>>"${mp_stderr}" || true
+        local ssh_wait_seconds="${SSH_WAIT_SECONDS:-300}"
+        local ssh_sleep_seconds="${SSH_WAIT_SLEEP_SECONDS:-5}"
+        local waited=0
+        local attempt=1
+        while true; do
+            # SC2086: ssh_common_args intentionally word-splits to pass multiple -o flags.
+            if ssh -i "${lxc_key_file}" \
+                ${ssh_common_args} \
+                "root@${service_ip}" 'true' >/dev/null 2>&1; then
+                break
+            fi
+            echo "[ssh-wait-mp-reboot] attempt=${attempt} waited=${waited}s"
+            if (( waited >= ssh_wait_seconds )); then
+                echo "ERROR: ssh not ready on ${service_ip} after bind mount reboot (${ssh_wait_seconds}s)" >&2
+                return 1
+            fi
+            sleep "${ssh_sleep_seconds}"
+            waited=$(( waited + ssh_sleep_seconds ))
+            attempt=$(( attempt + 1 ))
+        done
+    fi
+
+    # Step 6: Capture after-state.
+    {
+        echo "--- pct config (after) ---"
+        sudo pct config "${ctid}" 2>>"${mp_stderr}" | awk '/^(mp[0-9]+:|features:|unprivileged:)/ {print}' || true
+    } >>"${mp_report}"
+
+    # Step 7 (T013): Emit step summary — ALL configured mounts listed regardless of outcome (FR-017).
+    local summary_table
+    summary_table="| Host Path | Container Path | Permission | Result |"$'\n'
+    summary_table+="|-----------|----------------|------------|--------|"$'\n'
+    local r
+    for r in "${mount_results[@]}"; do
+        local -a parts
+        IFS='|' read -ra parts <<< "${r}"
+        summary_table+="| ${parts[0]} | ${parts[1]} | ${parts[2]} | ${parts[3]} |"$'\n'
+    done
+
+    local summary_footer=""
+    if [[ "${any_applied}" -eq 1 ]]; then
+        summary_footer+="**Container reboot**: stopped → mounts applied → started"$'\n'
+    fi
+    local overall="success"
+    if [[ "${any_failed}" -eq 1 ]]; then overall="failure"; fi
+    summary_footer+="**Overall**: ${overall} (${applied_count} applied, ${skipped_count} skipped, ${failed_count} failed)"$'\n'
+
+    local summary_header="## Bind Mount Summary (Service: ${SERVICE})"
+    if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+        {
+            echo ""
+            echo "${summary_header}"
+            echo ""
+            printf '%s' "${summary_table}"
+            echo ""
+            printf '%s' "${summary_footer}"
+        } >> "${GITHUB_STEP_SUMMARY}"
+    else
+        echo ""
+        echo "${summary_header}"
+        echo ""
+        printf '%s' "${summary_table}"
+        echo ""
+        printf '%s' "${summary_footer}"
+    fi
+
+    # Return non-zero if any mount failed.
+    if [[ "${any_failed}" -eq 1 ]]; then
+        return 1
+    fi
+    return 0
 }
 
 main() {

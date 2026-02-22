@@ -66,12 +66,13 @@ variable "searchdomain" {
 
 variable "service_mountpoints" {
   type = map(map(object({
-    mp      = string
-    volume  = string
-    size    = optional(string)
-    slot    = optional(number)
-    key     = optional(string)
-    storage = optional(string)
+    mp       = string
+    volume   = string
+    size     = optional(string)
+    slot     = optional(number)
+    key      = optional(string)
+    storage  = optional(string)
+    readonly = optional(bool)
   })))
   description = "Per-service bind mounts (host path in volume, container path in mp). Keys under service name."
   default     = {}

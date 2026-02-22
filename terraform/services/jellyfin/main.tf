@@ -1,3 +1,8 @@
+locals {
+  all_mounts_jellyfin     = lookup(var.service_mountpoints, "jellyfin", {})
+  storage_mounts_jellyfin = { for k, v in local.all_mounts_jellyfin : k => v if !startswith(v.volume, "/") }
+}
+
 module "jellyfin_lxc" {
   source = "../../modules/lxc_service"
 
@@ -21,5 +26,5 @@ module "jellyfin_lxc" {
   # Required for in-guest NFS mounts inside an unprivileged LXC.
   features_mount = "nfs"
 
-  mountpoints = values(lookup(var.service_mountpoints, "jellyfin", {}))
+  mountpoints = values(local.storage_mounts_jellyfin)
 }

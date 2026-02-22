@@ -1,3 +1,8 @@
+locals {
+  all_mounts_immich     = lookup(var.service_mountpoints, "immich", {})
+  storage_mounts_immich = { for k, v in local.all_mounts_immich : k => v if !startswith(v.volume, "/") }
+}
+
 module "immich_lxc" {
   source = "../../modules/lxc_service"
 
@@ -18,5 +23,5 @@ module "immich_lxc" {
   searchdomain    = var.searchdomain
   ssh_public_keys = join("\n", var.ssh_public_keys)
 
-  mountpoints = values(lookup(var.service_mountpoints, "immich", {}))
+  mountpoints = values(local.storage_mounts_immich)
 }
