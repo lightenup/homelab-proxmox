@@ -1,0 +1,827 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ============================================================================
+# speckit-droid-adapter — Bridges Spec Kit agent files to droid exec
+#
+# This script is a stateless adapter. It translates Spec Kit's interactive
+# agent interface into droid's non-interactive execution model.
+#
+# It adds:
+#   - Persona injection (analyst, architect, developer, reviewer)
+#   - A non-interactive preamble for droid compatibility
+#   - Model and reasoning effort selection (-m, -r)
+#   - A review loop (implement → review → re-implement, max 3 iterations)
+#
+# It does NOT:
+#   - Add workflow stages or artifact formats (review prompt is adapter-owned)
+#   - Make decisions about what to run or in what order
+#   - Own git operations (Spec Kit scripts handle those)
+#   - Maintain state between invocations (review loop is single-session)
+#
+# Usage:
+#   ./adapter/speckit-droid-adapter <stage> [user-arguments] [options]
+#
+# Stages (maps to Spec Kit agent files):
+#   constitution   Create/update project constitution
+#   specify        Generate feature specification          [Analyst]
+#   clarify        Clarify spec ambiguities (optional)     [Analyst]
+#   plan           Create implementation plan              [Architect]
+#   checklist      Generate quality checklist (optional)   [Architect]
+#   tasks          Decompose plan into tasks               [Architect]
+#   analyze        Cross-artifact consistency (optional)   [Architect]
+#   implement      Execute tasks and produce code          [Developer]
+#   review         Review implementation against spec      [Reviewer]
+#   build          implement + review loop (max 3 rounds)  [Dev + Rev]
+#
+# Examples:
+#   ./adapter/speckit-droid-adapter specify "Build a bookmark manager CLI"
+#   ./adapter/speckit-droid-adapter implement -m claude-opus-4-6
+#   ./adapter/speckit-droid-adapter review -r high
+#   ./adapter/speckit-droid-adapter build                 # implement + review loop
+#   ./adapter/speckit-droid-adapter build --auto high -m gpt-5.2-codex -r medium
+# ============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Clean up temp files on exit/interrupt
+TMPFILES=()
+cleanup() { rm -f "${TMPFILES[@]}" 2>/dev/null; }
+trap cleanup EXIT INT TERM
+
+# --- Defaults ---------------------------------------------------------------
+DEFAULT_AUTO="medium"
+DEFAULT_MODEL=""     # empty = use per-stage default, then droid's default
+DEFAULT_REASONING="" # empty = use per-stage default, then model's default
+MAX_REVIEW_ITERATIONS=3
+
+# --- Agent file mapping ------------------------------------------------------
+declare -A AGENT_FILES=(
+  [constitution]=".github/agents/speckit.constitution.agent.md"
+  [specify]=".github/agents/speckit.specify.agent.md"
+  [clarify]=".github/agents/speckit.clarify.agent.md"
+  [plan]=".github/agents/speckit.plan.agent.md"
+  [checklist]=".github/agents/speckit.checklist.agent.md"
+  [tasks]=".github/agents/speckit.tasks.agent.md"
+  [analyze]=".github/agents/speckit.analyze.agent.md"
+  [implement]=".github/agents/speckit.implement.agent.md"
+)
+
+# --- Persona mapping ---------------------------------------------------------
+declare -A PERSONAS=(
+  [constitution]=""
+  [specify]="analyst"
+  [clarify]="analyst"
+  [plan]="architect"
+  [checklist]="architect"
+  [tasks]="architect"
+  [analyze]="architect"
+  [implement]="developer"
+  [review]="reviewer"
+  [build]=""
+)
+
+# --- Per-stage model defaults ------------------------------------------------
+# Optimal model/reasoning per stage. Overridden by -m / -r flags.
+declare -A STAGE_MODELS=(
+  [constitution]=""                          # interactive — use droid default
+  [specify]="claude-opus-4-6"               # deep analysis needs opus
+  [clarify]=""                               # lightweight — droid default
+  [plan]="claude-opus-4-6"                  # architecture needs opus
+  [checklist]=""                              # lightweight — droid default
+  [tasks]="claude-sonnet-4-6"               # structured decomposition
+  [analyze]=""                               # optional — droid default
+  [implement]="claude-sonnet-4-6"           # fast, capable coder
+  [review]="claude-sonnet-4-6"             # thorough but efficient
+)
+
+declare -A STAGE_REASONING=(
+  [constitution]=""
+  [specify]="high"                           # deep domain analysis
+  [clarify]=""
+  [plan]="high"                              # architectural decisions
+  [checklist]=""
+  [tasks]="medium"                           # structured output
+  [analyze]=""
+  [implement]="medium"                       # code generation
+  [review]="medium"                          # checklist evaluation
+)
+
+# --- Stages that get a self-critique pass ------------------------------------
+# After these stages, the adapter runs a second droid call to critique the
+# output, then re-runs the stage with critique feedback if REVISE is returned.
+CRITIQUE_STAGES=("specify" "plan")
+
+# --- Functions ---------------------------------------------------------------
+
+# Resolve effective model for a stage: explicit flag > per-stage default > empty
+resolve_model() {
+  local explicit="$1"
+  local stage="$2"
+  if [[ -n "$explicit" ]]; then
+    echo "$explicit"
+  else
+    echo "${STAGE_MODELS[$stage]:-}"
+  fi
+}
+
+# Resolve effective reasoning for a stage: explicit flag > per-stage default > empty
+resolve_reasoning() {
+  local explicit="$1"
+  local stage="$2"
+  if [[ -n "$explicit" ]]; then
+    echo "$explicit"
+  else
+    echo "${STAGE_REASONING[$stage]:-}"
+  fi
+}
+
+# Check if a stage should get a self-critique pass
+should_critique() {
+  local stage="$1"
+  for s in "${CRITIQUE_STAGES[@]}"; do
+    [[ "$s" == "$stage" ]] && return 0
+  done
+  return 1
+}
+
+# Run a critique pass on the most recent output of a stage
+# Returns 0 if REVISE, 1 if ACCEPT (or critique file not found)
+run_critique() {
+  local stage="$1"
+  local auto_level="$2"
+  local model="$3"
+  local reasoning="$4"
+
+  local critique_prompt="$REPO_ROOT/adapter/critique-prompt.md"
+  if [[ ! -f "$critique_prompt" ]]; then
+    echo "⚠ critique-prompt.md not found — skipping self-critique"
+    return 1
+  fi
+
+  local persona_name="${PERSONAS[$stage]:-}"
+
+  echo ""
+  echo "🔍 Running self-critique for $stage (persona: ${persona_name:-none})"
+  echo ""
+
+  local prompt_file
+  prompt_file=$(mktemp "${TMPDIR:-/tmp}/droid-critique-${stage}-XXXXXX")
+  TMPFILES+=("$prompt_file")
+
+  # Build: preamble + persona + critique prompt
+  build_preamble "$persona_name" > "$prompt_file"
+  cat "$critique_prompt" >> "$prompt_file"
+
+  # Build droid command — critique needs 'high' to write verdict files
+  local -a droid_cmd=(droid exec)
+  if [[ "$SKIP_PERMISSIONS" == true ]]; then
+    droid_cmd+=(--skip-permissions-unsafe)
+  else
+    droid_cmd+=(--auto high)
+  fi
+  [[ -n "$model" ]] && droid_cmd+=(-m "$model")
+  [[ -n "$reasoning" ]] && droid_cmd+=(-r "$reasoning")
+  droid_cmd+=(-f "$prompt_file")
+
+  cd "$REPO_ROOT"
+  "${droid_cmd[@]}"
+  local exit_code=$?
+  rm -f "$prompt_file"
+
+  if [[ $exit_code -ne 0 ]]; then
+    echo "⚠ Critique pass failed (exit $exit_code) — continuing without revision"
+    return 1
+  fi
+
+  # Check for REVISE verdict in the output
+  # The critique is written to the spec directory — find it
+  local feature_dir
+  feature_dir=$(find "$REPO_ROOT/specs" -maxdepth 1 -type d -name "[0-9]*" 2>/dev/null | sort -r | head -1)
+
+  if [[ -z "$feature_dir" ]]; then
+    echo "⚠ No feature directory found — cannot check critique verdict"
+    return 1
+  fi
+
+  # Look for REVISE in any recently modified markdown file
+  local revise_found=false
+  while IFS= read -r file; do
+    if grep -qi "REVISE" "$file" 2>/dev/null; then
+      revise_found=true
+      echo "↻ Critique verdict: REVISE — re-running $stage with feedback"
+      break
+    fi
+  done < <(find "$feature_dir" -name "*.md" -mmin -2 2>/dev/null)
+
+  if [[ "$revise_found" == "true" ]]; then
+    return 0
+  else
+    echo "✅ Critique verdict: ACCEPT"
+    return 1
+  fi
+}
+
+usage() {
+  echo "Usage: $(basename "$0") <stage> [user-arguments] [options]"
+  echo ""
+  echo "Bridges Spec Kit agent files to droid exec, adding personas and a"
+  echo "review loop. Translates interactive prompts into non-interactive"
+  echo "one-shot execution."
+  echo ""
+  echo "Stages:"
+  echo "  constitution   Create/update project constitution"
+  echo "  specify        Generate feature specification          [Analyst]"
+  echo "  clarify        Clarify spec ambiguities                [Analyst]"
+  echo "  plan           Create implementation plan              [Architect]"
+  echo "  checklist      Generate quality checklist              [Architect]"
+  echo "  tasks          Decompose plan into tasks               [Architect]"
+  echo "  analyze        Cross-artifact consistency check        [Architect]"
+  echo "  implement      Execute tasks and produce code          [Developer]"
+  echo "  review         Review implementation against spec      [Reviewer]"
+  echo "  build          Implement + review loop (max 3 rounds)  [Dev + Rev]"
+  echo ""
+  echo "Options:"
+  echo "  --auto <level>       Droid autonomy: low|medium|high (default: $DEFAULT_AUTO)"
+  echo "  -m, --model <id>    Model override (default: per-stage, see below)"
+  echo "  -r, --reasoning-effort <l> Reasoning override: off|low|medium|high|max"
+  echo "  --no-critique        Skip self-critique pass for specify/plan"
+  echo "  --no-tests           Skip test/lint gating in build loop"
+  echo "  --no-auto-route      Skip automatic routing suggestions"
+  echo "  --dry-run            Show the adapted prompt without executing droid"
+  echo "  -h, --help           Show this help"
+  echo ""
+  echo "Per-stage defaults (overridden by -m / -r):"
+  echo "  specify      opus / high       Deep domain analysis"
+  echo "  plan         opus / high       Architectural decisions"
+  echo "  tasks        sonnet / medium   Structured decomposition"
+  echo "  implement    sonnet / medium   Code generation"
+  echo "  review       sonnet / medium   Checklist evaluation"
+  echo "  (other stages use droid's default model)"
+  echo ""
+  echo "Available models (droid exec -m):"
+  echo "  claude-opus-4-6           Claude Opus 4.6"
+  echo "  claude-opus-4-6-fast      Claude Opus 4.6 Fast Mode"
+  echo "  claude-opus-4-5-20251101  Claude Opus 4.5 (droid default)"
+  echo "  claude-sonnet-4-6         Claude Sonnet 4.6"
+  echo "  gpt-5.2-codex             GPT-5.2-Codex"
+  echo "  gpt-5.1-codex-max         GPT-5.1-Codex-Max"
+  echo "  gemini-3-pro-preview      Gemini 3 Pro"
+  echo "  (run 'droid exec --help' for full list)"
+  echo ""
+  echo "Examples:"
+  echo "  $(basename "$0") specify \"Build a bookmark manager CLI\""
+  echo "  $(basename "$0") implement -m claude-opus-4-6 -r high"
+  echo "  $(basename "$0") build --auto high -m gpt-5.2-codex"
+  exit 0
+}
+
+build_preamble() {
+  local persona_name="$1"
+
+  cat <<'EOF'
+IMPORTANT EXECUTION CONTEXT — READ BEFORE PROCEEDING:
+
+You are running non-interactively via `droid exec`. You MUST follow these rules:
+
+1. DO NOT ask questions, present option tables, or wait for user responses.
+2. When instructions say "wait for user" or "ask the user", instead make an
+   informed decision based on available context and document your reasoning.
+3. Use reasonable defaults when the prompt offers choices.
+4. For clarification-style steps, derive answers from the spec, constitution,
+   addendum, or existing project context — do not leave gaps.
+5. If you cannot proceed without user input, write the blocker to stdout
+   and stop. Do not guess on critical decisions.
+
+EOF
+
+  # Inject persona if one is mapped
+  if [[ -n "$persona_name" ]]; then
+    local persona_file="$REPO_ROOT/adapter/personas/${persona_name}.md"
+    if [[ -f "$persona_file" ]]; then
+      echo "---"
+      echo ""
+      cat "$persona_file"
+      echo ""
+      echo "---"
+      echo ""
+    else
+      echo "<!-- Persona file not found: $persona_file -->" >&2
+    fi
+  fi
+}
+
+adapt_prompt() {
+  local agent_file="$1"
+  local user_args="$2"
+  local persona_name="$3"
+  local stage="${4:-}"
+
+  # 1. Emit the non-interactive preamble + persona
+  build_preamble "$persona_name"
+
+  # 2. Inject output format template if available for this stage
+  local output_format="$REPO_ROOT/adapter/output-formats/${stage}.md"
+  if [[ -n "$stage" ]] && [[ -f "$output_format" ]]; then
+    echo "---"
+    echo ""
+    cat "$output_format"
+    echo ""
+    echo "---"
+    echo ""
+  fi
+
+  # 3. Read agent file, substitute $ARGUMENTS with user input
+  if [[ -n "$user_args" ]]; then
+    # Collapse newlines to spaces to avoid awk "newline in string" errors
+    local sanitized_args
+    sanitized_args="$(printf '%s' "$user_args" | tr '\n' ' ' | sed 's/  */ /g')"
+    awk -v args="$sanitized_args" '{gsub(/\$ARGUMENTS/, args); print}' "$agent_file"
+  else
+    awk '{gsub(/\$ARGUMENTS/, ""); print}' "$agent_file"
+  fi
+}
+
+run_stage() {
+  local stage="$1"
+  local user_args="$2"
+  local auto_level="$3"
+  local dry_run="$4"
+  local extra_context="${5:-}"
+  local model="$6"
+  local reasoning="$7"
+
+  # Resolve per-stage defaults when no explicit flag provided
+  model=$(resolve_model "$model" "$stage")
+  reasoning=$(resolve_reasoning "$reasoning" "$stage")
+
+  local agent_path="$REPO_ROOT/${AGENT_FILES[$stage]}"
+  local persona_name="${PERSONAS[$stage]:-}"
+
+  if [[ ! -f "$agent_path" ]]; then
+    echo "Error: Agent file not found: $agent_path"
+    echo "Have you run 'specify init'?"
+    return 1
+  fi
+
+  local prompt_file
+  prompt_file=$(mktemp "${TMPDIR:-/tmp}/droid-prompt-${stage}-XXXXXX")
+  TMPFILES+=("$prompt_file")
+
+  adapt_prompt "$agent_path" "$user_args" "$persona_name" "$stage" > "$prompt_file"
+
+  # Append extra context (e.g., review feedback for re-implementation)
+  if [[ -n "$extra_context" ]]; then
+    echo "" >> "$prompt_file"
+    echo "$extra_context" >> "$prompt_file"
+  fi
+
+  # Build display strings
+  local model_display="${model:-default}"
+  local reasoning_display="${reasoning:-default}"
+
+  if [[ "$dry_run" == "true" ]]; then
+    echo "=== Dry run: adapted prompt for stage '$stage' ==="
+    echo "=== Agent file: ${AGENT_FILES[$stage]} ==="
+    echo "=== Persona: ${persona_name:-none} ==="
+    echo "=== Auto level: $auto_level ==="
+    echo "=== Model: $model_display ==="
+    echo "=== Reasoning: $reasoning_display ==="
+    echo "=== Prompt file: $prompt_file ==="
+    echo ""
+    cat "$prompt_file"
+    return 0
+  fi
+
+  echo "▶ Running stage: $stage (auto: $auto_level, persona: ${persona_name:-none})"
+  echo "  Agent: ${AGENT_FILES[$stage]}"
+  echo "  Model: $model_display | Reasoning: $reasoning_display"
+  [[ -n "$user_args" ]] && echo "  Input: $user_args"
+  echo ""
+
+  # Build droid command
+  local -a droid_cmd=(droid exec)
+  if [[ "$SKIP_PERMISSIONS" == true ]]; then
+    droid_cmd+=(--skip-permissions-unsafe)
+  else
+    droid_cmd+=(--auto "$auto_level")
+  fi
+  [[ -n "$model" ]] && droid_cmd+=(-m "$model")
+  [[ -n "$reasoning" ]] && droid_cmd+=(-r "$reasoning")
+  droid_cmd+=(-f "$prompt_file")
+
+  cd "$REPO_ROOT"
+  "${droid_cmd[@]}"
+  local exit_code=$?
+  rm -f "$prompt_file"
+  return $exit_code
+}
+
+run_review() {
+  local auto_level="$1"
+  local dry_run="$2"
+  local model="$3"
+  local reasoning="$4"
+
+  # Resolve per-stage defaults when no explicit flag provided
+  model=$(resolve_model "$model" "review")
+  reasoning=$(resolve_reasoning "$reasoning" "review")
+
+  local review_prompt="$REPO_ROOT/adapter/review-prompt.md"
+  if [[ ! -f "$review_prompt" ]]; then
+    echo "Error: Review prompt not found: $review_prompt"
+    return 1
+  fi
+
+  local prompt_file
+  prompt_file=$(mktemp "${TMPDIR:-/tmp}/droid-prompt-review-XXXXXX")
+  TMPFILES+=("$prompt_file")
+
+  # Build: preamble + persona + output format + review prompt
+  build_preamble "reviewer" > "$prompt_file"
+
+  # Inject review output format if available
+  local review_format="$REPO_ROOT/adapter/output-formats/review.md"
+  if [[ -f "$review_format" ]]; then
+    echo "---" >> "$prompt_file"
+    echo "" >> "$prompt_file"
+    cat "$review_format" >> "$prompt_file"
+    echo "" >> "$prompt_file"
+    echo "---" >> "$prompt_file"
+    echo "" >> "$prompt_file"
+  fi
+
+  cat "$review_prompt" >> "$prompt_file"
+
+  # Build display strings
+  local model_display="${model:-default}"
+  local reasoning_display="${reasoning:-default}"
+
+  if [[ "$dry_run" == "true" ]]; then
+    echo "=== Dry run: adapted prompt for stage 'review' ==="
+    echo "=== Persona: reviewer ==="
+    echo "=== Auto level: $auto_level ==="
+    echo "=== Model: $model_display ==="
+    echo "=== Reasoning: $reasoning_display ==="
+    echo "=== Prompt file: $prompt_file ==="
+    echo ""
+    cat "$prompt_file"
+    return 0
+  fi
+
+  echo "▶ Running stage: review (auto: $auto_level, persona: reviewer)"
+  echo "  Model: $model_display | Reasoning: $reasoning_display"
+  echo ""
+
+  # Build droid command
+  local -a droid_cmd=(droid exec)
+  if [[ "$SKIP_PERMISSIONS" == true ]]; then
+    droid_cmd+=(--skip-permissions-unsafe)
+  else
+    droid_cmd+=(--auto "$auto_level")
+  fi
+  [[ -n "$model" ]] && droid_cmd+=(-m "$model")
+  [[ -n "$reasoning" ]] && droid_cmd+=(-r "$reasoning")
+  droid_cmd+=(-f "$prompt_file")
+
+  cd "$REPO_ROOT"
+  "${droid_cmd[@]}"
+  local exit_code=$?
+  rm -f "$prompt_file"
+  return $exit_code
+}
+
+# Run project tests and lint; capture output on failure
+# Returns 0 if all pass, 1 if any fail (output in $GATE_OUTPUT)
+GATE_OUTPUT=""
+run_gate_tests() {
+  local test_config="$REPO_ROOT/adapter/test-config.sh"
+  if [[ ! -f "$test_config" ]]; then
+    echo "⚠ No test-config.sh found — skipping test gate"
+    return 0
+  fi
+
+  # Source the test config to get project-specific commands
+  source "$test_config"
+
+  GATE_OUTPUT=""
+  local failed=false
+
+  echo "🧪 Running project tests..."
+  local test_output
+  if test_output=$(run_project_tests 2>&1); then
+    echo "  ✅ Tests passed"
+  else
+    echo "  ❌ Tests failed"
+    GATE_OUTPUT="## Test Failures"$'\n\n'"$test_output"
+    failed=true
+  fi
+
+  echo "🔍 Running linter..."
+  local lint_output
+  if lint_output=$(run_project_lint 2>&1); then
+    echo "  ✅ Lint passed"
+  else
+    echo "  ❌ Lint failed"
+    GATE_OUTPUT="$GATE_OUTPUT"$'\n\n'"## Lint Errors"$'\n\n'"$lint_output"
+    failed=true
+  fi
+
+  if $failed; then
+    return 1
+  fi
+  return 0
+}
+
+run_build_loop() {
+  local user_args="$1"
+  local auto_level="$2"
+  local dry_run="$3"
+  local model="$4"
+  local reasoning="$5"
+  local no_tests="${6:-false}"
+
+  # Resolve per-stage defaults for display
+  local impl_model impl_reasoning rev_model rev_reasoning
+  impl_model=$(resolve_model "$model" "implement")
+  impl_reasoning=$(resolve_reasoning "$reasoning" "implement")
+  rev_model=$(resolve_model "$model" "review")
+  rev_reasoning=$(resolve_reasoning "$reasoning" "review")
+
+  local impl_model_display="${impl_model:-default}"
+  local rev_model_display="${rev_model:-default}"
+
+  if [[ "$dry_run" == "true" ]]; then
+    echo "=== Build loop: implement + review (max $MAX_REVIEW_ITERATIONS iterations) ==="
+    echo ""
+    echo "--- Implement prompt ---"
+    run_stage "implement" "$user_args" "$auto_level" "true" "" "$model" "$reasoning"
+    echo ""
+    echo "--- Review prompt ---"
+    run_review "$auto_level" "true" "$model" "$reasoning"
+    return 0
+  fi
+
+  local feedback=""
+
+  for iteration in $(seq 1 $MAX_REVIEW_ITERATIONS); do
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║  Build iteration $iteration of $MAX_REVIEW_ITERATIONS"
+    echo "║  Implement: $impl_model_display | Review: $rev_model_display"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+
+    # --- Implement phase ---
+    if [[ -n "$feedback" ]]; then
+      local extra_context
+      extra_context=$(cat <<FEEDBACK_EOF
+
+---
+
+## Review Feedback from Previous Iteration
+
+The reviewer found issues that need to be addressed. Fix ONLY the items
+listed below. Do not re-implement tasks that were already passing.
+
+$feedback
+FEEDBACK_EOF
+      )
+      run_stage "implement" "$user_args" "$auto_level" "false" "$extra_context" "$model" "$reasoning"
+    else
+      run_stage "implement" "$user_args" "$auto_level" "false" "" "$model" "$reasoning"
+    fi
+
+    echo ""
+
+    # --- Test/lint gate ---
+    if [[ "$no_tests" != "true" ]]; then
+      if ! run_gate_tests; then
+        echo ""
+        echo "⚠ Tests/lint failed — skipping review, feeding failures back to implement"
+        feedback="$GATE_OUTPUT"
+        if [[ $iteration -eq $MAX_REVIEW_ITERATIONS ]]; then
+          echo "⚠ Max iterations ($MAX_REVIEW_ITERATIONS) reached with failing tests."
+          return 1
+        fi
+        echo "↻ Re-implementing to fix test/lint failures (iteration $((iteration + 1)))"
+        echo ""
+        continue
+      fi
+    fi
+
+    # --- Review phase ---
+    run_review "$auto_level" "false" "$model" "$reasoning"
+
+    # --- Check verdict ---
+    # Find the review file in the current feature directory
+    local feature_dir
+    feature_dir=$(find "$REPO_ROOT/specs" -maxdepth 1 -type d -name "[0-9]*" 2>/dev/null | sort -r | head -1)
+
+    if [[ -z "$feature_dir" ]]; then
+      echo "⚠ Could not find feature directory to check review verdict"
+      break
+    fi
+
+    local review_file="$feature_dir/review.md"
+    if [[ ! -f "$review_file" ]]; then
+      echo "⚠ No review.md found — reviewer may not have written output"
+      break
+    fi
+
+    # Extract verdict
+    if grep -qi "APPROVED" "$review_file" && ! grep -qi "CHANGES_REQUESTED" "$review_file"; then
+      echo ""
+      echo "✅ Review APPROVED on iteration $iteration"
+      return 0
+    fi
+
+    if [[ $iteration -eq $MAX_REVIEW_ITERATIONS ]]; then
+      echo ""
+      echo "⚠ Max iterations ($MAX_REVIEW_ITERATIONS) reached. Check review.md for remaining items."
+      return 0
+    fi
+
+    # Extract feedback for next iteration
+    feedback=$(awk '/^## Blocking Issues/,/^## [^B]/' "$review_file" | head -50)
+    local dev_feedback
+    dev_feedback=$(awk '/^## Feedback for Developer/,/^## [^F]/' "$review_file" | head -50)
+    if [[ -n "$dev_feedback" ]]; then
+      feedback="$feedback"$'\n\n'"$dev_feedback"
+    fi
+
+    echo ""
+    echo "↻ Changes requested — starting iteration $((iteration + 1))"
+    echo ""
+  done
+}
+
+# --- Parse arguments ---------------------------------------------------------
+
+if [[ $# -lt 1 ]]; then
+  usage
+fi
+
+STAGE=""
+USER_ARGS=""
+AUTO_LEVEL="$DEFAULT_AUTO"
+MODEL="$DEFAULT_MODEL"
+REASONING="$DEFAULT_REASONING"
+DRY_RUN=false
+NO_CRITIQUE=false
+NO_TESTS=false
+NO_AUTO_ROUTE=false
+SKIP_PERMISSIONS=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --auto)
+      AUTO_LEVEL="${2:?'--auto requires a level (low|medium|high)'}"
+      shift 2
+      ;;
+    -m|--model)
+      MODEL="${2:?'-m/--model requires a model id'}"
+      shift 2
+      ;;
+    -r|--reasoning-effort)
+      REASONING="${2:?'-r/--reasoning-effort requires a level'}"
+      shift 2
+      ;;
+    --no-critique)
+      NO_CRITIQUE=true
+      shift
+      ;;
+    --no-tests)
+      NO_TESTS=true
+      shift
+      ;;
+    --no-auto-route)
+      NO_AUTO_ROUTE=true
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --skip-permissions-unsafe)
+      SKIP_PERMISSIONS=true
+      shift
+      ;;
+    --help|-h)
+      usage
+      ;;
+    *)
+      if [[ -z "$STAGE" ]]; then
+        STAGE="$1"
+      else
+        if [[ -n "$USER_ARGS" ]]; then
+          USER_ARGS="$USER_ARGS $1"
+        else
+          USER_ARGS="$1"
+        fi
+      fi
+      shift
+      ;;
+  esac
+done
+
+# --- Validate ----------------------------------------------------------------
+
+ALL_STAGES="constitution specify clarify plan checklist tasks analyze implement review build"
+if ! echo " $ALL_STAGES " | grep -q " $STAGE "; then
+  echo "Error: Unknown stage '$STAGE'"
+  echo "Valid stages: $ALL_STAGES"
+  exit 1
+fi
+
+# --- Routing -----------------------------------------------------------------
+
+# Marker → suggested next stage mapping
+declare -A ROUTE_MARKERS=(
+  ["NEEDS CLARIFICATION"]="clarify"
+  ["NEEDS_CLARIFICATION"]="clarify"
+  ["BLOCKED"]=""               # no auto-route, just warn
+  ["SCOPE CREEP"]="specify"
+  ["SCOPE_CREEP"]="specify"
+  ["INCONSISTENCY"]="analyze"
+  ["SPEC INCOMPLETE"]="specify"
+  ["SPEC_INCOMPLETE"]="specify"
+)
+
+# Check for routing markers in the most recently modified spec artifacts
+check_routing() {
+  local stage="$1"
+
+  local feature_dir
+  feature_dir=$(find "$REPO_ROOT/specs" -maxdepth 1 -type d -name "[0-9]*" 2>/dev/null | sort -r | head -1)
+
+  if [[ -z "$feature_dir" ]]; then
+    return 0
+  fi
+
+  local found_any=false
+
+  for marker in "${!ROUTE_MARKERS[@]}"; do
+    # Search recently modified files for markers (case-insensitive)
+    local matching_files
+    matching_files=$(grep -rli "\[${marker}\]" "$feature_dir"/*.md 2>/dev/null || true)
+
+    if [[ -n "$matching_files" ]]; then
+      found_any=true
+      local target="${ROUTE_MARKERS[$marker]}"
+
+      if [[ -n "$target" ]]; then
+        echo ""
+        echo "⚡ Routing marker found: [$marker]"
+        echo "   Suggested next stage: $target"
+        echo "   Run: ./adapter/speckit-droid-adapter $target"
+      else
+        echo ""
+        echo "⚠ Routing marker found: [$marker]"
+        echo "   This requires manual intervention — review the flagged artifact"
+        while IFS= read -r file; do
+          echo "   → $(basename "$file")"
+        done <<< "$matching_files"
+      fi
+    fi
+  done
+
+  if $found_any; then
+    echo ""
+  fi
+}
+
+# --- Execute -----------------------------------------------------------------
+
+case "$STAGE" in
+  review)
+    run_review "$AUTO_LEVEL" "$DRY_RUN" "$MODEL" "$REASONING"
+    ;;
+  build)
+    run_build_loop "$USER_ARGS" "$AUTO_LEVEL" "$DRY_RUN" "$MODEL" "$REASONING" "$NO_TESTS"
+    ;;
+  *)
+    if $DRY_RUN; then
+      run_stage "$STAGE" "$USER_ARGS" "$AUTO_LEVEL" "true" "" "$MODEL" "$REASONING"
+      exit 0
+    fi
+    run_stage "$STAGE" "$USER_ARGS" "$AUTO_LEVEL" "false" "" "$MODEL" "$REASONING"
+
+    # Self-critique pass for specify/plan stages
+    if ! $NO_CRITIQUE && should_critique "$STAGE"; then
+      eff_model=$(resolve_model "$MODEL" "$STAGE")
+      eff_reasoning=$(resolve_reasoning "$REASONING" "$STAGE")
+      if run_critique "$STAGE" "$AUTO_LEVEL" "$eff_model" "$eff_reasoning"; then
+        echo "↻ Re-running $STAGE with critique feedback..."
+        run_stage "$STAGE" "$USER_ARGS" "$AUTO_LEVEL" "false" \
+          "Review your previous output and address the issues identified in the self-critique above." \
+          "$MODEL" "$REASONING"
+      fi
+    fi
+
+    # Conditional routing check
+    if ! $NO_AUTO_ROUTE; then
+      check_routing "$STAGE"
+    fi
+    ;;
+esac

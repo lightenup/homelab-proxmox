@@ -1,6 +1,7 @@
 {
   "protectedPathGlobs": [
     ".specify/**",
+    "adapter/**",
     "scripts/lab/**",
     "mkdir/**"
   ],
