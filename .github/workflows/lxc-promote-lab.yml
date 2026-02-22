@@ -68,6 +68,7 @@ jobs:
         continue-on-error: true
         env:
           ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+          PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
         run: |
           set -euo pipefail
 
@@ -76,11 +77,10 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy plan --environment lab --service '${service}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
-          else
-            ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy plan --environment lab --service '${service}'"
-          fi
+          # Stream secrets via stdin (line 1 = vault pw, line 2 = proxmox token secret)
+          # to avoid interpolating them into the SSH command string.
+          printf '%s\n%s\n' "${ANSIBLE_VAULT_PASSWORD:-}" "${PROXMOX_API_TOKEN_SECRET:-}" | \
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; read -r _vault_pw; read -r _tf_secret; if [ -n \"\${_vault_pw}\" ]; then pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; printf '%s' \"\${_vault_pw}\" >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; fi; if [ -n \"\${_tf_secret}\" ]; then export TF_VAR_proxmox_api_token_id='terraform@pve!terraform-token'; export TF_VAR_proxmox_api_token_secret=\"\${_tf_secret}\"; fi; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy plan --environment lab --service '${service}'; rm -f \"\${pwfile:-}\""
 
       - name: Capture RUN_ID (LAB plan)
         id: capture_run_id
@@ -253,6 +253,7 @@ jobs:
         id: apply_on_pve
         env:
           ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+          PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
         run: |
           set -euo pipefail
 
@@ -261,11 +262,8 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
-          else
-            ssh ${ssh_opts} "${ssh_target}" "cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'"
-          fi
+          printf '%s\n%s\n' "${ANSIBLE_VAULT_PASSWORD:-}" "${PROXMOX_API_TOKEN_SECRET:-}" | \
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; read -r _vault_pw; read -r _tf_secret; if [ -n \"\${_vault_pw}\" ]; then pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; printf '%s' \"\${_vault_pw}\" >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; fi; if [ -n \"\${_tf_secret}\" ]; then export TF_VAR_proxmox_api_token_id='terraform@pve!terraform-token'; export TF_VAR_proxmox_api_token_secret=\"\${_tf_secret}\"; fi; cd /home/ci/homelab-proxmox/scripts/lab && GIT_REF='${{ github.ref }}' GIT_REF_NAME='${{ github.ref_name }}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service '${service}'; rm -f \"\${pwfile:-}\""
 
       - name: Capture RUN_ID (LAB apply)
         id: capture_run_id

@@ -4,15 +4,10 @@
 # Location: ansible/group_vars/services/vault.yml (gitignored by **/vault.yml)
 #
 # These are NEW secrets you must generate. They do not exist anywhere yet.
-# Generate strong random values (e.g., openssl rand -base64 32).
+# The Nextcloud role preflight will fail-fast if any are missing or still
+# set to the placeholder value.
 #
-# Quick setup:
-#   cp docs/nextcloud-vault-example.yml ansible/group_vars/services/vault.yml
-#   # Edit: replace every GENERATE_* placeholder with a real value
-#   # Then encrypt if using ansible-vault:
-#   ansible-vault encrypt ansible/group_vars/services/vault.yml
-#
-# The Nextcloud role preflight will fail-fast if any of these are missing.
+# See SETUP INSTRUCTIONS below for step-by-step per machine.
 # -------------------------------------------------------------------
 
 # MariaDB database password (used by Nextcloud app to connect to its DB)
@@ -27,31 +22,67 @@ nextcloud_redis_password: "GENERATE_STRONG_RANDOM_PASSWORD"
 # Nextcloud admin account password (the initial web login)
 nextcloud_admin_password: "GENERATE_STRONG_RANDOM_PASSWORD"
 
-# -------------------------------------------------------------------
-# HOW TO GENERATE:
+# ===================================================================
+# SETUP INSTRUCTIONS (by machine)
+# ===================================================================
 #
-#   openssl rand -base64 32    # produces a 44-char random string
+# You only need to generate the secrets ONCE, then place copies on
+# both machines. The same file (same passwords) is used everywhere.
 #
-# Generate a DIFFERENT value for each variable above.
+# ─── STEP 1: Generate secrets (on your dev laptop) ─────────────────
 #
-# -------------------------------------------------------------------
-# WHERE THIS FILE GOES:
+#   cd ~/Development/private/homelab-proxmox
+#   cp docs/nextcloud-vault-example.yml ansible/group_vars/services/vault.yml
 #
-# Developer laptop:
-#   ansible/group_vars/services/vault.yml   (gitignored, plaintext or encrypted)
+#   # Replace each GENERATE_STRONG_RANDOM_PASSWORD with a unique value:
+#   openssl rand -base64 32   # run 4 times, one per variable
+#   $EDITOR ansible/group_vars/services/vault.yml
 #
-# PVE host (for CI/GitHub Actions):
-#   /var/lib/homelab-proxmox/vault/group_vars/services/vault.yml
-#   (the CI deploy script symlinks this into the repo checkout automatically)
+#   # Optionally encrypt (the vault password is in ansible/.vault-pass.txt):
+#   ansible-vault encrypt ansible/group_vars/services/vault.yml
 #
-# If using ansible-vault encryption:
-#   - Locally: ansible/.vault-pass.txt contains the password (gitignored)
-#   - CI: the ANSIBLE_VAULT_PASSWORD GitHub Actions secret provides it
+#   This file is gitignored (**/vault.yml) so it stays local.
 #
-# -------------------------------------------------------------------
+# ─── STEP 2: Copy to PVE host (for GitHub Actions CI) ─────────────
+#
+#   scp ansible/group_vars/services/vault.yml \
+#       pve:/var/lib/homelab-proxmox/vault/group_vars/services/vault.yml
+#
+#   The CI deploy script (pve-service-deploy) automatically symlinks
+#   this path into the repo checkout at deploy time. You don't need
+#   to touch the CI checkout directory.
+#
+#   If you encrypted the file in Step 1, the PVE copy must also be
+#   encrypted. The CI pipeline gets the vault password from the
+#   ANSIBLE_VAULT_PASSWORD GitHub Actions secret (already configured).
+#
+# ─── STEP 3: Verify ───────────────────────────────────────────────
+#
+#   From dev laptop (local deploy):
+#     cd ansible
+#     ansible-playbook playbooks/nextcloud.yml --check --diff
+#     # Should NOT fail on "assert nextcloud_db_password is defined"
+#
+#   From GitHub Actions (CI deploy):
+#     Actions → Lab 2 - LXC Deploy → select "nextcloud" → Run
+#     # The preflight task will fail-fast if any secret is missing
+#
+# ===================================================================
+# WHICH MACHINE DOES WHAT — SUMMARY
+# ===================================================================
+#
+#   DEV LAPTOP                          PVE HOST
+#   ──────────────────────────────────  ──────────────────────────────
+#   Generate secrets (openssl)          Receives copy via scp
+#   ansible/group_vars/services/        /var/lib/homelab-proxmox/vault/
+#     vault.yml                           group_vars/services/vault.yml
+#   Used by: manual ansible-playbook    Used by: GitHub Actions CI
+#   Vault pass: ansible/.vault-pass.txt Vault pass: GH secret → stdin
+#
+# ===================================================================
 # NON-SECRET VARIABLES (already defined, no action needed):
 #
 #   nextcloud_admin_user   → defaults to "admin" in roles/nextcloud/defaults/main.yml
 #   nextcloud_version      → defined in group_vars/services/vars.yml
 #   nextcloud_nfs_mount    → defined in group_vars/services/vars.yml
-# -------------------------------------------------------------------
+# ===================================================================

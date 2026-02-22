@@ -218,6 +218,7 @@ jobs:
         id: apply_on_pve
         env:
           ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+          PROXMOX_API_TOKEN_SECRET: ${{ secrets.PROXMOX_API_TOKEN_SECRET }}
         run: |
           set -euo pipefail
 
@@ -228,11 +229,8 @@ jobs:
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          if [[ -n "${ANSIBLE_VAULT_PASSWORD:-}" ]]; then
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; cat >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod'; rm -f \"\${pwfile}\"" <<<"${ANSIBLE_VAULT_PASSWORD}"
-          else
-            ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod'"
-          fi
+          printf '%s\n%s\n' "${ANSIBLE_VAULT_PASSWORD:-}" "${PROXMOX_API_TOKEN_SECRET:-}" | \
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; read -r _vault_pw; read -r _tf_secret; if [ -n \"\${_vault_pw}\" ]; then pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; printf '%s' \"\${_vault_pw}\" >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; fi; if [ -n \"\${_tf_secret}\" ]; then export TF_VAR_proxmox_api_token_id='terraform@pve!terraform-token'; export TF_VAR_proxmox_api_token_secret=\"\${_tf_secret}\"; export PROXMOX_API_TOKEN_SECRET=\"\${_tf_secret}\"; fi; test -f /home/ci/homelab-proxmox/scripts/lab/pve-service-deploy; cd /home/ci/homelab-proxmox/scripts/lab && ALLOW_PROD_APPLY=1 GIT_REF='${ref}' GIT_REF_NAME='${ref}' GIT_SHA='${checked_sha}' ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=prod ./pve-service-deploy apply --environment prod --service '${service}' --confirm 'deploy-prod'; rm -f \"\${pwfile:-}\""
 
       - name: Capture RUN_ID (PROD apply)
         id: capture_run_id
