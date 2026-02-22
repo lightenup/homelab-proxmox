@@ -9,10 +9,20 @@ nextcloud_domain: "nextcloud.local"
 nextcloud_require_nas_mount: true
 nextcloud_admin_user: "admin"
 
+# Container names
+nextcloud_app_container_name: "nextcloud_app"
+nextcloud_db_container_name: "nextcloud_db"
+
 # Database defaults (passwords must be overridden in group_vars or vault)
 nextcloud_db_name: "nextcloud"
 nextcloud_db_user: "nextcloud"
-nextcloud_db_container_name: "nextcloud_db"
+
+# Backup configuration
+nextcloud_backup_path: "/mnt/nextcloud/backups"
+nextcloud_backup_retention_days: 7
+nextcloud_backup_retention_weeks: 4
+nextcloud_backup_retention_months: 6
+nextcloud_backup_schedule: "*-*-* 04:00:00"
 
 # PHP resource limits
 nextcloud_php_memory_limit: "1024M"
