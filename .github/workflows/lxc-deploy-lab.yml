@@ -18,6 +18,7 @@ on:
           - immich
           - jellyfin
           - monitoring
+          - nextcloud
           - reverse_proxy
       apply:
         description: "Run plan+apply (true) or plan-only (false)"
