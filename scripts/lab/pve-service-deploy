@@ -1542,6 +1542,7 @@ sys.exit(3)
     # decrypt group_vars files for groups present in the generated inventory.
     link_vault_file_if_needed "ansible/group_vars/all/vault.yml"
     link_vault_file_if_needed "ansible/group_vars/services/secrets.yml"
+    link_vault_file_if_needed "ansible/group_vars/services/vault.yml"
 
     # Fail fast with a clear error if the vault password cannot decrypt the expected vault.
     # This avoids confusing downstream failures during inventory parsing or playbook execution.

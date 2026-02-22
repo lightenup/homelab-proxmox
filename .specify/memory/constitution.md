@@ -13,6 +13,14 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 - **Ansible** owns *configuration inside* those machines and on the Proxmox host.
 **Do not generate code that mixes these responsibilities.**
 
+### IV. Dual-Provisioning Parity
+Every provisioning and deployment operation MUST be executable through **both** CI/CD (GitHub Actions) **and** from a developer laptop. Neither path may have capabilities the other lacks.
+
+- New services must be added to the GitHub Actions workflow dropdowns and service scope allowlist **in the same PR** that introduces the service.
+- Scripts invoked by CI (e.g., `pve-service-deploy`) must also run locally with the same arguments. Hardcoded CI-only paths or runner-only assumptions are prohibited.
+- Secrets must be accessible in both contexts: vault files on PVE for CI, local `vault.yml` (gitignored) or environment variables for laptop runs.
+- If a step only works in one context (e.g., requires a self-hosted runner network), document the limitation and provide an equivalent local alternative.
+
 ## Architecture & Boundaries
 
 ### Provider Strategy
@@ -137,4 +145,4 @@ iterations) to converge on quality before declaring a feature complete.
 ## Governance
 This constitution supersedes all other practices. Amendments require documentation and approval. All PRs and reviews must verify compliance with these principles.
 
-**Version**: 1.1.0 | **Ratified**: 2025-12-15
+**Version**: 1.2.0 | **Ratified**: 2026-02-22
