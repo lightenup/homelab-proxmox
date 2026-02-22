@@ -13,8 +13,8 @@ storage_pool    = "local-lvm"
 services_bridge = "vmbr0"
 network_gateway = "192.168.1.1"
 
-# Optional: set DNS explicitly for all LXCs.
-# nameserver   = "192.168.1.210 1.1.1.1"
+# DNS for all LXCs. Required when PVE host uses Tailscale (resolv.conf is 100.100.100.100).
+nameserver      = "1.1.1.1"
 # searchdomain = "home.arpa"
 
 service_mountpoints = {
