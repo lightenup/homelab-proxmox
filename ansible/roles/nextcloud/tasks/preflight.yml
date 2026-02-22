@@ -1,0 +1,64 @@
+---
+# Preflight checks for Nextcloud deployment
+
+- name: Check if NAS mount exists
+  ansible.builtin.stat:
+    path: "{{ nextcloud_nfs_mount }}"
+  register: nas_mount
+
+- name: Fail if NAS mount is required and missing
+  ansible.builtin.fail:
+    msg: "Nextcloud NAS mount missing at {{ nextcloud_nfs_mount }}. Ensure the host bind mount is configured before deploy."
+  when:
+    - nextcloud_require_nas_mount | bool
+    - not nas_mount.stat.exists
+
+- name: Create local Nextcloud mount path when NAS is optional
+  ansible.builtin.file:
+    path: "{{ nextcloud_nfs_mount }}"
+    state: directory
+    mode: '0755'
+  when:
+    - not nextcloud_require_nas_mount | bool
+    - not nas_mount.stat.exists
+
+- name: Verify Nextcloud NAS mount path is writable
+  ansible.builtin.file:
+    path: "{{ nextcloud_nfs_mount }}/.ansible_test"
+    state: touch
+    mode: '0644'
+  register: write_test
+  changed_when: false
+
+- name: Remove test file
+  ansible.builtin.file:
+    path: "{{ nextcloud_nfs_mount }}/.ansible_test"
+    state: absent
+  changed_when: false
+
+- name: Check Docker daemon is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+  check_mode: true
+  register: docker_status
+  failed_when: docker_status.failed
+
+- name: Check available disk space on /opt
+  ansible.builtin.shell: df -BG /opt | tail -1 | awk '{print $4}' | sed 's/G//'
+  register: disk_space
+  changed_when: false
+  failed_when: disk_space.stdout | int < 10
+
+- name: Validate required variables are set
+  ansible.builtin.assert:
+    that:
+      - nextcloud_version is defined
+      - nextcloud_version != ""
+      - nextcloud_nfs_mount is defined
+      - nextcloud_db_password is defined
+      - nextcloud_db_root_password is defined
+      - nextcloud_redis_password is defined
+      - nextcloud_admin_password is defined
+      - nextcloud_admin_user is defined
+    fail_msg: "Required Nextcloud variables are not properly defined"

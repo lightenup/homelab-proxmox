@@ -1,0 +1,16 @@
+---
+- name: Configure base for Nextcloud
+  hosts: nextcloud
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure Nextcloud
+  hosts: nextcloud
+  become: true
+  vars:
+    nextcloud_require_nas_mount: "{{ (deploy_environment | default('prod')) != 'lab' }}"
+  roles:
+    - geerlingguy.docker
+    - nextcloud
+    - nextcloud_backup

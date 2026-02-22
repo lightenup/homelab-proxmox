@@ -1,0 +1,112 @@
+# Contract: Nextcloud Ansible Role Interface
+#
+# Defines the expected variables, tasks, and outputs for the nextcloud
+# and nextcloud_backup Ansible roles.
+#
+# Follows the established pattern from: ansible/roles/immich/
+
+# === Role: nextcloud ===
+# Path: ansible/roles/nextcloud/
+
+# --- Required Variables (group_vars/services/vars.yml) ---
+# nextcloud_version: "30"              # Nextcloud major version (Docker tag)
+# nextcloud_port: 8080                 # Host port mapped to container port 80
+# nextcloud_install_dir: "/opt/nextcloud"  # Docker Compose + config location
+# nextcloud_data_dir: "/opt/nextcloud"     # Local persistent data (DB, Redis)
+# nextcloud_nfs_mount: "/mnt/nextcloud"    # NAS-backed mount for user data
+# nextcloud_domain: "nextcloud.local"      # Trusted domain / reverse proxy hostname
+# nextcloud_ip: "192.168.20.216"           # LXC IP (for reverse proxy config)
+
+# --- Required Secrets (Ansible Vault) ---
+# nextcloud_admin_user: "admin"
+# nextcloud_admin_password: "<vault>"
+# nextcloud_db_password: "<vault>"
+# nextcloud_db_root_password: "<vault>"
+# nextcloud_redis_password: "<vault>"
+
+# --- Task Flow (tasks/main.yml) ---
+# 1. Include preflight checks (NAS mount, Docker, disk space)
+# 2. Create directories (install_dir, data_dir subdirs)
+# 3. Template docker-compose.yml.j2 → install_dir
+# 4. Template .env.j2 → install_dir
+# 5. Start stack via community.docker.docker_compose_v2
+# 6. Wait for Nextcloud to respond on port
+# 7. Run first-install configuration (occ commands):
+#    a. Install/enable apps: richdocuments, richdocumentscode, deck, twofactor_totp, text, bruteforcesettings
+#    b. Disable apps: photos, weather_status, firstrunwizard, recommendations, (spreed, mail, calendar, contacts if present)
+#    c. Set default_phone_region, maintenance_window_start
+#    d. Whitelist LAN subnet for brute-force protection
+# 8. Health check (HTTP GET to login page)
+
+# --- Preflight Checks (tasks/preflight.yml) ---
+# - NAS mount available at nextcloud_nfs_mount (conditional on nextcloud_require_nas_mount)
+# - Docker daemon running
+# - Disk space >= 10 GB on /opt
+# - Required variables defined
+
+# --- Templates ---
+# templates/docker-compose.yml.j2  — 3-service stack (nextcloud, mariadb, redis)
+# templates/.env.j2                — environment variables (secrets, config)
+
+# --- Handlers ---
+# handlers/main.yml — restart via docker_compose_v2
+
+# === Role: nextcloud_backup ===
+# Path: ansible/roles/nextcloud_backup/
+
+# --- Required Variables (group_vars/services/vars.yml) ---
+# nextcloud_backup_path: "/mnt/nextcloud/backups"
+# nextcloud_backup_retention_days: 7
+# nextcloud_backup_retention_weeks: 4
+# nextcloud_backup_retention_months: 6
+# nextcloud_backup_schedule: "*-*-* 03:00:00"
+# nextcloud_db_container_name: "nextcloud_db"
+
+# --- Task Flow ---
+# 1. Ensure backup directory exists
+# 2. Deploy backup script template → /usr/local/bin/backup_nextcloud.sh
+# 3. Create systemd service (oneshot)
+# 4. Create systemd timer
+# 5. Enable and start timer
+
+# --- Backup Script Contract ---
+# The script MUST:
+# - Enable Nextcloud maintenance mode before dump
+# - Run: mysqldump --single-transaction --default-character-set=utf8mb4
+# - Copy config.php to backup dir
+# - Disable maintenance mode after dump
+# - Compress output (gzip)
+# - Prune old backups by retention policy
+# - Exit non-zero on failure (for monitoring detection, FR-021/FR-022)
+
+# === Reverse Proxy Addition ===
+# Path: ansible/roles/reverse_proxy/templates/nextcloud.caddy.j2
+
+# Contract:
+# http://nextcloud.local {
+#     reverse_proxy {{ nextcloud_ip }}:{{ nextcloud_port }} {
+#         header_up X-Forwarded-Proto http
+#         header_up X-Real-IP {remote_host}
+#         header_up X-Forwarded-For {remote_host}
+#     }
+# }
+
+# === Inventory Addition ===
+# Path: ansible/inventories/prod/hosts.yml
+#
+# Add under all.children:
+#   services:
+#     hosts:
+#       nextcloud:
+#         ansible_host: 192.168.20.216
+#         ansible_user: root
+
+# === Host Vars ===
+# Path: ansible/host_vars/nextcloud.yml
+#
+# healthcheck_url:
+#   scheme: http
+#   port: 8080
+#   path: /login
+# healthcheck_profile: lan
+# healthcheck_expect_status: 200

@@ -30,6 +30,12 @@ service_mountpoints = {
       volume = "/mnt/nas/video"
     }
   }
+  nextcloud = {
+    data = {
+      mp     = "/mnt/nextcloud"
+      volume = "/mnt/nas/homelab_nextcloud"
+    }
+  }
 }
 
 # Ensure all services have an IP (CIDR format)
@@ -43,6 +49,8 @@ service_ips = {
   # Baseline example for spec 022
   # Suggested starting point: 2 vCPU / 2GB RAM / 32GB disk (see terraform/main.tf)
   jellyfin       = "192.168.20.215/24"
+
+  nextcloud      = "192.168.20.216/24"
 }
 
 ssh_public_keys = [

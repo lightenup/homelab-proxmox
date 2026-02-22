@@ -1,0 +1,100 @@
+# Contract: Nextcloud Docker Compose Stack
+#
+# Defines the expected Docker Compose service structure, volumes,
+# networking, and health checks for the Nextcloud deployment.
+#
+# Traces to: FR-001..FR-022 (full feature set)
+
+# === Services ===
+
+# Service 1: nextcloud_app
+#   Image: nextcloud:{{ nextcloud_version }} (Apache variant)
+#   Port: {{ nextcloud_port }}:80
+#   Volumes:
+#     - {{ nextcloud_data_dir }}/html:/var/www/html          (local: app code, config)
+#     - {{ nextcloud_nfs_mount }}/data:/var/www/html/data     (NAS: user files — FR-014)
+#     - /etc/localtime:/etc/localtime:ro
+#   Environment:
+#     - MYSQL_HOST=db
+#     - MYSQL_DATABASE=nextcloud
+#     - MYSQL_USER=nextcloud
+#     - MYSQL_PASSWORD={{ nextcloud_db_password }}
+#     - REDIS_HOST=redis
+#     - REDIS_HOST_PASSWORD={{ nextcloud_redis_password }}
+#     - NEXTCLOUD_TRUSTED_DOMAINS={{ nextcloud_domain }} {{ nextcloud_ip }}
+#     - TRUSTED_PROXIES={{ reverse_proxy_ip }}
+#     - OVERWRITEPROTOCOL=http
+#     - OVERWRITECLIURL=http://{{ nextcloud_domain }}
+#     - NEXTCLOUD_ADMIN_USER={{ nextcloud_admin_user }}
+#     - NEXTCLOUD_ADMIN_PASSWORD={{ nextcloud_admin_password }}
+#     - PHP_MEMORY_LIMIT=1024M
+#     - PHP_UPLOAD_LIMIT=16G
+#   Depends on: db, redis
+#   Restart: always
+#   Health check: curl -f http://localhost/status.php || exit 1
+
+# Service 2: nextcloud_db (MariaDB)
+#   Image: mariadb:11
+#   Volumes:
+#     - {{ nextcloud_data_dir }}/mariadb:/var/lib/mysql       (local disk only — FR-014a)
+#   Environment:
+#     - MYSQL_ROOT_PASSWORD={{ nextcloud_db_root_password }}
+#     - MYSQL_DATABASE=nextcloud
+#     - MYSQL_USER=nextcloud
+#     - MYSQL_PASSWORD={{ nextcloud_db_password }}
+#   Command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+#   Restart: always
+#   Health check: healthcheck.sh --connect --innodb_initialized
+#   NOT exposed to host network (internal only)
+
+# Service 3: nextcloud_redis
+#   Image: redis:7-alpine
+#   Volumes:
+#     - {{ nextcloud_data_dir }}/redis:/data                  (local disk)
+#   Command: redis-server --requirepass {{ nextcloud_redis_password }}
+#   Restart: always
+#   Health check: redis-cli -a {{ nextcloud_redis_password }} ping
+#   NOT exposed to host network (internal only)
+
+# === Volume Layout ===
+#
+# LOCAL DISK (/opt/nextcloud/):
+#   html/         — Nextcloud application code + config.php
+#   mariadb/      — MariaDB data files (MUST NOT be on NFS)
+#   redis/        — Redis persistence
+#
+# NAS (/mnt/nextcloud/):
+#   data/         — User files (FR-014: MUST be on NAS)
+#   backups/      — Database dumps + config backups (FR-021)
+
+# === Network ===
+#
+# All three services share a Docker bridge network (default compose network).
+# Only nextcloud_app exposes a port to the host ({{ nextcloud_port }}:80).
+# MariaDB and Redis are internal-only.
+
+# === Templating Pattern ===
+#
+# Both docker-compose.yml and .env are Ansible Jinja2 templates rendered at
+# deploy time. This matches the Immich pattern:
+#
+# - docker-compose.yml.j2: Uses {{ var }} for image version, ports, volumes.
+#   The nextcloud_app service uses `env_file: - .env` to pass runtime
+#   environment variables to the container.
+#   Database and Redis services have secrets directly in the compose
+#   environment section (matching Immich's POSTGRES_PASSWORD pattern).
+#
+# - .env.j2: Contains runtime env vars for the Nextcloud container
+#   (MYSQL_HOST, REDIS_HOST, trusted domains, admin credentials, PHP limits).
+#   Rendered by Ansible with mode 0600.
+#
+# Note: MYSQL_ROOT_PASSWORD is only used by MariaDB on first database
+# initialization. Changing it afterward in the .env has no effect.
+
+# === Security Constraints ===
+#
+# - No secrets in Docker image layers
+# - Secrets rendered by Ansible at deploy time via Jinja2 templates
+# - .env file permissions: 0600, owned by root
+# - Redis requires password authentication
+# - MariaDB requires password authentication

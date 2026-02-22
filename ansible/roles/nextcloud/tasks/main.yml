@@ -1,0 +1,193 @@
+---
+# Run preflight checks
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+# Create required directories
+- name: Ensure Nextcloud install directory exists
+  ansible.builtin.file:
+    path: "{{ nextcloud_install_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Ensure Nextcloud html directory exists (app code + config)
+  ansible.builtin.file:
+    path: "{{ nextcloud_data_dir }}/html"
+    state: directory
+    mode: '0755'
+
+- name: Ensure Nextcloud mariadb directory exists (local disk)
+  ansible.builtin.file:
+    path: "{{ nextcloud_data_dir }}/mariadb"
+    state: directory
+    mode: '0755'
+
+- name: Ensure Nextcloud redis directory exists (local disk)
+  ansible.builtin.file:
+    path: "{{ nextcloud_data_dir }}/redis"
+    state: directory
+    mode: '0755'
+
+- name: Ensure Nextcloud NFS data directory exists
+  ansible.builtin.file:
+    path: "{{ nextcloud_nfs_mount }}/data"
+    state: directory
+    mode: '0755'
+
+- name: Ensure Nextcloud NFS backups directory exists
+  ansible.builtin.file:
+    path: "{{ nextcloud_nfs_mount }}/backups"
+    state: directory
+    mode: '0755'
+
+# Deploy configuration
+- name: Deploy Nextcloud docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ nextcloud_install_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart nextcloud
+
+- name: Deploy Nextcloud .env
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ nextcloud_install_dir }}/.env"
+    mode: '0600'
+  notify: Restart nextcloud
+
+# Start services
+- name: Ensure Nextcloud stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ nextcloud_install_dir }}"
+    state: present
+    remove_orphans: true
+    pull: always
+
+- name: Wait for Nextcloud to be reachable
+  ansible.builtin.wait_for:
+    port: "{{ nextcloud_port }}"
+    host: "127.0.0.1"
+    delay: 10
+    timeout: 300
+
+- name: Wait for Nextcloud installation to complete
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ nextcloud_port }}/status.php"
+    method: GET
+    status_code: 200
+    return_content: true
+  register: nextcloud_status
+  retries: 30
+  delay: 10
+  until: >-
+    nextcloud_status.status == 200 and
+    (nextcloud_status.json.installed | default(false)) | bool
+
+# Configure apps
+- name: Install and enable Nextcloud apps
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data nextcloud_app php occ app:install {{ item }}
+  loop: "{{ nextcloud_apps_enable }}"
+  register: app_install_result
+  failed_when:
+    - app_install_result.rc != 0
+    - '"already installed" not in app_install_result.stdout'
+    - '"already installed" not in app_install_result.stderr'
+  changed_when: app_install_result.rc == 0
+
+- name: Enable Nextcloud apps
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data nextcloud_app php occ app:enable {{ item }}
+  loop: "{{ nextcloud_apps_enable }}"
+  register: app_enable_result
+  failed_when:
+    - app_enable_result.rc != 0
+    - '"already enabled" not in app_enable_result.stdout'
+    - '"already enabled" not in app_enable_result.stderr'
+  changed_when: app_enable_result.rc == 0
+
+- name: Disable unwanted Nextcloud apps
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data nextcloud_app php occ app:disable {{ item }}
+  loop: "{{ nextcloud_apps_disable }}"
+  register: app_disable_result
+  failed_when:
+    - app_disable_result.rc != 0
+    - '"not installed" not in app_disable_result.stdout'
+    - '"not installed" not in app_disable_result.stderr'
+    - '"No such app" not in app_disable_result.stderr'
+  changed_when: app_disable_result.rc == 0
+
+# Configure Redis caching
+- name: Set Nextcloud Redis host
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set redis host --value="nextcloud_redis"
+  changed_when: false
+
+- name: Set Nextcloud Redis port
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set redis port --value=6379 --type=integer
+  changed_when: false
+
+- name: Set Nextcloud Redis password
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set redis password --value="{{ nextcloud_redis_password }}"
+  changed_when: false
+  no_log: true
+
+- name: Set Nextcloud Redis timeout
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set redis timeout --value=0 --type=integer
+  changed_when: false
+
+- name: Set Nextcloud memcache.local
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set memcache.local --value='\OC\Memcache\APCu'
+  changed_when: false
+
+- name: Set Nextcloud memcache.distributed
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set memcache.distributed --value='\OC\Memcache\Redis'
+  changed_when: false
+
+- name: Set Nextcloud memcache.locking
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set memcache.locking --value='\OC\Memcache\Redis'
+  changed_when: false
+
+- name: Enable Nextcloud file locking
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set filelocking.enabled --value=true --type=boolean
+  changed_when: false
+
+# Configure regional and maintenance settings
+- name: Set Nextcloud default phone region
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set default_phone_region --value="GB"
+  changed_when: false
+
+- name: Set Nextcloud maintenance window start
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set maintenance_window_start --value=1 --type=integer
+  changed_when: false
+
+# Configure brute-force protection whitelist
+- name: Set Nextcloud brute-force protection LAN whitelist
+  ansible.builtin.command:
+    cmd: docker exec -u www-data nextcloud_app php occ config:system:set auth.bruteforce.protection.whitelist 0 --value="192.168.0.0/16"
+  changed_when: false
+
+# Final health check
+- name: Verify Nextcloud login page is accessible
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ nextcloud_port }}/login"
+    method: GET
+    status_code: 200
+  register: health_check
+  retries: 10
+  delay: 10
+  until: health_check.status == 200
+  changed_when: false

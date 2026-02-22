@@ -1,0 +1,31 @@
+---
+# Defaults for nextcloud role
+nextcloud_version: "30"
+nextcloud_port: 8080
+nextcloud_install_dir: "/opt/nextcloud"
+nextcloud_data_dir: "/opt/nextcloud"
+nextcloud_nfs_mount: "/mnt/nextcloud"
+nextcloud_domain: "nextcloud.local"
+nextcloud_require_nas_mount: true
+nextcloud_admin_user: "admin"
+
+# PHP resource limits
+nextcloud_php_memory_limit: "1024M"
+nextcloud_php_upload_limit: "16G"
+
+# Apps to install and enable
+nextcloud_apps_enable:
+  - richdocuments
+  - richdocumentscode
+  - deck
+  - twofactor_totp
+  - bruteforcesettings
+
+# Apps to disable
+nextcloud_apps_disable:
+  - photos
+  - weather_status
+  - firstrunwizard
+  - recommendations
+  - calendar
+  - contacts

@@ -38,7 +38,7 @@
       register: root_keys
 
     - name: Set authorized keys for ansible user
-      authorized_key:
+      ansible.posix.authorized_key:
         user: "{{ ansible_user_name }}"
         key: "{{ root_keys['content'] | b64decode }}"
         state: present

@@ -54,3 +54,11 @@
     mode: '0644'
     validate: caddy validate --adapter caddyfile --config %s
   notify: Restart caddy
+
+- name: Deploy Nextcloud Caddy configuration
+  ansible.builtin.template:
+    src: nextcloud.caddy.j2
+    dest: "{{ caddy_conf_dir }}/nextcloud.caddy"
+    mode: '0644'
+    validate: caddy validate --adapter caddyfile --config %s
+  notify: Restart caddy

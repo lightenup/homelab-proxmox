@@ -1,0 +1,53 @@
+---
+- name: Ensure backup directory exists
+  ansible.builtin.file:
+    path: "{{ nextcloud_backup_path }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Deploy backup script
+  ansible.builtin.template:
+    src: backup_nextcloud.sh.j2
+    dest: /usr/local/bin/backup_nextcloud.sh
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Create systemd service for Nextcloud backup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/nextcloud-backup.service
+    content: |
+      [Unit]
+      Description=Nextcloud Backup Service
+      After=docker.service network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/backup_nextcloud.sh
+      User=root
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Create systemd timer for Nextcloud backup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/nextcloud-backup.timer
+    content: |
+      [Unit]
+      Description=Run Nextcloud backup daily
+
+      [Timer]
+      OnCalendar={{ nextcloud_backup_schedule }}
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Enable and start Nextcloud backup timer
+  ansible.builtin.systemd:
+    name: nextcloud-backup.timer
+    state: started
+    enabled: true
