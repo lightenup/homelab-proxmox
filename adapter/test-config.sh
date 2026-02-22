@@ -49,7 +49,7 @@ run_project_lint() {
 
   if [[ -d "ansible" ]]; then
     if command -v ansible-lint >/dev/null 2>&1; then
-      ansible-lint -c .ansible-lint ansible 2>&1 || failed=1
+      ANSIBLE_ROLES_PATH="ansible/roles" ansible-lint -c .ansible-lint ansible 2>&1 || failed=1
     else
       echo "ℹ ansible-lint not installed; skipping Ansible lint"
     fi

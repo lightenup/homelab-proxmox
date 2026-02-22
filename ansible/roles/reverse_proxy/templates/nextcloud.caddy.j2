@@ -1,0 +1,7 @@
+http://nextcloud.local {
+    reverse_proxy {{ nextcloud_ip }}:{{ nextcloud_port }} {
+        header_up X-Forwarded-Proto http
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+    }
+}

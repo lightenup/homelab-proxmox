@@ -1,0 +1,20 @@
+---
+# Service aggregator playbook
+# Referenced by site.yml via: import_playbook: services.yml
+# Deploys all application services in the homelab.
+
+- name: Configure AdGuard Home
+  import_playbook: adguard.yml
+  tags: adguard
+
+- name: Configure Immich
+  import_playbook: immich.yml
+  tags: immich
+
+- name: Configure Jellyfin
+  import_playbook: jellyfin.yml
+  tags: jellyfin
+
+- name: Configure Nextcloud
+  import_playbook: nextcloud.yml
+  tags: nextcloud

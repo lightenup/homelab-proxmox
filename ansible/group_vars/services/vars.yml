@@ -32,3 +32,25 @@ immich_backup_retention_months: 6
 immich_backup_schedule: "*-*-* 04:30:00"
 immich_db_container_name: "immich_postgres"
 immich_restore_test_port: 2284
+
+# Nextcloud Configuration
+reverse_proxy_ip: "192.168.20.211"
+nextcloud_version: "30"
+nextcloud_ip: "192.168.20.216"
+nextcloud_port: 8080
+nextcloud_install_dir: "/opt/nextcloud"
+nextcloud_data_dir: "/opt/nextcloud"
+nextcloud_nfs_mount: "/mnt/nextcloud"
+nextcloud_domain: "nextcloud.local"
+nextcloud_db_name: "nextcloud"
+nextcloud_db_user: "nextcloud"
+nextcloud_db_container_name: "nextcloud_db"
+nextcloud_redis_container_name: "nextcloud_redis"
+nextcloud_app_container_name: "nextcloud_app"
+
+# Nextcloud Backup Configuration
+nextcloud_backup_path: "/mnt/nextcloud/backups"
+nextcloud_backup_retention_days: 7
+nextcloud_backup_retention_weeks: 4
+nextcloud_backup_retention_months: 6
+nextcloud_backup_schedule: "*-*-* 03:00:00"

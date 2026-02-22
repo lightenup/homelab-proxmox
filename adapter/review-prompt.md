@@ -14,12 +14,15 @@ Review the implementation for the current feature against the specification.
    - `.specify/memory/constitution.md` — process principles
    - `.specify/memory/addendum.md` — tech constraints (if present)
 
-3. Run the test suite using the appropriate command for the project's language:
-   - Go: `go test ./...`
-   - Python: `python -m pytest`
-   - Node: `npm test`
-   - Rust: `cargo test`
-   Determine the language from `plan.md` or the project files.
+3. Run the project's test gate using `adapter/test-config.sh`:
+   ```bash
+   source adapter/test-config.sh
+   run_project_tests
+   run_project_lint
+   ```
+   If `test-config.sh` is unconfigured (returns warning), fall back to
+   detecting the test command from `plan.md`, Makefile, package.json, or
+   project files.
 
 4. For each user story in `spec.md`, check whether the implementation satisfies
    its acceptance criteria. Examine the actual source code — do not rely solely

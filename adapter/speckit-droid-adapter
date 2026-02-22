@@ -57,6 +57,7 @@ DEFAULT_REASONING="" # empty = use per-stage default, then model's default
 MAX_REVIEW_ITERATIONS=3
 MAX_INPUT_FILE_BYTES=102400  # 100 KB per file — guard against accidental binary
 INPUT_FILES=()               # -f / @file references, appended as context
+NO_COMMIT=false              # --no-commit disables auto commit+push after build
 
 # --- Agent file mapping ------------------------------------------------------
 declare -A AGENT_FILES=(
@@ -251,6 +252,7 @@ usage() {
   echo "  -r, --reasoning-effort <l> Reasoning override: off|low|medium|high|max"
   echo "  --no-critique        Skip self-critique pass for specify/plan"
   echo "  --no-tests           Skip test/lint gating in build loop"
+  echo "  --no-commit          Skip auto commit+push after build completes"
   echo "  --no-auto-route      Skip automatic routing suggestions"
   echo "  --dry-run            Show the adapted prompt without executing droid"
   echo "  -h, --help           Show this help"
@@ -559,6 +561,190 @@ run_gate_tests() {
   return 0
 }
 
+# Finalize a build: commit all changes and push the branch.
+# Skipped if --no-commit was passed, or if there's nothing to commit.
+finalize_build() {
+  local auto_level="$1"
+
+  if [[ "$NO_COMMIT" == "true" ]]; then
+    echo ""
+    echo "📋 --no-commit: skipping auto commit+push (working tree left as-is)"
+    return 0
+  fi
+
+  cd "$REPO_ROOT"
+
+  # Check if there's anything to commit
+  if git diff --quiet HEAD 2>/dev/null && git diff --cached --quiet 2>/dev/null && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
+    echo ""
+    echo "📋 Nothing to commit — working tree already clean"
+    return 0
+  fi
+
+  # Determine the feature name from the current branch
+  local branch feature_name
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  feature_name="${branch:-unknown-feature}"
+
+  echo ""
+  echo "╔══════════════════════════════════════════════════════════════╗"
+  echo "║  Finalizing: commit + push                                  ║"
+  echo "╚══════════════════════════════════════════════════════════════╝"
+  echo ""
+
+  # Stage everything
+  git add -A
+  echo "  Staged all changes"
+
+  # Build commit message from the feature spec if available
+  local feature_dir commit_msg
+  feature_dir=$(find "$REPO_ROOT/specs" -maxdepth 1 -type d -name "[0-9]*" 2>/dev/null | sort -r | head -1)
+  if [[ -n "$feature_dir" && -f "$feature_dir/spec.md" ]]; then
+    # Extract the first heading as the feature title
+    local title
+    title=$(head -5 "$feature_dir/spec.md" | grep '^# ' | sed 's/^# //' | head -1)
+    commit_msg="feat: ${title:-implement $(basename "$feature_dir")}"
+  else
+    commit_msg="feat: implement $feature_name"
+  fi
+
+  git commit -m "$commit_msg" -m "Build completed via speckit-droid-adapter build loop."
+  echo "  Committed: $commit_msg"
+
+  # Push — only if auto level permits (high) or branch has a remote
+  local remote_branch
+  remote_branch=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo "")
+
+  if [[ -n "$remote_branch" ]]; then
+    # Upstream exists — push
+    git push
+    echo "  Pushed to $remote_branch"
+    echo ""
+    echo "🚀 Branch is ready for PR. Next step: create or merge the pull request."
+  elif [[ "$auto_level" == "high" ]]; then
+    # No upstream, but --auto high grants push permission
+    git push -u origin "$branch" 2>/dev/null || git push
+    echo "  Pushed $branch to origin"
+    echo ""
+    echo "🚀 Branch pushed. Next step: create a pull request."
+  else
+    echo "  ⚠ No upstream branch. Use --auto high to push, or push manually:"
+    echo "    git push -u origin $branch"
+  fi
+}
+
+# Print a post-build summary: what changed, review observations, next steps.
+print_build_summary() {
+  local iteration="$1"
+  local max_iter="$2"
+
+  cd "$REPO_ROOT"
+
+  echo ""
+  echo "╔══════════════════════════════════════════════════════════════╗"
+  echo "║  Build Summary                                              ║"
+  echo "╚══════════════════════════════════════════════════════════════╝"
+
+  # --- What was built ---
+  local feature_dir
+  feature_dir=$(.specify/scripts/bash/check-prerequisites.sh --json 2>/dev/null \
+    | grep -o '"feature_dir":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "")
+  if [[ -z "$feature_dir" ]]; then
+    feature_dir=$(find "$REPO_ROOT/specs" -maxdepth 1 -type d -name "[0-9]*" 2>/dev/null | sort -r | head -1)
+  fi
+
+  local spec_title=""
+  if [[ -n "$feature_dir" && -f "$feature_dir/spec.md" ]]; then
+    spec_title=$(head -5 "$feature_dir/spec.md" | grep '^# ' | sed 's/^# //' | head -1)
+  fi
+  echo ""
+  echo "  Feature : ${spec_title:-$(basename "${feature_dir:-unknown}")}"
+  echo "  Verdict : $(if [[ $iteration -lt $max_iter ]]; then echo "APPROVED (iteration $iteration)"; else echo "MAX ITERATIONS ($max_iter) — check review.md"; fi)"
+
+  # File stats
+  local files_changed new_files modified_files
+  files_changed=$(git diff --cached --name-only 2>/dev/null | wc -l | tr -d ' ')
+  new_files=$(git diff --cached --diff-filter=A --name-only 2>/dev/null | wc -l | tr -d ' ')
+  modified_files=$(git diff --cached --diff-filter=M --name-only 2>/dev/null | wc -l | tr -d ' ')
+  # If already committed, use last commit
+  if [[ "$files_changed" -eq 0 ]]; then
+    files_changed=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | wc -l | tr -d ' ')
+    new_files=$(git diff --diff-filter=A --name-only HEAD~1 HEAD 2>/dev/null | wc -l | tr -d ' ')
+    modified_files=$(git diff --diff-filter=M --name-only HEAD~1 HEAD 2>/dev/null | wc -l | tr -d ' ')
+  fi
+  # If still nothing (no commit, dirty tree), count from status
+  if [[ "$files_changed" -eq 0 ]]; then
+    files_changed=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    new_files=$(git status --porcelain 2>/dev/null | grep -c '^??' | tr -d ' ')
+    modified_files=$(git status --porcelain 2>/dev/null | grep -c '^ M\|^M ' | tr -d ' ')
+  fi
+  echo "  Files   : $files_changed total ($new_files new, $modified_files modified)"
+
+  # --- Review observations ---
+  local review_file="${feature_dir}/review.md"
+  if [[ -f "$review_file" ]]; then
+    local blocking_count obs_count
+    blocking_count=$(awk '/^## Blocking Issues/,/^---/' "$review_file" | grep -c '^[0-9]\.' 2>/dev/null || echo 0)
+    obs_count=$(awk '/^## Observations/,/^---/' "$review_file" | grep -c '^[0-9]\.' 2>/dev/null || echo 0)
+    echo "  Blocking: $blocking_count"
+    echo "  Observations: $obs_count (non-blocking)"
+
+    if [[ "$obs_count" -gt 0 ]]; then
+      echo ""
+      echo "  Observations from review:"
+      awk '/^## Observations/,/^---/' "$review_file" | grep '^[0-9]\.' | sed 's/^/    /' | head -10
+    fi
+  fi
+
+  # --- Next steps ---
+  echo ""
+  echo "  ── Next Steps ───────────────────────────────────────────────"
+
+  local branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  local has_upstream
+  has_upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo "")
+
+  # Check if branch is dirty (no commit was made)
+  local is_dirty=false
+  if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+    is_dirty=true
+  fi
+
+  local step=1
+  if $is_dirty; then
+    echo "  ${step}. Commit:  git add -A && git commit -m 'feat: ${spec_title:-implement feature}'"
+    step=$((step + 1))
+  fi
+
+  if [[ -z "$has_upstream" ]]; then
+    echo "  ${step}. Push:    git push -u origin $branch"
+    step=$((step + 1))
+  fi
+
+  local remote_url
+  remote_url=$(git remote get-url origin 2>/dev/null || echo "")
+  if [[ "$remote_url" == *github.com* ]]; then
+    local repo_path
+    repo_path=$(echo "$remote_url" | sed 's|.*github.com[:/]||;s|\.git$||')
+    echo "  ${step}. PR:      https://github.com/$repo_path/compare/$branch"
+    step=$((step + 1))
+  else
+    echo "  ${step}. PR:      Create a pull request for branch '$branch'"
+    step=$((step + 1))
+  fi
+
+  echo "  ${step}. Deploy:  Follow project-specific deployment instructions"
+  step=$((step + 1))
+
+  # Show review file location
+  if [[ -f "$review_file" ]]; then
+    echo ""
+    echo "  Full review: ${review_file#$REPO_ROOT/}"
+  fi
+  echo ""
+}
+
 run_build_loop() {
   local user_args="$1"
   local auto_level="$2"
@@ -658,12 +844,16 @@ FEEDBACK_EOF
     if grep -qi "APPROVED" "$review_file" && ! grep -qi "CHANGES_REQUESTED" "$review_file"; then
       echo ""
       echo "✅ Review APPROVED on iteration $iteration"
+      finalize_build "$auto_level"
+      print_build_summary "$iteration" "$MAX_REVIEW_ITERATIONS"
       return 0
     fi
 
     if [[ $iteration -eq $MAX_REVIEW_ITERATIONS ]]; then
       echo ""
       echo "⚠ Max iterations ($MAX_REVIEW_ITERATIONS) reached. Check review.md for remaining items."
+      finalize_build "$auto_level"
+      print_build_summary "$MAX_REVIEW_ITERATIONS" "$MAX_REVIEW_ITERATIONS"
       return 0
     fi
 
@@ -718,6 +908,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-tests)
       NO_TESTS=true
+      shift
+      ;;
+    --no-commit)
+      NO_COMMIT=true
       shift
       ;;
     --no-auto-route)

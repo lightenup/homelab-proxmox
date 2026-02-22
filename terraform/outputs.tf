@@ -6,6 +6,7 @@ output "ansible_inventory" {
       reverse_proxy = module.reverse_proxy_lxc.ipv4
       monitoring    = module.monitoring_lxc.ipv4
       jellyfin      = module.jellyfin_lxc.ipv4
+      nextcloud     = module.nextcloud_lxc.ipv4
     }
   }
 }
