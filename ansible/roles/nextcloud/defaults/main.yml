@@ -14,6 +14,13 @@ nextcloud_db_name: "nextcloud"
 nextcloud_db_user: "nextcloud"
 nextcloud_db_container_name: "nextcloud_db"
 
+# Backup configuration
+nextcloud_backup_path: "/mnt/nextcloud/backups"
+nextcloud_backup_retention_days: 7
+nextcloud_backup_retention_weeks: 4
+nextcloud_backup_retention_months: 6
+nextcloud_backup_schedule: "*-*-* 04:00:00"
+
 # PHP resource limits
 nextcloud_php_memory_limit: "1024M"
 nextcloud_php_upload_limit: "16G"
