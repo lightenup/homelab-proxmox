@@ -2245,8 +2245,11 @@ enforce_bind_mount_policy() {
                 return 1
         fi
 
-        local violations
-        violations="$(jq -r '
+        # Allowed host-path prefixes for bind mounts (standard NAS mount pattern).
+        local -a allowed_prefixes=("/mnt/nas/")
+
+        local all_host_volumes
+        all_host_volumes="$(jq -r '
             .resource_changes[]? as $rc
             | ($rc.change.after // empty) as $after
             | select($after != null)
@@ -2257,19 +2260,43 @@ enforce_bind_mount_policy() {
             | "\($rc.address)\t\($vol)"
         ' "${plan_json}" 2>/dev/null || true)"
 
+        if [[ -z "${all_host_volumes}" ]]; then
+                {
+                        echo "ALLOW: No host-path bind mounts detected"
+                } >"${EVIDENCE_ROOT}/reports/plan/bind-mount-guard.txt"
+                return 0
+        fi
+
+        local violations=""
+        while IFS=$'\t' read -r addr vol; do
+                local allowed=false
+                local prefix
+                for prefix in "${allowed_prefixes[@]}"; do
+                        if [[ "${vol}" == "${prefix}"* ]]; then
+                                allowed=true
+                                break
+                        fi
+                done
+                if [[ "${allowed}" != "true" ]]; then
+                        violations+="${addr}\t${vol}\n"
+                fi
+        done <<< "${all_host_volumes}"
+
         if [[ -n "${violations}" ]]; then
                 {
-                        echo "DENY: Host-path bind mount(s) detected (volume starts with '/')"
+                        echo "DENY: Host-path bind mount(s) outside allowed prefixes"
+                        echo "Allowed prefixes: ${allowed_prefixes[*]}"
                         echo "Each line: <terraform_address><TAB><volume>"
                         echo
-                        echo "${violations}"
+                        printf '%b' "${violations}"
                 } >"${EVIDENCE_ROOT}/reports/plan/bind-mount-guard.txt"
-                preflight_fail "bind-mount policy violation (host-path bind mount detected)"
+                preflight_fail "bind-mount policy violation (host-path bind mount outside allowed prefixes)"
                 return 1
         fi
 
         {
-                echo "ALLOW: No host-path bind mounts detected"
+                echo "ALLOW: All host-path bind mounts under allowed prefixes"
+                echo "Allowed prefixes: ${allowed_prefixes[*]}"
         } >"${EVIDENCE_ROOT}/reports/plan/bind-mount-guard.txt"
         return 0
 }
