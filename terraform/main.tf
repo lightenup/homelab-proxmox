@@ -103,6 +103,13 @@ module "monitoring_lxc" {
   ssh_public_keys = join("\n", var.ssh_public_keys)
 }
 
+locals {
+  all_mounts_nextcloud_root     = lookup(var.service_mountpoints, "nextcloud", {})
+  storage_mounts_nextcloud_root = { for k, v in local.all_mounts_nextcloud_root : k => v if !startswith(v.volume, "/") }
+  all_mounts_jellyfin_root      = lookup(var.service_mountpoints, "jellyfin", {})
+  storage_mounts_jellyfin_root  = { for k, v in local.all_mounts_jellyfin_root : k => v if !startswith(v.volume, "/") }
+}
+
 module "nextcloud_lxc" {
   source = "./modules/lxc_service"
 
@@ -126,7 +133,7 @@ module "nextcloud_lxc" {
   # Required for in-guest NFS mounts inside an unprivileged LXC.
   features_mount = "nfs"
 
-  mountpoints = values(lookup(var.service_mountpoints, "nextcloud", {}))
+  mountpoints = values(local.storage_mounts_nextcloud_root)
 }
 
 # Baseline example for specs/022-lxc-gated-deploy
@@ -153,5 +160,5 @@ module "jellyfin_lxc" {
   # Required for in-guest NFS mounts inside an unprivileged LXC.
   features_mount = "nfs"
 
-  mountpoints = values(lookup(var.service_mountpoints, "jellyfin", {}))
+  mountpoints = values(local.storage_mounts_jellyfin_root)
 }

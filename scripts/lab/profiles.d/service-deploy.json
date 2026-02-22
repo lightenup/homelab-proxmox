@@ -46,6 +46,12 @@
       "type": "file",
       "condition": "environment == 'prod'",
       "description": "PROD tfvars hash (required for PROD runs)"
+    },
+    {
+      "path": "reports/apply/lxc-mountpoints.txt",
+      "type": "file",
+      "condition": "service has host-path bind mounts",
+      "description": "Before/after pct config for bind mount operations"
     }
   ]
 }

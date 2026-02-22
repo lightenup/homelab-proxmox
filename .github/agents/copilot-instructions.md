@@ -30,6 +30,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-04
 - MariaDB for metadata (local disk); NFS mount from Synology NAS for user files (034-add-nextcloud)
 - HCL (Terraform ≥ 1.5.7), YAML (Ansible), Jinja2 (templates), Bash (backup scripts) + `telmate/proxmox` Terraform provider (= 2.9.11), `community.docker.docker_compose_v2` Ansible module, `geerlingguy.docker` Ansible role (034-add-nextcloud)
 - MariaDB 11 (local disk), Redis 7 (local disk), user files on Synology NAS via NFS (034-add-nextcloud)
+- Bash 5.x (orchestrator), HCL/Terraform 1.6.x (infrastructure), Python 3.x (inline parsing) + Proxmox `pct` CLI, Terraform (Telmate provider 2.9.x), jq, python3 (036-token-privilege-separation)
+- N/A (no database; config in tfvars, state in local terraform.tfstate) (036-token-privilege-separation)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -65,9 +67,9 @@ specs/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 036-token-privilege-separation: Added Bash 5.x (orchestrator), HCL/Terraform 1.6.x (infrastructure), Python 3.x (inline parsing) + Proxmox `pct` CLI, Terraform (Telmate provider 2.9.x), jq, python3
 - 034-add-nextcloud: Added HCL (Terraform ≥ 1.5.7), YAML (Ansible), Jinja2 (templates), Bash (backup scripts) + `telmate/proxmox` Terraform provider (= 2.9.11), `community.docker.docker_compose_v2` Ansible module, `geerlingguy.docker` Ansible role
 - 034-add-nextcloud: Added N/A (third-party application; IaC is Terraform HCL + Ansible YAML) + Nextcloud 30 (Docker), MariaDB 11, Redis 7, Caddy (existing), Docker + Docker Compose (existing `geerlingguy.docker` role)
-- 033-idempotent-rebuild: Added Shell scripts + Python (existing orchestration), Terraform (HCL), Ansible (YAML) + Taskfile, scripts/lab, telmate/proxmox Terraform provider, Ansible
 
 
 <!-- MANUAL ADDITIONS START -->

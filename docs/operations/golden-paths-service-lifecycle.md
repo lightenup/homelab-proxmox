@@ -44,6 +44,40 @@ All add/change/delete operations use the single workflow: `.github/workflows/lxc
   - Update `terraform/outputs.tf` (ansible inventory mapping).
   - Update `terraform/environments/*/tfvars` for `service_ips` and `service_mountpoints`.
 
+### Bind Mount Configuration
+
+If the new service requires NAS host-path bind mounts (e.g., media libraries, user data), follow this checklist before deploying:
+
+**(a) Determine required host paths**
+- Check service documentation for NAS storage needs. All paths MUST be under `/mnt/nas/` (enforced by the orchestrator allowlist).
+
+**(b) Declare mounts in `service_mountpoints` in `terraform/environments/<env>.tfvars`**
+
+  Add an entry for your service. Example (Nextcloud):
+  ```hcl
+  service_mountpoints = {
+    nextcloud = {
+      data = {
+        mp     = "/mnt/nextcloud"
+        volume = "/mnt/nas/homelab_nextcloud"
+      }
+    }
+    # For read-only mounts, add: readonly = true
+    # e.g. readonly = true
+  }
+  ```
+  The `mp` field is the path inside the container; `volume` is the host NAS path.
+  Set `readonly = true` for media or photo libraries that the service should not modify.
+
+**(c) Deploy via `pve-service-deploy apply`**
+- The orchestrator applies mounts automatically via `pct set` (Tier 2), no `root@pam` token required.
+- The container is created by Terraform without host-path `mountpoint {}` blocks; bind mounts are applied in the post-create step.
+
+**(d) Verify**
+- Check the step summary for per-mount result states (`applied`, `skipped`, `failed`).
+- Inspect `reports/apply/lxc-mountpoints.txt` in the evidence artifact for before/after container configuration.
+- On re-deploy, already-applied mounts show as `skipped` (idempotent).
+
 2.  **Register Service (Ansible)**
     - Run the task:
       ```bash

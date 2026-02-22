@@ -1,3 +1,8 @@
+locals {
+  all_mounts_reverse_proxy     = lookup(var.service_mountpoints, "reverse_proxy", {})
+  storage_mounts_reverse_proxy = { for k, v in local.all_mounts_reverse_proxy : k => v if !startswith(v.volume, "/") }
+}
+
 module "reverse_proxy_lxc" {
   source = "../../modules/lxc_service"
 
@@ -18,5 +23,5 @@ module "reverse_proxy_lxc" {
   searchdomain    = var.searchdomain
   ssh_public_keys = join("\n", var.ssh_public_keys)
 
-  mountpoints = values(lookup(var.service_mountpoints, "reverse_proxy", {}))
+  mountpoints = values(local.storage_mounts_reverse_proxy)
 }

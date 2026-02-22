@@ -19,6 +19,14 @@
 
 The rebuild system expects `ssh pve` (or your chosen alias) to work from the laptop. Configure a host alias in `~/.ssh/config`, then reuse that alias across Terraform, Ansible, and rebuild scripts.
 
+### Privilege Tiers
+
+Standard rebuild operations use **Tier 1** (Terraform, `terraform@pve` API token) for container provisioning and **Tier 2** (orchestrator `pct set` via `sudo`) for post-create configuration such as bind mounts and feature flags.
+
+Manual break-glass operations (disaster recovery only) may use **Tier 3** (`root@pam!rebuild` API token) when Tier 1 and Tier 2 access is insufficient to recover the system. Tier 3 must never appear in automated CI/CD flows.
+
+See [constitution — Token Privilege Tiers](../../.specify/memory/constitution.md#token-privilege-tiers) for the full three-tier model definition and enforcement rules.
+
 Example `~/.ssh/config` entry:
 
 - Host pve

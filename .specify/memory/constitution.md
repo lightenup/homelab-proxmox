@@ -37,6 +37,23 @@ Every provisioning and deployment operation MUST be executable through **both** 
 - Ansible initially uses `root` for bootstrapping (homelab tradeoff).
 - Do not expose Proxmox UI publicly on the internet. Prefer Tailscale for remote admin.
 
+### Token Privilege Tiers
+
+All automated operations use a three-tier privilege model. No tier may be substituted for another.
+
+| Tier | Credential / Grant | Scope | Used By |
+|------|--------------------|-------|---------|
+| **1** | `terraform@pve` API token | Create/update/destroy LXC resources via Proxmox API | Terraform (`pve-service-deploy plan/apply`) |
+| **2** | Orchestrator `sudo pct` (sudoers rule, no password) | Post-create LXC configuration: bind mounts, feature flags | `pve-service-deploy` orchestrator post-create steps |
+| **3** | `root@pam!rebuild` API token | Break-glass disaster recovery only | Manual rebuild operations |
+
+**Invariant rules**:
+1. Tier 1 is the only credential passed to Terraform. No `root@pam` token in Terraform configurations.
+2. Tier 2 is exercised only by the orchestrator post-create step (`pct set` via `sudo`). Never used for Terraform.
+3. Tier 3 is never referenced in automated flows (CI/CD). Manual use only for disaster recovery.
+
+**Enforcement**: Enforced by `scripts/lab/ci-validate-iac.sh` (Tier 1 boundary — rejects `root@pam` in any `.tf` file) and orchestrator bind-mount allowlist (Tier 2 boundary — rejects host paths outside `/mnt/nas/`).
+
 ## Baseline Decisions
 
 ### State Management
@@ -145,4 +162,4 @@ iterations) to converge on quality before declaring a feature complete.
 ## Governance
 This constitution supersedes all other practices. Amendments require documentation and approval. All PRs and reviews must verify compliance with these principles.
 
-**Version**: 1.2.0 | **Ratified**: 2026-02-22
+**Version**: 1.3.0 | **Ratified**: 2026-02-22

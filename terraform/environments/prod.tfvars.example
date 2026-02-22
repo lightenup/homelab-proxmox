@@ -24,14 +24,22 @@ service_mountpoints = {
       volume = "/mnt/nas/homelab_immich"
     }
     external_photo = {
-      mp     = "/mnt/immich-external/photo"
-      volume = "/mnt/nas/photo"
+      mp       = "/mnt/immich-external/photo"
+      volume   = "/mnt/nas/photo"
+      readonly = true
     }
   }
   jellyfin = {
     video = {
-      mp     = "/mnt/media/video"
-      volume = "/mnt/nas/video"
+      mp       = "/media/video"
+      volume   = "/mnt/nas/video"
+      readonly = true
+    }
+  }
+  nextcloud = {
+    data = {
+      mp     = "/mnt/nextcloud"
+      volume = "/mnt/nas/homelab_nextcloud"
     }
   }
 }

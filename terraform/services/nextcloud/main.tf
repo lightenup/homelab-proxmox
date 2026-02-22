@@ -1,3 +1,8 @@
+locals {
+  all_mounts_nextcloud     = lookup(var.service_mountpoints, "nextcloud", {})
+  storage_mounts_nextcloud = { for k, v in local.all_mounts_nextcloud : k => v if !startswith(v.volume, "/") }
+}
+
 module "nextcloud_lxc" {
   source = "../../modules/lxc_service"
 
@@ -21,5 +26,5 @@ module "nextcloud_lxc" {
   # Required for in-guest NFS mounts inside an unprivileged LXC.
   features_mount = "nfs"
 
-  mountpoints = values(lookup(var.service_mountpoints, "nextcloud", {}))
+  mountpoints = values(local.storage_mounts_nextcloud)
 }
