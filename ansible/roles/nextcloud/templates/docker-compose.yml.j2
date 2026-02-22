@@ -9,12 +9,10 @@ services:
       - "{{ nextcloud_port }}:80"
     volumes:
       - "{{ nextcloud_data_dir }}/html:/var/www/html"
-      - "{{ nextcloud_nfs_mount }}/data:/mnt/ncdata"
+      - "{{ nextcloud_nfs_mount }}/data:/var/www/html/data"
       - "/etc/localtime:/etc/localtime:ro"
     env_file:
       - .env
-    environment:
-      NEXTCLOUD_DATA_DIR: /mnt/ncdata
     depends_on:
       nextcloud_db:
         condition: service_healthy
