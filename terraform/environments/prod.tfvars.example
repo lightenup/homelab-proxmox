@@ -11,10 +11,10 @@ proxmox_node    = "pve"
 lxc_template    = "local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
 storage_pool    = "local-lvm"
 services_bridge = "vmbr0"
-network_gateway = "192.168.20.1"
+network_gateway = "192.168.1.1"
 
 # Optional: set DNS explicitly for all LXCs.
-# nameserver   = "192.168.20.210 1.1.1.1"
+# nameserver   = "192.168.1.210 1.1.1.1"
 # searchdomain = "home.arpa"
 
 service_mountpoints = {
@@ -45,16 +45,16 @@ service_mountpoints = {
 }
 
 service_ips = {
-  adguard        = "192.168.20.210/24"
-  reverse_proxy  = "192.168.20.211/24"
-  homeassistant  = "192.168.20.212/24"
-  immich         = "192.168.20.213/24"
-  monitoring     = "192.168.20.214/24"
+  adguard        = "192.168.1.210/24"
+  reverse_proxy  = "192.168.1.211/24"
+  homeassistant  = "192.168.1.212/24"
+  immich         = "192.168.1.213/24"
+  monitoring     = "192.168.1.214/24"
 
   # Baseline example for spec 022
   # Suggested starting point: 2 vCPU / 2GB RAM / 32GB disk (see terraform/main.tf)
-  jellyfin       = "192.168.20.215/24"
-  nextcloud      = "192.168.20.216/24"
+  jellyfin       = "192.168.1.215/24"
+  nextcloud      = "192.168.1.216/24"
 }
 
 ssh_public_keys = [

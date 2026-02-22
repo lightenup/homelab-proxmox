@@ -17,7 +17,7 @@ All managed hosts broadcast their hostname on the local network via the `.local`
 | `immich.local` | `192.168.1.213` | Immich Photo Backup |
 | `adguard.local` | `192.168.1.210` | AdGuard Home (DNS) |
 | `homeassistant.local` | `192.168.1.212` | Home Assistant |
-| `nextcloud.local` | `192.168.20.216` | Nextcloud Cloud Storage |
+| `nextcloud.local` | `192.168.1.216` | Nextcloud Cloud Storage |
 
 ### How it works
 

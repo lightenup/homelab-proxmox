@@ -44,7 +44,7 @@ variable "ssh_public_keys" {
 variable "network_gateway" {
   type        = string
   description = "Default gateway for the LXC network"
-  default     = "192.168.20.1"
+  default     = "192.168.1.1"
 }
 
 variable "service_ips" {

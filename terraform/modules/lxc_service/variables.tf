@@ -36,12 +36,12 @@ variable "bridge" {
 
 variable "ip" {
   type        = string
-  description = "IPv4 address in CIDR notation, e.g. 192.168.20.10/24"
+  description = "IPv4 address in CIDR notation, e.g. 192.168.1.10/24"
 }
 
 variable "gateway" {
   type        = string
-  description = "Default gateway for this container, e.g. 192.168.20.1"
+  description = "Default gateway for this container, e.g. 192.168.1.1"
 }
 
 variable "nameserver" {
