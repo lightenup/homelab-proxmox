@@ -55,6 +55,8 @@ DEFAULT_AUTO="medium"
 DEFAULT_MODEL=""     # empty = use per-stage default, then droid's default
 DEFAULT_REASONING="" # empty = use per-stage default, then model's default
 MAX_REVIEW_ITERATIONS=3
+MAX_INPUT_FILE_BYTES=102400  # 100 KB per file — guard against accidental binary
+INPUT_FILES=()               # -f / @file references, appended as context
 
 # --- Agent file mapping ------------------------------------------------------
 declare -A AGENT_FILES=(
@@ -244,6 +246,7 @@ usage() {
   echo ""
   echo "Options:"
   echo "  --auto <level>       Droid autonomy: low|medium|high (default: $DEFAULT_AUTO)"
+  echo "  -f, --input-file <path>  Attach a reference document (repeatable, or use @file)"
   echo "  -m, --model <id>    Model override (default: per-stage, see below)"
   echo "  -r, --reasoning-effort <l> Reasoning override: off|low|medium|high|max"
   echo "  --no-critique        Skip self-critique pass for specify/plan"
@@ -272,6 +275,8 @@ usage() {
   echo ""
   echo "Examples:"
   echo "  $(basename "$0") specify \"Build a bookmark manager CLI\""
+  echo "  $(basename "$0") specify \"Add monitoring\" -f docs/requirements.md"
+  echo "  $(basename "$0") plan @docs/adr-003.md \"Python 3.12, FastAPI\""
   echo "  $(basename "$0") implement -m claude-opus-4-6 -r high"
   echo "  $(basename "$0") build --auto high -m gpt-5.2-codex"
   exit 0
@@ -317,6 +322,9 @@ adapt_prompt() {
   local user_args="$2"
   local persona_name="$3"
   local stage="${4:-}"
+  # Remaining args are input file paths
+  shift 4 2>/dev/null || true
+  local -a input_files=("$@")
 
   # 1. Emit the non-interactive preamble + persona
   build_preamble "$persona_name"
@@ -341,6 +349,20 @@ adapt_prompt() {
   else
     awk '{gsub(/\$ARGUMENTS/, ""); print}' "$agent_file"
   fi
+
+  # 4. Append reference documents from -f / @file
+  for fpath in "${input_files[@]}"; do
+    [[ -z "$fpath" ]] && continue
+    echo ""
+    echo "---"
+    echo ""
+    echo "## Reference Document"
+    echo "<!-- Source: $(basename "$fpath") -->"
+    echo ""
+    cat "$fpath"
+    echo ""
+    echo "---"
+  done
 }
 
 run_stage() {
@@ -369,7 +391,7 @@ run_stage() {
   prompt_file=$(mktemp "${TMPDIR:-/tmp}/droid-prompt-${stage}-XXXXXX")
   TMPFILES+=("$prompt_file")
 
-  adapt_prompt "$agent_path" "$user_args" "$persona_name" "$stage" > "$prompt_file"
+  adapt_prompt "$agent_path" "$user_args" "$persona_name" "$stage" "${INPUT_FILES[@]}" > "$prompt_file"
 
   # Append extra context (e.g., review feedback for re-implementation)
   if [[ -n "$extra_context" ]]; then
@@ -398,6 +420,9 @@ run_stage() {
   echo "  Agent: ${AGENT_FILES[$stage]}"
   echo "  Model: $model_display | Reasoning: $reasoning_display"
   [[ -n "$user_args" ]] && echo "  Input: $user_args"
+  if [[ ${#INPUT_FILES[@]} -gt 0 ]]; then
+    echo "  Input files: ${INPUT_FILES[*]}"
+  fi
   echo ""
 
   # Build droid command
@@ -707,10 +732,28 @@ while [[ $# -gt 0 ]]; do
       SKIP_PERMISSIONS=true
       shift
       ;;
+    -f|--input-file)
+      _fpath="${2:?'-f/--input-file requires a file path'}"
+      [[ -f "$_fpath" ]] || { echo "Error: Input file not found: $_fpath"; exit 1; }
+      _fsize=$(wc -c < "$_fpath")
+      if [[ $_fsize -gt $MAX_INPUT_FILE_BYTES ]]; then
+        echo "Warning: $_fpath is $(( _fsize / 1024 ))KB (limit ${MAX_INPUT_FILE_BYTES}B) — truncating"
+      fi
+      INPUT_FILES+=("$_fpath")
+      shift 2
+      ;;
     --help|-h)
       usage
       ;;
     *)
+      # @file shorthand: expand to input file reference
+      if [[ "$1" == @* && ${#1} -gt 1 ]]; then
+        _fpath="${1#@}"
+        [[ -f "$_fpath" ]] || { echo "Error: Input file not found: $_fpath"; exit 1; }
+        INPUT_FILES+=("$_fpath")
+        shift
+        continue
+      fi
       if [[ -z "$STAGE" ]]; then
         STAGE="$1"
       else
