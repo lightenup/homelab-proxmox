@@ -979,6 +979,124 @@ EOF
     return 0
 }
 
+# [Tier 2] Inject the orchestrator's deploy SSH key into a container's /root/.ssh/authorized_keys
+# via pct exec (bypasses Terraform variable precedence). Idempotent: no-op if key already present.
+# Usage: inject_deploy_key <ctid> <lxc_key_file>
+inject_deploy_key() {
+    local ctid="${1:?inject_deploy_key requires ctid}"
+    local key_file="${2:?inject_deploy_key requires key_file}"
+    local pub_key_file="${key_file}.pub"
+
+    # FR-016: validate public key file exists on PVE host
+    if [[ ! -f "${pub_key_file}" ]]; then
+        die "deploy public key not found: ${pub_key_file}"
+    fi
+
+    # FR-015: check container is running before attempting pct exec
+    local pct_status_output
+    pct_status_output="$(sudo pct status "${ctid}" 2>&1 || true)"
+    if ! printf '%s\n' "${pct_status_output}" | grep -q "^status: running$"; then
+        die "container ${ctid} is not running for deploy key injection (pct status: ${pct_status_output})"
+    fi
+
+    # Read public key content and compute fingerprint for evidence
+    local key_content
+    key_content="$(cat "${pub_key_file}")"
+    local key_fingerprint
+    key_fingerprint="$(ssh-keygen -lf "${pub_key_file}" | awk '{print $2}')"
+
+    # FR-005: create /root/.ssh with correct permissions and ensure authorized_keys exists
+    sudo pct exec "${ctid}" -- bash -c \
+        'mkdir -p /root/.ssh && chmod 700 /root/.ssh && touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys'
+
+    # Capture authorized_keys line count before injection
+    local authorized_keys_line_count_before
+    authorized_keys_line_count_before="$(sudo pct exec "${ctid}" -- bash -c \
+        'cat /root/.ssh/authorized_keys 2>/dev/null | wc -l' | tr -d '[:space:]')"
+
+    # FR-003, FR-004: idempotent key injection; determine action from grep exit code
+    local action
+    # key_content is expanded on the host; grep receives it as a literal argument in the container
+    if sudo pct exec "${ctid}" -- grep -qF "${key_content}" /root/.ssh/authorized_keys 2>/dev/null; then
+        action="skipped"
+    else
+        printf '%s\n' "${key_content}" | sudo pct exec "${ctid}" -- tee -a /root/.ssh/authorized_keys > /dev/null
+        action="injected"
+    fi
+
+    # Capture authorized_keys line count after injection
+    local authorized_keys_line_count_after
+    authorized_keys_line_count_after="$(sudo pct exec "${ctid}" -- bash -c \
+        'cat /root/.ssh/authorized_keys 2>/dev/null | wc -l' | tr -d '[:space:]')"
+
+    # FR-017: write evidence artifact
+    local key_report="${EVIDENCE_ROOT}/reports/apply/lxc-deploy-key.txt"
+    {
+        echo "ctid=${ctid}"
+        echo "key_file=${key_file}"
+        echo "key_fingerprint=${key_fingerprint}"
+        echo "action=${action}"
+        echo "authorized_keys_line_count_before=${authorized_keys_line_count_before}"
+        echo "authorized_keys_line_count_after=${authorized_keys_line_count_after}"
+    } >"${key_report}"
+
+    # FR-011: log action to stdout
+    echo "[deploy-key] ctid=${ctid} action=${action} fingerprint=${key_fingerprint}"
+}
+
+# [Tier 2] Hard-gate network reachability check via ping before the SSH wait loop.
+# On failure, captures container diagnostics via pct exec and dies with an actionable message.
+# Usage: check_network_reachability <ctid> <service_ip>
+check_network_reachability() {
+    local ctid="${1}"
+    local service_ip="${2:?check_network_reachability requires service_ip}"
+    local network_report="${EVIDENCE_ROOT}/reports/apply/network-check.txt"
+
+    # Write evidence header (FR-009)
+    {
+        echo "ctid=${ctid}"
+        echo "expected_ip=${service_ip}"
+        echo "timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    } >"${network_report}"
+
+    # FR-006: ping with fixed 5-second timeout (spec D-009)
+    if ping -c 1 -W 5 "${service_ip}" >/dev/null 2>&1; then
+        echo "ping_status=ok" >>"${network_report}"
+        echo "[network-check] ${service_ip} reachable (ping_status=ok)"
+        return 0
+    fi
+
+    # FR-008: ping failed — record unreachable status and capture diagnostics
+    echo "ping_status=unreachable" >>"${network_report}"
+
+    # FR-007, FR-012: capture container interface state and routing table via pct exec
+    local ip_addr_output ip_route_output net_config_output
+    ip_addr_output="$(sudo pct exec "${ctid}" -- ip addr show eth0 2>/dev/null || true)"
+    ip_route_output="$(sudo pct exec "${ctid}" -- ip route 2>/dev/null || true)"
+    net_config_output="$(sudo pct config "${ctid}" 2>/dev/null | grep -E '^net[0-9]+:' || true)"
+
+    {
+        echo "--- ip addr show eth0 ---"
+        printf '%s\n' "${ip_addr_output}"
+        echo "--- ip route ---"
+        printf '%s\n' "${ip_route_output}"
+        echo "--- pct config net ---"
+        printf '%s\n' "${net_config_output}"
+    } >>"${network_report}"
+
+    {
+        echo "--- ip addr show eth0 ---"
+        printf '%s\n' "${ip_addr_output}"
+        echo "--- ip route ---"
+        printf '%s\n' "${ip_route_output}"
+        echo "--- pct config net ---"
+        printf '%s\n' "${net_config_output}"
+    } >&2
+
+    # FR-008: emit actionable error message naming the unreachable IP and evidence file
+    die "network check failed: ${service_ip} is unreachable (ping -c 1 -W 5 returned non-zero); see ${network_report}"
+}
+
 cmd_apply() {
     parse_common_flags "$@"
 
@@ -1615,35 +1733,14 @@ sys.exit(3)
         die "could not resolve service IP from ansible inventory json"
     fi
 
-    # Clear stale host key to avoid MAN-IN-THE-MIDDLE prompts when the CT is recreated.
-    ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${service_ip}" >/dev/null 2>&1 || true
-
     # Ensure Ansible uses consistent, non-interactive SSH settings. In lab we deliberately
     # avoid failing on host key changes because LXCs can be recreated while keeping the
     # same IP, which otherwise bricks CI with known_hosts mismatches.
     local ssh_common_args
     ssh_common_args="${ANSIBLE_SSH_COMMON_ARGS:--o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null}"
 
-    local ssh_wait_seconds="${SSH_WAIT_SECONDS:-300}"
+    local ssh_wait_seconds="${SSH_WAIT_SECONDS:-120}"
     local ssh_sleep_seconds="${SSH_WAIT_SLEEP_SECONDS:-5}"
-    local waited=0
-    local attempt=1
-    echo "[ssh-wait] waiting for ssh on ${service_ip} (timeout=${ssh_wait_seconds}s, step=${ssh_sleep_seconds}s)"
-    while true; do
-        if ssh -i "${lxc_key_file}" \
-            ${ssh_common_args} \
-            "root@${service_ip}" 'true' >/dev/null 2>&1; then
-            echo "[ssh-wait] success after ${waited}s (attempt=${attempt})"
-            break
-        fi
-        echo "[ssh-wait] attempt=${attempt} waited=${waited}s"
-        if (( waited >= ssh_wait_seconds )); then
-            die "ssh not ready on ${service_ip} after ${ssh_wait_seconds}s"
-        fi
-        sleep "${ssh_sleep_seconds}"
-        waited=$((waited + ssh_sleep_seconds))
-        attempt=$((attempt + 1))
-    done
 
     # DNS sanity: Proxmox may set CT nameserver in config, but the container's
     # /etc/resolv.conf might not reflect it until a reboot. If DNS is wrong,
@@ -1760,6 +1857,39 @@ sys.exit(3)
             done
         fi
     fi
+
+    # [Tier 2] Inject the orchestrator's deploy SSH key into the container before SSH wait,
+    # bypassing Terraform variable precedence. Guarded by ctid availability (FR-014).
+    echo "[Tier 2] Injecting deploy SSH key via pct exec..."
+    if [[ -n "${ctid}" ]]; then
+        inject_deploy_key "${ctid}" "${lxc_key_file}"
+    fi
+
+    # Network reachability hard gate: fail fast with diagnostics rather than waiting 120s blind.
+    echo "[Network] Checking container reachability..."
+    check_network_reachability "${ctid:-}" "${service_ip}"
+
+    # Clear stale host key to avoid MAN-IN-THE-MIDDLE prompts when the CT is recreated.
+    ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${service_ip}" >/dev/null 2>&1 || true
+
+    local waited=0
+    local attempt=1
+    echo "[ssh-wait] waiting for ssh on ${service_ip} (timeout=${ssh_wait_seconds}s, step=${ssh_sleep_seconds}s)"
+    while true; do
+        if ssh -i "${lxc_key_file}" \
+            ${ssh_common_args} \
+            "root@${service_ip}" 'true' >/dev/null 2>&1; then
+            echo "[ssh-wait] success after ${waited}s (attempt=${attempt})"
+            break
+        fi
+        echo "[ssh-wait] attempt=${attempt} waited=${waited}s"
+        if (( waited >= ssh_wait_seconds )); then
+            die "ssh not ready on ${service_ip} after ${ssh_wait_seconds}s"
+        fi
+        sleep "${ssh_sleep_seconds}"
+        waited=$((waited + ssh_sleep_seconds))
+        attempt=$((attempt + 1))
+    done
 
     # Proxmox API tokens cannot change certain feature flags (e.g., mount=nfs) unless
     # authenticated as root@pam. To keep least-privilege (no root SSH) while still
@@ -2274,7 +2404,7 @@ for m in mounts:
             echo "action=reboot"
         } >>"${mp_report}"
         sudo -n pct reboot "${ctid}" >>"${mp_report}" 2>>"${mp_stderr}" || true
-        local ssh_wait_seconds="${SSH_WAIT_SECONDS:-300}"
+        local ssh_wait_seconds="${SSH_WAIT_SECONDS:-120}"
         local ssh_sleep_seconds="${SSH_WAIT_SLEEP_SECONDS:-5}"
         local waited=0
         local attempt=1
