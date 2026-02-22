@@ -21,7 +21,7 @@ variable "proxmox_node" {
 
 variable "lxc_template" {
   type        = string
-  description = "LXC template path, e.g. local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"
+  description = "LXC template path, e.g. local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
 }
 
 variable "storage_pool" {
