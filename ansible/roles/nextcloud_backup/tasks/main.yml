@@ -3,9 +3,7 @@
   ansible.builtin.file:
     path: "{{ nextcloud_backup_path }}"
     state: directory
-    mode: '0755'
-    owner: root
-    group: root
+    mode: '0777'
 
 - name: Deploy backup script
   ansible.builtin.template:
