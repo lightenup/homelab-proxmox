@@ -9,6 +9,11 @@ nextcloud_domain: "nextcloud.local"
 nextcloud_require_nas_mount: true
 nextcloud_admin_user: "admin"
 
+# Database defaults (passwords must be overridden in group_vars or vault)
+nextcloud_db_name: "nextcloud"
+nextcloud_db_user: "nextcloud"
+nextcloud_db_container_name: "nextcloud_db"
+
 # PHP resource limits
 nextcloud_php_memory_limit: "1024M"
 nextcloud_php_upload_limit: "16G"
