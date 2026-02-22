@@ -47,6 +47,11 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 
 ## Workflow & Process
 
+### Test-Driven Changes (NEW FUNCTIONALITY)
+- New functionality SHALL include non-destructive validation steps (e.g., plan-only or dry-run checks) executed during development.
+- When feasible, add automated tests (unit or integration). If not feasible, document the reason in the spec/tasks or work notes.
+- Prefer implementations that support unit testing (e.g., Python modules with mock/fake support) over opaque shell-only logic.
+
 ### CI/CD Expectations
 - Pipeline should: Validate/plan Terraform -> (Optional) lint Ansible -> Apply Terraform -> Run Ansible.
 - Avoid adding destructive automation without clear barriers (e.g. approvals, prevent_destroy).

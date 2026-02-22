@@ -1,0 +1,65 @@
+---
+# ansible/roles/proxmox_state_dirs/tasks/main.yml
+# Purpose: Create NAS-backed state directory structure for rebuild orchestrator
+# Used by: specs/033-idempotent-rebuild (D-001)
+# Note: NFS mounts don't allow ownership changes from client - NAS controls permissions
+
+- name: Ensure homelab_ci NFS mount exists
+  ansible.builtin.stat:
+    path: /mnt/nas/homelab_ci
+  register: nas_mount
+  failed_when: not nas_mount.stat.exists or not nas_mount.stat.isdir
+
+- name: Create infra_state root directory
+  ansible.builtin.file:
+    path: /mnt/nas/homelab_ci/infra_state
+    state: directory
+    mode: '0755'
+
+- name: Create environment directories
+  ansible.builtin.file:
+    path: "/mnt/nas/homelab_ci/infra_state/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - lab
+    - prod
+
+- name: Create service state directories for lab environment
+  ansible.builtin.file:
+    path: "/mnt/nas/homelab_ci/infra_state/lab/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - immich
+    - monitoring
+    - reverse_proxy
+    - homeassistant
+    - jellyfin
+    - adguard
+
+- name: Create service state directories for prod environment
+  ansible.builtin.file:
+    path: "/mnt/nas/homelab_ci/infra_state/prod/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - immich
+    - monitoring
+    - reverse_proxy
+
+- name: Create Ansible inventory directories for lab
+  ansible.builtin.file:
+    path: /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated
+    state: directory
+    mode: '0755'
+
+- name: Create Ansible inventory directories for prod
+  ansible.builtin.file:
+    path: /mnt/nas/homelab_ci/infra_state/prod/ansible/inventories/generated
+    state: directory
+    mode: '0755'
+
+- name: Verify directory structure
+  ansible.builtin.debug:
+    msg: "Created state directories: lab (6 services) + prod (3 services) + inventory paths"

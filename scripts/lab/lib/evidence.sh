@@ -137,6 +137,25 @@ validate_evidence() {
     fi
 }
 
+render_rebuild_phase_summary() {
+    local state_path="$1"
+    local output_file="$2"
+
+    if [[ ! -f "$state_path" ]]; then
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$output_file")"
+
+    {
+        echo "# Rebuild Phase Summary"
+        echo ""
+        echo "| Phase | Status | Started | Ended | Notes |"
+        echo "|-------|--------|---------|-------|-------|"
+        jq -r '.phases[] | "| \(.name) | \(.status) | \(.started_at // "-") | \(.ended_at // "-") | \(.notes // "-") |"' "$state_path"
+    } > "$output_file"
+}
+
 # Collect provisioning evidence on timeout/failure
 # Usage: collect_provisioning_evidence <vmid> [target_ip] [evidence_dir]
 collect_provisioning_evidence() {

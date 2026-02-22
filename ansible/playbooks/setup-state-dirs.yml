@@ -1,0 +1,9 @@
+---
+# Create NAS-backed state directory structure
+# Task: D-001 from specs/033-idempotent-rebuild/plan-delta-state-storage.md
+
+- name: Setup Proxmox state directories on NAS
+  hosts: proxmox_hosts
+  become: true
+  roles:
+    - proxmox_state_dirs

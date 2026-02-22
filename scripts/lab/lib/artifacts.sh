@@ -36,6 +36,24 @@ artifact_run_path() {
     artifact_path "$(artifact_runs_dir)/${run_id#./}"
 }
 
+init_rebuild_artifacts() {
+    local repo_root="${REPO_ROOT:-$(pwd)}"
+    local local_root="${repo_root}/artifacts"
+    local force_local="${REBUILD_FORCE_LOCAL_ARTIFACTS:-true}"
+
+    if [[ "$force_local" == "true" ]]; then
+        ARTIFACT_ROOT="$local_root"
+        ARTIFACT_RUNS_DIR="rebuild-runs"
+    else
+        if [[ -z "${ARTIFACT_ROOT:-}" ]]; then
+            ARTIFACT_ROOT="$local_root"
+        fi
+        if [[ -z "${ARTIFACT_RUNS_DIR:-}" ]]; then
+            ARTIFACT_RUNS_DIR="rebuild-runs"
+        fi
+    fi
+}
+
 ensure_artifact_root() {
     if [[ -d "$ARTIFACT_ROOT" ]]; then
         return 0

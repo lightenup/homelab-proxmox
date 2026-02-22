@@ -1,4 +1,11 @@
 ---
+- name: Configure NAS NFS mounts
+  ansible.builtin.include_role:
+    name: proxmox_mounts
+  tags:
+    - mounts
+    - nfs
+
 - name: Ensure base packages on Proxmox host
   ansible.builtin.apt:
     name:

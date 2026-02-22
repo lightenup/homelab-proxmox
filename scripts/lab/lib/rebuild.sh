@@ -108,12 +108,26 @@ is_local_proxmox() {
     [[ "$host_lower" == "localhost" || "$host_lower" == "127.0.0.1" || "$host_lower" == "${hostname_short,,}" || "$host_lower" == "${hostname_fqdn,,}" || "$host_lower" == "${hostname_label,,}" ]]
 }
 
+build_ssh_target() {
+    if [[ -n "${SSH_TARGET:-}" ]]; then
+        echo "$SSH_TARGET"
+        return 0
+    fi
+    if [[ -n "${SSH_USER:-}" ]]; then
+        echo "${SSH_USER}@${PROXMOX_HOST}"
+        return 0
+    fi
+    echo "${PROXMOX_HOST}"
+}
+
 host_exec() {
     local cmd="$1"
     if is_local_proxmox; then
         PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH" bash -lc "$cmd"
     else
-        ssh $SSH_OPTS "${SSH_USER}@${PROXMOX_HOST}" "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin $cmd"
+        local target
+        target="$(build_ssh_target)"
+        ssh $SSH_OPTS "$target" "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin $cmd"
     fi
 }
 
@@ -516,7 +530,8 @@ JSON
     }
 
 run_baseline_host_checks() {
-    local ssh_target="${SSH_USER}@${PROXMOX_HOST}"
+    local ssh_target
+    ssh_target="$(build_ssh_target)"
     local failed=0
 
     # HOST-001: SSH
@@ -748,4 +763,643 @@ remediate_templates() {
     emit_event "remediation_complete" "$RUN_ID" "scope=templates" "log=${rem_log#${ARTIFACT_DIR}/}"
 
     return 0
+}
+
+load_rebuild_config() {
+    local config_path="${REBUILD_CONFIG_PATH:-${REPO_ROOT:-}/scripts/lab/rebuild-config.json}"
+    if [[ ! -f "$config_path" ]]; then
+        log_error "Rebuild config not found: $config_path"
+        return 1
+    fi
+
+    REBUILD_CONFIG_PATH="$config_path"
+    REBUILD_DEFAULT_ENVIRONMENT=$(jq -r '.default_environment' "$config_path")
+    REBUILD_PROD_CONFIRM_STRING=$(jq -r '.prod_confirm_string' "$config_path")
+    REBUILD_SERVICE_DEPLOY_CONFIRM_STRING=$(jq -r '.service_deploy_confirm_string' "$config_path")
+    REBUILD_SERVICE_ALLOWLIST_PATH=$(jq -r '.service_allowlist_path' "$config_path")
+
+    mapfile -t REBUILD_REQUIRED_MOUNTS < <(jq -r '.required_host_mounts[]' "$config_path")
+    mapfile -t REBUILD_PHASES < <(jq -r '.phases[]' "$config_path")
+}
+
+rebuild_should_run_phase() {
+    local phase="$1"
+    shift
+    local -a selected=("$@")
+    if [[ ${#selected[@]} -eq 0 ]]; then
+        return 0
+    fi
+    for item in "${selected[@]}"; do
+        if [[ "$item" == "$phase" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+rebuild_write_preflight_summary() {
+    local output_file="$1"
+    local environment="$2"
+    local mode="$3"
+    local confirm="$4"
+    shift 4
+    local -a phases=("$@")
+
+    mkdir -p "$(dirname "$output_file")"
+    {
+        echo "Rebuild Preflight Summary"
+        echo "Environment: ${environment}"
+        echo "Mode: ${mode}"
+        echo "Run ID: ${RUN_ID}"
+        echo "Evidence Dir: ${ARTIFACT_DIR}"
+        echo "Phases: ${phases[*]}"
+        echo "Confirm String: ${confirm:-<none>}"
+        echo "Backup Dir: ${REBUILD_BACKUP_DIR:-<unset>}"
+        echo "Remote Repo Root: ${REMOTE_REPO_ROOT:-/var/lib/homelab-proxmox}"
+        echo "Apply Network: ${REBUILD_APPLY_NETWORK:-false}"
+        echo "Apply FSTAB: ${REBUILD_APPLY_FSTAB:-false}"
+    } > "$output_file"
+}
+
+rebuild_write_evidence_index() {
+    local output_file="${ARTIFACT_DIR}/reports/rebuild-evidence-index.md"
+    mkdir -p "$(dirname "$output_file")"
+    cat > "$output_file" <<EOF
+# Rebuild Evidence Index
+
+- Preflight summary: reports/preflight-summary.txt
+- Mount checks: reports/mounts/
+- Restore summary: reports/restore/restore-summary.txt
+- IaC summary: reports/iac/iac-summary.txt
+- Service logs: reports/services/
+- Verification summary: reports/verify/verify-summary.txt
+- Checks: checks.json
+- State: state.json
+EOF
+}
+
+rebuild_phase_mounts() {
+    local failed=0
+    local remediation_attempted=0
+
+    # First pass: validation
+    log_info "Validating host NFS mounts..."
+    if ! run_rebuild_host_mount_checks; then
+        log_warn "Host mount checks failed - attempting automatic remediation"
+
+        # Invoke Ansible mount role
+        record_check "MNT-REMEDIATE-001" "Invoking mount remediation" "medium" "PASS" "INFO" "Running task ansible:mounts" "reports/mounts/remediation.log"
+
+        local remediation_log="${ARTIFACT_DIR}/reports/mounts/remediation.log"
+        mkdir -p "$(dirname "$remediation_log")"
+
+        if (cd "${REPO_ROOT}" && task ansible:mounts) >> "$remediation_log" 2>&1; then
+            log_info "Mount remediation completed - re-validating"
+            remediation_attempted=1
+
+            # Re-run validation
+            if ! run_rebuild_host_mount_checks; then
+                record_check "MNT-REMEDIATE-002" "Mount remediation verification" "blocker" "PASS" "FAIL" "Mounts still failing after remediation" "reports/mounts/remediation.log"
+                failed=1
+            else
+                record_check "MNT-REMEDIATE-002" "Mount remediation verification" "medium" "PASS" "PASS" "Mounts fixed by remediation" "reports/mounts/remediation.log"
+            fi
+        else
+            record_check "MNT-REMEDIATE-001" "Mount remediation" "blocker" "PASS" "FAIL" "Ansible mount role failed" "reports/mounts/remediation.log"
+            failed=1
+        fi
+    fi
+
+    # Immich bind mount checks (no auto-remediation, different failure mode)
+    log_info "Validating Immich LXC bind mounts..."
+    if ! run_rebuild_immich_bind_mount_checks; then
+        if [[ $remediation_attempted -eq 1 ]]; then
+            log_warn "Immich bind mount check failed after host mount remediation"
+            log_warn "This may indicate LXC config issue (not auto-remediatable)"
+        fi
+        failed=1
+    fi
+
+    return $failed
+}
+
+rebuild_phase_restore() {
+    local evidence_dir="${ARTIFACT_DIR}/reports/restore"
+    mkdir -p "$evidence_dir"
+    local summary_file="${evidence_dir}/restore-summary.txt"
+
+    if [[ -z "${REBUILD_BACKUP_DIR:-}" ]]; then
+        echo "Missing REBUILD_BACKUP_DIR" > "$summary_file"
+        record_check "RESTORE-001" "Backup directory available" "blocker" "PASS" "FAIL" "REBUILD_BACKUP_DIR not set" "reports/restore/restore-summary.txt"
+        return 1
+    fi
+
+    if ! host_exec "test -d '${REBUILD_BACKUP_DIR}'" >/dev/null 2>&1; then
+        echo "Backup dir not found: ${REBUILD_BACKUP_DIR}" > "$summary_file"
+        record_check "RESTORE-001" "Backup directory available" "blocker" "PASS" "FAIL" "Backup dir missing" "reports/restore/restore-summary.txt"
+        return 1
+    fi
+
+    record_check "RESTORE-001" "Backup directory available" "blocker" "PASS" "PASS" "Backup dir present" "reports/restore/restore-summary.txt"
+
+    if [[ "${REBUILD_MODE}" == "plan" ]]; then
+        echo "Plan-only: restore steps skipped" >> "$summary_file"
+        record_check "RESTORE-PLAN" "Restore phase executed" "high" "PASS" "PASS" "Plan-only run" "reports/restore/restore-summary.txt"
+        return 0
+    fi
+
+    local restore_failed=0
+
+    if host_exec "cp -a /etc/pve/lxc /root/rebuild-lxc-backup-${RUN_ID}" >/dev/null 2>&1; then
+        :
+    fi
+
+    if host_exec "cp ${REBUILD_BACKUP_DIR}/proxmox/*.conf /etc/pve/lxc/" >> "$summary_file" 2>&1; then
+        record_check "RESTORE-002" "LXC config restore" "high" "PASS" "PASS" "LXC configs restored" "reports/restore/restore-summary.txt"
+    else
+        record_check "RESTORE-002" "LXC config restore" "high" "PASS" "FAIL" "Failed to restore LXC configs" "reports/restore/restore-summary.txt"
+        restore_failed=1
+    fi
+
+    if host_exec "cp /etc/pve/storage.cfg /root/rebuild-storage-backup-${RUN_ID}.cfg" >/dev/null 2>&1; then
+        :
+    fi
+
+    if host_exec "cp ${REBUILD_BACKUP_DIR}/proxmox/storage.cfg /etc/pve/storage.cfg" >> "$summary_file" 2>&1; then
+        host_exec "systemctl restart pvedaemon pveproxy" >> "$summary_file" 2>&1 || true
+        record_check "RESTORE-003" "Storage config restore" "high" "PASS" "PASS" "Storage config restored" "reports/restore/restore-summary.txt"
+    else
+        record_check "RESTORE-003" "Storage config restore" "high" "PASS" "FAIL" "Failed to restore storage config" "reports/restore/restore-summary.txt"
+        restore_failed=1
+    fi
+
+    if [[ "${REBUILD_APPLY_NETWORK:-false}" == "true" ]]; then
+        if host_exec "cp /etc/network/interfaces /root/rebuild-network-backup-${RUN_ID}.cfg" >/dev/null 2>&1; then
+            :
+        fi
+        if host_exec "cp ${REBUILD_BACKUP_DIR}/network/interfaces /etc/network/interfaces" >> "$summary_file" 2>&1; then
+            record_check "RESTORE-004" "Network config restore" "high" "PASS" "PASS" "Network config restored" "reports/restore/restore-summary.txt"
+        else
+            record_check "RESTORE-004" "Network config restore" "high" "PASS" "FAIL" "Failed to restore network config" "reports/restore/restore-summary.txt"
+            restore_failed=1
+        fi
+    else
+        record_check "RESTORE-004" "Network config restore" "high" "PASS" "PASS" "Skipped network restore (REBUILD_APPLY_NETWORK=false)" "reports/restore/restore-summary.txt"
+    fi
+
+    if [[ "${REBUILD_APPLY_FSTAB:-false}" == "true" ]]; then
+        if host_exec "cp /etc/fstab /root/rebuild-fstab-backup-${RUN_ID}.cfg" >/dev/null 2>&1; then
+            :
+        fi
+        if host_exec "cp ${REBUILD_BACKUP_DIR}/system/fstab /etc/fstab" >> "$summary_file" 2>&1; then
+            host_exec "mount -a" >> "$summary_file" 2>&1 || true
+            record_check "RESTORE-005" "FSTAB restore" "high" "PASS" "PASS" "FSTAB restored" "reports/restore/restore-summary.txt"
+        else
+            record_check "RESTORE-005" "FSTAB restore" "high" "PASS" "FAIL" "Failed to restore fstab" "reports/restore/restore-summary.txt"
+            restore_failed=1
+        fi
+    else
+        record_check "RESTORE-005" "FSTAB restore" "high" "PASS" "PASS" "Skipped fstab restore (REBUILD_APPLY_FSTAB=false)" "reports/restore/restore-summary.txt"
+    fi
+
+    return $restore_failed
+}
+
+rebuild_phase_iac() {
+    local evidence_dir="${ARTIFACT_DIR}/reports/iac"
+    mkdir -p "$evidence_dir"
+    local summary_file="${evidence_dir}/iac-summary.txt"
+    local iac_dir="${REBUILD_BACKUP_DIR:-}/iac"
+    local target_root="${REBUILD_IAC_TARGET:-${REMOTE_REPO_ROOT:-/var/lib/homelab-proxmox}}"
+
+    if [[ -z "${REBUILD_BACKUP_DIR:-}" ]]; then
+        echo "Missing REBUILD_BACKUP_DIR" > "$summary_file"
+        record_check "IAC-001" "IaC backup directory available" "high" "PASS" "FAIL" "REBUILD_BACKUP_DIR not set" "reports/iac/iac-summary.txt"
+        return 1
+    fi
+
+    if ! host_exec "test -d '${iac_dir}'" >/dev/null 2>&1; then
+        echo "IaC directory not found: ${iac_dir}" > "$summary_file"
+        record_check "IAC-001" "IaC backup directory available" "high" "PASS" "FAIL" "IaC dir missing" "reports/iac/iac-summary.txt"
+        return 1
+    fi
+
+    record_check "IAC-001" "IaC backup directory available" "high" "PASS" "PASS" "IaC dir present" "reports/iac/iac-summary.txt"
+
+    if [[ "${REBUILD_MODE}" == "apply" ]]; then
+        if host_exec "rsync -a '${iac_dir}/' '${target_root}/'" >> "$summary_file" 2>&1; then
+            record_check "IAC-002" "IaC artifacts restored" "high" "PASS" "PASS" "IaC artifacts restored" "reports/iac/iac-summary.txt"
+        else
+            record_check "IAC-002" "IaC artifacts restored" "high" "PASS" "FAIL" "IaC restore failed" "reports/iac/iac-summary.txt"
+            return 1
+        fi
+    else
+        echo "Plan-only: IaC restore skipped" >> "$summary_file"
+        record_check "IAC-002" "IaC artifacts restored" "high" "PASS" "PASS" "Plan-only run" "reports/iac/iac-summary.txt"
+    fi
+
+    if command -v task >/dev/null 2>&1; then
+        if (cd "${REPO_ROOT}" && task terraform:plan) >> "$summary_file" 2>&1; then
+            record_check "IAC-003" "IaC drift check" "high" "PASS" "PASS" "Terraform plan completed" "reports/iac/iac-summary.txt"
+        else
+            if [[ "${REBUILD_MODE}" == "plan" ]]; then
+                record_check "IAC-003" "IaC drift check" "high" "PASS" "FAIL" "Terraform plan failed (non-fatal in plan mode)" "reports/iac/iac-summary.txt"
+                log_warn "IaC drift check failed (non-fatal in plan mode). See $summary_file"
+            else
+                record_check "IAC-003" "IaC drift check" "high" "PASS" "FAIL" "Terraform plan failed" "reports/iac/iac-summary.txt"
+                return 1
+            fi
+        fi
+    else
+        record_check "IAC-003" "IaC drift check" "high" "PASS" "FAIL" "Task CLI not available" "reports/iac/iac-summary.txt"
+        return 1
+    fi
+
+    return 0
+}
+
+rebuild_phase_services() {
+    local evidence_dir="${ARTIFACT_DIR}/reports/services"
+    mkdir -p "$evidence_dir"
+
+    local allowlist_path="${REBUILD_SERVICE_ALLOWLIST_PATH:-${REPO_ROOT:-}/scripts/lab/service-scope-allowlist.json}"
+    if [[ ! -f "$allowlist_path" ]]; then
+        record_check "SRV-001" "Service allowlist present" "high" "PASS" "FAIL" "Allowlist missing" "reports/services"
+        return 1
+    fi
+    record_check "SRV-001" "Service allowlist present" "low" "PASS" "PASS" "Allowlist found: $allowlist_path" "reports/services"
+
+    # Source state library for laptop execution
+    # shellcheck source=./state.sh
+    if [[ -f "${REPO_ROOT}/scripts/lab/lib/state.sh" ]]; then
+        source "${REPO_ROOT}/scripts/lab/lib/state.sh"
+    else
+        record_check "SRV-002" "State library present" "blocker" "PASS" "FAIL" "State library missing: ${REPO_ROOT}/scripts/lab/lib/state.sh" "reports/services"
+        return 1
+    fi
+
+    # Enable NAS state for laptop execution
+    export USE_NAS_STATE=true
+    export ENVIRONMENT="${REBUILD_ENVIRONMENT}"
+
+    # Verify state access before starting
+    if ! verify_state_access; then
+        record_check "SRV-003" "State storage accessible" "blocker" "PASS" "FAIL" "Cannot write to NAS state: $(resolve_state_root 2>&1)" "reports/services"
+        return 1
+    fi
+    record_check "SRV-003" "State storage accessible" "low" "PASS" "PASS" "NAS state verified: $(resolve_state_root)" "reports/services"
+
+    # Load Proxmox API credentials for Terraform provider
+    # These must be set by operator before running rebuild with services phase
+    export TF_VAR_proxmox_api_url="${PROXMOX_API_URL:-https://192.168.1.112:8006/api2/json}"
+    if [[ -z "${PROXMOX_API_TOKEN_ID:-}" ]]; then
+        record_check "SRV-004" "Proxmox API credentials" "blocker" "PASS" "FAIL" "PROXMOX_API_TOKEN_ID not set" "reports/services"
+        log_error "PROXMOX_API_TOKEN_ID required for Terraform provider"
+        log_error "Example: export PROXMOX_API_TOKEN_ID='root@pam!rebuild'"
+        return 1
+    fi
+    if [[ -z "${PROXMOX_API_TOKEN_SECRET:-}" ]]; then
+        record_check "SRV-004" "Proxmox API credentials" "blocker" "PASS" "FAIL" "PROXMOX_API_TOKEN_SECRET not set" "reports/services"
+        log_error "PROXMOX_API_TOKEN_SECRET required for Terraform provider"
+        return 1
+    fi
+    export TF_VAR_proxmox_api_token_id="${PROXMOX_API_TOKEN_ID}"
+    export TF_VAR_proxmox_api_token_secret="${PROXMOX_API_TOKEN_SECRET}"
+    record_check "SRV-004" "Proxmox API credentials" "low" "PASS" "PASS" "Credentials loaded (token_id: ${PROXMOX_API_TOKEN_ID})" "reports/services"
+
+    local env_tfvars="${REPO_ROOT}/terraform/environments/${REBUILD_ENVIRONMENT}.tfvars"
+    if [[ ! -f "${env_tfvars}" ]]; then
+        record_check "SRV-005" "Environment tfvars present" "high" "PASS" "FAIL" "Missing tfvars file: ${env_tfvars}" "reports/services"
+        log_error "Missing required tfvars file: ${env_tfvars}"
+        log_error "Create it from example: terraform/environments/${REBUILD_ENVIRONMENT}.tfvars.example"
+        return 1
+    fi
+    record_check "SRV-005" "Environment tfvars present" "low" "PASS" "PASS" "Using tfvars: ${env_tfvars}" "reports/services"
+
+    local -a services
+    mapfile -t services < <(jq -r 'keys[]' "$allowlist_path")
+    local failed=0
+    local idx=5  # Start after SRV-005
+
+    for service in "${services[@]}"; do
+        idx=$((idx + 1))
+        local check_id
+        check_id="SRV-$(printf '%03d' "$idx")"
+        local log_file="${evidence_dir}/${service}.log"
+
+        local tf_dir="${REPO_ROOT}/terraform/services/${service}"
+        if [[ ! -d "$tf_dir" ]]; then
+            record_check "$check_id" "Service ${service} directory" "low" "PASS" "PASS" "Service ${service} not Terraform-managed; skipping" "reports/services/${service}.log"
+            continue
+        fi
+
+        # Get state file path using state library
+        local state_file
+        if ! state_file="$(get_service_state_path "$service")"; then
+            record_check "$check_id" "Service ${service} state path" "high" "PASS" "FAIL" "State path resolution failed" "reports/services/${service}.log"
+            failed=1
+            continue
+        fi
+
+        mkdir -p "$(dirname "$state_file")"
+
+        # Execute Terraform from laptop
+        log_info "Processing service: ${service} (mode: ${REBUILD_MODE})"
+
+        local tf_exit_code=0
+        (
+            cd "$tf_dir" || exit 1
+
+            # Initialize
+            if ! terraform init -input=false -no-color >> "$log_file" 2>&1; then
+                echo "ERROR: Terraform init failed for $service" >> "$log_file"
+                exit 1
+            fi
+
+            # Plan or Apply
+            if [[ "${REBUILD_MODE}" == "plan" ]]; then
+                terraform plan -var-file="$env_tfvars" -state="$state_file" -input=false -no-color >> "$log_file" 2>&1
+            else
+                # Apply mode requires confirmation (already validated in preflight)
+                terraform apply -var-file="$env_tfvars" -state="$state_file" -input=false -auto-approve -no-color >> "$log_file" 2>&1
+            fi
+        ) || tf_exit_code=$?
+
+        if [[ $tf_exit_code -eq 0 ]]; then
+            record_check "$check_id" "Service rebuild (${service})" "high" "PASS" "PASS" "Service ${service} ${REBUILD_MODE} succeeded" "reports/services/${service}.log"
+        else
+            record_check "$check_id" "Service rebuild (${service})" "high" "PASS" "FAIL" "Service ${service} ${REBUILD_MODE} failed (see logs)" "reports/services/${service}.log"
+            failed=1
+        fi
+    done
+
+    return $failed
+}
+
+rebuild_phase_verify() {
+    local evidence_dir="${ARTIFACT_DIR}/reports/verify"
+    mkdir -p "$evidence_dir"
+    local summary_file="${evidence_dir}/verify-summary.txt"
+
+    if command -v task >/dev/null 2>&1; then
+        {
+            echo "Running inventory update (best effort)..."
+            if (cd "${REPO_ROOT}" && task inventory:update); then
+                echo "inventory:update succeeded"
+            else
+                echo "inventory:update failed; continuing with health checks"
+            fi
+            echo
+            echo "Running health checks..."
+            (cd "${REPO_ROOT}" && task healthcheck:run)
+        } > "$summary_file" 2>&1
+
+        if [[ $? -eq 0 ]]; then
+            record_check "VERIFY-001" "Lifecycle verification" "high" "PASS" "PASS" "Health checks succeeded" "reports/verify/verify-summary.txt"
+            return 0
+        fi
+    fi
+
+    record_check "VERIFY-001" "Lifecycle verification" "high" "PASS" "FAIL" "Lifecycle verify failed" "reports/verify/verify-summary.txt"
+    return 1
+}
+
+cmd_idempotent_rebuild() {
+    local environment=""
+    local mode="plan"
+    local confirm=""
+    local -a selected_phases=()
+
+    if ! run_dependency_preflight; then
+        log_error "Dependency preflight failed; install missing tools before rebuild."
+        exit 1
+    fi
+
+    if ! load_rebuild_config; then
+        exit 1
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --mode)
+                mode="${2:-plan}"
+                shift 2
+                ;;
+            --apply)
+                mode="apply"
+                shift
+                ;;
+            --environment)
+                environment="${2:-}"
+                shift 2
+                ;;
+            --confirm)
+                confirm="${2:-}"
+                shift 2
+                ;;
+            --phase)
+                selected_phases+=("${2:-}")
+                shift 2
+                ;;
+            --phases)
+                IFS=',' read -r -a selected_phases <<< "${2:-}"
+                shift 2
+                ;;
+            --backup-dir)
+                REBUILD_BACKUP_DIR="${2:-}"
+                shift 2
+                ;;
+            --remote-repo-root)
+                REMOTE_REPO_ROOT="${2:-}"
+                shift 2
+                ;;
+            --iac-target)
+                REBUILD_IAC_TARGET="${2:-}"
+                shift 2
+                ;;
+            --apply-network)
+                REBUILD_APPLY_NETWORK="true"
+                shift
+                ;;
+            --apply-fstab)
+                REBUILD_APPLY_FSTAB="true"
+                shift
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [[ -z "$environment" ]]; then
+        environment="$REBUILD_DEFAULT_ENVIRONMENT"
+    fi
+
+    if [[ "$mode" != "plan" && "$mode" != "apply" ]]; then
+        log_error "Invalid mode: $mode"
+        exit 1
+    fi
+
+    # Validate required arguments based on selected phases
+    local -a phases_to_run=()
+    if [[ ${#selected_phases[@]} -eq 0 ]]; then
+        # No phases specified, all phases will run
+        phases_to_run=("${REBUILD_PHASES[@]}")
+    else
+        # Only selected phases will run
+        for phase in "${REBUILD_PHASES[@]}"; do
+            if rebuild_should_run_phase "$phase" "${selected_phases[@]}"; then
+                phases_to_run+=("$phase")
+            fi
+        done
+    fi
+
+    # Check if restore or iac phases will run - they require --backup-dir
+    local needs_backup_dir=0
+    for phase in "${phases_to_run[@]}"; do
+        if [[ "$phase" == "restore" || "$phase" == "iac" ]]; then
+            needs_backup_dir=1
+            break
+        fi
+    done
+
+    if [[ $needs_backup_dir -eq 1 && -z "${REBUILD_BACKUP_DIR:-}" ]]; then
+        log_error "The restore and iac phases require --backup-dir argument"
+        log_error ""
+        log_error "Usage: task rebuild:plan -- --backup-dir /path/to/backup"
+        log_error "   Or: task rebuild:plan -- --phase mounts  # Skip phases that need backup"
+        log_error ""
+        log_error "Selected phases: ${phases_to_run[*]}"
+        exit 1
+    fi
+
+    init_rebuild_artifacts
+    if ! ensure_artifact_root; then
+        log_error "Artifact root missing or not writable: ${ARTIFACT_ROOT}"
+        exit 1
+    fi
+
+    export RUN_ID_PREFIX="rebuild"
+    local base_dir
+    base_dir="$(artifact_runs_path)"
+    mkdir -p "$base_dir"
+    local run_id
+    run_id="$(create_evidence_pack "$base_dir")"
+    export RUN_ID="$run_id"
+    export ARTIFACT_DIR="${base_dir}/${run_id}"
+    export EVIDENCE_ROOT="$ARTIFACT_DIR"
+    export REBUILD_MODE="$mode"
+    export REBUILD_ENVIRONMENT="$environment"
+    export REBUILD_CONFIRM="$confirm"
+
+    mkdir -p "${ARTIFACT_DIR}/reports"
+
+    rebuild_state_init "$run_id" "$environment" "$mode" "${REBUILD_PHASES[@]}"
+    rebuild_state_set_status "running"
+
+    local preflight_file="${ARTIFACT_DIR}/reports/preflight-summary.txt"
+    rebuild_write_preflight_summary "$preflight_file" "$environment" "$mode" "$confirm" "${REBUILD_PHASES[@]}"
+
+    export CURRENT_SOURCE="rebuild"
+    export CURRENT_PHASE="preflight"
+
+    if [[ "$environment" == "prod" && "$confirm" != "$REBUILD_PROD_CONFIRM_STRING" ]]; then
+        record_check "SAFE-001" "Prod confirmation provided" "blocker" "PASS" "FAIL" "Missing prod confirm string" "reports/preflight-summary.txt"
+        rebuild_state_set_status "failed"
+        serialize_checks "${ARTIFACT_DIR}/checks.json"
+        rebuild_write_evidence_index
+        return 1
+    fi
+
+    if [[ "$mode" == "apply" && -z "$confirm" ]]; then
+        record_check "SAFE-002" "Apply confirmation provided" "blocker" "PASS" "FAIL" "Missing confirm string for apply" "reports/preflight-summary.txt"
+        rebuild_state_set_status "failed"
+        serialize_checks "${ARTIFACT_DIR}/checks.json"
+        rebuild_write_evidence_index
+        return 1
+    fi
+
+    record_check "SAFE-001" "Prod confirmation provided" "blocker" "PASS" "PASS" "Safety checks satisfied" "reports/preflight-summary.txt"
+
+    local failed=0
+    for phase in "${REBUILD_PHASES[@]}"; do
+        if ! rebuild_should_run_phase "$phase" "${selected_phases[@]}"; then
+            continue
+        fi
+
+        export CURRENT_PHASE="$phase"
+        rebuild_state_update_phase "$phase" "running"
+
+        case "$phase" in
+            mounts)
+                if ! rebuild_phase_mounts; then
+                    rebuild_state_update_phase "$phase" "failed" "Mount validation failed"
+                    log_error "Mount validation failed. See ${ARTIFACT_DIR}/reports/mounts"
+                    failed=1
+                else
+                    rebuild_state_update_phase "$phase" "completed"
+                fi
+                ;;
+            restore)
+                if ! rebuild_phase_restore; then
+                    rebuild_state_update_phase "$phase" "failed" "Restore phase failed"
+                    log_error "Restore phase failed. See ${ARTIFACT_DIR}/reports/restore/restore-summary.txt"
+                    failed=1
+                else
+                    rebuild_state_update_phase "$phase" "completed"
+                fi
+                ;;
+            iac)
+                if ! rebuild_phase_iac; then
+                    rebuild_state_update_phase "$phase" "failed" "IaC phase failed"
+                    log_error "IaC phase failed. See ${ARTIFACT_DIR}/reports/iac/iac-summary.txt"
+                    failed=1
+                else
+                    rebuild_state_update_phase "$phase" "completed"
+                fi
+                ;;
+            services)
+                if ! rebuild_phase_services; then
+                    rebuild_state_update_phase "$phase" "failed" "Services phase failed"
+                    log_error "Services phase failed. See ${ARTIFACT_DIR}/reports/services"
+                    failed=1
+                else
+                    rebuild_state_update_phase "$phase" "completed"
+                fi
+                ;;
+            verify)
+                if ! rebuild_phase_verify; then
+                    rebuild_state_update_phase "$phase" "failed" "Verify phase failed"
+                    log_error "Verify phase failed. See ${ARTIFACT_DIR}/reports/verify/verify-summary.txt"
+                    failed=1
+                else
+                    rebuild_state_update_phase "$phase" "completed"
+                fi
+                ;;
+            *)
+                log_warn "Unknown phase: $phase"
+                ;;
+        esac
+    done
+
+    if [[ $failed -eq 0 ]]; then
+        rebuild_state_set_status "completed"
+    else
+        rebuild_state_set_status "failed"
+    fi
+
+    serialize_checks "${ARTIFACT_DIR}/checks.json"
+    if command -v render_rebuild_phase_summary >/dev/null 2>&1; then
+        render_rebuild_phase_summary "${ARTIFACT_DIR}/state.json" "${ARTIFACT_DIR}/reports/rebuild-phase-summary.md"
+    fi
+    rebuild_write_evidence_index
+
+    if [[ $failed -ne 0 ]]; then
+        log_error "Rebuild failed. Evidence: ${ARTIFACT_DIR}"
+        log_error "Checks: ${ARTIFACT_DIR}/checks.json"
+        log_error "Phase summary: ${ARTIFACT_DIR}/reports/rebuild-phase-summary.md"
+    fi
+
+    [[ $failed -eq 0 ]] && return 0 || return 1
 }

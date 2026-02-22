@@ -1,57 +1,105 @@
 version: '3'
 
-# Homelab Proxmox operator entry point.
-# This file intentionally starts with placeholders; tasks are wired up incrementally.
+# Homelab Proxmox Taskfile
+# Operator commands for service lifecycle, infrastructure management, and disaster recovery.
+# Default environment: LAB (10.99.0.10) unless specified otherwise
+# Production requires explicit confirmation strings
 
 env:
   PYTHONPATH: python/src
 
 tasks:
+  default:
+    desc: Show available commands with usage examples
+    silent: true
+    cmds:
+      - |
+        echo "Homelab Proxmox Tasks"
+        echo "====================="
+        echo ""
+        echo "Quick Start:"
+        echo "  task ansible:mounts          # Deploy NFS mounts to PROD (192.168.1.112)"
+        echo "  task rebuild:plan            # Test rebuild orchestrator (safe)"
+        echo "  task healthcheck:run         # Run health checks"
+        echo ""
+        echo "Common Workflows:"
+        echo "  task ansible:host            # Configure Proxmox host (PROD)"
+        echo "  task lifecycle:plan          # Plan LXC changes (requires ENVIRONMENT= SERVICE=)"
+        echo "  task terraform:plan          # Terraform infrastructure plan"
+        echo ""
+        echo "Run 'task --list' for all available tasks"
+        echo "Run 'task <task-name> --help' for detailed help (if supported)"
+
   service:add:
-    # Operator-only (day-to-day)
-    desc: Add a service
+    desc: "[LAB] Add a new service to the service catalog"
+    summary: |
+      Add a service definition to the catalog for deployment.
+      Environment: LAB
+      Example: task service:add -- --name myservice --type lxc
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli service add {{.CLI_ARGS}}
 
   service:change:
-    # Operator-only (day-to-day)
-    desc: Change a service
+    desc: "[LAB] Modify an existing service configuration"
+    summary: |
+      Update service parameters in the catalog.
+      Environment: LAB
+      Example: task service:change -- --name myservice --cpu 4
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli service change {{.CLI_ARGS}}
 
   service:remove:
-    # Operator-only (day-to-day)
-    desc: Remove a service
+    desc: "[LAB] Remove a service from the catalog"
+    summary: |
+      Delete a service definition (with verification).
+      Environment: LAB
+      Example: task service:remove -- --name myservice
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli service remove --verify {{.CLI_ARGS}}
 
   inventory:update:
-    # Rebuild-critical (feeds Ansible operations)
-    desc: Regenerate/update Ansible inventory
+    desc: "Regenerate Ansible inventory from Proxmox state"
+    summary: |
+      Query Proxmox and update Ansible inventory files.
+      Used by: Ansible playbooks, rebuild orchestrator
+      Example: task inventory:update
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli inventory update {{.CLI_ARGS}}
 
   healthcheck:run:
-    # Operator-only (day-to-day)
-    desc: Run healthcheck suite
+    desc: "Run service health checks across all environments"
+    summary: |
+      Execute health check suite against deployed services.
+      Targets: All registered services
+      Example: task healthcheck:run
+      With drift: task healthcheck:run -- --check-drift
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli healthcheck run {{.CLI_ARGS}}
 
   terraform:validate:
-    # Rebuild-critical (safe)
-    desc: Terraform fmt/validate checks
+    desc: "[SAFE] Validate Terraform configuration (fmt + validate)"
+    summary: |
+      Run terraform fmt and validate checks.
+      Safe: Does not modify infrastructure
+      Example: task terraform:validate
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli terraform validate {{.CLI_ARGS}}
 
   terraform:plan:
-    # Rebuild-critical (non-destructive)
-    desc: Terraform plan
+    desc: "[SAFE] Generate Terraform execution plan"
+    summary: |
+      Create plan for infrastructure changes.
+      Safe: Does not apply changes
+      Example: task terraform:plan
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli terraform plan {{.CLI_ARGS}}
 
   terraform:apply:
-    # Rebuild-critical (destructive; requires explicit confirmation)
-    desc: Terraform apply (requires CONFIRM=yes)
+    desc: "[DESTRUCTIVE] Apply Terraform changes (requires CONFIRM=yes)"
+    summary: |
+      Execute infrastructure changes from Terraform plan.
+      Requires: CONFIRM=yes
+      Example: task terraform:apply CONFIRM=yes
     preconditions:
       - sh: 'test "{{.CONFIRM}}" = "yes"'
         msg: "Refusing to run terraform apply without explicit confirmation. Re-run with: task terraform:apply CONFIRM=yes -- [args]"
@@ -59,14 +107,21 @@ tasks:
       - python3 -m homelab_proxmox_orchestrator.ops_cli terraform apply --confirm {{.CLI_ARGS}}
 
   lifecycle:plan:
-    # Rebuild-critical (safe)
-    desc: LXC lifecycle plan (plan-only, evidence capture)
+    desc: "[SAFE] Plan LXC lifecycle changes (requires ENVIRONMENT= SERVICE=)"
+    summary: |
+      Generate plan for LXC create/destroy/update operations.
+      Requires: ENVIRONMENT=<lab|static> SERVICE=<service-name>
+      Safe: Does not apply changes
+      Example: task lifecycle:plan ENVIRONMENT=lab SERVICE=immich
     cmds:
       - scripts/lifecycle/terraform_plan_apply.sh plan --environment {{.ENVIRONMENT}} --service {{.SERVICE}} {{.CLI_ARGS}}
 
   lifecycle:apply:
-    # Rebuild-critical (destructive; requires explicit confirmation)
-    desc: LXC lifecycle apply (uses plan evidence)
+    desc: "[DESTRUCTIVE] Apply LXC lifecycle changes (requires CONFIRM=yes)"
+    summary: |
+      Execute LXC lifecycle plan.
+      Requires: CONFIRM=yes ENVIRONMENT= SERVICE= PLAN_RUN_ID=
+      Example: task lifecycle:apply CONFIRM=yes ENVIRONMENT=lab SERVICE=immich PLAN_RUN_ID=<run-id>
     preconditions:
       - sh: 'test "{{.CONFIRM}}" = "yes"'
         msg: "Refusing to run lifecycle:apply without explicit confirmation. Re-run with: task lifecycle:apply CONFIRM=yes -- [args]"
@@ -74,41 +129,121 @@ tasks:
       - scripts/lifecycle/terraform_plan_apply.sh apply --environment {{.ENVIRONMENT}} --service {{.SERVICE}} --from-plan-run-id {{.PLAN_RUN_ID}} {{.CLI_ARGS}}
 
   lifecycle:verify:
-    # Rebuild-critical (verification)
-    desc: LXC lifecycle verification (inventory + healthcheck drift)
+    desc: "Verify LXC state matches expected (inventory + health checks)"
+    summary: |
+      Update inventory and run health checks to detect drift.
+      Example: task lifecycle:verify
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli inventory update
       - python3 -m homelab_proxmox_orchestrator.ops_cli healthcheck run -- --check-drift
 
+  rebuild:plan:
+    desc: "[SAFE] [LAB] Test rebuild orchestrator (non-destructive)"
+    summary: |
+      Execute rebuild orchestrator in plan-only mode.
+      Target: LAB environment (10.99.0.10)
+      Safe: Does not modify infrastructure
+      Examples:
+        task rebuild:plan                                    # All phases
+        task rebuild:plan -- --phase mounts                   # Single phase
+        task rebuild:plan -- --phase restore --backup-dir /path/to/backup
+    cmds:
+      - scripts/rebuild/run-rebuild.sh --mode plan {{.CLI_ARGS}}
+
+  rebuild:apply:
+    desc: "[DESTRUCTIVE] Apply rebuild changes (requires CONFIRM=<string>)"
+    summary: |
+      Execute rebuild orchestrator with actual changes.
+      Requires: CONFIRM=<environment-specific-string>
+        LAB: CONFIRM=rebuild-lab
+        PROD: CONFIRM=rebuild-prod
+      Example: task rebuild:apply CONFIRM=rebuild-lab -- --phase restore --backup-dir /path/to/backup
+    preconditions:
+      - sh: 'test -n "{{.CONFIRM}}"'
+        msg: "Refusing to run rebuild apply without explicit confirmation. Re-run with: task rebuild:apply CONFIRM=<confirm-string> -- [args]"
+    cmds:
+      - scripts/rebuild/run-rebuild.sh --mode apply --confirm {{.CONFIRM}} {{.CLI_ARGS}}
+
   deploy:lab:
-    # Rebuild-critical (integration)
-    desc: Deploy/update a service in the lab
+    desc: "[LAB] Deploy/update a service in lab environment"
+    summary: |
+      Full deployment workflow for lab services.
+      Target: LAB (10.99.0.10)
+      Example: task deploy:lab -- --service immich
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli deploy lab {{.CLI_ARGS}}
 
   summary:render:
-    # Operator-only (day-to-day)
-    desc: Render a human-readable run summary
+    desc: "Convert deployment evidence to human-readable summary"
+    summary: |
+      Generate markdown/text summary from evidence artifacts.
+      Use after: Any task that generates evidence (rebuild, lifecycle, deploy)
+      Example: task summary:render -- --run-id <run-id>
     cmds:
       - python3 -m homelab_proxmox_orchestrator.ops_cli summary render {{.CLI_ARGS}}
 
   dr:hetzner:list:
-    # Operator-only / maintenance
-    desc: List Hetzner backup bucket contents (DR drill)
+    desc: "[DR] List backup objects in Hetzner storage"
+    summary: |
+      Query Hetzner Object Storage for disaster recovery backups.
+      Use for: DR drill planning, backup verification
+      Example: task dr:hetzner:list
     dir: scripts/dr
     cmds:
       - bash ./hetzner_list.sh {{.CLI_ARGS}}
 
   dr:hetzner:download:
-    # Operator-only / maintenance
-    desc: Download Hetzner backup objects (DR drill)
+    desc: "[DR] Download backup objects from Hetzner storage"
+    summary: |
+      Retrieve DR backups from Hetzner Object Storage.
+      Example: task dr:hetzner:download -- <backup-object-name>
     dir: scripts/dr
     cmds:
       - bash ./hetzner_download.sh {{.CLI_ARGS}}
 
   dr:verify-restore:
-    # Operator-only / maintenance
-    desc: Verify extracted photos in a restore directory
+    desc: "[DR] Verify integrity of extracted backup data"
+    summary: |
+      Validate restored photos/data after DR recovery.
+      Example: task dr:verify-restore -- --restore-dir /path/to/extracted
     dir: scripts/dr
     cmds:
       - bash ./verify_restore.sh {{.CLI_ARGS}}
+
+  ansible:host:
+    desc: "[PROD] Configure Proxmox host (mounts, packages, Tailscale)"
+    summary: |
+      Full Proxmox host configuration via Ansible.
+      Target: PROD (192.168.1.112)
+      Includes: NFS mounts, base packages, Tailscale
+      Example: task ansible:host
+      Check mode: task ansible:host -- --check
+    dir: ansible
+    cmds:
+      - ansible-playbook -i inventories/static/hosts.yml playbooks/host_proxmox.yml --vault-password-file .vault-pass.txt {{.CLI_ARGS}}
+
+  ansible:mounts:
+    desc: "[PROD] Configure NAS NFS mounts on Proxmox host"
+    summary: |
+      Deploy/update NAS NFS mount configuration via IaC.
+      Target: PROD (192.168.1.112)
+      Manages: All 6 NAS mounts in /mnt/nas/*
+      Example: task ansible:mounts
+      Check mode: task ansible:mounts -- --check
+    dir: ansible
+    cmds:
+      - ansible-playbook -i inventories/static/hosts.yml playbooks/host_proxmox.yml --vault-password-file .vault-pass.txt --tags mounts {{.CLI_ARGS}}
+
+  ansible:backup:
+    desc: "[PROD] Deploy/update Proxmox backup system"
+    summary: |
+      Configure automated Proxmox configuration backups.
+      Target: PROD (192.168.1.112)
+      Includes: Backup script, systemd timer, NAS mount
+      Example: task ansible:backup
+      Check mode: task ansible:backup -- --check
+    dir: ansible
+    cmds:
+      - ansible-playbook -i inventories/static/hosts.yml playbooks/backup_proxmox.yml --vault-password-file .vault-pass.txt {{.CLI_ARGS}}
+
+

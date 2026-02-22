@@ -9,7 +9,7 @@ set -euo pipefail
 
 # Lock to prevent concurrent execution (using flock)
 LOCK_FD=200
-LOCK_FILE="/var/lock/proxmox-backup.lock"
+LOCK_FILE="/run/lock/proxmox-backup.lock"
 
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
@@ -213,60 +213,95 @@ collect_proxmox_config() {
 }
 
 collect_iac_artifacts() {
-  if [[ -z "${REPO_PATH:-}" ]]; then
-    log_info "Skipping IaC artifacts (REPO_PATH not defined)"
-    return 0
-  fi
-  
-  if [[ ! -d "$REPO_PATH" ]]; then
-    log_warning "REPO_PATH defined but directory not found: $REPO_PATH"
-    return 0
-  fi
-  
-  log_info "Collecting IaC artifacts from: $REPO_PATH"
+  log_info "Collecting IaC artifacts"
   
   local dest="${STAGING_DIR}/iac-artifacts"
   mkdir -p "$dest"
   
-  # Terraform state
-  if [[ -d "${REPO_PATH}/terraform" ]]; then
-    mkdir -p "$dest/terraform"
-    cp -a "${REPO_PATH}/terraform/terraform.tfstate" "$dest/terraform/" 2>/dev/null || true
-    cp -a "${REPO_PATH}/terraform/terraform.tfstate.backup" "$dest/terraform/" 2>/dev/null || true
+  # Collect NAS-backed state (primary source)
+  local nas_state_root="/mnt/nas/homelab_ci/infra_state"
+  if [[ -d "$nas_state_root" ]]; then
+    log_info "Collecting NAS-backed state from: $nas_state_root"
+    mkdir -p "$dest/nas-state"
+    
+    # Copy all environment state directories
+    for env_dir in "${nas_state_root}"/*; do
+      [[ -d "$env_dir" ]] || continue
+      local env_name
+      env_name="$(basename "$env_dir")"
+      
+      log_info "  Environment: $env_name"
+      mkdir -p "$dest/nas-state/${env_name}"
+      
+      # Terraform state files per service
+      for service_dir in "${env_dir}"/*; do
+        [[ -d "$service_dir" ]] || continue
+        local service_name
+        service_name="$(basename "$service_dir")"
+        
+        if [[ -f "${service_dir}/terraform.tfstate" ]]; then
+          mkdir -p "$dest/nas-state/${env_name}/${service_name}"
+          cp -a "${service_dir}/terraform.tfstate" "$dest/nas-state/${env_name}/${service_name}/" 2>/dev/null || true
+          cp -a "${service_dir}/terraform.tfstate.backup" "$dest/nas-state/${env_name}/${service_name}/" 2>/dev/null || true
+        fi
+      done
+      
+      # Ansible inventory
+      local inventory_file="${env_dir}/ansible/inventories/generated/hosts.yml"
+      if [[ -f "$inventory_file" ]]; then
+        mkdir -p "$dest/nas-state/${env_name}/ansible/inventories/generated"
+        cp -a "$inventory_file" "$dest/nas-state/${env_name}/ansible/inventories/generated/"
+      fi
+    done
+  else
+    log_warning "NAS state root not found: $nas_state_root (NFS mount issue?)"
   fi
   
-  # Ansible inventory
-  if [[ -f "${REPO_PATH}/ansible/inventories/generated/hosts.yml" ]]; then
-    mkdir -p "$dest/ansible/inventories/generated"
-    cp -a "${REPO_PATH}/ansible/inventories/generated/hosts.yml" "$dest/ansible/inventories/generated/"
-  fi
-  
-  # Ansible group_vars (exclude secrets.yml)
-  if [[ -d "${REPO_PATH}/ansible/group_vars" ]]; then
-    mkdir -p "$dest/ansible/group_vars"
-    find "${REPO_PATH}/ansible/group_vars" -type f ! -name 'secrets.yml' -exec cp -a {} "$dest/ansible/group_vars/" \;
-  fi
-  
-  # Ansible playbooks
-  if [[ -d "${REPO_PATH}/ansible/playbooks" ]]; then
-    mkdir -p "$dest/ansible/playbooks"
-    cp -a "${REPO_PATH}/ansible/playbooks"/*.yml "$dest/ansible/playbooks/" 2>/dev/null || true
-  fi
-  
-  # Ansible role tasks
-  if [[ -d "${REPO_PATH}/ansible/roles" ]]; then
-    mkdir -p "$dest/ansible/roles"
-    find "${REPO_PATH}/ansible/roles" -type f -path '*/tasks/*.yml' -exec bash -c 'mkdir -p "$0/$(dirname "${1#'"${REPO_PATH}"'/ansible/roles/}")" && cp -a "$1" "$0/$(dirname "${1#'"${REPO_PATH}"'/ansible/roles/}")/"' "$dest/ansible/roles" {} \;
-  fi
-  
-  # Documentation
-  if [[ -f "${REPO_PATH}/README.md" ]]; then
-    cp -a "${REPO_PATH}/README.md" "$dest/"
-  fi
-  
-  if [[ -d "${REPO_PATH}/docs" ]]; then
-    mkdir -p "$dest/docs"
-    find "${REPO_PATH}/docs" -type f -name '*.md' -exec cp -a {} "$dest/docs/" \;
+  # Legacy REPO_PATH collection (transitional, can be removed after migration complete)
+  if [[ -n "${REPO_PATH:-}" && -d "$REPO_PATH" ]]; then
+    log_info "Collecting legacy repo artifacts from: $REPO_PATH"
+    mkdir -p "$dest/legacy"
+    
+    # Terraform state (old location)
+    if [[ -d "${REPO_PATH}/terraform" ]]; then
+      mkdir -p "$dest/legacy/terraform"
+      cp -a "${REPO_PATH}/terraform/terraform.tfstate" "$dest/legacy/terraform/" 2>/dev/null || true
+      cp -a "${REPO_PATH}/terraform/terraform.tfstate.backup" "$dest/legacy/terraform/" 2>/dev/null || true
+    fi
+    
+    # Ansible inventory (old location)
+    if [[ -f "${REPO_PATH}/ansible/inventories/generated/hosts.yml" ]]; then
+      mkdir -p "$dest/legacy/ansible/inventories/generated"
+      cp -a "${REPO_PATH}/ansible/inventories/generated/hosts.yml" "$dest/legacy/ansible/inventories/generated/"
+    fi
+    
+    # Ansible group_vars (exclude secrets.yml)
+    if [[ -d "${REPO_PATH}/ansible/group_vars" ]]; then
+      mkdir -p "$dest/legacy/ansible/group_vars"
+      find "${REPO_PATH}/ansible/group_vars" -type f ! -name 'secrets.yml' -exec cp -a {} "$dest/legacy/ansible/group_vars/" \;
+    fi
+    
+    # Ansible playbooks
+    if [[ -d "${REPO_PATH}/ansible/playbooks" ]]; then
+      mkdir -p "$dest/legacy/ansible/playbooks"
+      cp -a "${REPO_PATH}/ansible/playbooks"/*.yml "$dest/legacy/ansible/playbooks/" 2>/dev/null || true
+    fi
+    
+    # Ansible role tasks
+    if [[ -d "${REPO_PATH}/ansible/roles" ]]; then
+      mkdir -p "$dest/legacy/ansible/roles"
+      find "${REPO_PATH}/ansible/roles" -type f -path '*/tasks/*.yml' -exec bash -c 'mkdir -p "$0/$(dirname "${1#'"${REPO_PATH}"'/ansible/roles/}")" && cp -a "$1" "$0/$(dirname "${1#'"${REPO_PATH}"'/ansible/roles/}")/"' "$dest/legacy/ansible/roles" {} \;
+    fi
+    
+    # Documentation
+    if [[ -f "${REPO_PATH}/README.md" ]]; then
+      cp -a "${REPO_PATH}/README.md" "$dest/legacy/"
+    fi
+    
+    if [[ -d "${REPO_PATH}/docs" ]]; then
+      mkdir -p "$dest/legacy/docs"
+      find "${REPO_PATH}/docs" -type f -name '*.md' -exec cp -a {} "$dest/legacy/docs/" \;
+    fi
   fi
   
   # Scan for plaintext secrets (security check)
@@ -419,14 +454,14 @@ verify_backup() {
   
   # Test decryption (decrypt first 1MB to verify key and format)
   log_info "Testing decryption of backup archive"
-  if ! head -c 1048576 "$backup_file" | age -d -i "${AGE_PRIVATE_KEY:-/root/.age/proxmox-backup.key}" > /dev/null 2>&1; then
+  if ! head -c 1048576 "$backup_file" | age -d -i "${AGE_KEY_PATH:-/root/.age/proxmox-backup.key}" > /dev/null 2>&1; then
     log_error "Decryption test failed - backup may be corrupted or key invalid"
     return 1
   fi
   
   # Quick integrity check: list tar contents without extracting
   log_info "Verifying archive structure"
-  if ! age -d -i "${AGE_PRIVATE_KEY:-/root/.age/proxmox-backup.key}" "$backup_file" 2>/dev/null | zstd -d 2>/dev/null | tar -t > /dev/null 2>&1; then
+  if ! age -d -i "${AGE_KEY_PATH:-/root/.age/proxmox-backup.key}" "$backup_file" 2>/dev/null | zstd -d 2>/dev/null | tar -t > /dev/null 2>&1; then
     log_error "Archive structure verification failed - backup corrupted"
     return 1
   fi

@@ -102,6 +102,17 @@
     - backup
     - prerequisites
 
+- name: Mount NAS backup share
+  ansible.posix.mount:
+    path: "{{ proxmox_backup_nas_mount_point }}"
+    src: "{{ proxmox_backup_nas_host }}:{{ proxmox_backup_nas_path }}"
+    fstype: nfs
+    opts: rw,nofail
+    state: mounted
+  tags:
+    - backup
+    - prerequisites
+
 - name: Verify prerequisites installed
   ansible.builtin.command: "{{ item }} --version"
   register: prereq_check

@@ -24,6 +24,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-04
 - Local Terraform state on PVE host; NFS mounts for service data (NAS) (031-lxc-lifecycle-pipeline)
 - Terraform (HCL), Ansible (YAML), Python 3.x, shell scripts + elmate/proxmox Terraform provider, Ansible, Taskfile, Python orchestration scripts (032-audit-rebuild-readiness)
 - Local Terraform state on PVE host; NAS-backed NFS mounts for backups and shared data (032-audit-rebuild-readiness)
+- Shell scripts + Python (existing orchestration), Terraform (HCL), Ansible (YAML) + Taskfile, scripts/lab, telmate/proxmox Terraform provider, Ansible (033-idempotent-rebuild)
+- Local Terraform state on PVE; NAS-backed NFS mounts for backups and shared data (033-idempotent-rebuild)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -59,9 +61,9 @@ specs/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 033-idempotent-rebuild: Added Shell scripts + Python (existing orchestration), Terraform (HCL), Ansible (YAML) + Taskfile, scripts/lab, telmate/proxmox Terraform provider, Ansible
 - 032-audit-rebuild-readiness: Added Terraform (HCL), Ansible (YAML), Python 3.x, shell scripts + elmate/proxmox Terraform provider, Ansible, Taskfile, Python orchestration scripts
 - 031-lxc-lifecycle-pipeline: Added Terraform (HCL), Ansible (YAML), Python 3.x, GitHub Actions (YAML), shell scripts + elmate/proxmox Terraform provider, Ansible, Taskfile, GitHub Actions, Python automation scripts
-- 029-mutmut-shared-cache: Added Python 3.11 (mutmut/pytest tooling), shell scripts for automation + mutmut, pytest, uv, GitHub Actions
 
 
 <!-- MANUAL ADDITIONS START -->

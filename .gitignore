@@ -62,6 +62,7 @@ artifacts/healthcheck/
 artifacts/019-lab/
 artifacts/lab-runs/
 artifacts/service-deploy-runs/
+artifacts/rebuild-runs/
 
 # Local workflow evidence (extracted packs)
 evidence/
