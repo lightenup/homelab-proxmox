@@ -71,7 +71,70 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 - `.github/workflows/` – CI and deploy pipelines.
 - `scripts/` – helper scripts.
 
+## System Roles & Interoperability
+
+### Spec Kit — Workflow System
+Spec Kit owns the workflow definition: stages, artifact formats, templates,
+shell scripts, and directory conventions. The `.specify/` directory and
+`.github/agents/` files are Spec Kit's domain.
+
+**Rules:**
+- Feature directories follow `specs/NNN-feature-name/` naming.
+- Git branches should follow `NNN-feature-name` convention for feature work.
+- Shell scripts in `.specify/scripts/bash/` are authoritative for scaffolding
+	(branch creation, template copying, prerequisite checks). Use them — do not
+	replicate their logic.
+- Templates in `.specify/templates/` define artifact structure. Follow them.
+
+### Droid — Execution Engine
+Droid executes work defined by Spec Kit artifacts. It reads prompts, produces
+code and documents, runs commands, and marks tasks complete.
+
+**Rules:**
+- Droid runs non-interactively via `droid exec -f <prompt> --auto <level>`.
+- When instructions say "ask the user" or "wait for response," make an informed
+	decision from available context and document the choice.
+- Droid MUST NOT create alternative directory structures, artifact formats,
+	or workflow conventions that conflict with Spec Kit's expectations.
+- Droid uses `--auto medium` by default. Production operations (push, deploy)
+	require `--auto high`.
+
+### Adapter — Interface Translation
+The adapter (`adapter/speckit-droid-adapter`) translates Spec Kit's interactive
+agent interface into droid's non-interactive execution model. It is stateless
+and mechanical.
+
+**Rules:**
+- The adapter MUST NOT add workflow stages, templates, or artifact formats.
+- The adapter MUST NOT make decisions about what to run or in what order.
+- The adapter's only job: prepend a non-interactive preamble, load the
+	appropriate persona, substitute `$ARGUMENTS`, and invoke `droid exec`.
+
+## Personas
+
+Each pipeline stage is executed under a specific persona that constrains the
+agent's perspective, vocabulary, and decision-making frame. Persona files live
+in `adapter/personas/` and are prepended to the prompt by the adapter.
+
+| Persona | Stages | Focus |
+|---------|--------|-------|
+| **Analyst** | specify, clarify | Requirements, user stories, acceptance criteria |
+| **Architect** | plan, tasks, checklist, analyze | Design, structure, decomposition |
+| **Developer** | implement | Code, tests, build, run |
+| **Reviewer** | review | Spec compliance, quality, feedback loops |
+
+The reviewer persona enables an implement → review → re-implement loop (max 3
+iterations) to converge on quality before declaring a feature complete.
+
+## Precedence
+- On **workflow concerns** (stages, artifacts, directory layout): Spec Kit wins.
+- On **execution concerns** (how commands run, autonomy levels): Droid wins.
+- On **process concerns** (transparency, scope discipline, verification):
+	this constitution wins.
+- On **technology-specific concerns**: the project addendum wins (if present,
+	placed at `.specify/memory/addendum.md`).
+
 ## Governance
 This constitution supersedes all other practices. Amendments require documentation and approval. All PRs and reviews must verify compliance with these principles.
 
-**Version**: 1.0.1 | **Ratified**: 2025-12-15
+**Version**: 1.1.0 | **Ratified**: 2025-12-15
