@@ -32,3 +32,9 @@ immich_backup_retention_months: 6
 immich_backup_schedule: "*-*-* 04:30:00"
 immich_db_container_name: "immich_postgres"
 immich_restore_test_port: 2284
+
+# Reverse Proxy
+reverse_proxy_ip: "192.168.1.211"
+
+# Nextcloud Configuration
+nextcloud_ip: "192.168.1.216"
