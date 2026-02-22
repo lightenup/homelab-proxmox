@@ -16,6 +16,7 @@ on:
           - immich
           - jellyfin
           - monitoring
+          - nextcloud
           - reverse_proxy
       allow_override_failed_lab_gate:
         description: "Allow proceeding to PROD apply if LAB deploy or confidence suite fails"
