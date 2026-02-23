@@ -1,7 +1,7 @@
 # LAB environment example (no secrets)
 # Copy to terraform/environments/lab.tfvars (ignored by git) and fill values.
 
-proxmox_api_url = "https://proxmox.example:8006/api2/json"
+proxmox_api_url = "https://192.168.1.112:8006/api2/json"
 
 # Token-based auth (set via secrets; do not commit)
 proxmox_api_token_id     = "terraform@pve!token"
