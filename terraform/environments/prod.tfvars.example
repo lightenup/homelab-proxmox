@@ -58,5 +58,5 @@ service_ips = {
 }
 
 ssh_public_keys = [
-  "ssh-ed25519 AAAA... operator@example"
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO4xtULNL2RD45yGIFiOWsRmWDkza6LZsCURRoJJiY04 jacobsen.andreas@gmail.com"
 ]
