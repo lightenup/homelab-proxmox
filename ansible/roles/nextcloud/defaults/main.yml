@@ -1,6 +1,6 @@
 ---
 # Defaults for nextcloud role
-nextcloud_version: "31"
+nextcloud_version: "32"
 nextcloud_port: 8080
 nextcloud_install_dir: "/opt/nextcloud"
 nextcloud_data_dir: "/opt/nextcloud"
@@ -35,12 +35,12 @@ nextcloud_apps_enable:
   - deck
   - twofactor_totp
   - bruteforcesettings
+  - calendar
+  - weather_status
 
 # Apps to disable
 nextcloud_apps_disable:
   - photos
-  - weather_status
   - firstrunwizard
   - recommendations
-  - calendar
   - contacts
