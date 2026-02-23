@@ -4,11 +4,11 @@ set -euo pipefail
 # tfvars provisioning helpers
 #
 # Primary entrypoint:
-#   _tfvars_provision_prod_and_write_proof <reports_dir> <tfvars_dir>
+#   _tfvars_provision_and_write_proof <reports_dir> <tfvars_dir> <environment>
 #
 # Design constraints:
 # - Never log secrets
-# - Write redacted proof under <reports_dir>/prod-tfvars/
+# - Write redacted proof under <reports_dir>/<environment>-tfvars/
 # - Enforce token ID: terraform@pve!terraform-token
 
 _tfvars_now_utc() {
@@ -51,14 +51,30 @@ _tfvars_write_validation_json() {
 	local rendered_path="$4"
 	local validation_status="$5"
 	local token_id="$6"
-	local secret_present="$7" # true|false
+	local secret_present="$7"   # true|false
 	local file_hash="$8"
 	local errors_json_array="$9" # JSON array string
+	local drift_results_json="${10:-}"  # JSON object string or ""
+	local change_warnings_json="${11:-}" # JSON array string or ""
 
 	local ts_esc src_esc rp_esc
 	ts_esc="$(_tfvars_escape_hcl_string "${timestamp}")"
 	src_esc="$(_tfvars_escape_hcl_string "${template_source}")"
 	rp_esc="$(_tfvars_escape_hcl_string "${rendered_path}")"
+
+	local drift_line=""
+	if [[ -n "${drift_results_json}" ]]; then
+		drift_line="  \"drift_results\": ${drift_results_json},"$'\n'
+	else
+		drift_line="  \"drift_results\": {},"$'\n'
+	fi
+
+	local warnings_line=""
+	if [[ -n "${change_warnings_json}" ]]; then
+		warnings_line="  \"change_warnings\": ${change_warnings_json}"$'\n'
+	else
+		warnings_line="  \"change_warnings\": []"$'\n'
+	fi
 
 	cat >"${out_path}" <<EOF
 {
@@ -69,25 +85,37 @@ _tfvars_write_validation_json() {
   "token_id": "${token_id}",
   "secret_present": ${secret_present},
   "file_hash": "${file_hash}",
-  "validation_errors": ${errors_json_array}
-}
+  "validation_errors": ${errors_json_array},
+${drift_line}${warnings_line}}
 EOF
 }
 
-_tfvars_provision_prod_and_write_proof() {
+# Extract top-level HCL key names from a tfvars file.
+# Outputs one key name per line (no duplicates).
+_tfvars_extract_top_level_keys() {
+	local file_path="$1"
+	grep -E '^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*=' "${file_path}" 2>/dev/null \
+		| grep -v '^[[:space:]]*#' \
+		| awk -F'[[:space:]]*=' '{gsub(/^[[:space:]]+/, "", $1); print $1}' \
+		| sort -u
+}
+
+_tfvars_provision_and_write_proof() {
 	local reports_dir="$1"
 	local tfvars_dir="$2"
+	local environment="$3"
 
 	local required_token_id="terraform@pve!terraform-token"
-	local rendered_path="${tfvars_dir%/}/prod.tfvars"
+	local rendered_path="${tfvars_dir%/}/${environment}.tfvars"
+	local evidence_subdir="${environment}-tfvars"
 
-	mkdir -p "${reports_dir%/}/prod-tfvars" "${tfvars_dir%/}"
+	mkdir -p "${reports_dir%/}/${evidence_subdir}" "${tfvars_dir%/}"
 
 	local timestamp
 	timestamp="$(_tfvars_now_utc)"
 
 	# Secret passed by GitHub Actions (preferred). Back-compat supports PROXMOX_TOKEN_SECRET.
-	# If neither is present, we will attempt to reuse an existing rendered prod.tfvars
+	# If neither is present, we will attempt to reuse an existing rendered tfvars
 	# (common when secrets are managed locally on PVE).
 	local token_secret="${PROXMOX_API_TOKEN_SECRET:-${PROXMOX_TOKEN_SECRET:-}}"
 	local secret_source=""
@@ -114,8 +142,8 @@ _tfvars_provision_prod_and_write_proof() {
 		local repo_root="${REPO_ROOT:-}"
 		local candidates=()
 		if [[ -n "${repo_root}" ]]; then
-			candidates+=("${repo_root}/terraform/environments/prod.tfvars")
-			candidates+=("${repo_root}/terraform/environments/prod.tfvars.example")
+			candidates+=("${repo_root}/terraform/environments/${environment}.tfvars.template")
+			candidates+=("${repo_root}/terraform/environments/${environment}.tfvars.example")
 		fi
 
 		local c
@@ -128,7 +156,7 @@ _tfvars_provision_prod_and_write_proof() {
 		done
 	fi
 
-	# If no token secret is available, prefer validating an existing rendered prod.tfvars
+	# If no token secret is available, prefer validating an existing rendered tfvars
 	# (so we don't overwrite a locally-managed secret with an empty value). This also
 	# satisfies the "template" requirement when no repo template exists.
 	if [[ -z "${token_secret}" && -f "${rendered_path}" ]]; then
@@ -139,8 +167,19 @@ _tfvars_provision_prod_and_write_proof() {
 
 	if [[ -z "${template_path}" ]]; then
 		# No template -> fail early, but still write proof artifacts.
-		local errors_json='["Missing prod.tfvars template (set PROD_TFVARS_TEMPLATE or ensure terraform/environments/prod.tfvars.example exists)"]'
-		_tfvars_write_validation_json "${reports_dir%/}/prod-tfvars/validation.json" "${timestamp}" "missing" "${rendered_path}" "fail" "${required_token_id}" "false" "0000000000000000000000000000000000000000000000000000000000000000" "${errors_json}"
+		local errors_json="[\"Missing ${environment}.tfvars template (set PROD_TFVARS_TEMPLATE or ensure terraform/environments/${environment}.tfvars.example exists)\"]"
+		_tfvars_write_validation_json \
+			"${reports_dir%/}/${evidence_subdir}/validation.json" \
+			"${timestamp}" \
+			"missing" \
+			"${rendered_path}" \
+			"fail" \
+			"${required_token_id}" \
+			"false" \
+			"0000000000000000000000000000000000000000000000000000000000000000" \
+			"${errors_json}" \
+			"" \
+			""
 		{
 			echo "timestamp=${timestamp}"
 			echo "template_source=missing"
@@ -151,15 +190,15 @@ _tfvars_provision_prod_and_write_proof() {
 			echo "secret_source=${secret_source}"
 			echo "file_hash=0000000000000000000000000000000000000000000000000000000000000000"
 			echo "error=missing template"
-		} >"${reports_dir%/}/prod-tfvars/provisioning.txt"
-		echo "0000000000000000000000000000000000000000000000000000000000000000" >"${reports_dir%/}/prod-tfvars/prod.tfvars.sha256"
+		} >"${reports_dir%/}/${evidence_subdir}/provisioning.txt"
+		echo "0000000000000000000000000000000000000000000000000000000000000000" >"${reports_dir%/}/${evidence_subdir}/${environment}.tfvars.sha256"
 		return 1
 	fi
 
 	# Render to a temp file; only move into place if validation passes.
 	umask 077
 	local tmp
-	tmp="$(mktemp -t prod.tfvars.XXXXXX)"
+	tmp="$(mktemp -t "${environment}.tfvars.XXXXXX")"
 	trap 'rm -f "${tmp}" 2>/dev/null || true' RETURN
 
 	# Start from template and enforce token_id + secret.
@@ -174,22 +213,27 @@ _tfvars_provision_prod_and_write_proof() {
 		printf '\nproxmox_api_token_id     = "%s"\n' "${required_token_id}" >>"${tmp}"
 	fi
 
-	# Inject secret only if provided. If no env secret is available, do NOT overwrite
-	# any existing secret in the file.
+	# Inject secret via sentinel replacement. Skip comment lines to preserve
+	# any documentation examples of the sentinel marker in comments.
 	if [[ -n "${token_secret}" ]]; then
 		local secret_escaped
 		secret_escaped="$(_tfvars_escape_hcl_string "${token_secret}")"
-		if grep -Eq '^[[:space:]]*proxmox_api_token_secret[[:space:]]*=' "${tmp}"; then
-			# macOS/BSD sed requires a backup suffix; GNU sed ignores it.
-			sed -i.bak -E "s|^[[:space:]]*proxmox_api_token_secret[[:space:]]*=.*$|proxmox_api_token_secret = \"${secret_escaped}\"|" "${tmp}" 2>/dev/null || true
-			rm -f "${tmp}.bak" 2>/dev/null || true
-		else
-			printf 'proxmox_api_token_secret = "%s"\n' "${secret_escaped}" >>"${tmp}"
-		fi
+		sed -i.bak '/^[[:space:]]*#/! s|__INJECT_TOKEN_SECRET__|'"${secret_escaped}"'|g' "${tmp}" 2>/dev/null || true
+		rm -f "${tmp}.bak" 2>/dev/null || true
 	fi
 
-	# Validation (no secrets in outputs)
+	# Post-injection sentinel validation: scan non-comment lines for any remaining
+	# __INJECT_*__ markers. Fail if any are found (means secret was not provided).
 	local -a errors=()
+	local remaining_sentinels
+	remaining_sentinels="$(grep -v '^[[:space:]]*#' "${tmp}" 2>/dev/null | grep -oE '__INJECT_[A-Z_]+__' | sort -u || true)"
+	if [[ -n "${remaining_sentinels}" ]]; then
+		while IFS= read -r sentinel; do
+			if [[ -n "${sentinel}" ]]; then
+				errors+=("Un-injected sentinel: ${sentinel} (source: PROXMOX_API_TOKEN_SECRET not set)")
+			fi
+		done <<<"${remaining_sentinels}"
+	fi
 
 	local token_id_in_file=""
 	token_id_in_file="$(awk -F'"' '/^[[:space:]]*proxmox_api_token_id[[:space:]]*=/ {print $2; exit}' "${tmp}" 2>/dev/null || true)"
@@ -224,6 +268,116 @@ _tfvars_provision_prod_and_write_proof() {
 		file_hash="$(_tfvars_sha256 "${tmp}" || echo "${file_hash}")"
 	fi
 
+	# Key-set drift detection: compare top-level keys between template and existing rendered file.
+	local drift_results_json=""
+	if [[ -f "${rendered_path}" ]]; then
+		local template_keys
+		template_keys="$(_tfvars_extract_top_level_keys "${tmp}")"
+		local rendered_keys
+		rendered_keys="$(_tfvars_extract_top_level_keys "${rendered_path}")"
+
+		local -a provisioning_gaps=()
+		local -a manual_additions=()
+
+		# Keys in template missing from rendered (provisioning gaps)
+		local key
+		while IFS= read -r key; do
+			if [[ -n "${key}" ]] && ! grep -qxF "${key}" <<<"${rendered_keys}"; then
+				provisioning_gaps+=("${key}")
+			fi
+		done <<<"${template_keys}"
+
+		# Keys in rendered missing from template (manual additions)
+		while IFS= read -r key; do
+			if [[ -n "${key}" ]] && ! grep -qxF "${key}" <<<"${template_keys}"; then
+				manual_additions+=("${key}")
+			fi
+		done <<<"${rendered_keys}"
+
+		# Build JSON arrays
+		local gaps_json='[]'
+		if [[ ${#provisioning_gaps[@]} -gt 0 ]]; then
+			gaps_json='['
+			local i
+			for i in "${!provisioning_gaps[@]}"; do
+				local g_esc
+				g_esc="$(_tfvars_escape_hcl_string "${provisioning_gaps[$i]}")"
+				if [[ $i -gt 0 ]]; then gaps_json+=','; fi
+				gaps_json+="\"${g_esc}\""
+			done
+			gaps_json+=']'
+		fi
+
+		local additions_json='[]'
+		if [[ ${#manual_additions[@]} -gt 0 ]]; then
+			additions_json='['
+			local j
+			for j in "${!manual_additions[@]}"; do
+				local a_esc
+				a_esc="$(_tfvars_escape_hcl_string "${manual_additions[$j]}")"
+				if [[ $j -gt 0 ]]; then additions_json+=','; fi
+				additions_json+="\"${a_esc}\""
+			done
+			additions_json+=']'
+		fi
+
+		drift_results_json="{\"provisioning_gaps\":${gaps_json},\"manual_additions\":${additions_json}}"
+	fi
+
+	# Non-secret value change warnings: compare simple key="value" pairs between
+	# existing rendered file and temp (post-injection). Skip secret key.
+	local change_warnings_json='[]'
+	local -a provisioning_txt_warnings=()
+	if [[ -f "${rendered_path}" ]]; then
+		# Extract simple single-line string assignments: key = "value"
+		local -A rendered_vals=()
+		local -A template_vals=()
+
+		local kv_line kv_key kv_val
+		while IFS= read -r kv_line; do
+			kv_key="$(echo "${kv_line}" | awk -F'[[:space:]]*=[[:space:]]*' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1}')"
+			kv_val="$(echo "${kv_line}" | sed -n 's/^[^"]*"\([^"]*\)"[[:space:]]*$/\1/p')"
+			if [[ -n "${kv_key}" && -n "${kv_val}" && "${kv_key}" != "proxmox_api_token_secret" ]]; then
+				rendered_vals["${kv_key}"]="${kv_val}"
+			fi
+		done < <(grep -E '^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"]*"[[:space:]]*$' "${rendered_path}" 2>/dev/null | grep -v '^[[:space:]]*#' || true)
+
+		while IFS= read -r kv_line; do
+			kv_key="$(echo "${kv_line}" | awk -F'[[:space:]]*=[[:space:]]*' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1}')"
+			kv_val="$(echo "${kv_line}" | sed -n 's/^[^"]*"\([^"]*\)"[[:space:]]*$/\1/p')"
+			if [[ -n "${kv_key}" && -n "${kv_val}" && "${kv_key}" != "proxmox_api_token_secret" ]]; then
+				template_vals["${kv_key}"]="${kv_val}"
+			fi
+		done < <(grep -E '^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"]*"[[:space:]]*$' "${tmp}" 2>/dev/null | grep -v '^[[:space:]]*#' || true)
+
+		local warn_key
+		local -a warnings_arr=()
+		for warn_key in "${!template_vals[@]}"; do
+			if [[ -v rendered_vals["${warn_key}"] ]]; then
+				local old_v="${rendered_vals[${warn_key}]}"
+				local new_v="${template_vals[${warn_key}]}"
+				if [[ "${old_v}" != "${new_v}" ]]; then
+					local wk_esc ov_esc nv_esc
+					wk_esc="$(_tfvars_escape_hcl_string "${warn_key}")"
+					ov_esc="$(_tfvars_escape_hcl_string "${old_v}")"
+					nv_esc="$(_tfvars_escape_hcl_string "${new_v}")"
+					warnings_arr+=("{\"key\":\"${wk_esc}\",\"old_value\":\"${ov_esc}\",\"new_value\":\"${nv_esc}\"}")
+					provisioning_txt_warnings+=("changed: ${warn_key}: old=\"${old_v}\" -> new=\"${new_v}\"")
+				fi
+			fi
+		done
+
+		if [[ ${#warnings_arr[@]} -gt 0 ]]; then
+			change_warnings_json='['
+			local wi
+			for wi in "${!warnings_arr[@]}"; do
+				if [[ $wi -gt 0 ]]; then change_warnings_json+=','; fi
+				change_warnings_json+="${warnings_arr[$wi]}"
+			done
+			change_warnings_json+=']'
+		fi
+	fi
+
 	local validation_status="pass"
 	if [[ ${#errors[@]} -gt 0 ]]; then
 		validation_status="fail"
@@ -247,7 +401,18 @@ _tfvars_provision_prod_and_write_proof() {
 		errors_json+=$'\n]'
 	fi
 
-	_tfvars_write_validation_json "${reports_dir%/}/prod-tfvars/validation.json" "${timestamp}" "${template_source}" "${rendered_path}" "${validation_status}" "${required_token_id}" "${secret_present}" "${file_hash}" "${errors_json}"
+	_tfvars_write_validation_json \
+		"${reports_dir%/}/${evidence_subdir}/validation.json" \
+		"${timestamp}" \
+		"${template_source}" \
+		"${rendered_path}" \
+		"${validation_status}" \
+		"${required_token_id}" \
+		"${secret_present}" \
+		"${file_hash}" \
+		"${errors_json}" \
+		"${drift_results_json}" \
+		"${change_warnings_json}"
 
 	{
 		echo "timestamp=${timestamp}"
@@ -262,9 +427,13 @@ _tfvars_provision_prod_and_write_proof() {
 			echo "validation_errors:"
 			printf '  - %s\n' "${errors[@]}"
 		fi
-	} >"${reports_dir%/}/prod-tfvars/provisioning.txt"
+		if [[ ${#provisioning_txt_warnings[@]} -gt 0 ]]; then
+			echo "change_warnings:"
+			printf '  - %s\n' "${provisioning_txt_warnings[@]}"
+		fi
+	} >"${reports_dir%/}/${evidence_subdir}/provisioning.txt"
 
-	echo "${file_hash}" >"${reports_dir%/}/prod-tfvars/prod.tfvars.sha256"
+	echo "${file_hash}" >"${reports_dir%/}/${evidence_subdir}/${environment}.tfvars.sha256"
 
 	if [[ "${validation_status}" != "pass" ]]; then
 		return 1

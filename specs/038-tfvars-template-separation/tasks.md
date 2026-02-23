@@ -57,7 +57,7 @@
 - **Description**: Create `terraform/environments/prod.tfvars.template` with real non-secret infrastructure values (from the current `prod.tfvars.example` prod network: `192.168.1.x`), the literal token ID `terraform@pve!terraform-token`, and exactly one `__INJECT_TOKEN_SECRET__` sentinel marker in the `proxmox_api_token_secret` field. Add a header comment: `# CI template — real non-secret values. Do not copy for local use; see prod.tfvars.example instead.`
 - **Acceptance**: `grep -c '__INJECT_TOKEN_SECRET__' terraform/environments/prod.tfvars.template` returns `1`. File exists and contains the literal string `terraform@pve!terraform-token`.
 - **Traces to**: FR-001, FR-002, FR-011, D-003
-- [ ] T001 [P] Create CI template for prod in `terraform/environments/prod.tfvars.template`
+- [X] T001 [P] Create CI template for prod in `terraform/environments/prod.tfvars.template`
 
 ---
 
@@ -71,7 +71,7 @@
 - **Description**: Create `terraform/environments/lab.tfvars.template` with real non-secret infrastructure values (lab network: `192.168.1.x` — same subnet as prod; the old `192.168.20.x` was a bug fixed during nextcloud deploy), the literal token ID `terraform@pve!terraform-token`, and exactly one `__INJECT_TOKEN_SECRET__` sentinel marker. Add a header comment: `# CI template — real non-secret values. Do not copy for local use; see lab.tfvars.example instead.` Lab template is consumed by the provisioner (T004a wires lab into the same codepath as prod).
 - **Acceptance**: `grep -c '__INJECT_TOKEN_SECRET__' terraform/environments/lab.tfvars.template` returns `1`. File exists and contains `192.168.1` (lab network) for service IPs. `grep -c '192.168.20' terraform/environments/lab.tfvars.template` returns `0`.
 - **Traces to**: FR-001, FR-002, FR-011, D-005
-- [ ] T002 [P] Create CI template for lab in `terraform/environments/lab.tfvars.template`
+- [X] T002 [P] Create CI template for lab in `terraform/environments/lab.tfvars.template`
 
 ---
 
@@ -85,7 +85,7 @@
 - **Description**: Add two optional properties to `scripts/lab/contracts/evidence-tfvars-proof.schema.json`. `drift_results` is an object with `provisioning_gaps` (array of strings) and `manual_additions` (array of strings). `change_warnings` is an array of objects each with required string properties `key`, `old_value`, `new_value`. Both fields must be absent from the `required` array (backward compatibility, A-002). Update the `additionalProperties` handling if needed to permit the new fields. Add an example to `examples[]` showing both new fields populated.
 - **Acceptance**: `python3 -c "import json; json.load(open('scripts/lab/contracts/evidence-tfvars-proof.schema.json'))"` exits 0. Schema contains `"drift_results"` and `"change_warnings"` in `properties`. Neither appears in `required`.
 - **Traces to**: FR-012, A-002
-- [ ] T003 [P] Extend evidence schema in `scripts/lab/contracts/evidence-tfvars-proof.schema.json`
+- [X] T003 [P] Extend evidence schema in `scripts/lab/contracts/evidence-tfvars-proof.schema.json`
 
 ---
 
@@ -107,7 +107,7 @@
 - **Description**: In `_tfvars_provision_prod_and_write_proof()` in `scripts/lab/lib/tfvars.sh`, replace the current `candidates` array (`prod.tfvars`, `prod.tfvars.example`) with the new three-tier lookup: (1) `PROD_TFVARS_TEMPLATE` env var (existing override path), (2) `${repo_root}/terraform/environments/prod.tfvars.template`, (3) `${repo_root}/terraform/environments/prod.tfvars.example`. When the env var points to a nonexistent file, fall back to file-system discovery (current behaviour) and document the fallback in evidence via `template_source`. Remove `prod.tfvars` (rendered file) from the candidates list — it must no longer be a template source.
 - **Acceptance**: When `terraform/environments/prod.tfvars.template` exists, the provisioner selects it over `prod.tfvars.example`. When only `prod.tfvars.example` exists (template deleted), the provisioner falls back to it without error. Verified by inspecting the `template_source` field in the resulting `validation.json`.
 - **Traces to**: FR-004, D-002, SC-006
-- [ ] T004 [US1] Update template lookup chain in `scripts/lab/lib/tfvars.sh`
+- [X] T004 [US1] Update template lookup chain in `scripts/lab/lib/tfvars.sh`
 
 ---
 
@@ -124,7 +124,7 @@
   3. **Update TFVARS_PATH assignment**: After provisioning, set `TFVARS_PATH="${tfvars_dir%/}/${ENVIRONMENT}.tfvars"` instead of hardcoded `prod.tfvars`.
 - **Acceptance**: `grep -c '_tfvars_provision_prod_and_write_proof' scripts/lab/lib/tfvars.sh scripts/lab/pve-service-deploy` returns `0` (old name gone). `grep -c '_tfvars_provision_and_write_proof' scripts/lab/pve-service-deploy` returns at least `2` (one in cmd_plan, one in cmd_apply). `grep -c 'ENVIRONMENT.*==.*prod.*_tfvars_provision' scripts/lab/pve-service-deploy` returns `0` (no prod-only guard). Lab runs produce evidence under `reports/lab-tfvars/`.
 - **Traces to**: Goal 6, D-005
-- [ ] T004a Rename provisioner and wire lab into same codepath
+- [X] T004a Rename provisioner and wire lab into same codepath
 
 ---
 
@@ -141,7 +141,7 @@
   3. **Fixture files**: Create lab counterparts under `scripts/lab/fixtures/evidence-packs/service-deploy-valid/reports/lab-tfvars/` (`validation.json` and `lab.tfvars.sha256`) matching the same schema. Update existing `prod-tfvars/validation.json` fixture to include the new `drift_results` and `change_warnings` fields (from T003 schema extension).
 - **Acceptance**: `grep -c 'prod-tfvars' scripts/lab/verify_evidence.py` returns `0` (no more hardcoded prod path). Lab evidence packs with `reports/lab-tfvars/` pass verification. Prod evidence packs with `reports/prod-tfvars/` still pass verification (backward compat). `python3 -m pytest python/tests/ -ra` passes (existing verify_evidence tests).
 - **Traces to**: Goal 6, FR-012, D-005
-- [ ] T004b Update evidence consumers for env-parameterized artifact paths
+- [X] T004b Update evidence consumers for env-parameterized artifact paths
 
 ---
 
@@ -155,7 +155,7 @@
 - **Description**: In `_tfvars_provision_and_write_proof()`, replace the current `sed` field-name pattern match for `proxmox_api_token_secret` with sentinel replacement. When `token_secret` is non-empty, use `sed -i.bak '/^[[:space:]]*#/! s|__INJECT_TOKEN_SECRET__|${secret_escaped}|g'` on the temp file (with `.bak` cleanup for macOS/BSD portability). Retain the existing token ID enforcement (`proxmox_api_token_id` sed replacement) unchanged. When processing a `.tfvars.example` fallback (no sentinels), the injection is a no-op — the existing sed-based field replacement is preserved as fallback for backward compatibility.
 - **Acceptance**: Given `PROXMOX_API_TOKEN_SECRET=test123` and a template containing `proxmox_api_token_secret = "__INJECT_TOKEN_SECRET__"` and a comment line `# __INJECT_TOKEN_SECRET__ example`, the rendered tmp file contains the injected value in the value field and the comment is unchanged (sentinel preserved in comment, replaced in value).
 - **Traces to**: FR-005, D-001, D-003
-- [ ] T005 [US1] Implement sentinel injection in `scripts/lab/lib/tfvars.sh`
+- [X] T005 [US1] Implement sentinel injection in `scripts/lab/lib/tfvars.sh`
 
 **Checkpoint**: At this point, US-1 core flow (template discovery + sentinel injection) is functional.
 
@@ -179,7 +179,7 @@
 - **Description**: In `_tfvars_provision_and_write_proof()`, after sentinel injection and token ID enforcement, scan the temp file for remaining `__INJECT_[A-Z_]+__` patterns on non-comment lines. Use `grep -E '__INJECT_[A-Z_]+__'` filtered through `grep -v '^[[:space:]]*#'`. For each remaining sentinel found, append an error to the `errors` array: `"Un-injected sentinel: __INJECT_TOKEN_SECRET__ (source: PROXMOX_API_TOKEN_SECRET not set)"`. This check runs BEFORE the existing token ID and secret validations. When processing a `.tfvars.example` fallback (no sentinels), `grep` finds nothing — the check is benign.
 - **Acceptance**: Given a template with `proxmox_api_token_secret = "__INJECT_TOKEN_SECRET__"` and `PROXMOX_API_TOKEN_SECRET` unset, the provisioner exits with code 1 and the written `validation.json` contains `"Un-injected sentinel: __INJECT_TOKEN_SECRET__"` in `validation_errors`.
 - **Traces to**: FR-006, US-2, SC-002
-- [ ] T006 [US2] Add post-injection sentinel validation in `scripts/lab/lib/tfvars.sh`
+- [X] T006 [US2] Add post-injection sentinel validation in `scripts/lab/lib/tfvars.sh`
 
 **Checkpoint**: At this point, US-1 and US-2 (P1 stories) are complete. Zero sentinel leakage is now guaranteed.
 
@@ -205,7 +205,7 @@
 - **Description**: Edit `terraform/environments/prod.tfvars.example` to replace: (a) all IP address values → `<pve-api-url>`, `<gateway-ip>`, `<service-ip>/24` (with instructional comments); (b) the SSH public key → `<your-ssh-public-key>`; (c) `proxmox_api_token_id` value → `<token-id>` (with comment showing expected format `terraform@pve!terraform-token`); (d) `proxmox_api_token_secret` value → `<your-token-secret>`. Add a header comment: `# Documentation example — copy to prod.tfvars and replace placeholders. See prod.tfvars.template for CI use.` Preserve the `service_mountpoints` block structure and all mount path values intact (required by existing tests).
 - **Acceptance**: `grep -cE '192\.168\.|AAAAC3NzaC1|__INJECT_' terraform/environments/prod.tfvars.example` returns `0`. `grep -c 'service_mountpoints' terraform/environments/prod.tfvars.example` returns `1` (block preserved). `PYTHONPATH=python/src python3 -m pytest python/tests/orchestrator/test_tfvars_mountpoints.py -v` passes.
 - **Traces to**: FR-003, FR-011, A-005, US-3, SC-003
-- [ ] T007 [P] [US3] Revert prod example to safe placeholders in `terraform/environments/prod.tfvars.example`
+- [X] T007 [P] [US3] Revert prod example to safe placeholders in `terraform/environments/prod.tfvars.example`
 
 ---
 
@@ -219,7 +219,7 @@
 - **Description**: Edit `terraform/environments/lab.tfvars.example` applying the same placeholder substitutions as T007: IP addresses → placeholders with instructional comments, SSH public key → `<your-ssh-public-key>`, token ID → `<token-id>`, token secret → `<your-token-secret>`. Add a header comment: `# Documentation example — copy to lab.tfvars and replace placeholders. See lab.tfvars.template for CI use.` Preserve the `service_mountpoints` block structure.
 - **Acceptance**: `grep -cE '192\.168\.|AAAAC3NzaC1|__INJECT_' terraform/environments/lab.tfvars.example` returns `0`. `grep -c 'service_mountpoints' terraform/environments/lab.tfvars.example` returns `1` (block preserved).
 - **Traces to**: FR-003, FR-011, A-005, US-3, SC-003
-- [ ] T008 [P] [US3] Revert lab example to safe placeholders in `terraform/environments/lab.tfvars.example`
+- [X] T008 [P] [US3] Revert lab example to safe placeholders in `terraform/environments/lab.tfvars.example`
 
 **Checkpoint**: US-3 complete. Example files are now safe to copy for new operators.
 
@@ -243,7 +243,7 @@
 - **Description**: Add a helper function `_tfvars_extract_top_level_keys()` that takes a file path and echoes one key per line. It extracts lines matching `^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*=` that are NOT comment lines. Use `grep` + `awk -F'[[:space:]]*=' '{print $1}' | tr -d '[:space:]'`. In `_tfvars_provision_and_write_proof()`, after injection and validation: if a rendered file already exists at `rendered_path`, call `_tfvars_extract_top_level_keys` on both the temp file and the existing rendered file, then compare the two key sets using bash logic. Build `drift_results_json` as a JSON string: `{"provisioning_gaps":[...], "manual_additions":[...]}`. Provisioning gaps = keys in template missing from rendered. Manual additions = keys in rendered missing from template. Drift findings are informational only — do not add to `errors` array or affect `validation_status`.
 - **Acceptance**: Given a template with keys `A,B,C` and a rendered file with keys `A,B,D`, the resulting `validation.json` contains `"provisioning_gaps":["C"]` and `"manual_additions":["D"]`. Given identical key sets, both arrays are empty. Given no existing rendered file, `drift_results` is absent or both arrays empty.
 - **Traces to**: FR-008, FR-012, US-4, D-006, SC-004
-- [ ] T009 [US4] Implement drift detection helper and logic in `scripts/lab/lib/tfvars.sh`
+- [X] T009 [US4] Implement drift detection helper and logic in `scripts/lab/lib/tfvars.sh`
 
 ---
 
@@ -265,7 +265,7 @@
 - **Description**: In `_tfvars_provision_and_write_proof()`, after drift detection: if a rendered file exists at `rendered_path`, extract simple key-value pairs from both the existing rendered file and the temp file (post-injection). Use `awk` to parse lines matching `^[[:space:]]*([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*=[[:space:]]*"([^"]*)"` (single-line string assignments only). Skip the `proxmox_api_token_secret` key (secret). For each key where values differ, build a JSON object `{"key":"...","old_value":"...","new_value":"..."}` and append to `change_warnings_json` array. Warnings are informational only — do not add to `errors` array. If no rendered file exists (first render), `change_warnings_json` is `[]`. Also write warnings to `provisioning.txt` in human-readable format (`changed: <key>: old="..." -> new="..."`).
 - **Acceptance**: Given a rendered file containing `network_gateway = "192.168.1.99"` and a template with `network_gateway = "192.168.1.1"`, the resulting `validation.json` contains a `change_warnings` entry with `"key":"network_gateway"`, `"old_value":"192.168.1.99"`, `"new_value":"192.168.1.1"`. Given identical non-secret values, `change_warnings` is `[]`. Given no existing rendered file, `change_warnings` is `[]`.
 - **Traces to**: FR-009, FR-010, FR-012, US-5, D-004, SC-005
-- [ ] T010 [US5] Add non-secret value change warnings in `scripts/lab/lib/tfvars.sh`
+- [X] T010 [US5] Add non-secret value change warnings in `scripts/lab/lib/tfvars.sh`
 
 ---
 
@@ -279,7 +279,7 @@
 - **Description**: Modify `_tfvars_write_validation_json()` to accept two additional parameters: `drift_results_json` (JSON object string or `""`) and `change_warnings_json` (JSON array string or `""`). When non-empty, include them as `"drift_results": <value>` and `"change_warnings": <value>` in the output JSON. When empty, write `"drift_results": {}` and `"change_warnings": []` as defaults. Update ALL call sites of `_tfvars_write_validation_json()` (the happy path and the early-exit error path for missing template) to pass the new parameters — use empty strings for the error path.
 - **Acceptance**: `python3 -c "import json; d=json.load(open('validation.json')); assert 'drift_results' in d and 'change_warnings' in d"` succeeds on a sample output produced by the provisioner. The early-exit path (missing template) still writes a valid JSON file (with empty drift/warnings defaults). `shellcheck scripts/lab/lib/tfvars.sh` exits 0.
 - **Traces to**: FR-012, US-4, US-5, SC-004, SC-005
-- [ ] T011 [US5] Update `_tfvars_write_validation_json` signature and call sites in `scripts/lab/lib/tfvars.sh`
+- [X] T011 [US5] Update `_tfvars_write_validation_json` signature and call sites in `scripts/lab/lib/tfvars.sh`
 
 **Checkpoint**: US-4 and US-5 complete. Evidence artifact now includes drift results and change warnings.
 
@@ -309,7 +309,7 @@
   8. `test_template_file_has_sentinel`: Read `terraform/environments/prod.tfvars.template` and verify it contains exactly one `__INJECT_TOKEN_SECRET__` occurrence and the literal string `terraform@pve!terraform-token`.
 - **Acceptance**: `PYTHONPATH=python/src python3 -m pytest python/tests/orchestrator/test_tfvars_template.py -v` exits 0 with exactly 8 tests collected and 0 failures.
 - **Traces to**: FR-001, FR-002, FR-003, FR-006, FR-008, FR-009, FR-012, SC-002
-- [ ] T012 [P] Create `python/tests/orchestrator/test_tfvars_template.py` with 8 contract tests
+- [X] T012 [P] Create `python/tests/orchestrator/test_tfvars_template.py` with 8 contract tests
 
 ---
 
@@ -336,7 +336,7 @@
   6. `grep -c 'prod-tfvars' scripts/lab/verify_evidence.py` returns `0` (env-parameterized, not hardcoded)
   7. `grep -c '192.168.20' terraform/environments/lab.tfvars.template` returns `0` (correct subnet)
 - **Traces to**: SC-002, SC-006
-- [ ] T013 Run full verification suite (all 5 checks)
+- [X] T013 Run full verification suite (all 5 checks)
 
 ---
 

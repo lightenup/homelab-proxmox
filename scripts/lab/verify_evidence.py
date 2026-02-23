@@ -323,31 +323,34 @@ class EvidenceVerifier:
                 remediation="Regenerate reports/lab-snapshot.json to match schema"
             )
 
-            if environment == "prod":
+            if environment in ("prod", "lab"):
+                env_tfvars_dir = f"reports/{environment}-tfvars"
+                env_upper = environment.upper()
+
                 self._validate_report_schema(
-                    report_relpath="reports/prod-tfvars/validation.json",
+                    report_relpath=f"{env_tfvars_dir}/validation.json",
                     schema_filename="evidence-tfvars-proof.schema.json",
                     error_code="SCHEMA-002",
-                    remediation="Regenerate reports/prod-tfvars/validation.json to match schema"
+                    remediation=f"Regenerate {env_tfvars_dir}/validation.json to match schema"
                 )
 
-                proof = self.load_json("reports/prod-tfvars/validation.json")
+                proof = self.load_json(f"{env_tfvars_dir}/validation.json")
                 if isinstance(proof, dict):
                     if proof.get("validation_status") != "pass":
                         self.add_error(
                             "TFVARS-001",
-                            "PROD tfvars validation_status is not 'pass'",
-                            "Fix prod.tfvars provisioning/inputs and re-run so validation_status becomes 'pass'"
+                            f"{env_upper} tfvars validation_status is not 'pass'",
+                            f"Fix {environment}.tfvars provisioning/inputs and re-run so validation_status becomes 'pass'"
                         )
 
                     if proof.get("secret_present") is not True:
                         self.add_error(
                             "TFVARS-002",
-                            "PROD tfvars secret_present is false",
+                            f"{env_upper} tfvars secret_present is false",
                             "Ensure PROXMOX_API_TOKEN_SECRET (or PROXMOX_TOKEN_SECRET) is set and not a placeholder"
                         )
 
-                sha_path = self.pack_path / "reports/prod-tfvars/prod.tfvars.sha256"
+                sha_path = self.pack_path / f"{env_tfvars_dir}/{environment}.tfvars.sha256"
                 if sha_path.exists():
                     try:
                         sha = sha_path.read_text(encoding="utf-8").strip()
@@ -356,8 +359,8 @@ class EvidenceVerifier:
                     if re.fullmatch(r"[a-f0-9]{64}", sha or "") is None:
                         self.add_error(
                             "TFVARS-003",
-                            "PROD tfvars sha256 file is invalid (expected 64 lowercase hex chars)",
-                            "Regenerate reports/prod-tfvars/prod.tfvars.sha256 from a valid prod.tfvars"
+                            f"{env_upper} tfvars sha256 file is invalid (expected 64 lowercase hex chars)",
+                            f"Regenerate {env_tfvars_dir}/{environment}.tfvars.sha256 from a valid {environment}.tfvars"
                         )
 
         dir_name = self.pack_path.name

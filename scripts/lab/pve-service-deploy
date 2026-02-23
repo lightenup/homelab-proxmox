@@ -800,23 +800,21 @@ cmd_plan() {
         export TF_VAR_ssh_public_keys
     fi
 
-    # PROD tfvars automation: provision/validate and emit redacted proof before Terraform.
-    if [[ "${ENVIRONMENT}" == "prod" ]]; then
-        local tfvars_dir="${TFVARS_DIR:-/var/lib/homelab-proxmox/tfvars}"
+    # tfvars automation: provision/validate and emit redacted proof before Terraform.
+    local tfvars_dir="${TFVARS_DIR:-/var/lib/homelab-proxmox/tfvars}"
 
-        if ! _tfvars_provision_prod_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}"; then
-            write_plan_summary "blocked" "prod tfvars provisioning/validation failed"
-            emit_error "${RUN_ID}" "prod tfvars provisioning/validation failed"
-            run_offline_verify || true
-            trap - ERR
-            return 1
-        fi
+    if ! _tfvars_provision_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}" "${ENVIRONMENT}"; then
+        write_plan_summary "blocked" "${ENVIRONMENT} tfvars provisioning/validation failed"
+        emit_error "${RUN_ID}" "${ENVIRONMENT} tfvars provisioning/validation failed"
+        run_offline_verify || true
+        trap - ERR
+        return 1
+    fi
 
-        # Prefer the rendered/provisioned PROD tfvars path.
-        if [[ -f "${tfvars_dir%/}/prod.tfvars" ]]; then
-            TFVARS_PATH="${tfvars_dir%/}/prod.tfvars"
-            export TFVARS_PATH
-        fi
+    # Prefer the rendered/provisioned tfvars path.
+    if [[ -f "${tfvars_dir%/}/${ENVIRONMENT}.tfvars" ]]; then
+        TFVARS_PATH="${tfvars_dir%/}/${ENVIRONMENT}.tfvars"
+        export TFVARS_PATH
     fi
 
     local tfvars_path
@@ -1129,20 +1127,18 @@ cmd_apply() {
 
     assert_no_target_env || { run_offline_verify || true; return 1; }
 
-    # PROD tfvars automation: provision/validate and emit redacted proof before Terraform.
-    if [[ "${ENVIRONMENT}" == "prod" ]]; then
-        local tfvars_dir="${TFVARS_DIR:-/var/lib/homelab-proxmox/tfvars}"
+    # tfvars automation: provision/validate and emit redacted proof before Terraform.
+    local tfvars_dir="${TFVARS_DIR:-/var/lib/homelab-proxmox/tfvars}"
 
-        if ! _tfvars_provision_prod_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}"; then
-            emit_error "${RUN_ID}" "prod tfvars provisioning/validation failed"
-            run_offline_verify || true
-            return 1
-        fi
+    if ! _tfvars_provision_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}" "${ENVIRONMENT}"; then
+        emit_error "${RUN_ID}" "${ENVIRONMENT} tfvars provisioning/validation failed"
+        run_offline_verify || true
+        return 1
+    fi
 
-        if [[ -f "${tfvars_dir%/}/prod.tfvars" ]]; then
-            TFVARS_PATH="${tfvars_dir%/}/prod.tfvars"
-            export TFVARS_PATH
-        fi
+    if [[ -f "${tfvars_dir%/}/${ENVIRONMENT}.tfvars" ]]; then
+        TFVARS_PATH="${tfvars_dir%/}/${ENVIRONMENT}.tfvars"
+        export TFVARS_PATH
     fi
 
     # Ansible consumes vault secrets via a password file.
