@@ -140,7 +140,7 @@ As a homelab operator, I want the provisioner to warn me when a non-secret value
 ## Out of Scope
 
 - **Vault or secret management integration**: Moving secrets to a vault, KeyVault, or other secret management system is a separate initiative. This feature only improves how secrets are injected from environment variables.
-- **Lab tfvars CI provisioning**: Lab tfvars are manually managed on the PVE host, not rendered by CI. CI templates for lab will be created for future use but are not consumed by the provisioner today.
+- **Lab tfvars CI provisioning**: Lab and prod use the same provisioner codepath for evidence parity (Goal 6, D-005). Lab CI templates are created and consumed by the provisioner.
 - **Workflow YAML changes**: The provisioner is called from bash scripts, not from workflow step definitions. No GitHub Actions workflow file changes are in scope.
 - **HCL syntax validation**: Full HCL parsing or linting of template files is out of scope. Validation is limited to sentinel detection and key-set comparison.
 - **Multi-environment provisioning in a single run**: The provisioner renders one environment at a time. Orchestrating multiple environments is unchanged.
@@ -162,7 +162,7 @@ As a homelab operator, I want the provisioner to warn me when a non-secret value
 | D-002 | Keep `.tfvars.example` fallback in the provisioner lookup order | Ensures backward compatibility for older branches that have not been updated with `.tfvars.template` files. Avoids breaking CI on branch switches. |
 | D-003 | Only inject the token secret via sentinel; all other values — including the token ID (`terraform@pve!terraform-token`) — are literal in the template | The token ID is a non-secret constant enforced by the provisioner and safe to commit. Non-secret values (IPs, mountpoints, gateway) are static configuration that belongs in version control. Only the token secret — sourced from `PROXMOX_API_TOKEN_SECRET` at runtime — needs sentinel injection. |
 | D-004 | Warn but still overwrite when non-secret values differ between rendered file and template | The CI template is the source of truth. Manual hotfixes on the rendered file are temporary and should be backported to the template. The warning makes the overwrite auditable without blocking deployments. |
-| D-005 | Create lab CI templates for future use even though lab provisioning is not CI-managed today | Maintains structural parity between environments and prepares for future automation of lab provisioning without requiring another feature cycle. |
+| D-005 | Lab and prod use the same provisioner codepath | Evidence parity between environments. A lab deploy that produces no tfvars validation evidence is less trustworthy than prod. Same function, same artifacts, same guarantees. |
 | D-006 | Drift detection compares key sets only (not values) between template and rendered file | Value comparison is handled by the no-clobber warning (FR-009). Key-set comparison catches structural divergence (missing or extra keys) which is a different class of problem. |
 
 ## Open Questions
