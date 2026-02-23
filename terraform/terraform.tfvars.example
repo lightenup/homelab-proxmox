@@ -10,7 +10,7 @@
 # The workflow / scripts select the appropriate tfvars based on environment.
 
 # Minimal placeholder to show required variable names (do not commit secrets)
-proxmox_api_url = "https://proxmox.example:8006/api2/json"
+proxmox_api_url = "https://192.168.1.112:8006/api2/json"
 proxmox_api_token_id = "terraform@pve!token"
 proxmox_api_token_secret = "REDACTED"
 proxmox_node = "pve"
