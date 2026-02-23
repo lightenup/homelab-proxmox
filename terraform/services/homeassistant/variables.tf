@@ -1,6 +1,6 @@
 variable "proxmox_api_url" {
   type        = string
-  description = "Proxmox API URL, e.g. https://proxmox.example:8006/api2/json"
+  description = "Proxmox API URL, e.g. https://192.168.1.112:8006/api2/json"
 }
 
 variable "proxmox_api_token_id" {
