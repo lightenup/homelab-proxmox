@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-01-09T08:00:00Z",
+  "template_source": "fixture",
+  "rendered_path": "/var/lib/homelab-proxmox/tfvars/lab.tfvars",
+  "validation_status": "pass",
+  "token_id": "terraform@pve!terraform-token",
+  "secret_present": true,
+  "file_hash": "b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef12345678",
+  "validation_errors": [],
+  "drift_results": {
+    "provisioning_gaps": [],
+    "manual_additions": []
+  },
+  "change_warnings": []
+}

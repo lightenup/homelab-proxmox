@@ -1,17 +1,17 @@
-# PROD environment example (no secrets)
+# Documentation example — copy to prod.tfvars and replace placeholders. See prod.tfvars.template for CI use.
 # Copy to terraform/environments/prod.tfvars (ignored by git) and fill values.
 
-proxmox_api_url = "https://192.168.1.112:8006/api2/json"
+proxmox_api_url = "<pve-api-url>"  # e.g. https://<host>:8006/api2/json
 
 # Token-based auth (set via secrets; do not commit)
-proxmox_api_token_id     = "terraform@pve!token"
-proxmox_api_token_secret = "REDACTED"
+proxmox_api_token_id     = "<token-id>"          # e.g. terraform@pve!terraform-token
+proxmox_api_token_secret = "<your-token-secret>" # from Proxmox API token
 
 proxmox_node    = "pve"
 lxc_template    = "local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
 storage_pool    = "local-lvm"
 services_bridge = "vmbr0"
-network_gateway = "192.168.1.1"
+network_gateway = "<gateway-ip>"  # e.g. your LAN gateway address
 
 # DNS for all LXCs. Required when PVE host uses Tailscale (resolv.conf is 100.100.100.100).
 nameserver      = "1.1.1.1"
@@ -45,18 +45,18 @@ service_mountpoints = {
 }
 
 service_ips = {
-  adguard        = "192.168.1.210/24"
-  reverse_proxy  = "192.168.1.211/24"
-  homeassistant  = "192.168.1.212/24"
-  immich         = "192.168.1.213/24"
-  monitoring     = "192.168.1.214/24"
+  adguard        = "<service-ip>/24"  # e.g. <host>/24 in CIDR notation
+  reverse_proxy  = "<service-ip>/24"
+  homeassistant  = "<service-ip>/24"
+  immich         = "<service-ip>/24"
+  monitoring     = "<service-ip>/24"
 
   # Baseline example for spec 022
   # Suggested starting point: 2 vCPU / 2GB RAM / 32GB disk (see terraform/main.tf)
-  jellyfin       = "192.168.1.215/24"
-  nextcloud      = "192.168.1.216/24"
+  jellyfin       = "<service-ip>/24"
+  nextcloud      = "<service-ip>/24"
 }
 
 ssh_public_keys = [
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO4xtULNL2RD45yGIFiOWsRmWDkza6LZsCURRoJJiY04 jacobsen.andreas@gmail.com"
+  "<your-ssh-public-key>"  # e.g. ssh-ed25519 AAAA... user@host
 ]

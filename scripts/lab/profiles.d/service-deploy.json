@@ -48,6 +48,24 @@
       "description": "PROD tfvars hash (required for PROD runs)"
     },
     {
+      "path": "reports/lab-tfvars/provisioning.txt",
+      "type": "file",
+      "condition": "environment == 'lab'",
+      "description": "LAB tfvars provisioning report (redacted; required for LAB runs)"
+    },
+    {
+      "path": "reports/lab-tfvars/validation.json",
+      "type": "file",
+      "condition": "environment == 'lab'",
+      "description": "LAB tfvars validation proof (required for LAB runs)"
+    },
+    {
+      "path": "reports/lab-tfvars/lab.tfvars.sha256",
+      "type": "file",
+      "condition": "environment == 'lab'",
+      "description": "LAB tfvars hash (required for LAB runs)"
+    },
+    {
       "path": "reports/apply/lxc-mountpoints.txt",
       "type": "file",
       "condition": "service has host-path bind mounts",
