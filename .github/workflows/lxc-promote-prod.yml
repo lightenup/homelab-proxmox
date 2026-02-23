@@ -162,8 +162,21 @@ jobs:
           ./scripts/lab/fetch_evidence_pack.sh --environment lab --run-id "${RUN_ID}" >/dev/null
 
       - name: Verify evidence pack (offline)
+        id: verify_evidence
         if: always()
-        run: ./scripts/lab/ci-verify.sh evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          run_id="${{ steps.capture_run_id.outputs.run_id }}"
+          ./scripts/lab/ci-verify.sh "evidence/lab/${run_id}"
+          summary="evidence/lab/${run_id}/summary.json"
+          verified=false
+          if [[ -f "${summary}" ]]; then
+            status="$(jq -r '.verification.status // empty' "${summary}" 2>/dev/null || true)"
+            if [[ "${status}" == "PASS" ]]; then
+              verified=true
+            fi
+          fi
+          echo "verified=${verified}" >>"$GITHUB_OUTPUT"
 
       - name: Validate LAB apply evidence SHA
         id: sha_check
@@ -202,8 +215,13 @@ jobs:
         run: |
           set -euo pipefail
           ok=false
-          if [[ "${{ steps.apply_on_pve.outcome }}" == "success" && "${{ steps.sha_check.outputs.sha_ok }}" == "true" ]]; then
-            ok=true
+          sha_ok="${{ steps.sha_check.outputs.sha_ok }}"
+          if [[ "${sha_ok}" == "true" ]]; then
+            if [[ "${{ steps.apply_on_pve.outcome }}" == "success" ]]; then
+              ok=true
+            elif [[ "${{ steps.verify_evidence.outputs.verified }}" == "true" ]]; then
+              ok=true
+            fi
           fi
           echo "ok=${ok}" >>"$GITHUB_OUTPUT"
 
