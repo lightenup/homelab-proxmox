@@ -1,6 +1,6 @@
 ---
 # Defaults for nextcloud role
-nextcloud_version: "30"
+nextcloud_version: "31"
 nextcloud_port: 8080
 nextcloud_install_dir: "/opt/nextcloud"
 nextcloud_data_dir: "/opt/nextcloud"
