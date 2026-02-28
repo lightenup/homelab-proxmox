@@ -1,5 +1,5 @@
 {
-    auto_https off
+    acme_dns {{ caddy_acme_dns_provider }} {{ caddy_acme_dns_provider_name }}
     log {
         output stdout
     }

@@ -25,7 +25,8 @@ prometheus_port: 9090
 
 # Grafana configuration
 grafana_port: 3000
-grafana_domain: "monitoring.local"
+grafana_domain: "grafana.hus-sky.no"
+grafana_protocol: "https"
 grafana_datasource_name: "Prometheus"
 grafana_admin_user: "admin"
 grafana_admin_password: "admin"  # Override in vault for production
