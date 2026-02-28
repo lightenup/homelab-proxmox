@@ -97,6 +97,7 @@ As a homelab operator, I want all API credentials required for certificate issua
 - What happens when AdGuard (the DNS server) itself is being accessed via a subdomain that relies on DNS resolution? LAN clients need an alternative DNS path (e.g., the public DNS record) or the AdGuard rewrite must be configured before AdGuard is placed behind the proxy.
 - What happens when a new service is added in the future? The pattern for adding a new HTTPS-proxied service must be documented and repeatable (new Caddy site block template, AdGuard rewrite, optional DNS record).
 - What happens if the Domeneshop API credentials are rotated? The operator must update the Ansible vault and re-run the reverse proxy deployment. Certificate renewal must resume automatically.
+- What happens when a Tailscale client tries to resolve a `hus-sky.no` subdomain? Public DNS resolvers return the private LAN IP (`192.168.1.211`) from the registrar's A record. Tailscale's subnet route (`192.168.1.0/24`) makes this IP reachable. No special DNS configuration is needed on Tailscale clients — standard public DNS resolution works because the A record is publicly visible even though the IP is private.
 
 ## Requirements
 
@@ -124,7 +125,7 @@ As a homelab operator, I want all API credentials required for certificate issua
 - **Service Subdomain Mapping**: Associates each service with its public subdomain (`<service>.hus-sky.no`), backend IP, and backend port. Defines the routing configuration for the reverse proxy.
 - **TLS Certificate**: Represents a Let's Encrypt certificate bound to one or more `hus-sky.no` subdomains. Has issuance date, expiry date, and renewal state. Managed automatically by the reverse proxy.
 - **DNS Rewrite Rule**: An AdGuard DNS rewrite entry mapping a `hus-sky.no` subdomain to the reverse proxy LAN IP. Required for split-horizon DNS so LAN clients resolve subdomains locally.
-- **Registrar DNS Record**: A DNS A record (or wildcard) at Domeneshop pointing `*.hus-sky.no` (or individual subdomains) to the reverse proxy LAN IP. Required for Let's Encrypt DNS-01 validation and as the public-facing record.
+- **Registrar DNS Record**: A DNS A record (or wildcard) at Domeneshop pointing `*.hus-sky.no` (or individual subdomains) to the reverse proxy LAN IP. Required for routing client traffic (LAN and Tailscale) to the proxy. Note: DNS-01 validation uses TXT records created via the Domeneshop API, not A records — the A record is purely for traffic routing.
 - **Vault Secret**: An encrypted Ansible vault entry holding the Domeneshop API token and secret. Never stored in plaintext. Injected at deployment time.
 
 ## Success Criteria
@@ -147,10 +148,10 @@ As a homelab operator, I want all API credentials required for certificate issua
 - **A-004**: The reverse proxy LXC (`192.168.1.211`) already exists and is managed by Terraform/Ansible. No new LXC provisioning is needed.
 - **A-005**: AdGuard is running on `192.168.1.210` and is the LAN DNS server. It supports DNS rewrite configuration via its Ansible-managed setup or its web UI.
 - **A-006**: The Domeneshop DNS API supports the DNS-01 ACME challenge flow required by Let's Encrypt and Caddy.
-- **A-007**: All service backend IPs and ports remain unchanged; only the proxy and DNS layers change.
+- **A-007**: All service backend IPs and ports remain unchanged; only the proxy and DNS layers change. Current backends: Nextcloud (`192.168.1.216:8080`), Immich (`192.168.1.213:2283`), Grafana/Monitoring (`192.168.1.214:3000`), Jellyfin (`192.168.1.215:8096`), AdGuard (`192.168.1.210`, web UI port to be confirmed during planning — not currently defined in Ansible vars).
 - **A-008**: Terraform owns no changes in this feature — all work is Ansible-only (per the constitution's separation of concerns).
 - **A-009**: The Home Assistant service is not yet deployed. Its Caddy site block is included as a placeholder for future activation.
-- **A-010**: The `hus-sky.no` domain's public A records will point to a private LAN IP (`192.168.1.211`). External resolvers may not serve these records, but this is acceptable since services are LAN-only + Tailscale.
+- **A-010**: The `hus-sky.no` domain's public A records will point to a private LAN IP (`192.168.1.211`). Public DNS resolvers will serve these records normally (they are valid DNS entries), but the IP is only routable from the LAN or via Tailscale's subnet route (`192.168.1.0/24`). This is acceptable since services are LAN + Tailscale only and are not intended for public internet access.
 
 ## Out of Scope
 
@@ -162,6 +163,8 @@ As a homelab operator, I want all API credentials required for certificate issua
 - **HTTP-to-HTTPS redirect** — Whether HTTP requests to port 80 should redirect to HTTPS is a proxy configuration detail, not a user requirement. The reverse proxy's default behavior is acceptable.
 - **Removal of old `.local` mDNS hostnames** — The old hostnames can remain in DNS indefinitely without harm. Cleanup is a separate housekeeping task.
 - **AdGuard DNS rewrite automation via API** — If AdGuard rewrites must be configured manually via the AdGuard web UI rather than Ansible, that is acceptable as a one-time setup step. Ansible automation of this is desirable but not required for this feature.
+- **Certificate expiry alerting** — Caddy handles renewal automatically with built-in retries over a 30-day renewal window. Adding Prometheus or Uptime Kuma checks for certificate validity is a separate monitoring enhancement that can be layered on after the base HTTPS feature is stable.
+- **Monitoring system URL updates** — Existing Uptime Kuma targets and healthcheck URLs check backends directly by IP:port (e.g., `http://192.168.1.213:2283`). These continue to function since backends are unchanged. Updating monitoring to validate the HTTPS proxy layer is a separate observability improvement.
 
 ## Decision Log
 
