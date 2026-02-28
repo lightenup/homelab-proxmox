@@ -35,6 +35,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-04
 - Bash (POSIX-compatible, runs on Debian 12 Proxmox host) + `pct` (Proxmox CLI), `ping`, `ssh-keygen`, `grep`, `sudo` (037-ci-fresh-deploy-fixes)
 - N/A (evidence artifacts are flat files in the evidence pack) (037-ci-fresh-deploy-fixes)
 - Bash (POSIX-compatible, runs on Debian 12 Proxmox host) + `sed`, `awk`, `grep`, `sha256sum`/`shasum` (standard POSIX tools) (038-tfvars-template-separation)
+- Ansible 2.10+, Jinja2 templates, Go 1.22+ (build dependency for xcaddy) + Caddy v2 (custom build), xcaddy, `caddy-dns/lego-deprecated`, `go-acme/lego` v4.9.1 (039-https-services)
+- N/A (certificates managed by Caddy in `/var/lib/caddy/`) (039-https-services)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -70,9 +72,9 @@ specs/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 039-https-services: Added Ansible 2.10+, Jinja2 templates, Go 1.22+ (build dependency for xcaddy) + Caddy v2 (custom build), xcaddy, `caddy-dns/lego-deprecated`, `go-acme/lego` v4.9.1
 - 038-tfvars-template-separation: Added Bash (POSIX-compatible, runs on Debian 12 Proxmox host) + `sed`, `awk`, `grep`, `sha256sum`/`shasum` (standard POSIX tools)
 - 037-ci-fresh-deploy-fixes: Added Bash (POSIX-compatible, runs on Debian 12 Proxmox host) + `pct` (Proxmox CLI), `ping`, `ssh-keygen`, `grep`, `sudo`
-- 036-token-privilege-separation: Added Bash 5.x (orchestrator), HCL/Terraform 1.6.x (infrastructure), Python 3.x (inline parsing) + Proxmox `pct` CLI, Terraform (Telmate provider 2.9.x), jq, python3
 
 
 <!-- MANUAL ADDITIONS START -->
