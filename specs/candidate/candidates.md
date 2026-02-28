@@ -83,6 +83,10 @@ Deploying nextcloud required 12 incremental fix commits across ~10 CI runs. Ever
 **Problem**: The PVE `lab.tfvars` is not in the repo (gitignored, contains secrets). It drifts from reality silently. The `192.168.20.x` subnet, missing `nameserver`, and missing `nextcloud` entry were all drift.
 **Proposal**: Add a CI step that compares PVE tfvars structure (keys, not values) against the `.tfvars.example` files. Flag any keys present in the example but missing from PVE, or vice versa. Secrets are compared by presence, not value.
 
-#### 6. Ansible vault bootstrap
+#### 6. Static prod inventory for config-only deploys
+**Problem**: The prod inventory (`inventories/prod/hosts.yml`) only contains the Proxmox host and infra nodes. Service LXCs are not listed — they only exist in dynamically generated inventories created by `pve-service-deploy` on the PVE host. This means config-only changes to existing LXCs (e.g., updating Caddy templates, changing Nextcloud env vars) cannot be run from a developer laptop without ad-hoc inventory hacks.
+**Proposal**: Add a `services` group to `inventories/prod/hosts.yml` with static entries for each service LXC (hostname, `ansible_host` IP, `ansible_user`). This lets `ansible-playbook playbooks/<service>.yml -i inventories/prod/hosts.yml` work directly from a laptop for config-only changes, while `pve-service-deploy` continues to use generated inventories for full provisioning. The service entries should match the hostnames expected by `host_vars/` and playbook `hosts:` directives.
+
+#### 7. Ansible vault bootstrap
 **Problem**: Secrets had to be manually generated and added to a vault file. The vault password file had to be manually placed at the correct path. There was no vault file at all until nextcloud needed one.
 **Proposal**: `task service:scaffold` generates a vault template with placeholder values and instructions. `task vault:init` creates the vault password file at the expected path if it doesn't exist. Document the vault password location in the onboarding checklist.

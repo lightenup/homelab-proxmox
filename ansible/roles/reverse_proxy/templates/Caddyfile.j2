@@ -1,5 +1,5 @@
 {
-    acme_dns {{ caddy_acme_dns_provider }} {{ caddy_acme_dns_provider_name }}
+    acme_dns {{ caddy_acme_dns_provider }} {$DOMENESHOP_API_TOKEN} {$DOMENESHOP_API_SECRET}
     log {
         output stdout
     }

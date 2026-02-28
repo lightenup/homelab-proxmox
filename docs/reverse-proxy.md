@@ -5,18 +5,20 @@
 This project uses [Caddy](https://caddyserver.com/) as an internal reverse proxy running on a dedicated LXC container (`reverse_proxy` / `192.168.1.211`).
 
 The proxy serves as a single entry point for internal services, handling:
--   Simple HTTP routing (currently).
--   Future SSL termination (if needed).
+-   HTTPS termination with valid Let's Encrypt certificates.
+-   Automated certificate issuance and renewal via DNS-01 ACME challenges.
 -   Centralized logging.
 
 ## Architecture
 
 -   **Host**: `reverse_proxy` (LXC)
--   **Software**: Caddy v2 (installed via official Apt repository)
--   **Configuration Mode**: HTTP-only (`auto_https off`)
+-   **Software**: Custom Caddy v2 binary built with `xcaddy` (includes `caddy-dns/domainnameshop` module)
+-   **Domain**: `*.hus-sky.no` (Domeneshop)
+-   **TLS**: Automatic via DNS-01 challenges against the Domeneshop API
 -   **Config Structure**: Modular
-    -   Main Config: `/etc/caddy/Caddyfile`
+    -   Main Config: `/etc/caddy/Caddyfile` (global ACME settings)
     -   Site Configs: `/etc/caddy/conf.d/*.caddy`
+    -   Secrets: `/etc/caddy/domeneshop.env` (systemd EnvironmentFile, mode 0600)
 
 ## Ansible Role: `reverse_proxy`
 
@@ -24,10 +26,17 @@ The configuration is managed entirely via Ansible.
 
 ### Structure
 
--   `tasks/main.yml`: Installs Caddy, creates directories, deploys the main Caddyfile, and deploys individual site configurations.
--   `templates/Caddyfile.j2`: The global configuration template.
--   `templates/*.caddy.j2`: Individual service configuration templates (e.g., `immich.caddy.j2`).
--   `handlers/main.yml`: Handles restarting/reloading Caddy when configs change.
+-   `tasks/main.yml`: Installs Caddy, builds custom binary with xcaddy, deploys configs, manages systemd overrides.
+-   `defaults/main.yml`: DNS provider, plugin list, domain settings.
+-   `templates/Caddyfile.j2`: Global configuration (ACME DNS settings).
+-   `templates/*.caddy.j2`: Individual service site blocks (e.g., `immich.caddy.j2`).
+-   `templates/domeneshop.env.j2`: API credentials for DNS-01 challenges.
+-   `templates/caddy-domeneshop.conf.j2`: Systemd drop-in override for secrets injection.
+-   `handlers/main.yml`: Handles daemon-reload and Caddy restart when configs change.
+
+### Secrets
+
+Domeneshop API credentials are stored in Ansible vault (`group_vars/services/vault.yml`) and injected at runtime via a systemd EnvironmentFile. They are never written to the Caddyfile — Caddy reads them via `{$DOMENESHOP_API_TOKEN}` and `{$DOMENESHOP_API_SECRET}` parse-time substitution.
 
 ## How to Add a New Service
 
@@ -38,7 +47,7 @@ To proxy a new service (e.g., `homeassistant`), follow these steps:
 
     ```caddy
     # ansible/roles/reverse_proxy/templates/homeassistant.caddy.j2
-    http://homeassistant.local {
+    homeassistant.hus-sky.no {
         reverse_proxy {{ homeassistant_ip }}:{{ homeassistant_port }}
     }
     ```
@@ -71,7 +80,9 @@ To proxy a new service (e.g., `homeassistant`), follow these steps:
 
 -   **Check Status**: `systemctl status caddy`
 -   **View Logs**: `journalctl -u caddy -f`
--   **Validate Config**: `caddy validate --config /etc/caddy/Caddyfile`
+-   **Validate Config**: `DOMENESHOP_API_TOKEN=x DOMENESHOP_API_SECRET=x caddy validate --config /etc/caddy/Caddyfile` (env vars required for parse-time substitution)
+-   **Check Certs**: `caddy list-modules 2>/dev/null | grep domainnameshop` (verify DNS module loaded)
+-   **Cert Status**: Check `/var/lib/caddy/.local/share/caddy/certificates/` or Caddy logs for issuance
 
 ## How to Remove a Service
 

@@ -3,6 +3,10 @@
 **Feature**: 039-https-services
 **Date**: 2026-02-28
 
+## Implementation Note (2026-03-01)
+
+R-001 selected `caddy-dns/lego-deprecated` as the DNS provider module. During deployment, this module was found to be incompatible with Caddy v2.11.1 (panics with `missing method AppendRecords` — the lego interface is no longer supported by current Caddy). The module was replaced with `caddy-dns/domainnameshop`, a native libdns-based provider for Domeneshop (international brand: Domainname.shop). This module uses the same API credentials (`DOMENESHOP_API_TOKEN`, `DOMENESHOP_API_SECRET`) and supports both global `acme_dns` and per-site `tls` directives. The Caddyfile uses `acme_dns domainnameshop {$DOMENESHOP_API_TOKEN} {$DOMENESHOP_API_SECRET}` in the global options block.
+
 ---
 
 ## R-001: Caddy DNS Provider for Domeneshop

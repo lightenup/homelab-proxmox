@@ -121,6 +121,25 @@
     - '"No such app" not in app_disable_result.stderr'
   changed_when: app_disable_result.rc == 0
 
+# Configure trusted domains via occ (env var only applies on first install)
+- name: Set Nextcloud trusted domain 0 (primary)
+  ansible.builtin.command:
+    cmd: "docker exec -u www-data {{ nextcloud_app_container_name }} php occ config:system:set trusted_domains 0 --value={{ nextcloud_domain }}"
+  changed_when: false
+
+- name: Set Nextcloud trusted domain 1 (IP)
+  ansible.builtin.command:
+    cmd: "docker exec -u www-data {{ nextcloud_app_container_name }} php occ config:system:set trusted_domains 1 --value={{ nextcloud_ip }}"
+  changed_when: false
+
+- name: Set Nextcloud extra trusted domains
+  ansible.builtin.command:
+    cmd: "docker exec -u www-data {{ nextcloud_app_container_name }} php occ config:system:set trusted_domains {{ idx + 2 }} --value={{ item }}"
+  loop: "{{ nextcloud_trusted_domains_extra | default([]) }}"
+  loop_control:
+    index_var: idx
+  changed_when: false
+
 # Configure Redis caching
 - name: Set Nextcloud Redis host
   ansible.builtin.command:
