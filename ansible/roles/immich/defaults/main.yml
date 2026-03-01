@@ -13,25 +13,3 @@ immich_external_library_mounts: []
 immich_metrics_enabled: true
 immich_metrics_port: 8081
 immich_microservices_metrics_port: 8082
-
-# Monitoring contract for Prometheus self-registration (FR-007, US-4)
-monitoring_contract:
-  enabled: true
-  scrape_targets:
-    - job_name: "immich-api"
-      port: 8081
-      path: "/metrics"
-      scrape_interval: "30s"
-    - job_name: "immich-microservices"
-      port: 8082
-      path: "/metrics"
-      scrape_interval: "30s"
-  alert_rules:
-    - alert: ImmichJobBacklogHigh
-      expr: |
-        immich_jobs_waiting > 500
-      for: "10m"
-      severity: "warning"
-      summary: "Immich job backlog growing on {{ $labels.instance }}"
-      description: "Immich has more than 500 waiting jobs for 10 minutes (current: {{ $value }})."
-  dashboard_file: "grafana/dashboards/immich-photo-service.json"
