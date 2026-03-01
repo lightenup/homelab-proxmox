@@ -8,7 +8,7 @@ exclude: |
     python/\.pytest_cache/|
     python/\.mypy_cache/|
     python/\.ruff_cache/|
-    ansible/\.ansible/|
+    ansible/\.ansible/roles/geerlingguy\.docker/|
     ansible/roles/.*/files/|
     ansible/roles/.*/templates/|
     ansible/group_vars/.*/vault\.yml

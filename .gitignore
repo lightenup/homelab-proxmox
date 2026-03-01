@@ -36,6 +36,7 @@ ansible/playbooks/artifacts/
 **/tailscale_auth_key*
 **/*.key
 **/*.pem
+ansible/.vault-pass.txt
 
 # Disaster Recovery drill files (local only)
 scripts/dr/rclone.conf
