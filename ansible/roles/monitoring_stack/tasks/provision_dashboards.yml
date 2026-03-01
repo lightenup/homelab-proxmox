@@ -27,7 +27,7 @@
   loop_control:
     label: >-
       {{
-        item + ': ' + (hostvars[item].monitoring_contract.dashboard_file | default('no dashboard'))
-        if hostvars[item].monitoring_contract is defined
+        item + ': ' + (hostvars[item].monitoring_contract.dashboard_file | default('no dashboard', true))
+        if (hostvars[item].monitoring_contract is defined and hostvars[item].monitoring_contract.dashboard_file is not none)
         else item + ': no contract'
       }}
