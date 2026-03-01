@@ -2,12 +2,15 @@
 
 **Feature Branch**: `040-monitoring-overhaul`
 **Created**: 2026-03-01
+**Revised**: 2026-03-01 (Self-critique pass — see revision notes at end)
 **Status**: Draft
 **Input**: User description: "Monitoring observability overhaul"
 
 ## Overview
 
-The homelab monitoring stack currently has minimal coverage: Prometheus scrapes only itself and a Telegraf SNMP bridge, Grafana has a single Synology NAS dashboard, and three Synology-focused alert rules exist. A separate Uptime Kuma instance monitors four services via HTTP checks, and an independent Python healthcheck script watches seven services. This feature overhauls the monitoring foundation to provide infrastructure-level metrics from every service container, application-level metrics from services that natively expose them, a unified alerting framework that replaces Uptime Kuma, and an extensible pattern that makes onboarding future services automatic.
+The homelab monitoring stack currently has minimal coverage: Prometheus scrapes only itself and a Telegraf SNMP bridge, Grafana has a single Synology NAS dashboard, and three Synology-focused alert rules exist. A separate Uptime Kuma instance monitors four services via HTTP checks (though it is not included in the monitoring playbook and the Kuma role is unused), and an independent Python healthcheck script watches seven services. Monitoring stack component versions have already been updated to current stable releases (Prometheus v3.8.1, Grafana 12.3.1, Telegraf 1.37.0, Alertmanager v0.30.0) in the group_vars layer.
+
+This feature overhauls the monitoring foundation to provide infrastructure-level metrics from every service container, application-level metrics from services that natively expose them, a unified alerting framework that replaces Uptime Kuma, and an extensible pattern that makes onboarding future services automatic.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -82,35 +85,37 @@ As a homelab administrator, I want adding monitoring for a new service to requir
 
 ---
 
-### User Story 5 — Monitoring Stack Modernization (Priority: P2)
+### User Story 5 — Monitoring Stack Version Alignment (Priority: P2)
 
-As a homelab administrator, I want the monitoring stack components updated to current stable versions, so that I benefit from security patches, performance improvements, and new features rather than running software that is multiple major versions behind.
+As a homelab administrator, I want the monitoring stack's pinned defaults file to match the already-deployed current stable versions and for the new configuration templates introduced by this feature to be validated against those versions, so that the codebase is internally consistent and the overhaul does not inadvertently downgrade components.
 
-**Why this priority**: The current monitoring stack runs versions from late 2023 (Prometheus v2.48.0, Grafana 10.2.0, Telegraf 1.28, Alertmanager v0.26.0). Running outdated software accumulates security risk and misses improvements. However, this is lower priority than new capabilities because the existing versions are functional.
+**Why this priority**: The monitoring stack group_vars already specify current stable versions (Prometheus v3.8.1, Grafana 12.3.1, Telegraf 1.37.0, Alertmanager v0.30.0), but the role defaults file still pins late-2023 versions (Prometheus v2.48.0, Grafana 10.2.0, Telegraf 1.28, Alertmanager v0.26.0). This discrepancy risks confusion during implementation. The real work here is ensuring the new self-registration templates, alert rules, and dashboard JSON are compatible with the already-running v3.x/12.x stack — not performing the version upgrade itself.
 
-**Independent Test**: Deploy the updated stack, verify all existing functionality (Synology dashboard, Synology alerts, email alerting) still works after the version upgrade. Confirm the running versions match the updated targets.
+**Independent Test**: Verify that `ansible/roles/monitoring_stack/defaults/main.yml` version pins match `ansible/group_vars/monitoring/vars.yml`. Verify the Synology dashboard, Synology alerts, and email alerting continue to function with the new configuration templates.
 
 **Acceptance Scenarios**:
 
-1. **Given** the monitoring stack is redeployed with updated component versions, **When** the operator checks the running versions, **Then** all components are at their latest stable major versions (Prometheus 3.x, Grafana 12.x, Telegraf 1.37.x, Alertmanager 0.28.x or newer).
-2. **Given** the version upgrade is applied, **When** the operator views the existing Synology NAS dashboard, **Then** all panels display data correctly and the three existing Synology alert rules continue to evaluate without errors.
-3. **Given** the version upgrade includes a major version change (Prometheus v2 → v3), **When** the monitoring stack starts, **Then** no configuration compatibility errors appear in the logs and all scrape targets report successful scrapes.
+1. **Given** the monitoring stack role defaults previously pinned outdated versions, **When** this feature is complete, **Then** the defaults file version pins match the group_vars values (Prometheus v3.8.1, Grafana 12.3.1, Telegraf 1.37.0, Alertmanager v0.30.0) — eliminating the defaults/group_vars version mismatch.
+2. **Given** new Prometheus configuration templates are introduced (self-registration scrape configs, additional alert rule files), **When** the monitoring stack starts, **Then** no configuration compatibility errors appear in the logs and all scrape targets report successful scrapes — confirming compatibility with Prometheus 3.x syntax.
+3. **Given** new Grafana dashboard JSON files are introduced (infrastructure overview, reverse proxy, photo service), **When** the operator accesses the dashboards, **Then** they render correctly on Grafana 12.x — confirming no deprecated panel types or query syntax are used.
 
 ---
 
 ### User Story 6 — Uptime Kuma Decommission (Priority: P2)
 
-As a homelab administrator, I want Uptime Kuma fully removed from the codebase and the monitoring container, so that I no longer maintain a redundant monitoring tool alongside the unified alerting system.
+As a homelab administrator, I want Uptime Kuma fully removed from the codebase, the monitoring container, and all cross-role references, so that I no longer maintain a redundant monitoring tool alongside the unified alerting system and no dead code paths remain.
 
-**Why this priority**: Once unified alerting (US-2) is in place, Uptime Kuma provides no additional value. Keeping it running wastes container resources and creates confusion about which system is authoritative. However, removal depends on the replacement being functional first.
+**Why this priority**: Once unified alerting (US-2) is in place, Uptime Kuma provides no additional value. Keeping it running wastes container resources and creates confusion about which system is authoritative. However, removal depends on the replacement being functional first. Additionally, the `proxmox_backup` role has a `kuma_only` email mode with code that references Uptime Kuma push monitors — this dead code path must be cleaned up.
 
-**Independent Test**: After removal, verify no Uptime Kuma processes run, no Kuma-related files exist in the codebase, and the monitoring playbook still succeeds.
+**Independent Test**: After removal, verify no Uptime Kuma processes run, no Kuma-related files exist in the codebase (including cross-role references), and both the monitoring playbook and the proxmox backup playbook still succeed.
 
 **Acceptance Scenarios**:
 
 1. **Given** the Uptime Kuma Ansible role directory previously existed, **When** this feature is complete, **Then** the directory `ansible/roles/uptime_kuma/` no longer exists in the repository.
 2. **Given** Uptime Kuma variables were defined in monitoring host vars and vault, **When** this feature is complete, **Then** all Uptime Kuma-related variables (`monitoring_targets`, `uptime_kuma_api_url`, `uptime_kuma_api_wait_timeout`, `uptime_kuma_api_retry_delay`, `uptime_kuma_api_max_retries`, `uptime_kuma_admin_user`, `uptime_kuma_admin_password`) are removed.
 3. **Given** the monitoring playbook is run after Uptime Kuma removal, **When** the playbook completes, **Then** no errors reference missing Uptime Kuma roles or variables, and the monitoring stack functions correctly.
+4. **Given** the `proxmox_backup` role had a `kuma_only` email mode with `configure_kuma.yml` that referenced Uptime Kuma push monitors, **When** this feature is complete, **Then** the `kuma_only` mode code, `configure_kuma.yml` task file, and KUMA_URL template variable are removed from the `proxmox_backup` role, and the `proxmox_backup_email_mode` options no longer include `kuma_only`.
+5. **Given** operational documentation in `docs/operations.md` referenced "Kuma Migration" and "Current Mode: kuma_only", **When** this feature is complete, **Then** those references are updated to reflect the current state (Uptime Kuma decommissioned, email mode disabled/enabled only).
 
 ---
 
@@ -124,6 +129,9 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase a
 - **What happens if the email notification system is down when an alert fires?** The alert management system logs the failed delivery. The alert remains active and delivery is retried on the next evaluation cycle. The operator can view pending alerts in the alert status interface.
 - **What happens if a service's monitoring contract declares an alert rule with invalid syntax?** The monitoring stack should fail deployment with a validation error identifying the specific service and rule, rather than deploying a broken configuration.
 - **What happens to existing Synology metrics and alerts during the overhaul?** The existing Synology SNMP integration (Telegraf), three Synology alert rules, and the Synology NAS dashboard must be preserved unchanged. They continue to function alongside the new capabilities.
+- **What happens when the generic ServiceDown alert fires alongside the existing SynologyNASDown alert?** Both would fire if the Telegraf SNMP target goes down — the generic `up == 0` rule and the Synology-specific `SynologyNASDown` rule. The alerting system must use inhibition rules so that the more specific `SynologyNASDown` alert takes precedence and the generic `ServiceDown` alert is suppressed for Synology targets, avoiding duplicate notifications.
+- **What happens when an infrastructure metrics agent is unreachable but the service container itself is healthy?** Both the agent-down alert and any threshold alerts for that container become invalid. The alerting system should use inhibition rules to suppress infrastructure threshold alerts (CPU, memory, disk) for a container when that container's agent is unreachable, since the threshold data is stale.
+- **What happens to historical Uptime Kuma data when it is decommissioned?** Historical uptime data stored in Uptime Kuma's SQLite database on the monitoring container is discarded. No export or migration is performed because the Prometheus-based unified alerting system provides equivalent availability tracking via the `up` metric going forward. The operator accepts loss of pre-decommission uptime history from the Kuma tool.
 
 ## Requirements *(mandatory)*
 
@@ -169,17 +177,25 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase a
 - **FR-021**: All Uptime Kuma-related variables MUST be removed from `ansible/host_vars/monitoring/vars.yml` (monitoring_targets, uptime_kuma_api_url, uptime_kuma_api_wait_timeout, uptime_kuma_api_retry_delay, uptime_kuma_api_max_retries). *(traces to US-6)*
 - **FR-022**: All Uptime Kuma-related secrets MUST be removed from `ansible/group_vars/monitoring/vault.yml` (uptime_kuma_admin_user, uptime_kuma_admin_password). *(traces to US-6)*
 - **FR-023**: The Uptime Kuma container on the monitoring LXC MUST be stopped and removed as part of deployment. *(traces to US-6)*
+- **FR-024**: The `proxmox_backup` role's Uptime Kuma integration MUST be removed: the `configure_kuma.yml` task file, the `kuma_only` option from `proxmox_backup_email_mode`, and the `KUMA_URL` template variable in `proxmox-backup.conf.j2`. *(traces to US-6)*
+- **FR-025**: Operational documentation (`docs/operations.md`) MUST be updated to remove references to Uptime Kuma migration and the `kuma_only` email mode. *(traces to US-6)*
 
-#### Version Updates
+#### Version Alignment
 
-- **FR-024**: All monitoring stack components MUST be updated to current stable versions: Prometheus to latest 3.x, Grafana to latest 12.x, Telegraf to latest 1.37.x, Alertmanager to latest 0.28.x or newer. *(traces to US-5)*
-- **FR-025**: Version updates MUST NOT break existing functionality — the Synology SNMP integration, existing alert rules, and Synology dashboard MUST continue to work after the upgrade. *(traces to US-5)*
+- **FR-026**: The monitoring stack role defaults (`ansible/roles/monitoring_stack/defaults/main.yml`) MUST be updated to match the already-deployed versions in group_vars (Prometheus v3.8.1, Grafana 12.3.1, Telegraf 1.37.0, Alertmanager v0.30.0), eliminating the defaults/group_vars version mismatch. *(traces to US-5)*
+- **FR-027**: All new configuration templates (scrape configs, alert rules, dashboard JSON) MUST be compatible with the currently running Prometheus 3.x and Grafana 12.x — no deprecated syntax or features. *(traces to US-5)*
+
+#### Alerting Hygiene
+
+- **FR-028**: The alerting configuration MUST include inhibition rules to prevent the generic ServiceDown alert from firing alongside the more specific SynologyNASDown alert for the same target, avoiding duplicate notifications. *(traces to US-2)*
+- **FR-029**: The alerting configuration MUST include inhibition rules to suppress infrastructure threshold alerts (CPU, memory, disk) for a specific container when that container's infrastructure metrics agent is unreachable, since threshold data is stale. *(traces to US-1, US-2)*
+- **FR-030**: The monitoring stack deployment MUST validate alert rule syntax before activating new configuration. If any service's monitoring contract contains an invalid alert rule, deployment MUST fail with an error identifying the specific service and rule. *(traces to US-4)*
 
 #### IaC & Operations
 
-- **FR-026**: All changes MUST be deployed via Ansible roles and playbooks (no manual configuration of the monitoring stack). *(traces to all stories)*
-- **FR-027**: The monitoring playbook MUST be idempotent — re-running it without changes produces no unexpected modifications. *(traces to all stories)*
-- **FR-028**: No secrets (SMTP credentials, Grafana admin password, SNMP credentials) MUST be committed to the git repository in plaintext. *(traces to all stories)*
+- **FR-031**: All changes MUST be deployed via Ansible roles and playbooks (no manual configuration of the monitoring stack). *(traces to all stories)*
+- **FR-032**: The monitoring playbook MUST be idempotent — re-running it without changes produces no unexpected modifications. *(traces to all stories)*
+- **FR-033**: No secrets (SMTP credentials, Grafana admin password, SNMP credentials) MUST be committed to the git repository in plaintext. *(traces to all stories)*
 
 ### Key Entities
 
@@ -198,11 +214,13 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase a
 - **SC-003**: Operator can view Caddy request rates and error breakdowns on a dedicated reverse proxy dashboard, with data refreshing within 30 seconds of actual traffic.
 - **SC-004**: Operator can view Immich API throughput and job queue sizes on a dedicated photo service dashboard, with data refreshing within 30 seconds.
 - **SC-005**: Adding monitoring for a future service requires changes only to that service's role — verified by confirming that zero lines in the monitoring role's code reference Caddy or Immich by name.
-- **SC-006**: No Uptime Kuma process, role directory, variable, or secret exists in the codebase or on the monitoring container after deployment.
-- **SC-007**: All monitoring stack components run at their latest stable major versions (Prometheus 3.x, Grafana 12.x, Telegraf 1.37.x, Alertmanager 0.28.x+).
+- **SC-006**: No Uptime Kuma process, role directory, variable, secret, or cross-role reference (including `proxmox_backup` role's `kuma_only` code path and `docs/operations.md` Kuma references) exists in the codebase or on the monitoring container after deployment.
+- **SC-007**: The monitoring stack role defaults file version pins match the group_vars values (Prometheus v3.8.1, Grafana 12.3.1, Telegraf 1.37.0, Alertmanager v0.30.0) — no version mismatch between the two layers.
 - **SC-008**: Existing Synology NAS dashboard displays data correctly and all three Synology alert rules evaluate without errors after the overhaul.
 - **SC-009**: Re-running the monitoring Ansible playbook without changes produces an idempotent result (no unexpected changes).
 - **SC-010**: Infrastructure alert rules fire correctly: disk warning at >85%, disk critical at >95%, memory warning at >85%, CPU warning at >85% sustained — verified by test scenarios or threshold inspection.
+- **SC-011**: When the Telegraf SNMP target goes down, only the SynologyNASDown alert fires — the generic ServiceDown alert is suppressed for that target via inhibition rules (no duplicate alerts).
+- **SC-012**: The monitoring LXC's total resource consumption (all monitoring stack components combined) does not exceed 4 GB RAM and 2 vCPU under normal operation with all 7 infrastructure agents + 2 application metrics endpoints scraped.
 
 ## Assumptions
 
@@ -211,11 +229,21 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase a
 - **A-003**: Caddy supports native Prometheus-format metrics via a configuration directive. No external exporter is needed.
 - **A-004**: Immich supports native Prometheus-format metrics via environment variable configuration. No external exporter is needed.
 - **A-005**: The infrastructure metrics agent can run as a standalone binary on containers that do not have Docker installed (e.g., Jellyfin, Reverse Proxy).
-- **A-006**: Home Assistant is not yet deployed (placeholder role only) and is excluded from monitoring in this iteration. The infrastructure metrics agent is still deployed to its container if the container exists.
+- **A-006**: Home Assistant is not yet deployed (placeholder role only — `ansible/roles/homeassistant/tasks/main.yml` is a debug placeholder) and is excluded from application-level monitoring in this iteration. The infrastructure metrics agent is still deployed to its container if the container exists.
 - **A-007**: The existing Telegraf SNMP bridge for Synology NAS continues to function unchanged alongside the new components.
-- **A-008**: Prometheus 3.x is backwards-compatible with the existing scrape configuration syntax or requires only minor, documented adjustments.
-- **A-009**: The Grafana version currently running may already be newer than the version pinned in defaults (10.2.0 vs. potentially 12.x). The actual running version should be verified before applying the version bump.
-- **A-010**: The monitoring playbook does not currently include the Uptime Kuma role (confirmed by inspection of `ansible/playbooks/monitoring.yml`), so removing the role directory will not break the playbook.
+- **A-008**: The monitoring stack is already running Prometheus v3.8.1 (confirmed in `ansible/group_vars/monitoring/vars.yml`). The Prometheus v2 → v3 migration has already occurred. New configuration templates must target Prometheus 3.x syntax from the start.
+- **A-009**: The monitoring stack is already running Grafana 12.3.1 (confirmed in `ansible/group_vars/monitoring/vars.yml`). The role defaults file (`ansible/roles/monitoring_stack/defaults/main.yml`) still pins Grafana 10.2.0, but group_vars override defaults. The defaults file needs alignment, not a version upgrade operation.
+- **A-010**: The monitoring playbook does not currently include the Uptime Kuma role (confirmed by inspection of `ansible/playbooks/monitoring.yml` — roles are `lxc_base`, `mdns_base`, `monitoring_stack`), so removing the Uptime Kuma role directory will not break the playbook.
+- **A-011**: The `proxmox_backup` role's `proxmox_backup_email_mode` is currently set to `"disabled"` in `ansible/group_vars/proxmox_hosts/vars.yml` (not `kuma_only`), meaning the Kuma push integration is already inactive in practice. Removing the `kuma_only` code path will not break the currently running backup system.
+- **A-012**: The `docs/operations.md` documentation claiming "Current Mode: kuma_only (Email disabled, Kuma active)" is stale and does not match the actual group_vars setting of `"disabled"`. This documentation drift is corrected as part of the Uptime Kuma decommission.
+
+## Non-Functional Requirements
+
+- **NFR-001**: Each infrastructure metrics agent instance MUST consume no more than 50 MB RAM and negligible CPU on the service container it runs on — verified by inspection of agent resource usage on at least one container after deployment.
+- **NFR-002**: The monitoring LXC's total resource consumption (all stack components: Prometheus, Grafana, Telegraf, Alertmanager) MUST remain within 4 GB RAM and 2 vCPU under normal operation with all targets scraped. *(aligns with feature 017 resource allocation)*
+- **NFR-003**: The infrastructure overview dashboard MUST load within 5 seconds when displaying a 24-hour time range.
+- **NFR-004**: Alert delivery latency MUST be less than 5 minutes from condition trigger to email receipt — accounting for scrape interval (30s), evaluation interval (30s), alert threshold duration (2+ minutes), and SMTP delivery.
+- **NFR-005**: Adding 7 infrastructure agent targets + 2 application metrics endpoints to Prometheus MUST NOT cause TSDB disk usage to exceed 25 GB with 15-day retention (building on the existing ~10 GB estimate from feature 017).
 
 ## Out of Scope
 
@@ -229,6 +257,7 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase a
 - **Public internet exposure** — monitoring dashboards and metrics endpoints remain LAN-only.
 - **New notification channels** — no Slack, Discord, PagerDuty, or push notification integrations. Email-only per existing setup.
 - **Recording rules or complex aggregations** — deferred to the security monitoring iteration where they are needed for anomaly detection.
+- **Push-based heartbeat monitoring replacement** — the `proxmox_backup` role previously had an Uptime Kuma push monitor for backup success heartbeats. This push-based pattern (where the backup script pushes "I'm alive" to a monitor) is fundamentally different from Prometheus's pull-based model. Implementing a push-gateway or dead-man's-switch replacement is deferred. The backup script's success/failure is already logged, and the operator can verify backup health via the existing systemd timer status.
 
 ## Constraints
 
@@ -247,6 +276,7 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase a
 - **D-003**: Existing Ansible roles for each service (reverse_proxy, immich, jellyfin, nextcloud, adguard, homeassistant, lxc_base) — monitoring contracts will be added to these roles' defaults.
 - **D-004**: Existing Ansible Vault for the monitoring group — secrets for Uptime Kuma removal and any new credentials.
 - **D-005**: Network connectivity between monitoring LXC (192.168.1.214) and all service LXCs on metrics-specific ports.
+- **D-006**: Feature 013 (Proxmox Config Backup) — the `proxmox_backup` role has Uptime Kuma references (`configure_kuma.yml`, `kuma_only` mode) that must be cleaned up as part of the Uptime Kuma decommission.
 
 ## Decision Log
 
@@ -258,11 +288,42 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase a
 | DL-04 | Should Home Assistant get a monitoring contract? | No. Excluded from this iteration. | The HA Ansible role is a placeholder — the service is not yet deployed. Cannot monitor what does not exist. The infrastructure metrics agent will be deployed to the container if it exists, but no HA-specific monitoring contract is created. |
 | DL-05 | What alert thresholds to use for infrastructure alerts? | 85% warning, 95% critical for disk. 85% warning for memory and CPU. 2 minutes for service-down. | Industry-standard thresholds that balance early warning with noise reduction. Aligned with the existing Synology volume alert threshold (85%). The 2-minute service-down threshold matches the existing Uptime Kuma `alert_down_threshold` of 2 minutes. |
 | DL-06 | Should Uptime Kuma be removed in this iteration or deferred? | Remove in this iteration. | Once the Prometheus `up` metric + generic ServiceDown alert rule is in place, Uptime Kuma provides zero additional value. Keeping it running wastes resources and creates confusion about which system is authoritative. The monitoring playbook already does not include the Uptime Kuma role, making removal low-risk. |
-| DL-07 | Should version bumps be included or done separately? | Include in this iteration. | The monitoring stack runs versions from late 2023. Updating during the overhaul is more efficient than doing a separate upgrade iteration, and avoids maintaining backwards compatibility with old versions for the new self-registration templates. |
-| DL-08 | What Grafana version is actually running? | The defaults file says 10.2.0, but the running version may be newer (12.x). Actual running version must be verified before applying the bump. | The HTTPS services feature (039) added `grafana_domain` configuration, which may have updated the running Grafana version without updating the defaults file. The implementation must check the actual state to avoid a downgrade. |
+| DL-07 | Should version bumps be included or done separately? | Version bumps are already done — only defaults-file alignment is needed. | Inspection of `ansible/group_vars/monitoring/vars.yml` confirms Prometheus v3.8.1, Grafana 12.3.1, Telegraf 1.37.0, Alertmanager v0.30.0 are already deployed. The role defaults file still pins late-2023 versions, creating a mismatch. This feature aligns the defaults to match group_vars (housekeeping) and ensures new templates target the v3.x/12.x APIs. No upgrade operation is needed. |
+| DL-08 | What Grafana version is actually running? | Grafana 12.3.1, confirmed in `ansible/group_vars/monitoring/vars.yml` with `grafana_domain: "grafana.hus-sky.no"` and `grafana_protocol: "https"`. The defaults file pins 10.2.0 but group_vars override it. | Resolved by inspecting `ansible/group_vars/monitoring/vars.yml`. The HTTPS services feature (039) updated the Grafana domain and protocol. The version bump was applied to group_vars at some prior point. |
 | DL-09 | Should the infrastructure metrics agent run as a standalone binary or Docker container? | Standalone binary. | Some LXCs (Jellyfin, Reverse Proxy) run services natively without Docker. A standalone binary works everywhere regardless of whether Docker is installed. |
 | DL-10 | Should the metrics agent be deployed via `lxc_base` or individually per service? | Deploy as a shared base role included in every service's playbook. | This ensures every container gets infrastructure metrics automatically as new services are added, without requiring per-service configuration. Aligns with the extensible pattern philosophy. |
+
+| DL-11 | How to handle ServiceDown/SynologyNASDown alert overlap? | Use Alertmanager inhibition rules so that the more specific `SynologyNASDown` alert suppresses the generic `ServiceDown` alert for Synology targets. | The existing alertmanager config already uses inhibition (inhibit disk alerts when NAS is down). Extending this pattern to suppress the generic ServiceDown for Synology targets avoids duplicate emails while preserving both rules for their distinct use cases. |
+| DL-12 | Should infrastructure threshold alerts be inhibited when agent is unreachable? | Yes. Add inhibition rules that suppress CPU/memory/disk threshold alerts when the agent's `up` metric is 0. | Stale threshold data should not trigger false alerts. Inhibiting threshold alerts when the agent is down is standard practice and reduces noise. |
+| DL-13 | What happens to Uptime Kuma historical data? | Discarded. No export or migration. | The Prometheus `up` metric provides equivalent availability tracking going forward. The Kuma SQLite database is on the monitoring LXC (Docker volume) and contains only 4 monitor targets with limited history. The value of preserving this data does not justify the complexity. |
+| DL-14 | What about the proxmox_backup role's Kuma integration? | Remove the `kuma_only` code path entirely. | The `proxmox_backup_email_mode` is already set to `"disabled"` in group_vars (not `kuma_only`), so the Kuma code path is dead. The default in the role's `defaults/main.yml` is `kuma_only`, but the group_vars override makes it inactive. Removing the dead code prevents future confusion and eliminates a dangling dependency on the deleted Uptime Kuma role. |
+| DL-15 | Should the proxmox backup heartbeat monitoring be replaced? | No — deferred to a future iteration. | The push-based heartbeat pattern (backup script pushes "I'm alive") is fundamentally different from Prometheus's pull-based model. Implementing a push-gateway or dead-man's-switch is non-trivial and orthogonal to the monitoring overhaul's core goals. The backup script logs success/failure to systemd journal, which is sufficient for now. |
 
 ## Open Questions
 
 None — all ambiguities resolved in Decision Log above.
+
+---
+
+## Self-Critique
+
+### Strengths
+- Comprehensive user stories with well-structured Given/When/Then acceptance scenarios
+- Clear separation of P1 vs P2 priorities with justified rationale
+- Extensive edge case coverage (8 original + 3 added in revision)
+- Decision log resolves all ambiguities with documented rationale
+- Constitution cross-check is thorough (secrets policy, separation of concerns, dual-provisioning parity)
+
+### Issues Found (revision pass)
+- **[severity: high] Factual inaccuracy — version update story (US-5)**: The original spec claimed the stack "runs versions from late 2023" but `ansible/group_vars/monitoring/vars.yml` already has Prometheus v3.8.1, Grafana 12.3.1, Telegraf 1.37.0, Alertmanager v0.30.0. US-5 was framed as a version upgrade when the actual work is defaults-file alignment and template compatibility. **Fixed**: Rewrote US-5 as "Version Alignment", corrected narrative, updated acceptance scenarios and DL-07/DL-08.
+- **[severity: high] Missing cross-role Uptime Kuma dependencies**: The `proxmox_backup` role has `configure_kuma.yml`, a `kuma_only` email mode, and KUMA_URL template variable — all referencing Uptime Kuma. `docs/operations.md` also references Kuma. None of these were covered by FR-020 through FR-023. **Fixed**: Added FR-024, FR-025, US-6 acceptance scenarios 4–5, dependency D-006, assumptions A-011/A-012, and decision DL-14.
+- **[severity: high] ServiceDown/SynologyNASDown alert duplication**: FR-012's generic `up == 0` alert would fire simultaneously with the existing `SynologyNASDown` alert for the same target, causing duplicate emails. **Fixed**: Added FR-028 (inhibition rules), edge case, SC-011, and decision DL-11.
+- **[severity: medium] No non-functional requirements**: Feature 017 had detailed NFRs. Feature 040 adds 7 agents + 2 app metrics endpoints + 3 dashboards with zero NFRs. **Fixed**: Added NFR-001 through NFR-005.
+- **[severity: medium] Missing alert inhibition for stale threshold data**: No requirement to suppress CPU/memory/disk alerts when the agent itself is down. **Fixed**: Added FR-029 and decision DL-12.
+- **[severity: medium] Uptime Kuma data disposition not specified**: Spec said "remove" but didn't address historical data. **Fixed**: Added edge case and decision DL-13.
+- **[severity: medium] Missing alert rule validation requirement**: Edge case mentioned it but no FR covered it. **Fixed**: Added FR-030.
+- **[severity: low] Assumption A-009 hedged when fact was known**: Group_vars clearly show Grafana 12.3.1. **Fixed**: Stated the confirmed version.
+- **[severity: low] Push-based heartbeat monitoring gap not acknowledged**: Removing Kuma eliminates the proxmox backup push monitor pattern with no replacement. **Fixed**: Added to Out of Scope with decision DL-15.
+
+### Verdict
+ACCEPT (after revisions applied above)

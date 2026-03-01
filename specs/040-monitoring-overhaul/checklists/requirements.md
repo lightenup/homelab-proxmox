@@ -2,6 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-03-01
+**Revised**: 2026-03-01 (Post self-critique pass)
 **Feature**: [specs/040-monitoring-overhaul/spec.md](../spec.md)
 
 ## Content Quality
@@ -18,30 +19,43 @@
 - [x] CHK007 Success criteria are measurable
 - [x] CHK008 Success criteria are technology-agnostic (no implementation details)
 - [x] CHK009 All acceptance scenarios are defined (Given/When/Then format)
-- [x] CHK010 Edge cases are identified (8 edge cases documented)
-- [x] CHK011 Scope is clearly bounded (Out of Scope section with 10 items)
-- [x] CHK012 Dependencies and assumptions identified (5 dependencies, 10 assumptions)
+- [x] CHK010 Edge cases are identified (11 edge cases documented — 8 original + 3 added in revision)
+- [x] CHK011 Scope is clearly bounded (Out of Scope section with 11 items)
+- [x] CHK012 Dependencies and assumptions identified (6 dependencies, 12 assumptions)
 
 ## Feature Readiness
 
-- [x] CHK013 All functional requirements have clear acceptance criteria (FR-001 through FR-028, each traced to user stories)
-- [x] CHK014 User scenarios cover primary flows (6 user stories with 5+ acceptance scenarios each)
-- [x] CHK015 Feature meets measurable outcomes defined in Success Criteria (10 measurable outcomes)
+- [x] CHK013 All functional requirements have clear acceptance criteria (FR-001 through FR-033, each traced to user stories)
+- [x] CHK014 User scenarios cover primary flows (6 user stories with 3–5 acceptance scenarios each)
+- [x] CHK015 Feature meets measurable outcomes defined in Success Criteria (12 measurable outcomes)
 - [x] CHK016 No implementation details leak into specification
+- [x] CHK017 Non-functional requirements present with measurable thresholds (NFR-001 through NFR-005)
 
 ## Constitution Cross-Check
 
-- [x] CHK017 Spec-Driven Workflow: Feature follows `specs/NNN-*/` directory convention
-- [x] CHK018 Secrets Policy: FR-028 explicitly prohibits plaintext secrets in repository
-- [x] CHK019 Separation of Concerns: C-005 enforces Terraform/Ansible boundary
-- [x] CHK020 Dual-Provisioning Parity: C-007 requires CI/CD and laptop deployability
-- [x] CHK021 Decision Log present with rationale for each ambiguity resolved (10 decisions)
-- [x] CHK022 No TBD/TODO items remain — all resolved or scoped out
-- [x] CHK023 Open Questions section present (resolved: "None")
+- [x] CHK018 Spec-Driven Workflow: Feature follows `specs/NNN-*/` directory convention
+- [x] CHK019 Secrets Policy: FR-033 explicitly prohibits plaintext secrets in repository
+- [x] CHK020 Separation of Concerns: C-005 enforces Terraform/Ansible boundary
+- [x] CHK021 Dual-Provisioning Parity: C-007 requires CI/CD and laptop deployability
+- [x] CHK022 Decision Log present with rationale for each ambiguity resolved (15 decisions)
+- [x] CHK023 No TBD/TODO items remain — all resolved or scoped out
+- [x] CHK024 Open Questions section present (resolved: "None")
+
+## Self-Critique Findings (Revision Pass)
+
+- [x] CHK025 Factual accuracy verified: version state matches codebase reality (group_vars vs defaults)
+- [x] CHK026 Cross-role dependencies identified: proxmox_backup Kuma integration addressed (FR-024, FR-025)
+- [x] CHK027 Alert deduplication addressed: ServiceDown/SynologyNASDown inhibition rules (FR-028, SC-011)
+- [x] CHK028 Alert inhibition for stale data addressed: suppress thresholds when agent down (FR-029)
+- [x] CHK029 Deploy-time validation addressed: alert rule syntax validation (FR-030)
+- [x] CHK030 Documentation updates included: docs/operations.md Kuma references (FR-025)
+- [x] CHK031 Historical data disposition documented: Kuma data discarded (DL-13)
+- [x] CHK032 Push-based monitoring gap acknowledged: deferred to future iteration (Out of Scope + DL-15)
 
 ## Notes
 
-- All checklist items pass. Specification is ready for `/speckit.clarify` or `/speckit.plan`.
-- Decision Log documents 10 resolved ambiguities with rationale.
-- Success criteria SC-001 through SC-010 reference version numbers (Prometheus 3.x, Grafana 12.x) which are acceptable as they describe desired state targets, not implementation approaches.
-- FR-024 references specific version ranges; this is intentional as version currency is a core requirement of US-5.
+- All checklist items pass after revision. Specification is ready for `/speckit.plan`.
+- Decision Log documents 15 resolved ambiguities with rationale (10 original + 5 from revision).
+- Success criteria SC-001 through SC-012 are measurable and verifiable.
+- FR-026/FR-027 describe defaults-file alignment (not a version upgrade), reflecting the actual codebase state where group_vars already contain current versions.
+- NFR-001 through NFR-005 provide resource and performance bounds that were absent in the original draft.
