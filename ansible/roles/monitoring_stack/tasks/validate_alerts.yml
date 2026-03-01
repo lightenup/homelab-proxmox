@@ -15,7 +15,7 @@
 
 - name: Validate alert rule files with promtool
   ansible.builtin.command:
-    cmd: "docker run --rm -v {{ prometheus_config_path }}:/etc/prometheus prom/prometheus:{{ prometheus_version }} promtool check rules /etc/prometheus/alerts/{{ item.path | basename }}"
+    cmd: "docker run --rm --entrypoint promtool -v {{ prometheus_config_path }}:/etc/prometheus prom/prometheus:{{ prometheus_version }} check rules /etc/prometheus/alerts/{{ item.path | basename }}"
   loop: "{{ alert_rule_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"

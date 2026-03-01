@@ -1,4 +1,10 @@
 ---
+# Load host_vars for all services so monitoring_contract is available in hostvars
+- name: Load service host variables
+  hosts: services
+  gather_facts: false
+  tasks: []
+
 - name: Configure Monitoring Stack
   hosts: monitoring
   become: true

@@ -4,3 +4,10 @@ healthcheck_url:
   path: /
 healthcheck_profile: lan
 healthcheck_expect_status: 200
+
+# Monitoring contract for Prometheus self-registration (FR-007, US-4)
+monitoring_contract:
+  enabled: true
+  scrape_targets: []
+  alert_rules: []
+  dashboard_file: null

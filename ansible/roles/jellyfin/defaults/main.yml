@@ -12,11 +12,3 @@ jellyfin_apt_keyring_path: "/usr/share/keyrings/jellyfin-archive-keyring.gpg"
 
 jellyfin_packages:
   - jellyfin
-
-# Monitoring contract for Prometheus self-registration (Feature: 040-monitoring-overhaul, FR-007, US-4)
-# Jellyfin has no native application metrics — infrastructure metrics covered by node-exporter group job
-monitoring_contract:
-  enabled: true
-  scrape_targets: []
-  alert_rules: []
-  dashboard_file: null
