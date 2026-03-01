@@ -157,6 +157,6 @@ ls -l artifacts/rebuild-runs/rebuild-$(date +%Y%m%d)*
 
 ---
 
-**Maintainer**: Infrastructure team  
-**Last Updated**: 2026-02-09  
+**Maintainer**: Infrastructure team
+**Last Updated**: 2026-02-09
 **Branch**: 033-idempotent-rebuild

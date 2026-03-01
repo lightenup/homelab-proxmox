@@ -24,8 +24,8 @@ This runbook guides you through **restoring** your homelab infrastructure using 
 - ❌ Initial NAS infrastructure setup
 - ❌ Network/DNS configuration
 
-**Starting Point**: Fresh Proxmox VE 9 installation with network configured  
-**Ending Point**: Fully operational homelab with all services healthy  
+**Starting Point**: Fresh Proxmox VE 9 installation with network configured
+**Ending Point**: Fully operational homelab with all services healthy
 **Timeline**: 1-2 hours for complete restoration (lab or prod)
 
 ---
@@ -995,6 +995,6 @@ task rebuild:plan -- --environment [lab|prod]
 
 ---
 
-**Last Updated**: 2026-02-10  
-**Maintainer**: Infrastructure Team  
+**Last Updated**: 2026-02-10
+**Maintainer**: Infrastructure Team
 **Status**: Ready for testing

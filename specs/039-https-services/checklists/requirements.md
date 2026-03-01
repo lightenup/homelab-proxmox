@@ -1,0 +1,49 @@
+# Specification Quality Checklist: HTTPS for All Homelab Services
+
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-02-28
+**Feature**: [spec.md](../spec.md)
+
+## Content Quality
+
+- [x] CHK001 No implementation details (languages, frameworks, APIs)
+- [x] CHK002 Focused on user value and business needs
+- [x] CHK003 Written for non-technical stakeholders
+- [x] CHK004 All mandatory sections completed
+
+## Requirement Completeness
+
+- [x] CHK005 No [NEEDS CLARIFICATION] markers remain
+- [x] CHK006 Requirements are testable and unambiguous
+- [x] CHK007 Success criteria are measurable
+- [x] CHK008 Success criteria are technology-agnostic (no implementation details)
+- [x] CHK009 All acceptance scenarios are defined
+- [x] CHK010 Edge cases are identified
+- [x] CHK011 Scope is clearly bounded
+- [x] CHK012 Dependencies and assumptions identified
+
+## Feature Readiness
+
+- [x] CHK013 All functional requirements have clear acceptance criteria
+- [x] CHK014 User scenarios cover primary flows
+- [x] CHK015 Feature meets measurable outcomes defined in Success Criteria
+- [x] CHK016 No implementation details leak into specification
+
+## Self-Critique Review
+
+- [x] CHK017 Constitution/addendum cross-check performed — conventions honoured
+- [x] CHK018 Decision Log present with rationale for each ambiguity resolved
+- [x] CHK019 No TBD/TODO items remain — all resolved or scoped out
+- [x] CHK020 Key Entities factually accurate (Registrar DNS Record corrected re: DNS-01)
+- [x] CHK021 Assumptions enumerate concrete backend details (A-007 expanded)
+- [x] CHK022 Out of Scope explicitly covers monitoring and cert alerting
+
+## Notes
+
+- All items pass validation. Specification is ready for `/speckit.clarify` or `/speckit.plan`.
+- Decision Log contains 7 resolved ambiguities with rationale.
+- FR-005, FR-006 reference specific IP addresses — these are infrastructure facts (existing LXC addresses), not implementation choices.
+- FR-012 mentions "custom build" of Caddy — this is a requirement (the stock binary lacks the needed capability), not an implementation directive. The plan phase will determine the specific build approach.
+- A-007 now enumerates all backend IPs and ports, including a note that AdGuard's web UI port needs confirmation during planning.
+- A-010 corrected to clarify that public DNS resolvers DO serve the records (valid DNS), but the IP is only routable from LAN/Tailscale.
+- Key Entity "Registrar DNS Record" corrected to distinguish A records (routing) from TXT records (DNS-01 validation).

@@ -1,0 +1,12 @@
+---
+- name: Configure base for Reverse Proxy
+  hosts: reverse_proxy
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure Reverse Proxy
+  hosts: reverse_proxy
+  become: true
+  roles:
+    - reverse_proxy

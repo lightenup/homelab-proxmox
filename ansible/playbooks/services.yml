@@ -18,3 +18,7 @@
 - name: Configure Nextcloud
   import_playbook: nextcloud.yml
   tags: nextcloud
+
+- name: Configure Reverse Proxy
+  import_playbook: reverse_proxy.yml
+  tags: reverse_proxy

@@ -1,5 +1,11 @@
 ---
-- name: Restart caddy
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: Restart caddy
+
+- name: Restart caddy service
   ansible.builtin.service:
     name: caddy
     state: restarted
+  listen: Restart caddy

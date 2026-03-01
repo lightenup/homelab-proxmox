@@ -210,22 +210,22 @@ rebuild_phase_services() {
   local allowlist="${REBUILD_SERVICE_ALLOWLIST_PATH}"
   local -a services
   mapfile -t services < <(jq -r 'keys[]' "$allowlist")
-  
+
   for service in "${services[@]}"; do
     local tf_dir="${REPO_ROOT}/terraform/services/${service}"
     local state_file="${STATE_ROOT}/${service}/terraform.tfstate"
-    
+
     mkdir -p "$(dirname "$state_file")"
-    
+
     cd "$tf_dir"
     terraform init -input=false
-    
+
     if [[ "$REBUILD_MODE" == "plan" ]]; then
       terraform plan -state="$state_file" -var-file="${TFVARS_DIR}/${ENVIRONMENT}.tfvars"
     else
       terraform apply -state="$state_file" -var-file="${TFVARS_DIR}/${ENVIRONMENT}.tfvars" -auto-approve
     fi
-    
+
     record_check "SRV-$(printf '%03d' $idx)" "Service ${service}" ...
   done
 }
@@ -237,18 +237,18 @@ rebuild_phase_services() {
 rebuild_phase_mounts() {
   if ! run_rebuild_host_mount_checks; then
     log_warn "Mount checks failed - attempting remediation"
-    
+
     if ! task ansible:mounts; then
       record_check "MNT-REMEDIATE" "Mount remediation" "blocker" "PASS" "FAIL"
       return 1
     fi
-    
+
     log_info "Remediation complete - re-validating mounts"
     if ! run_rebuild_host_mount_checks; then
       record_check "MNT-REMEDIATE" "Mount remediation" "blocker" "PASS" "FAIL" "Mounts still failing after remediation"
       return 1
     fi
-    
+
     record_check "MNT-REMEDIATE" "Mount remediation" "medium" "PASS" "PASS"
   fi
 }

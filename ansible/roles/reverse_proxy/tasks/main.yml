@@ -27,6 +27,107 @@
     state: present
     update_cache: true
 
+# xcaddy: custom Caddy build with DNS plugin for HTTPS certificate automation (FR-012, R-002)
+- name: Download Go {{ go_version }} tarball
+  ansible.builtin.get_url:
+    url: "https://go.dev/dl/go{{ go_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/go{{ go_version }}.tar.gz"
+    mode: '0644'
+  when: caddy_custom_binary
+
+- name: Extract Go {{ go_version }} to /usr/local
+  ansible.builtin.unarchive:
+    src: "/tmp/go{{ go_version }}.tar.gz"
+    dest: /usr/local
+    remote_src: true
+    creates: /usr/local/go/bin/go
+  when: caddy_custom_binary
+
+- name: Install xcaddy build tool
+  ansible.builtin.command:
+    cmd: /usr/local/go/bin/go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+    creates: /root/go/bin/xcaddy
+  environment:
+    GOPATH: /root/go
+    HOME: /root
+  when: caddy_custom_binary
+
+- name: Check if custom Caddy binary has required plugins
+  ansible.builtin.shell:
+    cmd: "/usr/local/bin/caddy-custom list-modules 2>/dev/null | grep -q '{{ caddy_xcaddy_plugins[0] | regex_replace('github.com/caddy-dns/', 'dns.providers.') }}'"
+  register: caddy_plugin_check
+  changed_when: false
+  failed_when: false
+  when: caddy_custom_binary
+
+- name: Remove outdated custom Caddy binary
+  ansible.builtin.file:
+    path: /usr/local/bin/caddy-custom
+    state: absent
+  when:
+    - caddy_custom_binary
+    - caddy_plugin_check.rc != 0
+
+- name: Build custom Caddy binary with DNS plugin
+  ansible.builtin.command:
+    cmd: "/root/go/bin/xcaddy build --with {{ caddy_xcaddy_plugins | join(' --with ') }} --output /usr/local/bin/caddy-custom"
+    creates: /usr/local/bin/caddy-custom
+  environment:
+    GOPATH: /root/go
+    HOME: /root
+    PATH: /usr/local/go/bin:/usr/bin:/bin
+  when: caddy_custom_binary
+
+- name: Check dpkg-divert status for caddy binary
+  ansible.builtin.command:
+    cmd: dpkg-divert --list /usr/bin/caddy
+  register: caddy_divert_status
+  changed_when: false
+  when: caddy_custom_binary
+
+- name: Divert APT caddy binary to protect custom build from overwriting
+  ansible.builtin.command:
+    cmd: dpkg-divert --add --local --divert /usr/bin/caddy.dpkg-dist --rename /usr/bin/caddy
+  when:
+    - caddy_custom_binary
+    - caddy_divert_status.stdout | trim == ""
+
+- name: Copy custom Caddy binary to /usr/bin/caddy
+  ansible.builtin.copy:
+    src: /usr/local/bin/caddy-custom
+    dest: /usr/bin/caddy
+    remote_src: true
+    mode: '0755'
+    owner: root
+    group: root
+  when: caddy_custom_binary
+
+- name: Create systemd caddy service override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/caddy.service.d
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Deploy Domeneshop API credentials environment file
+  ansible.builtin.template:
+    src: domeneshop.env.j2
+    dest: /etc/caddy/domeneshop.env
+    mode: '0600'
+    owner: root
+    group: root
+  notify: Restart caddy
+
+- name: Deploy systemd drop-in override for Caddy secrets injection
+  ansible.builtin.template:
+    src: caddy-domeneshop.conf.j2
+    dest: /etc/systemd/system/caddy.service.d/domeneshop.conf
+    mode: '0644'
+    owner: root
+    group: root
+  notify: Restart caddy
+
 - name: Ensure Caddy configuration directory exists
   ansible.builtin.file:
     path: "{{ caddy_conf_dir }}"
@@ -38,8 +139,11 @@
     src: Caddyfile.j2
     dest: /etc/caddy/Caddyfile
     mode: '0644'
-    validate: caddy validate --adapter caddyfile --config %s
   notify: Restart caddy
+
+- name: Reload systemd before starting Caddy
+  ansible.builtin.systemd:
+    daemon_reload: true
 
 - name: Ensure Caddy service is enabled and running
   ansible.builtin.service:
@@ -52,7 +156,6 @@
     src: immich.caddy.j2
     dest: "{{ caddy_conf_dir }}/immich.caddy"
     mode: '0644'
-    validate: caddy validate --adapter caddyfile --config %s
   notify: Restart caddy
 
 - name: Deploy Nextcloud Caddy configuration
@@ -60,5 +163,40 @@
     src: nextcloud.caddy.j2
     dest: "{{ caddy_conf_dir }}/nextcloud.caddy"
     mode: '0644'
-    validate: caddy validate --adapter caddyfile --config %s
   notify: Restart caddy
+
+- name: Deploy Grafana Caddy configuration
+  ansible.builtin.template:
+    src: grafana.caddy.j2
+    dest: "{{ caddy_conf_dir }}/grafana.caddy"
+    mode: '0644'
+  notify: Restart caddy
+
+- name: Deploy Jellyfin Caddy configuration
+  ansible.builtin.template:
+    src: jellyfin.caddy.j2
+    dest: "{{ caddy_conf_dir }}/jellyfin.caddy"
+    mode: '0644'
+  notify: Restart caddy
+
+- name: Deploy AdGuard Caddy configuration
+  ansible.builtin.template:
+    src: adguard.caddy.j2
+    dest: "{{ caddy_conf_dir }}/adguard.caddy"
+    mode: '0644'
+  notify: Restart caddy
+
+- name: Deploy Home Assistant Caddy configuration
+  ansible.builtin.template:
+    src: homeassistant.caddy.j2
+    dest: "{{ caddy_conf_dir }}/homeassistant.caddy"
+    mode: '0644'
+  notify: Restart caddy
+
+- name: Validate full Caddy configuration
+  ansible.builtin.command:
+    cmd: caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile
+  environment:
+    DOMENESHOP_API_TOKEN: "{{ domeneshop_api_token }}"
+    DOMENESHOP_API_SECRET: "{{ domeneshop_api_secret }}"
+  changed_when: false

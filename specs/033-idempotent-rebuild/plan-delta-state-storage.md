@@ -19,7 +19,7 @@ Complete the idempotent rebuild orchestrator by migrating Terraform state and An
 ## Technical Context
 
 **Language/Version**: Bash (rebuild orchestrator), Python 3.x (inventory generation), Terraform 1.5.7+, Ansible 2.x
-**Primary Dependencies**: 
+**Primary Dependencies**:
 - Existing: telmate/proxmox (Terraform provider), ansible.posix.mount (NFS mounts)
 - New: NAS-backed state storage, environment-aware path resolution
 
@@ -37,13 +37,13 @@ Complete the idempotent rebuild orchestrator by migrating Terraform state and An
 
 **Performance Goals**: NFS state access <500ms per operation (acceptable for <5 services)
 
-**Constraints**: 
+**Constraints**:
 - Zero regression for 9+ GH Actions workflows
 - Environment isolation (lab ≠ static/prod state)
 - Backward compatibility via symlinks (30-day transition)
 - tfvars remain on PVE filesystem (secrets policy)
 
-**Scale/Scope**: 
+**Scale/Scope**:
 - Services: 6 (immich, monitoring, reverse_proxy, homeassistant, jellyfin, adguard)
 - Environments: 2 (lab, static/prod)
 - State files: ~12 total (<2MB combined)
@@ -321,16 +321,16 @@ done
 # Resolve state root based on platform and environment
 resolve_state_root() {
   local env="${ENVIRONMENT:?ENVIRONMENT must be set}"
-  
+
   # Validate environment
   case "$env" in
     lab|static) ;;
-    *) 
+    *)
       echo "ERROR: Unknown environment '$env'. Must be 'lab' or 'static'." >&2
       return 1
       ;;
   esac
-  
+
   # Platform-specific NAS mount points
   local nas_base
   if [[ "$(uname)" == "Darwin" ]]; then
@@ -338,11 +338,11 @@ resolve_state_root() {
   else
     nas_base="/mnt/nas/homelab_ci"
   fi
-  
+
   # Check if NAS-backed state enabled
   if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
     local state_root="${nas_base}/infra_state/${env}"
-    
+
     # Verify NAS mount accessible
     if [[ ! -d "$nas_base" ]]; then
       echo "ERROR: NAS mount not found at $nas_base" >&2
@@ -350,14 +350,14 @@ resolve_state_root() {
       echo "  On macOS: Run setup from docs/runbooks/laptop-nfs-setup.md" >&2
       return 1
     fi
-    
+
     # Verify state root exists
     if [[ ! -d "$state_root" ]]; then
       echo "ERROR: State root not found at $state_root" >&2
       echo "  Run: ansible-playbook ansible/playbooks/setup_nas_state_dirs.yml" >&2
       return 1
     fi
-    
+
     echo "$state_root"
   else
     # Legacy path (existing behavior)
@@ -369,9 +369,9 @@ resolve_state_root() {
 get_service_state_path() {
   local service="${1:?Service name required}"
   local state_root
-  
+
   state_root="$(resolve_state_root)" || return 1
-  
+
   if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
     # NAS: <root>/<environment>/<service>/terraform.tfstate
     echo "${state_root}/${service}/terraform.tfstate"
@@ -385,9 +385,9 @@ get_service_state_path() {
 get_inventory_path() {
   local env="${ENVIRONMENT:?ENVIRONMENT must be set}"
   local state_root
-  
+
   state_root="$(resolve_state_root)" || return 1
-  
+
   if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
     # NAS: <root>/ansible/inventories/generated/hosts.yml
     echo "${state_root}/ansible/inventories/generated/hosts.yml"
@@ -401,7 +401,7 @@ get_inventory_path() {
 verify_state_access() {
   local state_root
   state_root="$(resolve_state_root)" || return 1
-  
+
   # Test write access
   local test_file="${state_root}/.state-access-test-$$"
   if ! touch "$test_file" 2>/dev/null; then
@@ -410,7 +410,7 @@ verify_state_access() {
     return 1
   fi
   rm -f "$test_file"
-  
+
   return 0
 }
 ```
@@ -466,14 +466,14 @@ STATE_PATH_DEFAULT_ROOT="${STATE_PATH_DEFAULT_ROOT:-}"
 # Update ensure_state_path function (lines 439-459)
 ensure_state_path() {
     local service="${1:?ensure_state_path requires a service name}"
-    
+
     # Use new state library if available
     if command -v get_service_state_path >/dev/null 2>&1; then
         local state_path
         state_path="$(get_service_state_path "$service")" || return 1
-        
+
         mkdir -p "$(dirname "$state_path")"
-        
+
         # Safety: No automatic state seeding (explicitly opt-in as before)
         if [[ "${SEED_STATE_FROM_REPO:-}" == "1" ]]; then
             if [[ "${ENVIRONMENT:-}" != "prod" ]]; then
@@ -483,7 +483,7 @@ ensure_state_path() {
                 cp "${REPO_ROOT}/terraform/terraform.tfstate" "${state_path}"
             fi
         fi
-        
+
         echo "${state_path}"
     else
         # Fallback to legacy behavior
@@ -509,7 +509,7 @@ USE_NAS_STATE=true ENVIRONMENT=lab scripts/lab/pve-service-deploy plan --environ
 
 ### Task D-006: Update Supporting Scripts
 
-**Files**: 
+**Files**:
 - `scripts/lab/lib/snapshot.sh` (line 137)
 - `scripts/lab/guardrails.sh` (line 14)
 
@@ -522,14 +522,14 @@ write_lab_snapshot() {
     local output_file="${1:?write_lab_snapshot requires output_file}"
     local environment="${2:?write_lab_snapshot requires environment}"
     local state_root
-    
+
     # Use state library if available
     if command -v resolve_state_root >/dev/null 2>&1; then
         state_root="$(resolve_state_root)" || return 1
     else
         state_root="${3:-/var/lib/homelab-proxmox/state/services}"
     fi
-    
+
     # ... rest of function unchanged
 }
 ```
@@ -591,7 +591,7 @@ fi
       loop: "{{ service_dirs.files }}"
       loop_control:
         label: "{{ item.path | basename }}"
-      when: 
+      when:
         - proxmox_state_symlinks_enabled | default(false)
         - item.path | basename in proxmox_state_services | default([])
 
@@ -666,16 +666,16 @@ fi
 
 for service_dir in "${LEGACY_ROOT}"/*; do
   [[ -d "$service_dir" ]] || continue
-  
+
   service="$(basename "$service_dir")"
   legacy_state="${service_dir}/terraform.tfstate"
   nas_state="${NAS_ROOT}/${service}/terraform.tfstate"
-  
+
   if [[ ! -f "$legacy_state" ]]; then
     echo "⊘ ${service}: No state file to migrate"
     continue
   fi
-  
+
   if [[ -f "$nas_state" ]]; then
     echo "⚠ ${service}: NAS state exists, comparing..."
     if diff "$legacy_state" "$nas_state" >/dev/null 2>&1; then
@@ -687,9 +687,9 @@ for service_dir in "${LEGACY_ROOT}"/*; do
     fi
     continue
   fi
-  
+
   size=$(stat -c '%s' "$legacy_state" 2>/dev/null || stat -f '%z' "$legacy_state")
-  
+
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "➜ ${service}: Would copy ${size} bytes"
     echo "    From: $legacy_state"
@@ -762,17 +762,17 @@ rebuild_phase_services() {
 
     # Source state library
     source "${REPO_ROOT}/scripts/lab/lib/state.sh"
-    
+
     # Enable NAS state for laptop execution
     export USE_NAS_STATE=true
     export ENVIRONMENT="${REBUILD_ENVIRONMENT}"
-    
+
     # Verify state access before starting
     if ! verify_state_access; then
         record_check "SRV-002" "State storage accessible" "blocker" "PASS" "FAIL" "Cannot access NAS state" "reports/services"
         return 1
     fi
-    
+
     record_check "SRV-002" "State storage accessible" "low" "PASS" "PASS" "NAS state verified" "reports/services"
 
     # Iterate services
@@ -785,14 +785,14 @@ rebuild_phase_services() {
         idx=$((idx + 1))
         local check_id="SRV-$(printf '%03d' "$idx")"
         local log_file="${evidence_dir}/${service}.log"
-        
+
         local tf_dir="${REPO_ROOT}/terraform/services/${service}"
         if [[ ! -d "$tf_dir" ]]; then
             record_check "$check_id" "Service ${service} directory" "high" "PASS" "FAIL" "Terraform dir missing: $tf_dir" "reports/services/${service}.log"
             failed=1
             continue
         fi
-        
+
         # Get state file path
         local state_file
         state_file="$(get_service_state_path "$service")" || {
@@ -800,21 +800,21 @@ rebuild_phase_services() {
             failed=1
             continue
         }
-        
+
         mkdir -p "$(dirname "$state_file")"
-        
+
         # Execute Terraform from laptop
         log_info "Processing service: ${service} (mode: ${REBUILD_MODE})"
-        
+
         (
             cd "$tf_dir"
-            
+
             # Initialize
             if ! terraform init -input=false -no-color >> "$log_file" 2>&1; then
                 echo "Terraform init failed for $service" >> "$log_file"
                 exit 1
             fi
-            
+
             # Plan or Apply
             if [[ "${REBUILD_MODE}" == "plan" ]]; then
                 terraform plan -state="$state_file" -input=false -no-color >> "$log_file" 2>&1
@@ -823,7 +823,7 @@ rebuild_phase_services() {
                 terraform apply -state="$state_file" -input=false -auto-approve -no-color >> "$log_file" 2>&1
             fi
         )
-        
+
         if [[ $? -eq 0 ]]; then
             record_check "$check_id" "Service rebuild (${service})" "high" "PASS" "PASS" "Service ${service} ${REBUILD_MODE} succeeded" "reports/services/${service}.log"
         else
@@ -931,22 +931,22 @@ rebuild_phase_mounts() {
 rebuild_phase_mounts() {
     local failed=0
     local remediation_attempted=0
-    
+
     # First pass: validation
     log_info "Validating host NFS mounts..."
     if ! run_rebuild_host_mount_checks; then
         log_warn "Host mount checks failed - attempting automatic remediation"
-        
+
         # Invoke Ansible mount role
         record_check "MNT-REMEDIATE-001" "Invoking mount remediation" "medium" "PASS" "INFO" "Running task ansible:mounts" "reports/mounts/remediation.log"
-        
+
         local remediation_log="${ARTIFACT_DIR}/reports/mounts/remediation.log"
         mkdir -p "$(dirname "$remediation_log")"
-        
+
         if (cd "${REPO_ROOT}" && task ansible:mounts) >> "$remediation_log" 2>&1; then
             log_info "Mount remediation completed - re-validating"
             remediation_attempted=1
-            
+
             # Re-run validation
             if ! run_rebuild_host_mount_checks; then
                 record_check "MNT-REMEDIATE-002" "Mount remediation verification" "blocker" "PASS" "FAIL" "Mounts still failing after remediation" "reports/mounts/remediation.log"
@@ -959,7 +959,7 @@ rebuild_phase_mounts() {
             failed=1
         fi
     fi
-    
+
     # Immich bind mount checks (no auto-remediation, different failure mode)
     log_info "Validating Immich LXC bind mounts..."
     if ! run_rebuild_immich_bind_mount_checks; then
@@ -969,7 +969,7 @@ rebuild_phase_mounts() {
         fi
         failed=1
     fi
-    
+
     return $failed
 }
 ```
@@ -1018,7 +1018,7 @@ collect_iac_artifacts() {
     log_info "Skipping IaC artifacts (REPO_PATH not defined)"
     return 0
   fi
-  
+
   # ... collects from ${REPO_PATH}/terraform/terraform.tfstate
 }
 ```
@@ -1027,36 +1027,36 @@ collect_iac_artifacts() {
 ```bash
 collect_iac_artifacts() {
   log_info "Collecting IaC artifacts"
-  
+
   local dest="${STAGING_DIR}/iac-artifacts"
   mkdir -p "$dest"
-  
+
   # Collect NAS-backed state (primary source)
   local nas_state_root="/mnt/nas/homelab_ci/infra_state"
   if [[ -d "$nas_state_root" ]]; then
     log_info "Collecting NAS-backed state from: $nas_state_root"
     mkdir -p "$dest/nas-state"
-    
+
     # Copy all environment state directories
     for env_dir in "${nas_state_root}"/*; do
       [[ -d "$env_dir" ]] || continue
       env_name="$(basename "$env_dir")"
-      
+
       log_info "  Environment: $env_name"
       mkdir -p "$dest/nas-state/${env_name}"
-      
+
       # Terraform state files per service
       for service_dir in "${env_dir}"/*; do
         [[ -d "$service_dir" ]] || continue
         service_name="$(basename "$service_dir")"
-        
+
         if [[ -f "${service_dir}/terraform.tfstate" ]]; then
           mkdir -p "$dest/nas-state/${env_name}/${service_name}"
           cp -a "${service_dir}/terraform.tfstate" "$dest/nas-state/${env_name}/${service_name}/" 2>/dev/null || true
           cp -a "${service_dir}/terraform.tfstate.backup" "$dest/nas-state/${env_name}/${service_name}/" 2>/dev/null || true
         fi
       done
-      
+
       # Ansible inventory
       local inventory_file="${env_dir}/ansible/inventories/generated/hosts.yml"
       if [[ -f "$inventory_file" ]]; then
@@ -1067,26 +1067,26 @@ collect_iac_artifacts() {
   else
     log_warning "NAS state root not found: $nas_state_root (NFS mount issue?)"
   fi
-  
+
   # Legacy REPO_PATH collection (transitional, can be removed after migration complete)
   if [[ -n "${REPO_PATH:-}" && -d "$REPO_PATH" ]]; then
     log_info "Collecting legacy repo artifacts from: $REPO_PATH"
     mkdir -p "$dest/legacy"
-    
+
     # Terraform state (old location)
     if [[ -d "${REPO_PATH}/terraform" ]]; then
       mkdir -p "$dest/legacy/terraform"
       cp -a "${REPO_PATH}/terraform/terraform.tfstate" "$dest/legacy/terraform/" 2>/dev/null || true
       cp -a "${REPO_PATH}/terraform/terraform.tfstate.backup" "$dest/legacy/terraform/" 2>/dev/null || true
     fi
-    
+
     # Ansible inventory (old location)
     if [[ -f "${REPO_PATH}/ansible/inventories/generated/hosts.yml" ]]; then
       mkdir -p "$dest/legacy/ansible/inventories/generated"
       cp -a "${REPO_PATH}/ansible/inventories/generated/hosts.yml" "$dest/legacy/ansible/inventories/generated/"
     fi
   fi
-  
+
   log_info "IaC artifacts collected: $(du -sh "$dest" | cut -f1)"
 }
 ```
@@ -1190,7 +1190,7 @@ The `ENVIRONMENT` variable must be set correctly to access the appropriate state
    ```bash
    # Trigger promote-lab workflow
    gh workflow run lxc-promote-lab.yml -f service=monitoring
-   
+
    # Verify success
    gh run list --workflow=lxc-promote-lab.yml --limit 1
    ```
@@ -1207,7 +1207,7 @@ The `ENVIRONMENT` variable must be set correctly to access the appropriate state
    # GH Actions uses legacy paths, but they're symlinks to NAS
    gh workflow run lxc-promote-lab.yml -f service=monitoring
    # Expected: SUCCESS (transparent NAS access via symlinks)
-   
+
    # Verify state written to NAS
    ssh pve "ls -l /mnt/nas/homelab_ci/infra_state/lab/monitoring/terraform.tfstate"
    # Expected: File present, recent mtime
@@ -1218,7 +1218,7 @@ The `ENVIRONMENT` variable must be set correctly to access the appropriate state
    # Rebuild from laptop should work
    task rebuild:plan -- --phase services
    # Expected: SUCCESS
-   
+
    # GH Actions still works (uses legacy paths + symlinks)
    gh workflow run lxc-promote-lab.yml -f service=monitoring
    # Expected: SUCCESS
@@ -1295,7 +1295,7 @@ ls -lh /mnt/nas/homelab_ci/infra_state/static/*/terraform.tfstate
 cp -v /root/restore-YYYYMMDD/iac-artifacts/ansible-inventory/lab-hosts.yml \
   /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated/hosts.yml
 
-# Static inventory  
+# Static inventory
 cp -v /root/restore-YYYYMMDD/iac-artifacts/ansible-inventory/static-hosts.yml \
   /mnt/nas/homelab_ci/infra_state/static/ansible/inventories/generated/hosts.yml
 ```
@@ -1513,7 +1513,7 @@ If NFS performance inadequate:
    ```bash
    # On PVE: Edit shell profile
    echo "export USE_NAS_STATE=false" >> /etc/profile.d/nas-state-disable.sh
-   
+
    # In GH Actions: Workflows fall back to legacy paths automatically (no USE_NAS_STATE set)
    ```
 
@@ -1546,7 +1546,7 @@ If one service has issues with NAS state:
 # Exclude from NAS state (edit lib/state.sh)
 get_service_state_path() {
   local service="${1:?}"
-  
+
   # Blocklist for services staying on legacy
   case "$service" in
     problematic-service)
@@ -1554,7 +1554,7 @@ get_service_state_path() {
       return
       ;;
   esac
-  
+
   # Normal NAS path resolution
   ...
 }
@@ -1732,8 +1732,8 @@ ENVIRONMENT=lab USE_NAS_STATE=true bash -c '
 
 ---
 
-**Plan Author**: GitHub Copilot + Human Operator  
-**Date**: 2026-02-09  
-**Status**: Ready for Implementation  
-**Estimated Effort**: 10-16 developer-days  
+**Plan Author**: GitHub Copilot + Human Operator
+**Date**: 2026-02-09
+**Status**: Ready for Implementation
+**Estimated Effort**: 10-16 developer-days
 **Risk Level**: Medium (mitigated by phased approach + rollback plan)

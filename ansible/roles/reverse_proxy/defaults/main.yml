@@ -1,2 +1,15 @@
 ---
 caddy_conf_dir: /etc/caddy/conf.d
+
+# HTTPS and DNS-01 ACME configuration (FR-001, FR-011, FR-012)
+caddy_base_domain: "hus-sky.no"
+caddy_acme_dns_provider: "domainnameshop"
+caddy_custom_binary: true
+caddy_xcaddy_plugins:
+  - "github.com/caddy-dns/domainnameshop"
+
+# Go version for xcaddy build (R-002)
+go_version: "1.22.0"
+
+# Home Assistant conditional flag (FR-015, A-009)
+homeassistant_active: false

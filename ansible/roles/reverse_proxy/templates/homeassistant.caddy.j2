@@ -1,0 +1,9 @@
+{% if homeassistant_active | default(false) %}
+ha.{{ caddy_base_domain }} {
+    reverse_proxy {{ homeassistant_ip }}:{{ homeassistant_port }} {
+        header_up X-Forwarded-Proto https
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+    }
+}
+{% endif %}

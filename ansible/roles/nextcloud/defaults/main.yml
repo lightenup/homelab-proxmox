@@ -5,7 +5,10 @@ nextcloud_port: 8080
 nextcloud_install_dir: "/opt/nextcloud"
 nextcloud_data_dir: "/opt/nextcloud"
 nextcloud_nfs_mount: "/mnt/nextcloud"
-nextcloud_domain: "nextcloud.local"
+nextcloud_domain: "nextcloud.hus-sky.no"
+nextcloud_trusted_domains_extra:
+  - "nextcloud.local"
+nextcloud_overwrite_protocol: "https"
 nextcloud_require_nas_mount: true
 nextcloud_admin_user: "admin"
 

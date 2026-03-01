@@ -38,3 +38,22 @@ reverse_proxy_ip: "192.168.1.211"
 
 # Nextcloud Configuration
 nextcloud_ip: "192.168.1.216"
+nextcloud_port: 8080
+
+# Jellyfin Configuration
+jellyfin_ip: "192.168.1.215"
+jellyfin_port: 8096
+
+# AdGuard Configuration
+adguard_ip: "192.168.1.210"
+adguard_web_port: 3000
+
+# Home Assistant Configuration
+homeassistant_ip: "192.168.1.212"
+homeassistant_port: 8123
+
+# Reverse Proxy — backend addresses (needed for Caddy site block templates)
+# These are defined here because the reverse_proxy host is in the services group,
+# not in the nextcloud or monitoring roles' scope.
+monitoring_ip: "192.168.1.214"
+grafana_port: 3000

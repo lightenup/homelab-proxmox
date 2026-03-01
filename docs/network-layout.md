@@ -6,11 +6,15 @@ As of **Iteration 1 (Bootstrap)**, the network is flat to simplify initial adopt
 
 - **Network**: `192.168.1.0/24` (Default LAN)
 - **Gateway**: `192.168.1.1`
+- **Domain**: `hus-sky.no` (Domeneshop), wildcard `*.hus-sky.no → 192.168.1.211` via public DNS
 - **Service IPs**:
-  - AdGuard: `192.168.1.210`
-  - Reverse Proxy: `192.168.1.211`
-  - Home Assistant: `192.168.1.212`
-  - Immich: `192.168.1.213`
+  - AdGuard: `192.168.1.210` (`adguard.hus-sky.no`)
+  - Reverse Proxy: `192.168.1.211` (HTTPS termination, Let's Encrypt via DNS-01)
+  - Home Assistant: `192.168.1.212` (`ha.hus-sky.no`)
+  - Immich: `192.168.1.213` (`immich.hus-sky.no`)
+  - Monitoring (Grafana): `192.168.1.214` (`grafana.hus-sky.no`)
+  - Jellyfin: `192.168.1.215` (`jellyfin.hus-sky.no`)
+  - Nextcloud: `192.168.1.216` (`nextcloud.hus-sky.no`)
 
 ### Remote Access
 
@@ -109,7 +113,7 @@ Dedicated network for homelab services.
 - `immich-lxc`
 - `adguard-lxc`
 - `homeassistant-lxc`
-- `reverse-proxy-lxc` (e.g. Caddy/Traefik)
+- `reverse-proxy-lxc` (Caddy with DNS-01 HTTPS)
 - Future services (e.g. Gitea, monitoring, etc.)
 
 **Traffic patterns:**
@@ -195,9 +199,9 @@ Each major service gets its **own LXC**:
   - Integrates with IoT devices in VLAN 50.
   - Accessed from LAN and remotely via VPN.
 - `reverse-proxy-lxc`
-  - Fronts Immich/HA/other apps.
-  - Handles host-based routing for internal FQDNs (e.g. `immich.local`, `ha.local`).
-  - Can later be extended to serve a public domain + Let’s Encrypt.
+  - Fronts all services with HTTPS termination via `*.hus-sky.no`.
+  - Custom Caddy binary with `caddy-dns/domainnameshop` for automated Let's Encrypt DNS-01 certificates.
+  - Services are not publicly exposed; DNS resolves to LAN IP `192.168.1.211`.
 
 ## 5. Remote access
 
@@ -248,7 +252,4 @@ During all phases, access services via **hostnames** (e.g. using AdGuard for DNS
 - Decisions still to be made on:
   - Which VPN solution to standardize on (WireGuard vs. Tailscale vs. router-native).
   - Whether to manage switch/AP VLAN configuration purely manually or via Ansible/other tooling.
-- Once a domain is acquired, update:
-  - Reverse proxy configuration,
-  - Internal DNS overrides,
-  - This document.
+- ~~Once a domain is acquired, update reverse proxy configuration, internal DNS overrides, this document.~~ **Done** — `hus-sky.no` acquired via Domeneshop (2026-03-01). Wildcard DNS points to reverse proxy. All services accessible via HTTPS with valid Let's Encrypt certificates. Split-horizon DNS not yet needed (public DNS resolves to LAN IP).

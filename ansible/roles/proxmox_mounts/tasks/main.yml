@@ -40,4 +40,3 @@
   loop: "{{ nas_nfs_mounts }}"
   loop_control:
     label: "{{ item.path }} ({{ item.purpose }})"
-

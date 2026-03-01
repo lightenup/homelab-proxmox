@@ -644,6 +644,7 @@ class EvidenceVerifier:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         with open(report_path, 'w') as f:
             json.dump(report_data, f, indent=2)
+            f.write('\n')
 
         # Update summary with verification block
         try:
@@ -658,6 +659,7 @@ class EvidenceVerifier:
             }
             with open(summary_path, 'w') as sf:
                 json.dump(summary_content, sf, indent=2)
+                sf.write('\n')
         except Exception as exc:
             # Non-fatal; emit warning
             self.add_warning("SUMMARY-001", f"Failed to update summary.json: {exc}", "Manually add verification block to summary.json")
