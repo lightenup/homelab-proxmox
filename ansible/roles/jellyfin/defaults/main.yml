@@ -2,6 +2,13 @@
 # Jellyfin APT repo settings (Debian/Ubuntu)
 
 jellyfin_repo_enabled: true
+
+# Jellyfin exporter settings
+# Feature: 041-monitoring-tier-b
+jellyfin_exporter_version: "1.4.0"
+jellyfin_exporter_port: 9594
+jellyfin_exporter_install_dir: "/opt/jellyfin-exporter"
+jellyfin_exporter_arch: "linux-amd64"
 jellyfin_repo_url: "https://repo.jellyfin.org/{{ ansible_distribution | lower }}"
 # Example: bookworm, jammy
 jellyfin_repo_suite: "{{ ansible_distribution_release }}"

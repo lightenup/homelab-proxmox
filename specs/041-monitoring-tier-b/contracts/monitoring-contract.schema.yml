@@ -1,0 +1,77 @@
+# Monitoring Contract Schema
+# Defines the structure for service self-registration in host_vars
+# Consumed by monitoring_stack role templates (prometheus.yml.j2, service_alerts.yml.j2, provision_dashboards.yml)
+#
+# Each service declares its contract in ansible/host_vars/<service>.yml
+# The monitoring stack aggregates all contracts to generate its configuration.
+
+type: object
+required: [enabled]
+properties:
+  enabled:
+    type: boolean
+    description: Whether this service participates in monitoring
+
+  scrape_targets:
+    type: array
+    default: []
+    items:
+      type: object
+      required: [job_name, port]
+      properties:
+        job_name:
+          type: string
+          pattern: "^[a-z][a-z0-9-]+$"
+          description: >
+            Unique Prometheus job label. Convention: <service>-<component>.
+            Must not collide with any other job_name across all contracts.
+        port:
+          type: integer
+          minimum: 1024
+          maximum: 65535
+          description: Exporter port on the service host
+        path:
+          type: string
+          default: "/metrics"
+          description: HTTP path for metrics scrape
+        scrape_interval:
+          type: string
+          default: "30s"
+          description: Override for global scrape interval
+
+  alert_rules:
+    type: array
+    default: []
+    items:
+      type: object
+      required: [alert, expr, for, severity, summary, description]
+      properties:
+        alert:
+          type: string
+          pattern: "^[A-Z][a-zA-Z0-9]+$"
+          description: Alert name in PascalCase
+        expr:
+          type: string
+          description: PromQL expression
+        for:
+          type: string
+          description: Duration before alert fires (e.g., "5m")
+        severity:
+          type: string
+          enum: [warning, critical]
+        summary:
+          type: string
+          description: >
+            Human-readable one-line summary.
+            May use Go template syntax for Prometheus labels.
+        description:
+          type: string
+          description: Detailed alert description with context.
+
+  dashboard_file:
+    type: [string, "null"]
+    default: null
+    description: >
+      Path relative to the service role's files/ directory.
+      Convention: grafana/dashboards/<service-name>.json
+      Set to null if no dashboard exists.

@@ -31,13 +31,15 @@
 #                            INPUT PLUGINS                                    #
 ###############################################################################
 
-# SNMP Input - Simplified configuration using numeric OIDs without MIB dependencies
+# SNMP Input Block 1: CPU Utilization (Synology System MIB)
+# Produces: snmp_synology_cpu_usage_percent
 [[inputs.snmp]]
+  name = "snmp_synology_cpu"
   agents = ["{{ synology_nas_ip }}:161"]
   timeout = "{{ prometheus_scrape_timeout }}"
   retries = 3
   version = 3
-  
+
   # SNMPv3 Authentication
   sec_name = "{{ snmp_username }}"
   sec_level = "{{ snmp_security_level }}"
@@ -45,63 +47,188 @@
   auth_password = "{{ snmp_auth_password }}"
   priv_protocol = "{{ snmp_priv_protocol }}"
   priv_password = "{{ snmp_priv_password }}"
-  
-  # Generic system information (works with any SNMP device)
+
+  [[inputs.snmp.field]]
+    name = "usage_percent"
+    oid = "1.3.6.1.4.1.6574.1.7.1.0"
+
+  [inputs.snmp.tags]
+    device = "synology-nas"
+    location = "homelab"
+    source = "telegraf-snmp"
+
+# SNMP Input Block 2: Disk Health (Synology Disk MIB table)
+# Produces: snmp_synology_disk_status, snmp_synology_disk_temperature_celsius
+# Tags: diskID
+[[inputs.snmp]]
+  name = "snmp_synology_disk"
+  agents = ["{{ synology_nas_ip }}:161"]
+  timeout = "{{ prometheus_scrape_timeout }}"
+  retries = 3
+  version = 3
+
+  # SNMPv3 Authentication
+  sec_name = "{{ snmp_username }}"
+  sec_level = "{{ snmp_security_level }}"
+  auth_protocol = "{{ snmp_auth_protocol }}"
+  auth_password = "{{ snmp_auth_password }}"
+  priv_protocol = "{{ snmp_priv_protocol }}"
+  priv_password = "{{ snmp_priv_password }}"
+
+  [[inputs.snmp.table]]
+    oid = "1.3.6.1.4.1.6574.2.1.1"
+
+    [[inputs.snmp.table.field]]
+      name = "diskID"
+      oid = "1.3.6.1.4.1.6574.2.1.1.2"
+      is_tag = true
+
+    [[inputs.snmp.table.field]]
+      name = "status"
+      oid = "1.3.6.1.4.1.6574.2.1.1.5"
+
+    [[inputs.snmp.table.field]]
+      name = "temperature_celsius"
+      oid = "1.3.6.1.4.1.6574.2.1.1.6"
+
+  [inputs.snmp.tags]
+    device = "synology-nas"
+    location = "homelab"
+    source = "telegraf-snmp"
+
+# SNMP Input Block 3: Volume Capacity (Synology RAID MIB table)
+# Produces: snmp_synology_volume_status, snmp_synology_volume_available_bytes, snmp_synology_volume_size_bytes
+# Tags: raidName
+[[inputs.snmp]]
+  name = "snmp_synology_volume"
+  agents = ["{{ synology_nas_ip }}:161"]
+  timeout = "{{ prometheus_scrape_timeout }}"
+  retries = 3
+  version = 3
+
+  # SNMPv3 Authentication
+  sec_name = "{{ snmp_username }}"
+  sec_level = "{{ snmp_security_level }}"
+  auth_protocol = "{{ snmp_auth_protocol }}"
+  auth_password = "{{ snmp_auth_password }}"
+  priv_protocol = "{{ snmp_priv_protocol }}"
+  priv_password = "{{ snmp_priv_password }}"
+
+  [[inputs.snmp.table]]
+    oid = "1.3.6.1.4.1.6574.3.1.1"
+
+    [[inputs.snmp.table.field]]
+      name = "raidName"
+      oid = "1.3.6.1.4.1.6574.3.1.1.2"
+      is_tag = true
+
+    [[inputs.snmp.table.field]]
+      name = "status"
+      oid = "1.3.6.1.4.1.6574.3.1.1.3"
+
+    [[inputs.snmp.table.field]]
+      name = "available_bytes"
+      oid = "1.3.6.1.4.1.6574.3.1.1.4"
+
+    [[inputs.snmp.table.field]]
+      name = "size_bytes"
+      oid = "1.3.6.1.4.1.6574.3.1.1.5"
+
+  [inputs.snmp.tags]
+    device = "synology-nas"
+    location = "homelab"
+    source = "telegraf-snmp"
+
+# SNMP Input Block 4: Network Throughput (IF-MIB ifXTable — 64-bit counters)
+# Produces: snmp_synology_network_rx_bytes, snmp_synology_network_tx_bytes, snmp_synology_network_speed_mbps
+# Tags: ifName
+[[inputs.snmp]]
+  name = "snmp_synology_network"
+  agents = ["{{ synology_nas_ip }}:161"]
+  timeout = "{{ prometheus_scrape_timeout }}"
+  retries = 3
+  version = 3
+
+  # SNMPv3 Authentication
+  sec_name = "{{ snmp_username }}"
+  sec_level = "{{ snmp_security_level }}"
+  auth_protocol = "{{ snmp_auth_protocol }}"
+  auth_password = "{{ snmp_auth_password }}"
+  priv_protocol = "{{ snmp_priv_protocol }}"
+  priv_password = "{{ snmp_priv_password }}"
+
+  [[inputs.snmp.table]]
+    oid = "1.3.6.1.2.1.31.1.1.1"
+
+    [[inputs.snmp.table.field]]
+      name = "ifName"
+      oid = "1.3.6.1.2.1.31.1.1.1.1"
+      is_tag = true
+
+    [[inputs.snmp.table.field]]
+      name = "rx_bytes"
+      oid = "1.3.6.1.2.1.31.1.1.1.6"
+
+    [[inputs.snmp.table.field]]
+      name = "tx_bytes"
+      oid = "1.3.6.1.2.1.31.1.1.1.10"
+
+    [[inputs.snmp.table.field]]
+      name = "speed_mbps"
+      oid = "1.3.6.1.2.1.31.1.1.1.15"
+
+  [inputs.snmp.tags]
+    device = "synology-nas"
+    location = "homelab"
+    source = "telegraf-snmp"
+
+# SNMP Input Block 5: Memory and System Info (UCD-SNMP + System MIB)
+# Produces: snmp_memTotalReal, snmp_memAvailReal, snmp_memBuffer, snmp_memCached
+#           snmp_sysDescr, snmp_sysUpTime, snmp_sysName
+# Note: UCD-SNMP memory values are in KB; dashboard queries multiply by 1024 for bytes
+[[inputs.snmp]]
+  agents = ["{{ synology_nas_ip }}:161"]
+  timeout = "{{ prometheus_scrape_timeout }}"
+  retries = 3
+  version = 3
+
+  # SNMPv3 Authentication
+  sec_name = "{{ snmp_username }}"
+  sec_level = "{{ snmp_security_level }}"
+  auth_protocol = "{{ snmp_auth_protocol }}"
+  auth_password = "{{ snmp_auth_password }}"
+  priv_protocol = "{{ snmp_priv_protocol }}"
+  priv_password = "{{ snmp_priv_password }}"
+
+  # Generic system information
   [[inputs.snmp.field]]
     name = "sysDescr"
     oid = "1.3.6.1.2.1.1.1.0"
-  
+
   [[inputs.snmp.field]]
     name = "sysUpTime"
     oid = "1.3.6.1.2.1.1.3.0"
-  
+
   [[inputs.snmp.field]]
     name = "sysName"
     oid = "1.3.6.1.2.1.1.5.0"
-  
-  # CPU statistics (UCD-SNMP-MIB - common for Linux-based NAS)
-  [[inputs.snmp.field]]
-    name = "ssCpuRawUser"
-    oid = "1.3.6.1.4.1.2021.11.50.0"
-  
-  [[inputs.snmp.field]]
-    name = "ssCpuRawSystem"
-    oid = "1.3.6.1.4.1.2021.11.52.0"
-  
-  [[inputs.snmp.field]]
-    name = "ssCpuRawIdle"
-    oid = "1.3.6.1.4.1.2021.11.53.0"
-  
-  # Memory statistics (UCD-SNMP-MIB)
+
+  # Memory statistics (UCD-SNMP-MIB - values in KB)
   [[inputs.snmp.field]]
     name = "memTotalReal"
     oid = "1.3.6.1.4.1.2021.4.5.0"
-  
+
   [[inputs.snmp.field]]
     name = "memAvailReal"
     oid = "1.3.6.1.4.1.2021.4.6.0"
-  
+
   [[inputs.snmp.field]]
     name = "memBuffer"
     oid = "1.3.6.1.4.1.2021.4.14.0"
-  
+
   [[inputs.snmp.field]]
     name = "memCached"
     oid = "1.3.6.1.4.1.2021.4.15.0"
-  
-  # Synology-specific disk status
-  [[inputs.snmp.field]]
-    name = "disk1Status"
-    oid = "1.3.6.1.4.1.6574.2.1.1.5.0"
-  
-  [[inputs.snmp.field]]
-    name = "disk1Temp"
-    oid = "1.3.6.1.4.1.6574.2.1.1.6.0"
-  
-  # Synology RAID status
-  [[inputs.snmp.field]]
-    name = "raid1Status"
-    oid = "1.3.6.1.4.1.6574.3.1.1.3.0"
 
   # Add global tags for all metrics
   [inputs.snmp.tags]

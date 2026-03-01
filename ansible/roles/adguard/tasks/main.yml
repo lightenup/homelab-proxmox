@@ -1,0 +1,34 @@
+---
+# Preflight: verify required vault variables are defined before deploying exporter
+# Feature: 041-monitoring-tier-b (FR-028, T022)
+- name: Assert vault credentials are defined for AdGuard exporter
+  ansible.builtin.assert:
+    that:
+      - adguard_admin_user is defined
+      - adguard_admin_password is defined
+    fail_msg: >-
+      Missing vault variable: adguard_admin_user/adguard_admin_password —
+      run 'ansible-vault edit group_vars/services/vault.yml' to add them
+
+# Create install directory
+- name: Ensure AdGuard install directory exists
+  ansible.builtin.file:
+    path: "{{ adguard_install_dir }}"
+    state: directory
+    mode: '0755'
+
+# Deploy docker-compose for exporter
+- name: Deploy AdGuard exporter docker-compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ adguard_install_dir }}/docker-compose.yml"
+    mode: '0644'
+  no_log: true
+  notify: Restart adguard exporter
+
+# Ensure exporter container is running
+- name: Ensure AdGuard exporter is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ adguard_install_dir }}"
+    state: present
+    pull: always

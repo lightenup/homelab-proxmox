@@ -5,9 +5,12 @@ healthcheck_url:
 healthcheck_profile: lan
 healthcheck_expect_status: 200
 
-# Monitoring contract for Prometheus self-registration (FR-007, US-4)
+# Monitoring contract for Prometheus self-registration (FR-015, US-5)
 monitoring_contract:
   enabled: true
-  scrape_targets: []
+  scrape_targets:
+    - job_name: "jellyfin-exporter"
+      port: 9594
+      path: "/metrics"
   alert_rules: []
-  dashboard_file: null
+  dashboard_file: "grafana/dashboards/jellyfin.json"

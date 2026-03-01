@@ -1,0 +1,7 @@
+---
+# Defaults for adguard role (exporter deployment only)
+# Feature: 041-monitoring-tier-b
+adguard_exporter_version: "1.2.1"
+adguard_exporter_port: 9618
+adguard_install_dir: "/opt/adguard"
+adguard_exporter_interval: "10s"

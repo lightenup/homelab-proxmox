@@ -5,9 +5,20 @@ healthcheck_url:
 healthcheck_profile: lan
 healthcheck_expect_status: 200
 
-# Monitoring contract for Prometheus self-registration (FR-007, US-4)
+# Monitoring contract for Prometheus self-registration (FR-014, US-4)
 monitoring_contract:
   enabled: true
-  scrape_targets: []
-  alert_rules: []
-  dashboard_file: null
+  scrape_targets:
+    - job_name: "nextcloud-exporter"
+      port: 9205
+      path: "/metrics"
+      scrape_interval: "90s"
+  alert_rules:
+    - alert: NextcloudDown
+      expr: |
+        nextcloud_up == 0
+      for: "5m"
+      severity: "critical"
+      summary: !unsafe "Nextcloud is down on {{ $labels.instance }}"
+      description: !unsafe "Nextcloud has been unreachable for more than 5 minutes (instance: {{ $labels.instance }})."
+  dashboard_file: "grafana/dashboards/nextcloud.json"

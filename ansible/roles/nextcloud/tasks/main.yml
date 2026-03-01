@@ -210,3 +210,21 @@
   delay: 10
   until: health_check.status == 200
   changed_when: false
+
+# Exporter: verify vault token is present, then provision serverinfo token
+# Feature: 041-monitoring-tier-b (FR-028, T022)
+- name: Assert vault serverinfo token is defined for Nextcloud exporter
+  ansible.builtin.assert:
+    that:
+      - nextcloud_serverinfo_token is defined
+    fail_msg: >-
+      Missing vault variable: nextcloud_serverinfo_token —
+      run 'ansible-vault edit group_vars/services/vault.yml' to add it
+
+- name: Configure Nextcloud serverinfo token for exporter
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data {{ nextcloud_app_container_name }}
+      php occ config:app:set serverinfo token --value="{{ nextcloud_serverinfo_token }}"
+  changed_when: false
+  no_log: true

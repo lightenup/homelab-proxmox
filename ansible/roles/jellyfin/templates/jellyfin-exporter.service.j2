@@ -1,0 +1,17 @@
+[Unit]
+Description=Jellyfin Prometheus Exporter
+After=network.target jellyfin.service
+Wants=jellyfin.service
+
+[Service]
+Type=simple
+ExecStart={{ jellyfin_exporter_install_dir }}/jellyfin_exporter
+Environment=JELLYFIN_ADDRESS=http://127.0.0.1:{{ jellyfin_port | default(8096) }}
+Environment=JELLYFIN_TOKEN={{ jellyfin_api_key }}
+Environment=LISTEN_ADDRESS=:{{ jellyfin_exporter_port }}
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

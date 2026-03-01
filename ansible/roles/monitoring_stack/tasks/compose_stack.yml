@@ -14,28 +14,28 @@
     src: prometheus.yml.j2
     dest: "{{ prometheus_config_path }}/prometheus.yml"
     mode: '0644'
-  notify: Restart monitoring stack
+  notify: Reload prometheus
 
 - name: Deploy infrastructure alert rules
   ansible.builtin.copy:
     src: prometheus/alerts/infrastructure_alerts.yml
     dest: "{{ prometheus_config_path }}/alerts/infrastructure_alerts.yml"
     mode: '0644'
-  notify: Restart monitoring stack
+  notify: Reload prometheus
 
 - name: Deploy Synology alert rules
   ansible.builtin.copy:
     src: prometheus/alerts/synology_alerts.yml
     dest: "{{ prometheus_config_path }}/alerts/synology_alerts.yml"
     mode: '0644'
-  notify: Restart monitoring stack
+  notify: Reload prometheus
 
 - name: Deploy service alert rules from monitoring contracts
   ansible.builtin.template:
     src: service_alerts.yml.j2
     dest: "{{ prometheus_config_path }}/alerts/service_alerts.yml"
     mode: '0644'
-  notify: Restart monitoring stack
+  notify: Reload prometheus
 
 - name: Deploy Telegraf configuration
   ansible.builtin.template:

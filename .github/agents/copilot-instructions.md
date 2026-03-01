@@ -39,6 +39,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-04
 - N/A (certificates managed by Caddy in `/var/lib/caddy/`) (039-https-services)
 - Ansible (YAML/Jinja2), Prometheus 3.x PromQL, Grafana 12.x JSON Schema v1 + Ansible roles, Docker Compose, Prometheus node_exporter v1.10.2 (040-monitoring-overhaul)
 - Prometheus TSDB (Docker volume), Grafana SQLite (Docker volume) (040-monitoring-overhaul)
+- Ansible 2.x (YAML/Jinja2), Telegraf TOML, Grafana JSON, Go binaries + Docker (geerlingguy.docker), Telegraf 1.37.0, Prometheus v3.8.1, Grafana 12.3.1 (041-monitoring-tier-b)
+- N/A (metrics stored in Prometheus TSDB, already provisioned) (041-monitoring-tier-b)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -74,9 +76,9 @@ specs/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 041-monitoring-tier-b: Added Ansible 2.x (YAML/Jinja2), Telegraf TOML, Grafana JSON, Go binaries + Docker (geerlingguy.docker), Telegraf 1.37.0, Prometheus v3.8.1, Grafana 12.3.1
 - 040-monitoring-overhaul: Added Ansible (YAML/Jinja2), Prometheus 3.x PromQL, Grafana 12.x JSON Schema v1 + Ansible roles, Docker Compose, Prometheus node_exporter v1.10.2
 - 039-https-services: Added Ansible 2.10+, Jinja2 templates, Go 1.22+ (build dependency for xcaddy) + Caddy v2 (custom build), xcaddy, `caddy-dns/lego-deprecated`, `go-acme/lego` v4.9.1
-- 038-tfvars-template-separation: Added Bash (POSIX-compatible, runs on Debian 12 Proxmox host) + `sed`, `awk`, `grep`, `sha256sum`/`shasum` (standard POSIX tools)
 
 
 <!-- MANUAL ADDITIONS START -->
