@@ -2,7 +2,6 @@
 
 **Feature Branch**: `040-monitoring-overhaul`
 **Created**: 2026-03-01
-**Revised**: 2026-03-01 (Self-critique pass — see revision notes at end)
 **Status**: Draft
 **Input**: User description: "Monitoring observability overhaul"
 
@@ -115,7 +114,7 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase, 
 2. **Given** Uptime Kuma variables were defined in monitoring host vars and vault, **When** this feature is complete, **Then** all Uptime Kuma-related variables (`monitoring_targets`, `uptime_kuma_api_url`, `uptime_kuma_api_wait_timeout`, `uptime_kuma_api_retry_delay`, `uptime_kuma_api_max_retries`, `uptime_kuma_admin_user`, `uptime_kuma_admin_password`) are removed.
 3. **Given** the monitoring playbook is run after Uptime Kuma removal, **When** the playbook completes, **Then** no errors reference missing Uptime Kuma roles or variables, and the monitoring stack functions correctly.
 4. **Given** the `proxmox_backup` role had a `kuma_only` email mode with `configure_kuma.yml` that referenced Uptime Kuma push monitors, **When** this feature is complete, **Then** the `kuma_only` mode code, `configure_kuma.yml` task file, and KUMA_URL template variable are removed from the `proxmox_backup` role, and the `proxmox_backup_email_mode` options no longer include `kuma_only`.
-5. **Given** operational documentation in `docs/operations.md` referenced "Kuma Migration" and "Current Mode: kuma_only", **When** this feature is complete, **Then** those references are updated to reflect the current state (Uptime Kuma decommissioned, email mode disabled/enabled only).
+5. **Given** operational documentation referenced Uptime Kuma in `docs/operations.md` ("Current Mode: kuma_only"), `docs/operations/backups-proxmox-config.md` (KUMA_URL configuration), and `docs/operations/backups-proxmox-config-email-decommission.md` (Kuma-based state machine), **When** this feature is complete, **Then** all Kuma references are updated to reflect the current state (Uptime Kuma decommissioned, email mode disabled/enabled only) and the email-decommission runbook's state machine no longer includes the `kuma_only` state.
 
 ---
 
@@ -175,10 +174,10 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase, 
 
 - **FR-020**: The Uptime Kuma Ansible role (`ansible/roles/uptime_kuma/`) MUST be removed from the repository. *(traces to US-6)*
 - **FR-021**: All Uptime Kuma-related variables MUST be removed from `ansible/host_vars/monitoring/vars.yml` (monitoring_targets, uptime_kuma_api_url, uptime_kuma_api_wait_timeout, uptime_kuma_api_retry_delay, uptime_kuma_api_max_retries). *(traces to US-6)*
-- **FR-022**: All Uptime Kuma-related secrets MUST be removed from `ansible/group_vars/monitoring/vault.yml` (uptime_kuma_admin_user, uptime_kuma_admin_password). *(traces to US-6)*
+- **FR-022**: All Uptime Kuma-related secrets MUST be removed from `ansible/group_vars/monitoring/vault.yml` (uptime_kuma_admin_user, uptime_kuma_admin_password) and from the example vault file `ansible/host_vars/monitoring/vault.yml.example`. *(traces to US-6)*
 - **FR-023**: The Uptime Kuma container on the monitoring LXC MUST be stopped and removed as part of deployment. *(traces to US-6)*
-- **FR-024**: The `proxmox_backup` role's Uptime Kuma integration MUST be removed: the `configure_kuma.yml` task file, the `kuma_only` option from `proxmox_backup_email_mode`, and the `KUMA_URL` template variable in `proxmox-backup.conf.j2`. *(traces to US-6)*
-- **FR-025**: Operational documentation (`docs/operations.md`) MUST be updated to remove references to Uptime Kuma migration and the `kuma_only` email mode. *(traces to US-6)*
+- **FR-024**: The `proxmox_backup` role's Uptime Kuma integration MUST be removed: the `configure_kuma.yml` task file, the `kuma_only` option from `proxmox_backup_email_mode`, the `KUMA_URL` template variable in `proxmox-backup.conf.j2`, the `send_kuma_notification` function in the backup script template, and the commented-out `proxmox_backup_kuma_url` in `ansible/group_vars/proxmox_hosts/vars.yml`. *(traces to US-6)*
+- **FR-025**: All operational documentation referencing Uptime Kuma MUST be updated: `docs/operations.md` (remove `kuma_only` mode reference), `docs/operations/backups-proxmox-config.md` (remove KUMA_URL configuration section), and `docs/operations/backups-proxmox-config-email-decommission.md` (update the state machine to remove the `kuma_only` state and Kuma-related transition steps). *(traces to US-6)*
 
 #### Version Alignment
 
@@ -292,38 +291,13 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase, 
 | DL-08 | What Grafana version is actually running? | Grafana 12.3.1, confirmed in `ansible/group_vars/monitoring/vars.yml` with `grafana_domain: "grafana.hus-sky.no"` and `grafana_protocol: "https"`. The defaults file pins 10.2.0 but group_vars override it. | Resolved by inspecting `ansible/group_vars/monitoring/vars.yml`. The HTTPS services feature (039) updated the Grafana domain and protocol. The version bump was applied to group_vars at some prior point. |
 | DL-09 | Should the infrastructure metrics agent run as a standalone binary or Docker container? | Standalone binary. | Some LXCs (Jellyfin, Reverse Proxy) run services natively without Docker. A standalone binary works everywhere regardless of whether Docker is installed. |
 | DL-10 | Should the metrics agent be deployed via `lxc_base` or individually per service? | Deploy as a shared base role included in every service's playbook. | This ensures every container gets infrastructure metrics automatically as new services are added, without requiring per-service configuration. Aligns with the extensible pattern philosophy. |
-
 | DL-11 | How to handle ServiceDown/SynologyNASDown alert overlap? | Use Alertmanager inhibition rules so that the more specific `SynologyNASDown` alert suppresses the generic `ServiceDown` alert for Synology targets. | The existing alertmanager config already uses inhibition (inhibit disk alerts when NAS is down). Extending this pattern to suppress the generic ServiceDown for Synology targets avoids duplicate emails while preserving both rules for their distinct use cases. |
 | DL-12 | Should infrastructure threshold alerts be inhibited when agent is unreachable? | Yes. Add inhibition rules that suppress CPU/memory/disk threshold alerts when the agent's `up` metric is 0. | Stale threshold data should not trigger false alerts. Inhibiting threshold alerts when the agent is down is standard practice and reduces noise. |
 | DL-13 | What happens to Uptime Kuma historical data? | Discarded. No export or migration. | The Prometheus `up` metric provides equivalent availability tracking going forward. The Kuma SQLite database is on the monitoring LXC (Docker volume) and contains only 4 monitor targets with limited history. The value of preserving this data does not justify the complexity. |
 | DL-14 | What about the proxmox_backup role's Kuma integration? | Remove the `kuma_only` code path entirely. | The `proxmox_backup_email_mode` is already set to `"disabled"` in group_vars (not `kuma_only`), so the Kuma code path is dead. The default in the role's `defaults/main.yml` is `kuma_only`, but the group_vars override makes it inactive. Removing the dead code prevents future confusion and eliminates a dangling dependency on the deleted Uptime Kuma role. |
 | DL-15 | Should the proxmox backup heartbeat monitoring be replaced? | No — deferred to a future iteration. | The push-based heartbeat pattern (backup script pushes "I'm alive") is fundamentally different from Prometheus's pull-based model. Implementing a push-gateway or dead-man's-switch is non-trivial and orthogonal to the monitoring overhaul's core goals. The backup script logs success/failure to systemd journal, which is sufficient for now. |
+| DL-16 | How broad is the Uptime Kuma documentation cleanup? | All documentation files referencing Kuma — not just `docs/operations.md`. | Codebase grep reveals Kuma references in three docs files: `docs/operations.md`, `docs/operations/backups-proxmox-config.md` (KUMA_URL config section), and `docs/operations/backups-proxmox-config-email-decommission.md` (entire Kuma-based state machine). Additionally, `ansible/host_vars/monitoring/vault.yml.example` contains Kuma example secrets and `ansible/group_vars/proxmox_hosts/vars.yml` has a commented-out `proxmox_backup_kuma_url`. All must be cleaned up to avoid stale references to a decommissioned tool. |
 
 ## Open Questions
 
 None — all ambiguities resolved in Decision Log above.
-
----
-
-## Self-Critique
-
-### Strengths
-- Comprehensive user stories with well-structured Given/When/Then acceptance scenarios
-- Clear separation of P1 vs P2 priorities with justified rationale
-- Extensive edge case coverage (8 original + 3 added in revision)
-- Decision log resolves all ambiguities with documented rationale
-- Constitution cross-check is thorough (secrets policy, separation of concerns, dual-provisioning parity)
-
-### Issues Found (revision pass)
-- **[severity: high] Factual inaccuracy — version update story (US-5)**: The original spec claimed the stack "runs versions from late 2023" but `ansible/group_vars/monitoring/vars.yml` already has Prometheus v3.8.1, Grafana 12.3.1, Telegraf 1.37.0, Alertmanager v0.30.0. US-5 was framed as a version upgrade when the actual work is defaults-file alignment and template compatibility. **Fixed**: Rewrote US-5 as "Version Alignment", corrected narrative, updated acceptance scenarios and DL-07/DL-08.
-- **[severity: high] Missing cross-role Uptime Kuma dependencies**: The `proxmox_backup` role has `configure_kuma.yml`, a `kuma_only` email mode, and KUMA_URL template variable — all referencing Uptime Kuma. `docs/operations.md` also references Kuma. None of these were covered by FR-020 through FR-023. **Fixed**: Added FR-024, FR-025, US-6 acceptance scenarios 4–5, dependency D-006, assumptions A-011/A-012, and decision DL-14.
-- **[severity: high] ServiceDown/SynologyNASDown alert duplication**: FR-012's generic `up == 0` alert would fire simultaneously with the existing `SynologyNASDown` alert for the same target, causing duplicate emails. **Fixed**: Added FR-028 (inhibition rules), edge case, SC-011, and decision DL-11.
-- **[severity: medium] No non-functional requirements**: Feature 017 had detailed NFRs. Feature 040 adds 7 agents + 2 app metrics endpoints + 3 dashboards with zero NFRs. **Fixed**: Added NFR-001 through NFR-005.
-- **[severity: medium] Missing alert inhibition for stale threshold data**: No requirement to suppress CPU/memory/disk alerts when the agent itself is down. **Fixed**: Added FR-029 and decision DL-12.
-- **[severity: medium] Uptime Kuma data disposition not specified**: Spec said "remove" but didn't address historical data. **Fixed**: Added edge case and decision DL-13.
-- **[severity: medium] Missing alert rule validation requirement**: Edge case mentioned it but no FR covered it. **Fixed**: Added FR-030.
-- **[severity: low] Assumption A-009 hedged when fact was known**: Group_vars clearly show Grafana 12.3.1. **Fixed**: Stated the confirmed version.
-- **[severity: low] Push-based heartbeat monitoring gap not acknowledged**: Removing Kuma eliminates the proxmox backup push monitor pattern with no replacement. **Fixed**: Added to Out of Scope with decision DL-15.
-
-### Verdict
-ACCEPT (after revisions applied above)
