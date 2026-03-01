@@ -1,0 +1,22 @@
+---
+# node_exporter role defaults
+# Feature: 040-monitoring-overhaul
+# Research: R-01, R-02
+
+node_exporter_version: "1.10.2"
+node_exporter_port: 9100
+node_exporter_user: "node_exporter"
+node_exporter_enabled: true
+
+# Collectors to disable in LXC environments (R-02)
+# LXCs share the host kernel and have no real hardware devices.
+# These collectors produce no data and waste CPU cycles scanning for non-existent sysfs entries.
+node_exporter_disabled_collectors:
+  - hwmon
+  - thermal_zone
+  - powersupplyclass
+  - nvme
+  - mdadm
+  - infiniband
+  - fibrechannel
+  - wifi

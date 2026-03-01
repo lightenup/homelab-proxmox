@@ -1,0 +1,24 @@
+---
+# Validate Prometheus alert rule syntax before stack restart
+# Feature: 040-monitoring-overhaul
+# Traces to: FR-030, US-4
+#
+# Runs promtool check rules on all deployed alert files. If any rule file has
+# invalid syntax, the task fails with a clear error identifying the file.
+# This prevents an invalid config from being activated on the monitoring stack.
+
+- name: Find deployed alert rule files
+  ansible.builtin.find:
+    paths: "{{ prometheus_config_path }}/alerts"
+    patterns: "*.yml"
+  register: alert_rule_files
+
+- name: Validate alert rule files with promtool
+  ansible.builtin.command:
+    cmd: "docker run --rm -v {{ prometheus_config_path }}:/etc/prometheus prom/prometheus:{{ prometheus_version }} promtool check rules /etc/prometheus/alerts/{{ item.path | basename }}"
+  loop: "{{ alert_rule_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  changed_when: false
+  register: promtool_result
+  failed_when: promtool_result.rc != 0

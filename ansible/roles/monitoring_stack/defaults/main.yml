@@ -3,11 +3,12 @@
 # Feature: 017-synology-metrics
 # Purpose: Version pins, ports, paths for Prometheus, Grafana, SNMP Exporter, Alertmanager
 
-# Service versions (pinned per plan.md)
-prometheus_version: "v2.48.0"
-grafana_version: "10.2.0"
-telegraf_version: "1.28"
-alertmanager_version: "v0.26.0"
+# Service versions (pinned per plan.md — aligned with group_vars/monitoring/vars.yml)
+# Feature: 040-monitoring-overhaul (FR-026)
+prometheus_version: "v3.8.1"
+grafana_version: "12.3.1"
+telegraf_version: "1.37.0"
+alertmanager_version: "v0.30.0"
 
 # Monitoring LXC
 monitoring_ip: "192.168.1.214"

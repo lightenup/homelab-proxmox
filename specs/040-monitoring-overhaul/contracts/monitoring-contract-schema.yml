@@ -1,0 +1,33 @@
+# Monitoring Contract Schema
+# Each service role declares this structure in its defaults/main.yml
+# The monitoring_stack role aggregates all contracts via hostvars at deploy time
+#
+# Usage: Copy this schema into a service role's defaults/main.yml and fill in values.
+
+# Schema definition (not executable — reference only)
+monitoring_contract:
+  # Whether this service participates in monitoring (default: false)
+  enabled: true
+
+  # Prometheus scrape targets declared by this service
+  # Each target becomes a scrape_config entry in prometheus.yml
+  scrape_targets:
+    - job_name: "<service-name>"       # MUST be unique across all services
+      port: 9100                        # Port serving Prometheus metrics
+      path: "/metrics"                  # Metrics endpoint path
+      scrape_interval: "30s"            # Optional: override global interval
+
+  # Alert rules declared by this service
+  # Each rule is added to the Prometheus alert rules file
+  alert_rules:
+    - alert: "ExampleHighLatency"       # Alert name (PascalCase convention)
+      expr: |                           # PromQL expression
+        histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 1
+      for: "5m"                         # Duration before firing
+      severity: "warning"               # warning | critical
+      summary: "High latency on {{ $labels.instance }}"
+      description: "99th percentile latency is {{ $value }}s (threshold: 1s)"
+
+  # Optional: dashboard JSON file path relative to role's files/ directory
+  # Set to null or omit if no dashboard is provided
+  dashboard_file: "grafana/dashboards/example.json"

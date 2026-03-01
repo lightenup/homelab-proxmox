@@ -1,6 +1,0 @@
----
-# Uptime Kuma API configuration
-uptime_kuma_api_url: "http://localhost:3001"
-uptime_kuma_api_wait_timeout: 120
-uptime_kuma_api_retry_delay: 5
-uptime_kuma_api_max_retries: 24

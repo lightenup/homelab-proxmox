@@ -1,33 +1,4 @@
 ---
-# Monitoring targets (4 critical services)
-# Note: Using IP addresses instead of mDNS names because Docker containers
-# cannot resolve .local names (no access to host's Avahi daemon)
-monitoring_targets:
-  - name: "Proxmox"
-    url: "https://192.168.1.112:8006"
-    type: "http"
-    interval: 60
-    ignoreTls: true
-  - name: "Reverse Proxy"
-    url: "http://192.168.1.211:80"
-    type: "http"
-    interval: 60
-    ignoreTls: false
-  - name: "Immich"
-    url: "http://192.168.1.213:2283"
-    type: "http"
-    interval: 60
-    ignoreTls: false
-  - name: "Proxmox Backup"
-    type: "push"
-    interval: 90000 # 25 hours (daily backup)
-
-# Uptime Kuma API configuration
-uptime_kuma_api_url: "http://localhost:3001"
-uptime_kuma_api_wait_timeout: 120
-uptime_kuma_api_retry_delay: 5
-uptime_kuma_api_max_retries: 24
-
 # Alert thresholds
 alert_down_threshold: 2  # minutes
 

@@ -1,0 +1,61 @@
+# Prometheus Scrape Configuration Contract
+# Defines the structure of the generated prometheus.yml scrape_configs section
+#
+# The monitoring_stack role's prometheus.yml.j2 template generates this output
+# by aggregating monitoring contracts from all inventory hosts.
+
+# === Static targets (always present) ===
+
+scrape_configs:
+  # Self-monitoring (existing)
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'prometheus'
+
+  # SNMP via Telegraf (existing, preserved per FR-019)
+  - job_name: 'telegraf-snmp'
+    static_configs:
+      - targets: ['telegraf:9273']
+
+  # === Infrastructure metrics (generated from services group) ===
+  # One entry per host in the 'services' inventory group with node_exporter
+  - job_name: 'node-exporter'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - '192.168.1.210:9100'  # adguard
+          - '192.168.1.211:9100'  # reverse_proxy
+          - '192.168.1.212:9100'  # homeassistant
+          - '192.168.1.213:9100'  # immich
+          - '192.168.1.214:9100'  # monitoring
+          - '192.168.1.215:9100'  # jellyfin
+          - '192.168.1.216:9100'  # nextcloud
+
+  # === Application metrics (generated from monitoring contracts) ===
+  # Only present when service roles declare scrape_targets in monitoring_contract
+
+  - job_name: 'caddy'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['192.168.1.211:2019']
+        labels:
+          instance: 'reverse_proxy'
+    metrics_path: /metrics
+
+  - job_name: 'immich-api'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['192.168.1.213:8081']
+        labels:
+          instance: 'immich'
+    metrics_path: /metrics
+
+  - job_name: 'immich-microservices'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['192.168.1.213:8082']
+        labels:
+          instance: 'immich'
+    metrics_path: /metrics

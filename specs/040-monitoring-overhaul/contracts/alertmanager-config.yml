@@ -1,0 +1,54 @@
+# Alertmanager Configuration Contract
+# Defines the target state of alertmanager.yml after the overhaul
+#
+# Changes from existing config:
+# - Updated inhibit_rules to use source_matchers/target_matchers (Alertmanager v0.30.0)
+# - Added ServiceDown → SynologyNASDown inhibition (FR-028)
+# - Added agent-down → threshold-suppression inhibition (FR-029)
+# - Added critical → warning severity inhibition
+
+# Route tree (unchanged from current)
+route:
+  receiver: 'email-default'
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+# Receivers (unchanged from current)
+receivers:
+  - name: 'email-default'
+    # Existing SMTP email config preserved
+
+# Inhibition rules (NEW — replaces single existing rule)
+inhibit_rules:
+  # 1. SynologyNASDown inhibits generic ServiceDown for Synology targets (FR-028)
+  #    Prevents duplicate alerts when Telegraf SNMP target goes down
+  - source_matchers:
+      - alertname = "SynologyNASDown"
+    target_matchers:
+      - alertname = "ServiceDown"
+    equal: ['instance']
+
+  # 2. SynologyNASDown inhibits Synology-specific alerts (existing, migrated syntax)
+  - source_matchers:
+      - alertname = "SynologyNASDown"
+    target_matchers:
+      - alertname =~ "Synology.*"
+    equal: ['instance']
+
+  # 3. Agent-down suppresses infrastructure threshold alerts (FR-029)
+  #    When node_exporter is unreachable, CPU/memory/disk thresholds are stale
+  - source_matchers:
+      - alertname = "ServiceDown"
+      - component = "availability"
+    target_matchers:
+      - component = "infrastructure"
+    equal: ['instance']
+
+  # 4. Critical severity suppresses warning for same alertname+instance
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ['alertname', 'instance']

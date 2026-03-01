@@ -19,9 +19,6 @@ AGE_PUBLIC_KEY="{{ proxmox_backup_age_public_key }}"
 RETENTION_DAILY={{ proxmox_backup_retention_daily }}
 RETENTION_MONTHLY={{ proxmox_backup_retention_monthly }}
 
-# Monitoring (Feature 014)
-KUMA_URL="{{ proxmox_backup_kuma_url | default('') }}"
-
 # Optional: IaC Repository (if undefined, US2 skipped)
 {% if proxmox_backup_repo_path is defined %}
 REPO_PATH="{{ proxmox_backup_repo_path }}"

@@ -49,3 +49,9 @@
     path: "{{ alertmanager_config_path }}"
     state: directory
     mode: '0755'
+
+- name: Create Prometheus alerts directory
+  ansible.builtin.file:
+    path: "{{ prometheus_config_path }}/alerts"
+    state: directory
+    mode: '0755'

@@ -20,3 +20,12 @@
     src: grafana/dashboards/synology-nas.json
     dest: "{{ grafana_dashboards_path }}/synology-nas.json"
     mode: '0644'
+
+- name: Deploy infrastructure overview dashboard
+  ansible.builtin.copy:
+    src: grafana/dashboards/infrastructure-overview.json
+    dest: "{{ grafana_dashboards_path }}/infrastructure-overview.json"
+    mode: '0644'
+
+- name: Deploy service-owned dashboards from monitoring contracts
+  ansible.builtin.include_tasks: provision_dashboards.yml

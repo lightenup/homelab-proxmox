@@ -20,10 +20,6 @@ proxmox_backup_schedule: "daily"
 proxmox_backup_time: "02:00"
 proxmox_backup_email_mode: "disabled"
 
-# Uptime Kuma Push URL (Feature 014) - Replaced with Grafana/Prometheus/AlertManager
-# proxmox_backup_kuma_url: "https://kuma.example.com/api/push/..."
-
-
 # NAS Configuration
 proxmox_backup_nas_host: "192.168.1.109"
 proxmox_backup_nas_path: "/volume1/homelab_backups/proxmox"
