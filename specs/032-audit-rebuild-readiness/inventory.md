@@ -25,4 +25,3 @@
 - Environments: lab + prod (as represented in repo)
 - Nodes: PVE host (`pve`), LXCs (immich, jellyfin, proxy, monitoring, homeassistant), NAS (Synology)
 - Runtime evidence: specs/032-audit-rebuild-readiness/runtime-inventory.md
-

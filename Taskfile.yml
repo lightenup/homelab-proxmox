@@ -245,5 +245,3 @@ tasks:
     dir: ansible
     cmds:
       - ansible-playbook -i inventories/static/hosts.yml playbooks/backup_proxmox.yml --vault-password-file .vault-pass.txt {{.CLI_ARGS}}
-
-

@@ -28,7 +28,7 @@ Define a consistent method for inventorying, classifying, and documenting reposi
 | --- | --- | --- |
 | low | Cosmetic or documentation-only | Missing doc link |
 | medium | Gap with workaround | Role exists but not wired |
-| high | Operational risk | Rebuild step missing | 
+| high | Operational risk | Rebuild step missing |
 | critical | Blocks rebuild/DR | No restore path for required data |
 
 ## Remediation Priority

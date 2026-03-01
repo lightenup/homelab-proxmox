@@ -10,6 +10,7 @@ ignore: |
   python/.mypy_cache/
   python/.ruff_cache/
   .github/workflows/
+  ansible/.ansible/
   ansible/roles/**/files/**
   ansible/roles/**/templates/**
   ansible/group_vars/**/vault.yml
