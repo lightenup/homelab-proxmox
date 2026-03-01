@@ -18,6 +18,10 @@ services:
       - .env
     ports:
       - "{{ immich_port }}:2283"
+{% if immich_metrics_enabled | default(false) %}
+      - "{{ immich_metrics_port }}:8081"
+      - "{{ immich_microservices_metrics_port }}:8082"
+{% endif %}
     depends_on:
       - redis
       - database

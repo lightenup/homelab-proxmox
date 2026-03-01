@@ -55,22 +55,29 @@
 
 ## R-04: Caddy Prometheus Metrics
 
-**Decision**: Enable Caddy's built-in metrics via the `metrics` global option, scrape from admin API on port 2019.
+**Decision**: Enable Caddy's built-in metrics via the `metrics` global option, expose on a dedicated metrics-only site block on port 9180. Do NOT bind the admin API to external interfaces.
 
 **Rationale**:
 - Caddy natively supports Prometheus metrics — no external exporter needed (A-003 confirmed).
-- The admin API (port 2019) serves metrics at `/metrics` by default.
-- Adding `metrics` to the global options block in Caddyfile enables all HTTP metrics.
+- The admin API (port 2019) serves metrics at `/metrics` by default, but also exposes config reload, reverse proxy management, and other admin operations. Binding it to `0.0.0.0` would expose the full admin API to the LAN — unnecessary attack surface.
+- Instead, add a dedicated site block on port 9180 using the `metrics` directive. This serves only `/metrics` with no admin capabilities. The admin API stays on `localhost:2019` (default, unreachable from outside).
+- Port 9180 is LAN-only (not a `*.hus-sky.no` subdomain, so the HTTPS reverse proxy ignores it per FR-006/C-003).
 
 **Configuration change** to `Caddyfile.j2`:
 ```caddyfile
 {
     acme_dns ...
-    log { output stdout }
     servers {
         metrics
     }
+    log { output stdout }
 }
+
+:9180 {
+    metrics /metrics
+}
+
+import /etc/caddy/conf.d/*.caddy
 ```
 
 **Metrics exposed** (all `caddy_` prefixed):
@@ -83,9 +90,11 @@
 - `caddy_reverse_proxy_upstreams_healthy` — upstream health gauge
 - Standard `go_*` and `process_*` runtime metrics
 
-**Port**: 2019 (admin API — LAN-only, not exposed via HTTPS reverse proxy per FR-006/C-003). Caddy's admin API binds to `localhost:2019` by default; must be changed to `0.0.0.0:2019` or the LXC's IP to be reachable from the monitoring container.
+**Port**: 9180 (dedicated metrics-only site block). Admin API remains on `localhost:2019` (default, not exposed).
 
-**Admin API listen address**: Add `admin 0.0.0.0:2019` to Caddyfile global options (or use the LXC's IP).
+**Alternatives rejected**:
+- Binding admin API to `0.0.0.0:2019`: Exposes full admin API (config reload, route management) to LAN. Unnecessary risk.
+- Binding admin API to LXC IP (`192.168.1.211:2019`): Still exposes admin API operations beyond metrics.
 
 ## R-05: Immich Prometheus Metrics
 
@@ -235,3 +244,31 @@ The existing provisioning YAML already scans the dashboards directory recursivel
 2. Stops and removes it if present
 3. Removes the Docker volume if present
 4. Removes the Kuma data directory if present
+
+## R-12: Grafana Dashboard Sourcing Strategy
+
+**Decision**: Import community dashboards from Grafana Labs and customize, rather than hand-authoring JSON from scratch.
+
+**Rationale**:
+- Grafana dashboard JSON files are hundreds of lines of panel definitions, query templates, and layout coordinates. Hand-authoring is tedious, error-prone, and produces dashboards that are less polished than community-maintained ones.
+- Grafana Labs provides a public API for downloading dashboard JSON by ID and revision: `https://grafana.com/api/dashboards/<ID>/revisions/<REV>/download`
+- Community dashboards already handle edge cases (metric name variations, Grafana version compatibility, panel type selection) that would take significant effort to get right from scratch.
+
+**Dashboard sources**:
+
+| Dashboard | Source | Grafana Labs ID | Notes |
+|-----------|--------|----------------|-------|
+| Infrastructure Overview (node_exporter) | "Node Exporter Full" by rfmoz | **1860** | Most popular node_exporter dashboard (40M+ downloads). Covers CPU, memory, disk, network, and more. Download latest revision, strip unused panels to keep only CPU/memory/disk/network for the 7-LXC overview. |
+| Caddy Reverse Proxy | No established community dashboard | N/A | Caddy's metrics are simple and well-documented. Author a minimal dashboard with 4 panels: request rate, response time P95, error rate by status, upstream health. This is small enough to hand-write. |
+| Immich Photo Service | "Immich Overview" by community | **22555** | Purpose-built for Immich Prometheus metrics. Download and adapt for Grafana 12.x if needed. |
+
+**Import process**:
+1. Download JSON via Grafana API: `curl -o dashboard.json https://grafana.com/api/dashboards/1860/revisions/latest/download`
+2. Replace hardcoded datasource UIDs with the provisioned `${DS_PROMETHEUS}` variable
+3. Verify panel types are Grafana 12.x compatible (replace deprecated `graph` panels with `timeseries` if found)
+4. Set dashboard UID to a stable value for idempotent provisioning
+5. Commit the customized JSON to the appropriate role's `files/grafana/dashboards/` directory
+
+**Alternatives rejected**:
+- Hand-authoring all three dashboards: Higher effort, lower quality. Only justified for Caddy where no community dashboard exists.
+- Using Grafana's dashboard import UI: Not IaC-compatible. Dashboards must be file-provisioned for reproducibility per constitution principle I (spec-driven workflow).

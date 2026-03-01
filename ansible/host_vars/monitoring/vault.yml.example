@@ -2,10 +2,6 @@
 # Example vault file structure for monitoring secrets
 # Create actual vault with: ansible-vault create ansible/group_vars/monitoring/vault.yml
 
-# Uptime Kuma admin credentials
-uptime_kuma_admin_user: "admin"
-uptime_kuma_admin_password: "CHANGE_ME_STRONG_PASSWORD"
-
 # SMTP configuration for email notifications
 smtp_host: "smtp.gmail.com"
 smtp_port: 587

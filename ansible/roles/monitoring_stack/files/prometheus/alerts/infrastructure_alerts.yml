@@ -1,0 +1,66 @@
+# Prometheus infrastructure alert rules
+# Feature: 040-monitoring-overhaul
+# Traces to: FR-012, FR-013, US-1, US-2
+
+groups:
+  - name: infrastructure_alerts
+    interval: 30s
+    rules:
+      # FR-012: Generic service-down detection (replaces Uptime Kuma)
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: availability
+        annotations:
+          summary: "{{ $labels.job }} target {{ $labels.instance }} is down"
+          description: "Scrape target {{ $labels.instance }} (job: {{ $labels.job }}) has been unreachable for more than 2 minutes."
+
+      # FR-013: High CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage on {{ $labels.instance }} has been above 85% for 10 minutes (current: {{ $value | printf \"%.1f\" }}%)."
+
+      # FR-013: High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage on {{ $labels.instance }} has been above 85% for 5 minutes (current: {{ $value | printf \"%.1f\" }}%)."
+
+      # FR-013: Disk space warning
+      - alert: DiskSpaceWarning
+        expr: |
+          100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "Disk space warning on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}% full (threshold: 85%)."
+
+      # FR-013: Disk space critical
+      - alert: DiskSpaceCritical
+        expr: |
+          100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "CRITICAL: Disk space on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}% full (threshold: 95%)."

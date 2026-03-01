@@ -1,8 +1,19 @@
 {
     acme_dns {{ caddy_acme_dns_provider }} {$DOMENESHOP_API_TOKEN} {$DOMENESHOP_API_SECRET}
+{% if caddy_metrics_enabled | default(false) %}
+    servers {
+        metrics
+    }
+{% endif %}
     log {
         output stdout
     }
 }
 
+{% if caddy_metrics_enabled | default(false) %}
+:{{ caddy_metrics_port }} {
+    metrics /metrics
+}
+
+{% endif %}
 import {{ caddy_conf_dir }}/*.caddy

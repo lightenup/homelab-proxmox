@@ -13,3 +13,26 @@ go_version: "1.22.0"
 
 # Home Assistant conditional flag (FR-015, A-009)
 homeassistant_active: false
+
+# Caddy Prometheus metrics (Feature: 040-monitoring-overhaul, FR-004, R-04)
+# Dedicated metrics-only site block on port 9180 (admin API stays on localhost:2019)
+caddy_metrics_enabled: true
+caddy_metrics_port: 9180
+
+# Monitoring contract for Prometheus self-registration (FR-007, US-4)
+monitoring_contract:
+  enabled: true
+  scrape_targets:
+    - job_name: "caddy"
+      port: 9180
+      path: "/metrics"
+      scrape_interval: "30s"
+  alert_rules:
+    - alert: CaddyHighErrorRate
+      expr: |
+        sum(rate(caddy_http_requests_total{code=~"5.."}[5m])) / sum(rate(caddy_http_requests_total[5m])) > 0.05
+      for: "5m"
+      severity: "warning"
+      summary: "Caddy high 5xx error rate"
+      description: "More than 5% of Caddy responses are 5xx errors over the last 5 minutes (current: {{ $value | printf \"%.2f\" }}%)."
+  dashboard_file: "grafana/dashboards/caddy-reverse-proxy.json"

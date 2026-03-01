@@ -362,19 +362,12 @@ Deployed by Ansible, sources variables from group_vars. Contains:
 
 ## Monitoring
 
-### Uptime Kuma (Primary)
+### Prometheus/Alertmanager (Primary)
 
-The backup script sends push notifications to Uptime Kuma.
+Backup infrastructure is monitored via the `node-exporter` scrape target on the Proxmox host. The `ServiceDown` alert fires when the host is unreachable for more than 2 minutes.
 
-- **Monitor Name**: "Proxmox Backup"
-- **Type**: Push
-- **Status**:
-  - **Up**: Backup completed successfully.
-  - **Down**: Backup failed (message contains failure type).
-
-**Configuration**:
-- The Kuma Push URL is automatically retrieved from the monitoring host during Ansible deployment.
-- It is stored in `/etc/proxmox-backup.conf` as `KUMA_URL`.
+- **Prometheus targets**: `http://192.168.1.214:9090/targets` — verify the Proxmox host shows `UP`.
+- **Alertmanager**: `http://192.168.1.214:9093` — check for active `ServiceDown` alerts.
 
 ### Backup Success/Failure Logs
 
@@ -393,13 +386,13 @@ ssh root@192.168.1.109 "ls -lhtr /volume1/homelab_backups/proxmox/"
 
 ---
 
-## Email Decommissioning
+## Email Notifications (Optional)
 
-We are transitioning from local Email notifications (Postfix) to Centralized Monitoring (Uptime Kuma).
+Email notifications are disabled by default (`proxmox_backup_email_mode: "disabled"`). Monitoring is handled by Prometheus/Alertmanager.
 
 See [backups-proxmox-config-email-decommission.md](./backups-proxmox-config-email-decommission.md) for the full runbook on how to:
-1.  Disable email notifications.
-2.  Rollback to email if needed.
+1.  Enable email notifications.
+2.  Disable email if no longer needed.
 3.  Permanently remove email packages.
 
 ---

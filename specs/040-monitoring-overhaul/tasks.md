@@ -1,521 +1,241 @@
 # Tasks: Monitoring & Observability Overhaul
 
 **Input**: Design documents from `specs/040-monitoring-overhaul/`
-**Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, contracts/
+**Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓, quickstart.md ✓
 
-## Format: `[ID] [P?] [Story] Description`
+**Tests**: Not requested — validation uses `promtool`, `ansible-lint`, `yamllint`, and `--check` mode (Phase 9).
 
-- **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: Which user story this task belongs to (e.g., US-1, US-2, US-3)
-- Include exact file paths in descriptions
+**Organization**: Phases 1–2 are setup/foundational; Phases 3–8 follow user story priority order (US1/US2/US3 as P1, then US4/US5/US6 as P2); Phase 9 is polish and static validation.
 
-## Inventory Note
+## Format: `[ID] [P?] [Story?] Description`
 
-The production inventory (`ansible/inventories/prod/hosts.yml`) currently contains 5 hosts in the
-`services` group: `reverse_proxy`, `immich`, `monitoring`, `jellyfin`, `nextcloud`. AdGuard
-(192.168.1.210) and Home Assistant (192.168.1.212) are listed in the spec's FR-001 but are not
-yet in the production inventory. The extensible pattern ensures they will automatically receive
-node_exporter and be scraped when added to the inventory in the future.
-
-## Design Correction: Monitoring Contract Scrape Targets
-
-The plan Steps 3, 4, and 5 state that monitoring contracts should include node_exporter as a
-scrape target. This is **incorrect** — it would create duplicate scrape configs because the
-Prometheus template (Step 7) already generates a dedicated `node-exporter` job by iterating
-over `groups['services']`. The prometheus scrape config contract (`contracts/prometheus-scrape-config.yml`)
-confirms this separation: the `node-exporter` job is group-based, and monitoring contracts
-only declare application-level scrape targets (Caddy port 2019, Immich ports 8081/8082).
-
-**Correction applied in these tasks:**
-- Jellyfin/Nextcloud contracts: `scrape_targets: []` (empty — node_exporter handled by group)
-- Reverse Proxy contract: only `caddy` job on port 2019 (no node_exporter target)
-- Immich contract: only `immich-api` (8081) and `immich-microservices` (8082) (no node_exporter target)
+- **[P]**: Can run in parallel (different files, no blocking dependencies)
+- **[Story]**: Which user story this task belongs to (US1–US6 map to spec user stories)
+- Exact file paths are in each task description
 
 ---
 
-## Phase 1: Foundational (Shared Infrastructure)
+## Phase 1: Setup — node_exporter Ansible Role
 
-**Purpose**: Create the node_exporter role and integrate it into the base role that all LXCs use.
+**Purpose**: Create the new `node_exporter` role structure. All four files are independent and can be authored in parallel. This role is the prerequisite for every user story that depends on infrastructure metrics.
 
-**⚠️ CRITICAL**: No user story work can begin until this phase is complete.
+**Plan step**: Step 1
 
-- [ ] T001 [P] [US-1] Create node_exporter Ansible role
-  - **Create**: `ansible/roles/node_exporter/defaults/main.yml`
-    - Variables: `node_exporter_version: "1.10.2"`, `node_exporter_port: 9100`, `node_exporter_user: "node_exporter"`, `node_exporter_enabled: true`, `node_exporter_disabled_collectors` list (hwmon, thermal_zone, powersupplyclass, nvme, mdadm, infiniband, fibrechannel, wifi per research.md R-02), `node_exporter_textfile_dir`, `node_exporter_filesystem_mount_exclude` regex
-  - **Create**: `ansible/roles/node_exporter/tasks/main.yml`
-    - Tasks: check current version (skip if matching), create system user, download binary from `https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz`, extract to `/usr/local/bin/node_exporter`, deploy systemd unit from template, enable and start service. Guard all tasks with `when: node_exporter_enabled | default(true)`
-  - **Create**: `ansible/roles/node_exporter/templates/node_exporter.service.j2`
-    - Systemd unit: `User={{ node_exporter_user }}`, `ExecStart=/usr/local/bin/node_exporter` with `--web.listen-address=:{{ node_exporter_port }}` and `--no-collector.X` for each disabled collector, `--collector.filesystem.mount-points-exclude` regex
-  - **Create**: `ansible/roles/node_exporter/handlers/main.yml`
-    - Handler: `Restart node_exporter` → `ansible.builtin.systemd: name=node_exporter state=restarted daemon_reload=yes`
-  - **Traces to**: FR-001, FR-002, A-005, C-004, DL-09, R-01, R-02
-  - **Done-when**: `ansible-lint ansible/roles/node_exporter/` exits 0 AND all 4 files exist AND `grep 'node_exporter_version.*1.10.2' ansible/roles/node_exporter/defaults/main.yml` matches AND `grep 'no-collector' ansible/roles/node_exporter/templates/node_exporter.service.j2` matches
+- [X] T001 [P] Create `ansible/roles/node_exporter/defaults/main.yml` — define `node_exporter_version: "1.10.2"`, `node_exporter_port: 9100`, `node_exporter_user: "node_exporter"`, `node_exporter_enabled: true`, and `node_exporter_disabled_collectors` list (hwmon, thermal_zone, powersupplyclass, nvme, mdadm, infiniband, fibrechannel, wifi) per research.md R-02
+- [X] T002 [P] Create `ansible/roles/node_exporter/tasks/main.yml` — tasks to download node_exporter binary (idempotent: skip if correct version already installed), create system user `node_exporter`, install binary to `/usr/local/bin/`, template the systemd unit, enable and start service; include filesystem mount-point exclusion flag `--collector.filesystem.mount-points-exclude`
+- [X] T003 [P] Create `ansible/roles/node_exporter/templates/node_exporter.service.j2` — systemd unit file that starts node_exporter with `--web.listen-address=:{{ node_exporter_port }}` and all `--no-collector.<name>` flags from `node_exporter_disabled_collectors`; runs as `node_exporter` system user
+- [X] T004 [P] Create `ansible/roles/node_exporter/handlers/main.yml` — single handler `Restart node_exporter` that executes `systemctl restart node_exporter`
 
-- [ ] T002 [US-1] Integrate node_exporter into lxc_base role
-  - **Modify**: `ansible/roles/lxc_base/tasks/main.yml`
-    - Append at end of file: `include_role: name=node_exporter` with `when: node_exporter_enabled | default(true)` and `tags: [node_exporter]`
-  - **Traces to**: FR-001, FR-003, DL-10, R-09
-  - **Dependencies**: T001
-  - **Done-when**: `grep -A2 'include_role' ansible/roles/lxc_base/tasks/main.yml | grep 'node_exporter'` matches AND `ansible-lint ansible/roles/lxc_base/` exits 0
-
-**Checkpoint**: node_exporter role exists and is wired into lxc_base. Running any service playbook will deploy node_exporter to that service's LXC.
+**Checkpoint**: Role files exist. `ansible-lint ansible/roles/node_exporter/` returns zero errors.
 
 ---
 
-## Phase 2: US-5 — Monitoring Stack Version Alignment (Priority: P2)
+## Phase 2: Foundational — Blocking Prerequisites
 
-**Goal**: Eliminate the defaults/group_vars version mismatch so the codebase is internally consistent.
+**Purpose**: Changes that must be complete before any user story implementation can begin. Includes lxc_base integration (blocks US1 deployment), Synology alert reorganization (blocks new alert directory structure), and version alignment (blocks correct template authoring). Phase 3+ cannot start until this phase is complete.
 
-**Independent Test**: Compare version strings in `defaults/main.yml` against `group_vars/monitoring/vars.yml` — they must match for all 4 components.
+**Plan steps**: Steps 2, 6, 9
 
-- [ ] T003 [P] [US-5] Align monitoring_stack version defaults to match group_vars
-  - **Modify**: `ansible/roles/monitoring_stack/defaults/main.yml`
-    - Change `prometheus_version: "v2.48.0"` → `"v3.8.1"`
-    - Change `grafana_version: "10.2.0"` → `"12.3.1"`
-    - Change `telegraf_version: "1.28"` → `"1.37.0"`
-    - Change `alertmanager_version: "v0.26.0"` → `"v0.30.0"`
-  - **Traces to**: FR-026, SC-007
-  - **Dependencies**: None
-  - **Done-when**: `grep 'prometheus_version.*v3.8.1' ansible/roles/monitoring_stack/defaults/main.yml` matches AND `grep 'grafana_version.*12.3.1' ansible/roles/monitoring_stack/defaults/main.yml` matches AND `grep 'telegraf_version.*1.37.0' ansible/roles/monitoring_stack/defaults/main.yml` matches AND `grep 'alertmanager_version.*v0.30.0' ansible/roles/monitoring_stack/defaults/main.yml` matches
+- [X] T005 Modify `ansible/roles/lxc_base/tasks/main.yml` — append `include_role: name=node_exporter` with guard `when: node_exporter_enabled | default(true)` at the end of the task list; ensures every LXC running lxc_base automatically gets node_exporter deployed (plan DL-10)
+- [X] T006 [P] Modify `ansible/roles/monitoring_stack/defaults/main.yml` — update four version pins to match `ansible/group_vars/monitoring/vars.yml`: `prometheus_version: "v3.8.1"`, `grafana_version: "12.3.1"`, `telegraf_version: "1.37.0"`, `alertmanager_version: "v0.30.0"`; add new defaults for monitoring contract aggregation (covers FR-026/US5 primary requirement)
+- [X] T007 [P] Create `ansible/roles/monitoring_stack/files/prometheus/alerts/synology_alerts.yml` — copy content verbatim from existing `ansible/roles/monitoring_stack/files/prometheus/alerts.yml` (three Synology alert rules preserved per FR-019); the `alerts/` directory is created by this file's existence in git
+- [X] T008 Delete `ansible/roles/monitoring_stack/files/prometheus/alerts.yml` — remove old flat-file location now that content has moved to `alerts/synology_alerts.yml`; depends on T007 being complete
 
-**Checkpoint**: Version defaults match group_vars. SC-007 satisfied.
+**Checkpoint**: `ls ansible/roles/monitoring_stack/files/prometheus/` shows `alerts/` directory only; `alerts/synology_alerts.yml` contains the original three Synology rules; `alerts.yml` no longer exists.
 
 ---
 
-## Phase 3: US-1 + US-4 — Infrastructure Health Baseline + Extensible Pattern Foundation (Priority: P1/P2)
+## Phase 3: User Story 1 — Infrastructure Health Baseline (Priority: P1) 🎯 MVP
 
-**Goal**: Deploy infrastructure metrics collection for all service containers, create the self-registration pattern for scrape config generation, and provide an infrastructure overview dashboard.
+**Goal**: Every service container exposes CPU/memory/disk/network metrics via node_exporter; Prometheus scrapes all 7 containers using a group-based job; infrastructure alert rules fire for resource exhaustion; infrastructure overview dashboard shows all containers in one view.
 
-**Independent Test**: After deployment, verify Prometheus targets page shows all service LXCs reporting node_exporter metrics.
+**Independent Test**: After deploying all service playbooks and the monitoring playbook, open `http://192.168.1.214:9090/targets` and confirm the `node-exporter` job shows 7 targets all reporting UP. Open Grafana and verify the Infrastructure Overview dashboard shows live data for all 7 containers (SC-001).
 
-### Alert Rules
+**Plan steps**: Steps 7, 8, 12, 18 (partial — directories and alert file deployment)
 
-- [ ] T005 [P] [US-1,US-2] Create infrastructure alert rules file
-  - **Create**: `ansible/roles/monitoring_stack/files/prometheus/alerts/infrastructure_alerts.yml`
-    - Group name: `infrastructure_alerts`, interval: `30s`
-    - Rules per `contracts/alert-rules.yml`:
-      - `ServiceDown`: `up == 0` for 2m, severity: critical, component: availability (FR-012)
-      - `HighCPUUsage`: `100 - (avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85` for 10m, severity: warning, component: infrastructure (FR-013)
-      - `HighMemoryUsage`: `100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 85` for 5m, severity: warning, component: infrastructure (FR-013)
-      - `DiskSpaceWarning`: `>85%` filesystem for 5m, severity: warning, component: infrastructure (FR-013)
-      - `DiskSpaceCritical`: `>95%` filesystem for 2m, severity: critical, component: infrastructure (FR-013)
-    - All rules must include `component` label for inhibition targeting (FR-028, FR-029)
-  - **Traces to**: FR-012, FR-013, SC-010, DL-05
-  - **Dependencies**: None
-  - **Done-when**: File exists AND `yamllint ansible/roles/monitoring_stack/files/prometheus/alerts/infrastructure_alerts.yml` exits 0 AND file contains all 5 alert names (ServiceDown, HighCPUUsage, HighMemoryUsage, DiskSpaceWarning, DiskSpaceCritical)
+- [X] T009 [US1] Modify `ansible/roles/monitoring_stack/templates/prometheus.yml.j2` — (1) update `rule_files` section to load from `alerts/*.yml` glob instead of single `alerts.yml`; (2) add `node-exporter` scrape job iterating over `groups['services']` via hostvars to generate static targets (all service IPs on port 9100, adds `instance` label = inventory hostname); (3) add application-level scrape jobs by iterating over all hosts' `hostvars[host].monitoring_contract.scrape_targets` when `monitoring_contract.enabled` is true; preserve existing `prometheus` self-monitor and `telegraf-snmp` static targets unchanged
+- [X] T010 [P] [US1] Create `ansible/roles/monitoring_stack/files/prometheus/alerts/infrastructure_alerts.yml` — alert rules group `infrastructure_alerts` with evaluation interval 30s, containing five rules: `ServiceDown` (up==0 for 2m, severity=critical, component=availability), `HighCPUUsage` (>85% for 10m, severity=warning, component=infrastructure), `HighMemoryUsage` (>85% for 5m, severity=warning, component=infrastructure), `DiskSpaceWarning` (>85% for 5m, severity=warning, component=infrastructure), `DiskSpaceCritical` (>95% for 2m, severity=critical, component=infrastructure) — use exact PromQL expressions from `contracts/alert-rules.yml`
+- [X] T011 [P] [US1] Create `ansible/roles/monitoring_stack/files/grafana/dashboards/infrastructure-overview.json` — download community dashboard "Node Exporter Full" (Grafana Labs ID 1860, latest revision) via `curl -o dashboard.json https://grafana.com/api/dashboards/1860/revisions/latest/download`; customize: set UID to `infra-overview`, title to "Infrastructure Overview", replace hardcoded datasource UIDs with `${DS_PROMETHEUS}`, replace any deprecated `graph` panels with `timeseries` for Grafana 12.x compatibility, set auto-refresh 30s; the community dashboard covers CPU, memory, disk, network and more — strip unused panels if needed to keep the dashboard focused on the 7-LXC overview
+- [X] T012 [P] [US1] Modify `ansible/roles/monitoring_stack/tasks/create_directories.yml` — add task to create `{{ prometheus_config_path }}/alerts/` directory with the same owner/mode as sibling directories; this directory receives the deployed alert rule files at play time
 
-- [ ] T006 [P] [US-1] Reorganize existing Synology alert rules into alerts/ subdirectory
-  - **Create**: `ansible/roles/monitoring_stack/files/prometheus/alerts/synology_alerts.yml` — copy EXACT content from existing `alerts.yml` (3 rules: SynologyVolumeHighUsage, SynologyNASDown, SynologyDiskSMARTWarning)
-  - **Delete**: `ansible/roles/monitoring_stack/files/prometheus/alerts.yml` (original file, after content is moved)
-  - **Traces to**: FR-019, FR-027, SC-008
-  - **Dependencies**: None
-  - **Done-when**: `test -f ansible/roles/monitoring_stack/files/prometheus/alerts/synology_alerts.yml` exits 0 AND `test ! -f ansible/roles/monitoring_stack/files/prometheus/alerts.yml` exits 0 AND `diff <(sort alerts/synology_alerts.yml) <(sort alerts.yml.bak)` shows content preserved (verify content matches original before deleting)
-
-### Prometheus Self-Registration
-
-- [ ] T007 [US-1,US-4] Update Prometheus configuration template for self-registration
-  - **Modify**: `ansible/roles/monitoring_stack/templates/prometheus.yml.j2`
-    - Change `rule_files` from `['/etc/prometheus/alerts.yml']` to `['/etc/prometheus/alerts/*.yml']`
-    - Preserve existing `prometheus` self-monitoring and `telegraf-snmp` static scrape configs unchanged
-    - Add `node-exporter` job after existing configs: iterate `groups['services'] | default([])` to generate static targets with `{{ hostvars[host].ansible_host }}:{{ hostvars[host].node_exporter_port | default(9100) }}` and `instance: '{{ host }}'` label
-    - Add application metrics section: iterate `groups['services'] | default([])`, for each host read `hostvars[host].monitoring_contract | default({})`, if `contract.enabled | default(false)`, iterate `contract.scrape_targets | default([])` to generate per-target scrape configs with job_name, port, path, scrape_interval, and instance label
-    - Generated config must match the structure in `contracts/prometheus-scrape-config.yml`
-  - **Traces to**: FR-003, FR-008, FR-027, SC-005
-  - **Dependencies**: T011, T012 (contracts with actual scrape targets must be defined for template logic validation)
-  - **Done-when**: Template contains `groups['services']` loop AND `monitoring_contract` loop AND preserves `job_name: 'prometheus'` and `job_name: 'telegraf-snmp'` AND `grep -c 'caddy\|immich\|jellyfin\|nextcloud\|adguard\|homeassistant' ansible/roles/monitoring_stack/templates/prometheus.yml.j2` returns 0 (no hardcoded service names — SC-005)
-
-### Dashboard
-
-- [ ] T008 [P] [US-1] Create infrastructure overview Grafana dashboard JSON
-  - **Create**: `ansible/roles/monitoring_stack/files/grafana/dashboards/infrastructure-overview.json`
-    - Grafana Schema v1 JSON, compatible with Grafana 12.x (FR-027)
-    - Unique `uid` field (e.g., `"infrastructure-overview"`)
-    - Template variable for instance selection (all hosts in services group)
-    - Panels using `timeseries` panel type:
-      - CPU usage: `100 - (avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[$__rate_interval])) * 100)`
-      - Memory usage: `100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)`
-      - Disk usage: `100 * (1 - node_filesystem_avail_bytes / node_filesystem_size_bytes)`
-      - Network throughput: `rate(node_network_receive_bytes_total[$__rate_interval])` / transmit
-    - Auto-refresh: 30s
-    - Datasource: Prometheus (uid from provisioning)
-  - **Traces to**: FR-016, FR-027, SC-001, NFR-003
-  - **Dependencies**: None
-  - **Done-when**: `python3 -c "import json; d=json.load(open('ansible/roles/monitoring_stack/files/grafana/dashboards/infrastructure-overview.json')); assert 'uid' in d; assert any('node_cpu' in str(p) for p in d.get('panels',[]))"` exits 0
-
-**Checkpoint**: Infrastructure metrics scraping pattern defined. Alert rules created. Dashboard JSON ready. All config artifacts ready for deployment orchestration (Phase 6).
+**Checkpoint**: `promtool check config` on rendered prometheus.yml passes; `promtool check rules` on `infrastructure_alerts.yml` and `synology_alerts.yml` both pass; infrastructure overview dashboard JSON validates against Grafana schema.
 
 ---
 
-## Phase 4: US-2 — Unified Service Availability Alerting (Priority: P1)
+## Phase 4: User Story 2 — Unified Service Availability Alerting (Priority: P1)
 
-**Goal**: Replace Uptime Kuma with Prometheus-native service availability alerting using the generic `ServiceDown` rule and proper inhibition rules to avoid duplicate alerts.
+**Goal**: Alertmanager uses updated inhibition rules that prevent duplicate alerts: SynologyNASDown suppresses generic ServiceDown for the same Synology target; agent-down suppresses infrastructure threshold alerts for that container; critical severity suppresses warning for same alertname+instance. The `ServiceDown` rule (created in T010) replaces all Uptime Kuma HTTP checks.
 
-**Independent Test**: Stop a monitored service, verify that the ServiceDown alert would fire. Verify inhibition rules prevent duplicate alerts for Synology targets.
+**Independent Test**: Stop a monitored service; verify exactly one alert email is received within 5 minutes (SC-002). Confirm the email identifies service name and endpoint. Restart the service; verify a recovery email arrives within 2 minutes. Confirm no duplicate alerts when Telegraf SNMP target goes down (SC-011).
 
-- [ ] T009 [US-2] Update Alertmanager configuration with inhibition rules
-  - **Modify**: `ansible/roles/monitoring_stack/templates/alertmanager.yml.j2`
-    - Replace existing `inhibit_rules` section with updated rules using `source_matchers`/`target_matchers` syntax (Alertmanager v0.30.0 — R-03)
-    - Add 4 inhibition rules per `contracts/alertmanager-config.yml`:
-      1. SynologyNASDown suppresses ServiceDown for same instance (FR-028, SC-011)
-      2. SynologyNASDown suppresses Synology.* alerts for same instance (existing rule, migrated syntax)
-      3. ServiceDown (component=availability) suppresses infrastructure threshold alerts (component=infrastructure) for same instance (FR-029)
-      4. Critical severity suppresses warning for same alertname+instance
-    - Preserve route tree and receivers sections unchanged (existing SMTP config)
-  - **Traces to**: FR-028, FR-029, SC-011, DL-11, DL-12, R-07
-  - **Dependencies**: T005 (infrastructure alerts define the component labels used in inhibition matching)
-  - **Done-when**: Template contains `source_matchers` (not deprecated `source_match`) AND contains all 4 inhibition rule blocks AND does NOT contain deprecated `source_match:`/`target_match:` keys AND `ansible-lint ansible/roles/monitoring_stack/` exits 0
+**Plan step**: Step 11
 
-- [ ] T010 [US-2,US-4] Create alert rule validation task
-  - **Create**: `ansible/roles/monitoring_stack/tasks/validate_alerts.yml`
-    - Task: run `promtool check rules` via Docker: `docker run --rm -v {{ prometheus_config_path }}:/etc/prometheus:ro prom/prometheus:{{ prometheus_version }} promtool check rules /etc/prometheus/alerts/synology_alerts.yml /etc/prometheus/alerts/infrastructure_alerts.yml /etc/prometheus/alerts/service_alerts.yml`
-    - Task must fail the playbook with a clear error if any rule file is invalid (FR-030)
-    - Task has `changed_when: false` (read-only check)
-  - **Traces to**: FR-030, SC-010
-  - **Dependencies**: T005, T006 (alert files must exist in the spec to define the paths)
-  - **Done-when**: `ansible-lint ansible/roles/monitoring_stack/tasks/validate_alerts.yml` exits 0 AND file contains `promtool check rules` AND file contains `changed_when: false`
+- [X] T013 [US2] Modify `ansible/roles/monitoring_stack/templates/alertmanager.yml.j2` — replace existing `inhibit_rules` block with four rules using Alertmanager v0.30.0 `source_matchers`/`target_matchers` syntax (NOT deprecated `source_match`/`target_match`): (1) `alertname="SynologyNASDown"` → suppresses `alertname="ServiceDown"` on matching `instance`; (2) `alertname="SynologyNASDown"` → suppresses `alertname=~"Synology.*"` on matching `instance` (migrated from existing rule); (3) `alertname="ServiceDown", component="availability"` → suppresses `component="infrastructure"` on matching `instance`; (4) `severity="critical"` → suppresses `severity="warning"` on matching `alertname` + `instance` — exact specification in `contracts/alertmanager-config.yml`
 
-**Checkpoint**: Alertmanager config ready with inhibition rules. Validation task ready. ServiceDown alert (in T005's infrastructure_alerts.yml) replaces Uptime Kuma HTTP checks.
+**Checkpoint**: `amtool check-config` on rendered alertmanager.yml passes. `grep "source_match:" ansible/roles/monitoring_stack/templates/alertmanager.yml.j2` returns zero matches (no deprecated syntax).
 
 ---
 
-## Phase 5: US-3 — Application-Level Service Metrics (Priority: P1)
+## Phase 5: User Story 3 — Application-Level Service Metrics (Priority: P1)
 
-**Goal**: Enable native Prometheus metrics on Caddy (reverse proxy) and Immich (photo service), declare their monitoring contracts, and provide dedicated dashboards.
+**Goal**: Caddy exposes Prometheus metrics on port 2019 (LAN-only); Immich exposes API and microservices metrics on ports 8081/8082; both have monitoring_contracts with service-specific alert rules (CaddyHighErrorRate, ImmichJobBacklogHigh); dedicated dashboards provisioned per service; service_alerts.yml.j2 aggregates per-service alert rules from all contracts.
 
-**Independent Test**: After deployment, `curl http://192.168.1.211:2019/metrics` returns Caddy metrics and `curl http://192.168.1.213:8081/metrics` returns Immich metrics.
+**Independent Test**: Generate HTTP traffic through the reverse proxy; verify `curl http://192.168.1.211:2019/metrics` returns caddy_http_requests_total. Upload photos to Immich; verify `curl http://192.168.1.213:8081/metrics` returns immich_jobs_waiting. Open Caddy and Immich Grafana dashboards and confirm live data (SC-003, SC-004).
 
-### Caddy Metrics
+**Plan steps**: Steps 4, 5, 10, 13, 14
 
-- [ ] T011 [P] [US-3] Enable Caddy metrics and add monitoring contract to reverse_proxy role
-  - **Modify**: `ansible/roles/reverse_proxy/defaults/main.yml`
-    - Add variables: `caddy_metrics_enabled: true`, `caddy_metrics_port: 2019`, `caddy_admin_listen: "0.0.0.0:2019"`
-    - Add `monitoring_contract`:
-      ```yaml
-      monitoring_contract:
-        enabled: true
-        scrape_targets:
-          - job_name: "caddy"
-            port: 2019
-            path: "/metrics"
-            scrape_interval: "30s"
-        alert_rules:
-          - alert: "CaddyHighErrorRate"
-            expr: "sum(rate(caddy_http_requests_total{code=~\"5..\"}[5m])) / sum(rate(caddy_http_requests_total[5m])) > 0.05"
-            for: "5m"
-            severity: "warning"
-            summary: "Caddy high 5xx error rate"
-            description: "More than 5% of Caddy responses are 5xx errors over the last 5 minutes (current: {{ $value | printf \"%.2f\" }}%)."
-        dashboard_file: "roles/reverse_proxy/files/grafana/dashboards/caddy-reverse-proxy.json"
-      ```
-  - **Modify**: `ansible/roles/reverse_proxy/templates/Caddyfile.j2`
-    - Add to global options block (conditional on `caddy_metrics_enabled`):
-      ```caddyfile
-      servers {
-          metrics
-      }
-      admin {{ caddy_admin_listen }}
-      ```
-    - Admin listen on `0.0.0.0:2019` makes metrics reachable from monitoring LXC (R-04)
-    - Metrics endpoint must NOT be exposed via public HTTPS reverse proxy (FR-006, C-003)
-  - **Traces to**: FR-004, FR-006, FR-007, FR-015, A-003, R-04, DL-03
-  - **Dependencies**: None
-  - **Done-when**: `grep 'caddy_metrics_enabled' ansible/roles/reverse_proxy/defaults/main.yml` matches AND `grep 'monitoring_contract' ansible/roles/reverse_proxy/defaults/main.yml` matches AND `grep 'metrics' ansible/roles/reverse_proxy/templates/Caddyfile.j2` matches AND `grep 'caddy_metrics_enabled' ansible/roles/reverse_proxy/templates/Caddyfile.j2` matches (conditional)
+- [X] T014 [P] [US3] Modify `ansible/roles/reverse_proxy/defaults/main.yml` — add: `caddy_metrics_enabled: true`, `caddy_metrics_port: 9180`; add full `monitoring_contract` dict with `enabled: true`, one scrape target `{job_name: "caddy", port: 9180, path: "/metrics", scrape_interval: "30s"}`, one alert rule `CaddyHighErrorRate` (PromQL from `contracts/alert-rules.yml`), `dashboard_file: "grafana/dashboards/caddy-reverse-proxy.json"`
+- [X] T015 [P] [US3] Modify `ansible/roles/reverse_proxy/templates/Caddyfile.j2` — in the global options block, conditionally add (when `caddy_metrics_enabled`) `servers { metrics }` inside the existing block; after the global block and before the `import` directive, add a dedicated metrics site block `:{{ caddy_metrics_port }} { metrics /metrics }` (conditional on `caddy_metrics_enabled`); the admin API stays on `localhost:2019` (default, not exposed externally); must not interfere with existing `acme_dns` or `log` directives
+- [X] T016 [P] [US3] Create `ansible/roles/reverse_proxy/files/grafana/dashboards/caddy-reverse-proxy.json` — hand-author a minimal Grafana Schema v1 JSON dashboard (no community dashboard exists for Caddy) with UID `caddy-proxy`, title "Reverse Proxy (Caddy)", auto-refresh 30s; four `timeseries` panels: HTTP request rate (`rate(caddy_http_requests_total[5m])`), response time P95 (`histogram_quantile(0.95, rate(caddy_http_request_duration_seconds_bucket[5m]))`), error rate by status code (4xx/5xx breakdown), and upstream health (`caddy_reverse_proxy_upstreams_healthy` as stat panel); Grafana 12.x schema only
+- [X] T017 [P] [US3] Modify `ansible/roles/immich/defaults/main.yml` — add: `immich_metrics_enabled: true`, `immich_metrics_port: 8081`, `immich_microservices_metrics_port: 8082`; add full `monitoring_contract` dict with `enabled: true`, two scrape targets `{job_name: "immich-api", port: 8081, ...}` and `{job_name: "immich-microservices", port: 8082, ...}`, one alert rule `ImmichJobBacklogHigh` (PromQL from `contracts/alert-rules.yml`), `dashboard_file: "grafana/dashboards/immich-photo-service.json"`
+- [X] T018 [P] [US3] Modify `ansible/roles/immich/templates/.env.j2` — add `IMMICH_TELEMETRY_INCLUDE=all` line conditional on `immich_metrics_enabled | default(false)`; place in the application configuration section after existing environment variables
+- [X] T019 [P] [US3] Modify `ansible/roles/immich/templates/docker-compose.yml.j2` — on the `immich-server` service, add port mappings `"{{ immich_metrics_port }}:8081"` and `"{{ immich_microservices_metrics_port }}:8082"` conditional on `immich_metrics_enabled | default(false)`; these ports are not exposed via the public-facing reverse proxy (FR-006)
+- [X] T020 [P] [US3] Create `ansible/roles/immich/files/grafana/dashboards/immich-photo-service.json` — download community dashboard "Immich Overview" (Grafana Labs ID 22555, latest revision) via `curl -o dashboard.json https://grafana.com/api/dashboards/22555/revisions/latest/download`; customize: set UID to `immich-photos`, title to "Photo Service (Immich)", replace hardcoded datasource UIDs with `${DS_PROMETHEUS}`, replace any deprecated panel types with Grafana 12.x equivalents, set auto-refresh 30s
+- [X] T021 [US3] Create `ansible/roles/monitoring_stack/templates/service_alerts.yml.j2` — Jinja2 template that iterates over `groups['all']` inventory hosts via `hostvars`, collects hosts where `hostvars[host].monitoring_contract.enabled | default(false)` is true and `hostvars[host].monitoring_contract.alert_rules | default([])` is non-empty, and renders each service's alert rules into a separate named `groups` entry; output is a valid Prometheus alert rules YAML file; template must handle empty/missing contracts gracefully (no alert_rules → no group emitted for that host)
 
-### Immich Metrics
-
-- [ ] T012 [P] [US-3] Enable Immich telemetry and add monitoring contract to immich role
-  - **Modify**: `ansible/roles/immich/defaults/main.yml`
-    - Add variables: `immich_metrics_enabled: true`, `immich_metrics_port: 8081`, `immich_microservices_metrics_port: 8082`
-    - Add `monitoring_contract`:
-      ```yaml
-      monitoring_contract:
-        enabled: true
-        scrape_targets:
-          - job_name: "immich-api"
-            port: 8081
-            path: "/metrics"
-            scrape_interval: "30s"
-          - job_name: "immich-microservices"
-            port: 8082
-            path: "/metrics"
-            scrape_interval: "30s"
-        alert_rules:
-          - alert: "ImmichJobBacklogHigh"
-            expr: "immich_jobs_waiting > 500"
-            for: "10m"
-            severity: "warning"
-            summary: "Immich job backlog growing on {{ $labels.instance }}"
-            description: "Immich has more than 500 waiting jobs for 10 minutes (current: {{ $value }})."
-        dashboard_file: "roles/immich/files/grafana/dashboards/immich-photo-service.json"
-      ```
-  - **Modify**: `ansible/roles/immich/templates/.env.j2`
-    - Add line (conditional on `immich_metrics_enabled`): `IMMICH_TELEMETRY_INCLUDE=all` (R-05)
-  - **Modify**: `ansible/roles/immich/templates/docker-compose.yml.j2`
-    - Add port mappings to immich-server service (conditional on `immich_metrics_enabled`):
-      ```yaml
-      - "{{ immich_metrics_port }}:8081"
-      - "{{ immich_microservices_metrics_port }}:8082"
-      ```
-  - **Traces to**: FR-005, FR-006, FR-007, FR-015, A-004, R-05, DL-03
-  - **Dependencies**: None
-  - **Done-when**: `grep 'immich_metrics_enabled' ansible/roles/immich/defaults/main.yml` matches AND `grep 'monitoring_contract' ansible/roles/immich/defaults/main.yml` matches AND `grep 'IMMICH_TELEMETRY' ansible/roles/immich/templates/.env.j2` matches AND `grep '8081' ansible/roles/immich/templates/docker-compose.yml.j2` matches
-
-### Service-Specific Alert Rules
-
-- [ ] T013 [US-3,US-4] Create service-specific alert rules Jinja2 template
-  - **Create**: `ansible/roles/monitoring_stack/templates/service_alerts.yml.j2`
-    - Jinja2 template that iterates over `groups['services'] | default([])`, reads `hostvars[host].monitoring_contract | default({})`, and for each contract with `enabled` and non-empty `alert_rules`, generates a Prometheus alert rules group
-    - Group name derived from `{{ host }}_alerts`
-    - Each alert rule rendered with: alert name, expr, for, labels (severity, component), annotations (summary, description)
-    - If no service declares alert rules, file should still be valid YAML (empty groups list)
-    - Template must NOT reference any service by name (SC-005)
-  - **Traces to**: FR-009, FR-015, SC-005
-  - **Dependencies**: T011, T012 (contracts with alert_rules must be defined to verify template logic)
-  - **Done-when**: `ansible-lint ansible/roles/monitoring_stack/` exits 0 AND `grep -c 'caddy\|immich' ansible/roles/monitoring_stack/templates/service_alerts.yml.j2` returns 0 AND template contains `hostvars` and `monitoring_contract` iteration logic
-
-### Dashboards
-
-- [ ] T014 [P] [US-3] Create Caddy reverse proxy Grafana dashboard JSON
-  - **Create**: `ansible/roles/reverse_proxy/files/grafana/dashboards/caddy-reverse-proxy.json`
-    - Note: `ansible/roles/reverse_proxy/files/` directory does not exist — create intermediate directories
-    - Grafana Schema v1 JSON, compatible with Grafana 12.x (FR-027)
-    - Unique `uid` field (e.g., `"caddy-reverse-proxy"`)
-    - Panels using `timeseries` panel type:
-      - HTTP request rate: `sum(rate(caddy_http_requests_total[$__rate_interval]))`
-      - Response time distribution: `histogram_quantile(0.99, rate(caddy_http_request_duration_seconds_bucket[$__rate_interval]))`
-      - Error rate breakdown: `sum by(code)(rate(caddy_http_requests_total{code=~"[45].."}[$__rate_interval]))`
-      - Upstream health: `caddy_reverse_proxy_upstreams_healthy`
-    - Auto-refresh: 30s, Datasource: Prometheus
-  - **Traces to**: FR-010, FR-017, SC-003, SC-005
-  - **Dependencies**: None
-  - **Done-when**: `python3 -c "import json; d=json.load(open('ansible/roles/reverse_proxy/files/grafana/dashboards/caddy-reverse-proxy.json')); assert d.get('uid') == 'caddy-reverse-proxy'; assert any('caddy_http' in str(p) for p in d.get('panels',[]))"` exits 0
-
-- [ ] T015 [P] [US-3] Create Immich photo service Grafana dashboard JSON
-  - **Create**: `ansible/roles/immich/files/grafana/dashboards/immich-photo-service.json`
-    - Note: `ansible/roles/immich/files/` directory does not exist — create intermediate directories
-    - Grafana Schema v1 JSON, compatible with Grafana 12.x (FR-027)
-    - Unique `uid` field (e.g., `"immich-photo-service"`)
-    - Panels using `timeseries` and `stat` panel types:
-      - API request rate: based on Immich HTTP metrics
-      - Background job queue sizes: `immich_jobs_waiting` (by job type)
-      - Processing throughput: `immich_jobs_completed` rate
-    - Based on community dashboard patterns (R-05, dashboard ID 22555)
-    - Auto-refresh: 30s, Datasource: Prometheus
-  - **Traces to**: FR-010, FR-018, SC-004, SC-005
-  - **Dependencies**: None
-  - **Done-when**: `python3 -c "import json; d=json.load(open('ansible/roles/immich/files/grafana/dashboards/immich-photo-service.json')); assert d.get('uid') == 'immich-photo-service'; assert any('immich_' in str(p) for p in d.get('panels',[]))"` exits 0
-
-**Checkpoint**: Caddy and Immich configured to expose metrics. Monitoring contracts declared. Dashboards and service alert template ready. All artifacts for US-3 created.
+**Checkpoint**: `curl http://192.168.1.211:9180/metrics` returns `caddy_http_requests_total` after Caddy deployment. `curl http://192.168.1.213:8081/metrics` returns Immich metrics after Immich deployment. `promtool check rules` on a rendered service_alerts.yml passes. `grep -r "caddy\|immich" ansible/roles/monitoring_stack/` returns zero hits (SC-005 — monitoring role has no service-name awareness).
 
 ---
 
-## Phase 6: US-4 — Extensible Monitoring Deployment Integration (Priority: P2)
+## Phase 6: User Story 4 — Extensible Monitoring Onboarding (Priority: P2)
 
-**Goal**: Wire up the self-registration pattern in the monitoring_stack role's deployment tasks so that monitoring contracts are aggregated at deploy time.
+**Goal**: Every service role declares a `monitoring_contract` variable in its defaults; monitoring_stack aggregates all contracts without any service-specific knowledge; dashboard provisioning copies service-owned dashboards automatically; alert validation runs before stack restart to fail-fast on syntax errors; compose_stack.yml deploys all alert files.
 
-**Independent Test**: Verify that the monitoring_stack role's code contains zero hardcoded references to Caddy, Immich, or any other service name (SC-005).
+**Independent Test**: After adding a mock `monitoring_contract` to a service role's defaults and re-running the monitoring playbook, the new scrape target appears in `http://192.168.1.214:9090/targets` and any declared dashboard is accessible in Grafana — with zero edits to any file in `ansible/roles/monitoring_stack/` (SC-005, US-4 AC-4).
 
-- [ ] T016 [US-4] Create dashboard provisioning task
-  - **Create**: `ansible/roles/monitoring_stack/tasks/provision_dashboards.yml`
-    - Task: iterate over `groups['services'] | default([])`, for each host read `hostvars[host].monitoring_contract | default({})`, if contract has `dashboard_file` defined and `enabled`, copy the JSON file from `{{ playbook_dir }}/../{{ contract.dashboard_file }}` to `{{ grafana_dashboards_path }}/` on the monitoring host
-    - Use `ansible.builtin.copy` with `src` pointing to the role-relative path
-    - Task must NOT reference any service name — it follows contract references only (SC-005)
-  - **Traces to**: FR-010, FR-011, SC-005
-  - **Dependencies**: T014, T015 (dashboard JSON files must exist)
-  - **Done-when**: `ansible-lint ansible/roles/monitoring_stack/tasks/provision_dashboards.yml` exits 0 AND `grep -c 'caddy\|immich' ansible/roles/monitoring_stack/tasks/provision_dashboards.yml` returns 0 AND file contains `hostvars` and `monitoring_contract` and `dashboard_file`
+**Plan steps**: Steps 3, 15, 17, 18 (compose_stack.yml and grafana_provision.yml)
 
-- [ ] T017 [US-4] Update monitoring_stack create_directories.yml — add alerts subdirectory
-  - **Modify**: `ansible/roles/monitoring_stack/tasks/create_directories.yml`
-    - Add task: Create Prometheus alerts directory `{{ prometheus_config_path }}/alerts` with mode 0755
-  - **Traces to**: FR-031
-  - **Dependencies**: None
-  - **Done-when**: `grep 'alerts' ansible/roles/monitoring_stack/tasks/create_directories.yml` matches AND `ansible-lint ansible/roles/monitoring_stack/tasks/create_directories.yml` exits 0
+- [X] T022 [P] [US4] Modify `ansible/roles/jellyfin/defaults/main.yml` — add `monitoring_contract` variable: `enabled: true`, `scrape_targets: []` (no native application metrics for Jellyfin in this iteration), `alert_rules: []`, `dashboard_file: null`; jellyfin's infrastructure metrics are covered by the group-based node-exporter job in prometheus.yml.j2 (T009), not a per-service scrape target
+- [X] T023 [P] [US4] Modify `ansible/roles/nextcloud/defaults/main.yml` — add `monitoring_contract` variable: `enabled: true`, `scrape_targets: []`, `alert_rules: []`, `dashboard_file: null`; same rationale as T022 for Nextcloud
+- [X] T024 [US4] Create `ansible/roles/monitoring_stack/tasks/provision_dashboards.yml` — Ansible task file that iterates over `groups['all']` hosts via `hostvars`, finds contracts where `monitoring_contract.dashboard_file` is defined and non-null, and copies each dashboard JSON from `{{ playbook_dir }}/../roles/<role>/files/<dashboard_file>` to the Grafana dashboards directory on the monitoring host; must never reference any service name directly (role path comes from the contract's host association via hostvars lookup); the monitoring_stack's own dashboards (synology-nas.json, infrastructure-overview.json) are deployed by a sibling task in compose_stack.yml, not this file
+- [X] T025 [P] [US4] Create `ansible/roles/monitoring_stack/tasks/validate_alerts.yml` — Ansible task file that runs `promtool check rules {{ prometheus_config_path }}/alerts/*.yml` using `command` module; fails with error message identifying the specific failing file if any rule has invalid syntax (FR-030); this task runs after all alert files are deployed to the host but before the Compose stack is restarted
+- [X] T026 [US4] Modify `ansible/roles/monitoring_stack/tasks/grafana_provision.yml` — add `include_tasks: provision_dashboards.yml` call after the existing dashboard copy tasks; this wires service-owned dashboards into the Grafana provisioning flow
+- [X] T027 [US4] Modify `ansible/roles/monitoring_stack/tasks/compose_stack.yml` — add tasks to: (1) copy `infrastructure_alerts.yml` to `{{ prometheus_config_path }}/alerts/infrastructure_alerts.yml`; (2) copy `synology_alerts.yml` to `{{ prometheus_config_path }}/alerts/synology_alerts.yml`; (3) template `service_alerts.yml.j2` to `{{ prometheus_config_path }}/alerts/service_alerts.yml`; these run before the Compose stack is started/restarted
 
-- [ ] T018 [US-4] Update monitoring_stack compose_stack.yml — deploy alert files and service template
-  - **Modify**: `ansible/roles/monitoring_stack/tasks/compose_stack.yml`
-    - **Replace** the existing "Deploy Prometheus alert rules" task (which copies `alerts.yml` to `{{ prometheus_config_path }}/alerts.yml`) with:
-      1. Copy `synology_alerts.yml` to `{{ prometheus_config_path }}/alerts/synology_alerts.yml`
-      2. Copy `infrastructure_alerts.yml` to `{{ prometheus_config_path }}/alerts/infrastructure_alerts.yml`
-      3. Template `service_alerts.yml.j2` to `{{ prometheus_config_path }}/alerts/service_alerts.yml`
-    - All three tasks notify `Restart monitoring stack` handler
-    - **Remove** the `docker compose up -d` task from this file (moved to main.yml for validation ordering — see T020)
-  - **Traces to**: FR-009, FR-019, FR-031
-  - **Dependencies**: T005, T006, T013 (alert files and template must exist)
-  - **Done-when**: File references `alerts/synology_alerts.yml` AND `alerts/infrastructure_alerts.yml` AND `service_alerts.yml.j2` AND does NOT contain the old `alerts.yml` single-file copy AND does NOT contain `docker compose up -d`
-
-- [ ] T019 [US-4] Update monitoring_stack grafana_provision.yml — include dashboard provisioning
-  - **Modify**: `ansible/roles/monitoring_stack/tasks/grafana_provision.yml`
-    - Add task after existing dashboard copy: `include_tasks: provision_dashboards.yml`
-    - Existing Synology NAS dashboard copy is preserved (FR-019)
-    - Add copy of `infrastructure-overview.json` to `{{ grafana_dashboards_path }}/` (deployed directly by monitoring_stack role, not via self-registration)
-  - **Traces to**: FR-010, FR-016, FR-019
-  - **Dependencies**: T008 (infrastructure dashboard JSON), T016 (provisioning task)
-  - **Done-when**: File includes `provision_dashboards.yml` AND copies `infrastructure-overview.json` AND preserves `synology-nas.json` copy
-
-- [ ] T020 [US-4] Update monitoring_stack main.yml — task orchestration
-  - **Modify**: `ansible/roles/monitoring_stack/tasks/main.yml`
-    - **Add** `include_tasks: kuma_cleanup.yml` as the FIRST task (before docker.yml) with `tags: [cleanup]`
-    - **Add** `include_tasks: validate_alerts.yml` AFTER `grafana_provision.yml` with `tags: [validate]`
-    - **Add** "Start monitoring stack" task AFTER `validate_alerts.yml`:
-      ```yaml
-      - name: Start monitoring stack
-        ansible.builtin.command:
-          cmd: docker compose up -d
-          chdir: "{{ monitoring_base_path }}"
-        register: docker_compose_result
-        changed_when: "'Created' in docker_compose_result.stdout or 'Started' in docker_compose_result.stdout"
-        tags: [compose]
-      ```
-    - This ensures: kuma cleanup → docker install → directory creation → config deployment → dashboard provisioning → alert validation → stack start → backup cron → mdns → verify
-    - The `docker compose up -d` was removed from compose_stack.yml (T018) and moved here to allow validation between config deploy and stack start
-  - **Traces to**: FR-030, FR-031, FR-032
-  - **Dependencies**: T010 (validate_alerts.yml), T016 (provision_dashboards.yml), T018 (compose_stack.yml no longer starts stack)
-  - **Done-when**: File includes `kuma_cleanup.yml` (first include) AND includes `validate_alerts.yml` AND contains `docker compose up -d` AND the order is: kuma_cleanup → docker → directories → compose_stack → grafana_provision → validate_alerts → compose_up → backup → mdns → verify
-
-**Checkpoint**: Monitoring stack deployment fully orchestrated. Self-registration wired end-to-end. All monitoring artifacts deployed in correct order with validation.
+**Checkpoint**: `grep -r "caddy\|immich\|jellyfin\|nextcloud" ansible/roles/monitoring_stack/` returns zero hits (SC-005). Mock monitoring_contract added to a service role → monitoring playbook re-run → new target appears in Prometheus targets page without modifying any monitoring_stack file (US-4 AC-4).
 
 ---
 
-## Phase 7: US-6 — Uptime Kuma Decommission (Priority: P2)
+## Phase 7: User Story 5 — Monitoring Stack Version Alignment (Priority: P2)
 
-**Goal**: Completely remove Uptime Kuma from the codebase, the monitoring container, and all cross-role references.
+**Goal**: The monitoring_stack role defaults file version pins match the already-deployed versions in group_vars; new configuration templates use Prometheus 3.x and Alertmanager v0.30.0 syntax.
 
-**Independent Test**: `grep -ri 'kuma' ansible/` returns zero results in active code (excluding git history).
+**Note**: The primary code change for this user story is **T006** in Phase 2 (foundational prerequisite). T006 must complete before any Phase 3+ templates are authored. The task below is a mechanically verifiable confirmation step that FR-026 is satisfied.
 
-### Monitoring Stack Cleanup
+**Independent Test**: `grep "prometheus_version\|grafana_version\|telegraf_version\|alertmanager_version" ansible/roles/monitoring_stack/defaults/main.yml` shows v3.8.1, 12.3.1, 1.37.0, v0.30.0 respectively — matching group_vars values (SC-007).
 
-- [ ] T021 [US-6] Create Kuma cleanup task in monitoring_stack
-  - **Create**: `ansible/roles/monitoring_stack/tasks/kuma_cleanup.yml`
-    - Tasks (all idempotent):
-      1. Check if `uptime-kuma` Docker container exists (`docker ps -a --filter name=uptime-kuma --format '{{ "{{" }}.Names{{ "}}" }}'`)
-      2. Stop and remove container if present (`docker rm -f uptime-kuma`)
-      3. Check if Docker volume exists and remove (`docker volume rm` if present)
-      4. Remove Kuma data directory if present (`/opt/monitoring/uptime-kuma` or similar)
-    - Each task guarded by `when:` condition checking existence first
-  - **Traces to**: FR-023, SC-006
-  - **Dependencies**: None
-  - **Done-when**: `ansible-lint ansible/roles/monitoring_stack/tasks/kuma_cleanup.yml` exits 0 AND file contains `uptime-kuma` container name AND all tasks have idempotency guards
+**Plan step**: Step 6
 
-- [ ] T022 [P] [US-6] Update monitoring_stack service description — remove Kuma reference
-  - **Modify**: `ansible/roles/monitoring_stack/templates/monitoring-stack.service.j2`
-    - Change `Description=Monitoring Stack (Uptime Kuma)` → `Description=Monitoring Stack`
-  - **Traces to**: FR-020, SC-006
-  - **Dependencies**: None
-  - **Done-when**: `grep -c 'Kuma\|kuma' ansible/roles/monitoring_stack/templates/monitoring-stack.service.j2` returns 0
+- [X] T028 [US5] Verify `ansible/roles/monitoring_stack/defaults/main.yml` version pins and syntax compliance: run `grep -E "prometheus_version|grafana_version|telegraf_version|alertmanager_version" ansible/roles/monitoring_stack/defaults/main.yml` and confirm outputs are `v3.8.1`, `12.3.1`, `1.37.0`, `v0.30.0`; run `grep "source_match:" ansible/roles/monitoring_stack/templates/alertmanager.yml.j2` and confirm output is empty (no deprecated syntax); this task is a static audit with no file modifications — it confirms T006 and T013 are correctly completed
 
-### Uptime Kuma Role Removal
-
-- [ ] T023 [P] [US-6] Delete Uptime Kuma Ansible role directory
-  - **Delete**: `ansible/roles/uptime_kuma/` — entire directory (12 files: defaults/main.yml, tasks/{main,check_setup,setup_admin,login,wait_for_api,get_monitors,provision_monitors,verify_monitors,configure_smtp}.yml, files/configure_uptime_kuma.js, templates/monitoring_config.json.j2)
-  - **Traces to**: FR-020, SC-006
-  - **Dependencies**: None (monitoring playbook does not reference this role — A-010)
-  - **Done-when**: `test ! -d ansible/roles/uptime_kuma/` exits 0
-
-### Variable Cleanup
-
-- [ ] T024 [P] [US-6] Remove Kuma variables from monitoring host_vars and vault example
-  - **Modify**: `ansible/host_vars/monitoring/vars.yml`
-    - Remove: `monitoring_targets` list (4 entries), `uptime_kuma_api_url`, `uptime_kuma_api_wait_timeout`, `uptime_kuma_api_retry_delay`, `uptime_kuma_api_max_retries`
-    - Preserve: `alert_down_threshold: 2`, `healthcheck_url` config, all other variables
-  - **Modify**: `ansible/host_vars/monitoring/vault.yml.example`
-    - Remove: `uptime_kuma_admin_user` and `uptime_kuma_admin_password` lines and any associated comment header
-    - Preserve: SMTP credential examples
-  - **Traces to**: FR-021, FR-022, SC-006
-  - **Dependencies**: T023 (role that used these vars is deleted)
-  - **Done-when**: `grep -c 'uptime_kuma\|monitoring_targets' ansible/host_vars/monitoring/vars.yml` returns 0 AND `grep -c 'uptime_kuma' ansible/host_vars/monitoring/vault.yml.example` returns 0 AND `grep 'alert_down_threshold' ansible/host_vars/monitoring/vars.yml` still matches (preserved)
-
-### proxmox_backup Role Cleanup
-
-- [ ] T025 [P] [US-6] Clean proxmox_backup role's Kuma integration
-  - **Delete**: `ansible/roles/proxmox_backup/tasks/configure_kuma.yml`
-  - **Modify**: `ansible/roles/proxmox_backup/defaults/main.yml`
-    - Change `proxmox_backup_email_mode: "kuma_only"` → `"disabled"`
-    - Remove `proxmox_backup_kuma_push_url` variable
-    - Update mode documentation comment to list only: `enabled`, `disabled` (remove `kuma_only`)
-  - **Modify**: `ansible/roles/proxmox_backup/tasks/main.yml`
-    - Remove the `configure_kuma.yml` include block (the `when: proxmox_backup_email_mode == 'kuma_only'` conditional)
-    - Change disable_email condition from `proxmox_backup_email_mode in ['kuma_only', 'disabled']` to `proxmox_backup_email_mode == 'disabled'`
-    - Remove `kuma` tag from tag lists
-  - **Modify**: `ansible/roles/proxmox_backup/templates/proxmox-backup.conf.j2`
-    - Remove the `KUMA_URL="{{ proxmox_backup_kuma_url | default('') }}"` line
-  - **Modify**: `ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2`
-    - Remove the `send_kuma_notification()` function definition (~lines 63-95)
-    - Remove the two call sites for `send_kuma_notification` in the `cleanup()` function (~lines 115, 134)
-  - **Traces to**: FR-024, SC-006, DL-14
-  - **Dependencies**: None (code path is already dead — group_vars set mode to "disabled" per A-011)
-  - **Done-when**: `test ! -f ansible/roles/proxmox_backup/tasks/configure_kuma.yml` exits 0 AND `grep -ci 'kuma' ansible/roles/proxmox_backup/defaults/main.yml` returns 0 AND `grep -ci 'kuma' ansible/roles/proxmox_backup/tasks/main.yml` returns 0 AND `grep -ci 'kuma\|KUMA' ansible/roles/proxmox_backup/templates/proxmox-backup.conf.j2` returns 0 AND `grep -ci 'kuma' ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2` returns 0 AND `ansible-lint ansible/roles/proxmox_backup/` exits 0
-
-- [ ] T026 [P] [US-6] Remove Kuma references from proxmox_hosts group_vars
-  - **Modify**: `ansible/group_vars/proxmox_hosts/vars.yml`
-    - Remove the commented-out `# proxmox_backup_kuma_url: "https://kuma.example.com/api/push/..."` lines (approximately 2 lines: comment header + value)
-  - **Traces to**: FR-024, SC-006
-  - **Dependencies**: None
-  - **Done-when**: `grep -ci 'kuma' ansible/group_vars/proxmox_hosts/vars.yml` returns 0
-
-**Checkpoint**: All Uptime Kuma code, variables, secrets, and cross-role references removed. SC-006 satisfied.
+**Checkpoint**: `grep "source_match:" ansible/roles/monitoring_stack/templates/alertmanager.yml.j2` returns empty. All four version variables in defaults/main.yml match group_vars/monitoring/vars.yml.
 
 ---
 
-## Phase 8: Documentation & Validation
+## Phase 8: User Story 6 — Uptime Kuma Decommission (Priority: P2)
 
-**Purpose**: Update all documentation that references Uptime Kuma and validate the entire changeset.
+**Goal**: Uptime Kuma container stopped and removed from monitoring LXC; entire uptime_kuma Ansible role directory deleted; all Kuma variables removed from host_vars, vault example, and group_vars; proxmox_backup role's dead kuma_only code path cleaned up; all operational documentation updated; monitoring_stack/tasks/main.yml wired with kuma_cleanup.yml (first) and validate_alerts.yml (before restart).
 
-### Documentation Updates
+**Independent Test**: After deployment: `docker ps` on monitoring LXC shows no uptime-kuma container; `find ansible/ -name "*.yml" -o -name "*.j2" | xargs grep -li "kuma"` returns zero hits in active code files; `ansible-playbook playbooks/monitoring.yml` succeeds with no Kuma errors; `ansible-playbook playbooks/backup_proxmox.yml` succeeds with no Kuma errors (SC-006).
 
-- [ ] T027 [P] [US-6] Update docs/operations.md — remove Kuma mode references
-  - **Modify**: `docs/operations.md`
-    - Replace the "Email Decommissioning & Kuma Migration" section content to reflect: Kuma is decommissioned, monitoring uses Prometheus `up` metric + Alertmanager for service availability, email mode is `disabled` (actual state per A-011, A-012)
-    - Remove `kuma_only` mode references
-  - **Traces to**: FR-025
-  - **Done-when**: `grep -ci 'kuma_only' docs/operations.md` returns 0
+**Plan steps**: Steps 16, 19, 20, 21, 22, 23, 24
 
-- [ ] T028 [P] [US-6] Update docs/operations/backups-proxmox-config.md — remove Kuma monitoring section
-  - **Modify**: `docs/operations/backups-proxmox-config.md`
-    - Remove "Uptime Kuma (Primary)" monitoring subsection and KUMA_URL configuration references
-    - Update monitoring section to reflect that backup success/failure is logged to systemd journal (DL-15)
-  - **Traces to**: FR-025
-  - **Done-when**: `grep -ci 'KUMA_URL\|Uptime Kuma' docs/operations/backups-proxmox-config.md` returns 0
+- [X] T029 [P] [US6] Create `ansible/roles/monitoring_stack/tasks/kuma_cleanup.yml` — idempotent task file that: (1) checks if Docker container named `uptime-kuma` exists; (2) stops and removes it if present (`docker rm -f uptime-kuma`); (3) removes the Docker volume `uptime-kuma_data` if present; (4) removes any residual Kuma config directory; all tasks use `failed_when: false` or `ignore_errors: true` to be idempotent when Kuma is already absent (FR-023)
+- [X] T030 [P] [US6] Modify `ansible/roles/monitoring_stack/templates/monitoring-stack.service.j2` — remove `(Uptime Kuma)` from the `Description=` line; no other changes to this file
+- [X] T031 [P] [US6] Delete `ansible/roles/uptime_kuma/` — remove the entire directory including all subdirectories and files (FR-020); the monitoring playbook does not reference this role (confirmed: `ansible/playbooks/monitoring.yml` roles are `lxc_base`, `mdns_base`, `monitoring_stack` only), so deletion has no playbook impact
+- [X] T032 [P] [US6] Modify `ansible/host_vars/monitoring/vars.yml` — remove the following variables: `monitoring_targets` (list), `uptime_kuma_api_url`, `uptime_kuma_api_wait_timeout`, `uptime_kuma_api_retry_delay`, `uptime_kuma_api_max_retries`; preserve all other variables including `alert_down_threshold` and any healthcheck variables (FR-021)
+- [X] T033 [P] [US6] Modify `ansible/host_vars/monitoring/vault.yml.example` — remove `uptime_kuma_admin_user` and `uptime_kuma_admin_password` lines and their comment header; preserve all other example vault entries (FR-022)
+- [X] T034 [P] [US6] Delete `ansible/roles/proxmox_backup/tasks/configure_kuma.yml` — remove the file entirely (FR-024); this task file contains the dead Kuma push-monitor configuration code
+- [X] T035 [US6] Modify `ansible/roles/proxmox_backup/tasks/main.yml` — remove the `kuma_only` conditional include block that references `configure_kuma.yml`; update the email-disable condition from `proxmox_backup_email_mode in ['kuma_only', 'disabled']` to `proxmox_backup_email_mode == 'disabled'`; remove the `kuma` tag from any task that has it; depends on T034 (configure_kuma.yml must be deleted first)
+- [X] T036 [P] [US6] Modify `ansible/roles/proxmox_backup/defaults/main.yml` — change default value of `proxmox_backup_email_mode` from `"kuma_only"` to `"disabled"`; remove `proxmox_backup_kuma_push_url` variable; update the inline mode documentation comment to remove `kuma_only` from the list of valid options (FR-024)
+- [X] T037 [P] [US6] Modify `ansible/roles/proxmox_backup/templates/proxmox-backup.conf.j2` — remove the `KUMA_URL` configuration line and its surrounding comment (FR-024)
+- [X] T038 [P] [US6] Modify `ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2` — remove the `send_kuma_notification` shell function definition and its two call sites (success and failure paths); remove any `KUMA_URL` variable reference (FR-024)
+- [X] T039 [P] [US6] Modify `ansible/group_vars/proxmox_hosts/vars.yml` — remove the commented-out `proxmox_backup_kuma_url` line and its preceding comment header; no other changes to this file (FR-024)
+- [X] T040 [US6] Modify `ansible/roles/monitoring_stack/tasks/main.yml` — add `include_tasks: kuma_cleanup.yml` as the **first** include in the task file (before any Docker or stack tasks); add `include_tasks: validate_alerts.yml` immediately before the Compose stack restart task; this single modification completes orchestration wiring for both US6 (Kuma cleanup) and US4 (alert validation); depends on T029 (kuma_cleanup.yml must exist) and T025 (validate_alerts.yml must exist)
+- [X] T041 [P] [US6] Modify `docs/operations.md` — remove or replace the "Email Decommissioning & Kuma Migration" section to reflect that Uptime Kuma is decommissioned and monitoring uses Prometheus/Alertmanager; correct the stale "Current Mode: kuma_only (Email disabled, Kuma active)" statement to reflect actual state (mode is `"disabled"` per group_vars) (FR-025, A-012)
+- [X] T042 [P] [US6] Modify `docs/operations/backups-proxmox-config.md` — remove the "Uptime Kuma (Primary)" monitoring subsection and KUMA_URL configuration instructions; update any references to monitoring modes to reflect the current state (FR-025)
+- [X] T043 [P] [US6] Modify `docs/operations/backups-proxmox-config-email-decommission.md` — remove the `kuma_only` state from the state machine table; remove all Kuma-related transition steps and procedures; the state machine now has only `disabled` and `enabled` email modes (FR-025)
+- [X] T044 [P] [US6] Modify `docs/architecture.md` — remove the "Target: Uptime Kuma Push notifications" line from the monitoring section; update monitoring architecture description to reflect unified Prometheus/Alertmanager alerting (FR-025)
 
-- [ ] T029 [P] [US-6] Update docs/operations/backups-proxmox-config-email-decommission.md — remove kuma_only state
-  - **Modify**: `docs/operations/backups-proxmox-config-email-decommission.md`
-    - Remove `kuma_only` state from the state machine table
-    - Remove Kuma-related transitions and procedures (e.g., "Verify Kuma Monitoring" steps)
-    - Update state machine to only include: `enabled`, `disabled` states
-  - **Traces to**: FR-025
-  - **Done-when**: `grep -ci 'kuma_only' docs/operations/backups-proxmox-config-email-decommission.md` returns 0
+**Checkpoint**: `find ansible/ -name "*.yml" -o -name "*.j2" | xargs grep -li "kuma" 2>/dev/null` returns zero hits. `ls ansible/roles/uptime_kuma/` returns "No such file". `grep "kuma_only" ansible/roles/proxmox_backup/defaults/main.yml` returns empty.
 
-- [ ] T030 [P] [US-6] Update docs/architecture.md — update monitoring references
-  - **Modify**: `docs/architecture.md`
-    - Remove `**Target**: Uptime Kuma Push notifications (Heartbeat).` line from the "Backup & Monitoring" section
-    - Update monitoring description to reflect Prometheus/Alertmanager-based monitoring with node_exporter across all service containers
-  - **Traces to**: FR-025
-  - **Done-when**: `grep -ci 'Uptime Kuma' docs/architecture.md` returns 0
+---
 
-### Validation
+## Phase 9: Polish & Static Validation
 
-- [ ] T031 Run ansible-lint on all modified and new roles
-  - **Command**: `ansible-lint ansible/roles/node_exporter/ ansible/roles/lxc_base/ ansible/roles/monitoring_stack/ ansible/roles/reverse_proxy/ ansible/roles/immich/ ansible/roles/proxmox_backup/`
-  - **Traces to**: FR-031, FR-032
-  - **Dependencies**: All previous tasks
-  - **Done-when**: Command exits 0 with no errors
+**Purpose**: Run all static analysis tools against modified files. Catch syntax errors, lint violations, and configuration incompatibilities before deployment. These checks are the CI gate.
 
-- [ ] T032 Run yamllint on all new and modified YAML files
-  - **Command**: Run yamllint on each new/modified `.yml` file in the changeset
-  - **Traces to**: FR-031
-  - **Dependencies**: All previous tasks
-  - **Done-when**: Command exits 0 with no errors (warnings acceptable)
+**Plan step**: Step 25
 
-- [ ] T033 Verify SC-005: monitoring_stack role has zero service name references
-  - **Command**: `rg -i 'caddy|immich|jellyfin|nextcloud|adguard|homeassistant' ansible/roles/monitoring_stack/ -g '*.yml' -g '*.j2' -g '*.json' --count`
-  - **Traces to**: SC-005
-  - **Dependencies**: All previous tasks
-  - **Done-when**: Command returns 0 matches (no service names hardcoded in monitoring_stack role)
+- [X] T045 [P] Run `ansible-lint ansible/roles/node_exporter/ ansible/roles/lxc_base/ ansible/roles/monitoring_stack/ ansible/roles/reverse_proxy/ ansible/roles/immich/ ansible/roles/jellyfin/ ansible/roles/nextcloud/ ansible/roles/proxmox_backup/` — must return zero errors or warnings
+- [X] T046 [P] Run `yamllint ansible/roles/node_exporter/ ansible/roles/monitoring_stack/ ansible/roles/reverse_proxy/defaults/ ansible/roles/immich/defaults/ ansible/roles/jellyfin/defaults/ ansible/roles/nextcloud/defaults/` — must return zero errors on all new/modified YAML files
+- [X] T047 [P] Run `promtool check rules ansible/roles/monitoring_stack/files/prometheus/alerts/infrastructure_alerts.yml ansible/roles/monitoring_stack/files/prometheus/alerts/synology_alerts.yml` — must return "SUCCESS: N rules found, 0 errors" for each file
+- [X] T048 [P] Render `ansible/roles/monitoring_stack/templates/prometheus.yml.j2` in dry-run (use `ansible --check` or a test inventory stub) and validate with `promtool check config` — must return "SUCCESS: prometheus.yml is valid"
+- [X] T049 Run `ansible-playbook --check ansible/playbooks/monitoring.yml` against the inventory — must complete with zero failures and report only expected changes (not `kuma_only` task errors, not missing variable errors); idempotency confirmed by running twice and seeing "changed=0" on the second run (SC-009)
 
-- [ ] T034 Verify SC-006: no Kuma references remain in active codebase
-  - **Command**: `rg -i 'uptime.kuma|kuma_only' ansible/ docs/ --count` (excluding git-ignored files)
-  - **Traces to**: SC-006
-  - **Dependencies**: All previous tasks (especially T023-T030)
-  - **Done-when**: Command returns 0 matches
+**Checkpoint**: All five validation commands return zero errors. Second `--check` run reports `changed=0`.
+
+---
+
+## File Manifest
+
+### Files Created (new)
+
+| File | Plan Step | Task |
+|------|-----------|------|
+| `ansible/roles/node_exporter/defaults/main.yml` | Step 1 | T001 |
+| `ansible/roles/node_exporter/tasks/main.yml` | Step 1 | T002 |
+| `ansible/roles/node_exporter/templates/node_exporter.service.j2` | Step 1 | T003 |
+| `ansible/roles/node_exporter/handlers/main.yml` | Step 1 | T004 |
+| `ansible/roles/monitoring_stack/files/prometheus/alerts/synology_alerts.yml` | Step 9 | T007 |
+| `ansible/roles/monitoring_stack/files/prometheus/alerts/infrastructure_alerts.yml` | Step 8 | T010 |
+| `ansible/roles/monitoring_stack/files/grafana/dashboards/infrastructure-overview.json` | Step 12 | T011 |
+| `ansible/roles/monitoring_stack/templates/service_alerts.yml.j2` | Step 10 | T021 |
+| `ansible/roles/monitoring_stack/tasks/provision_dashboards.yml` | Step 15 | T024 |
+| `ansible/roles/monitoring_stack/tasks/validate_alerts.yml` | Step 17 | T025 |
+| `ansible/roles/monitoring_stack/tasks/kuma_cleanup.yml` | Step 16 | T029 |
+| `ansible/roles/reverse_proxy/files/grafana/dashboards/caddy-reverse-proxy.json` | Step 13 | T016 |
+| `ansible/roles/immich/files/grafana/dashboards/immich-photo-service.json` | Step 14 | T020 |
+
+### Files Modified (existing)
+
+| File | Plan Step | Task |
+|------|-----------|------|
+| `ansible/roles/lxc_base/tasks/main.yml` | Step 2 | T005 |
+| `ansible/roles/monitoring_stack/defaults/main.yml` | Step 6 | T006 |
+| `ansible/roles/monitoring_stack/templates/prometheus.yml.j2` | Step 7 | T009 |
+| `ansible/roles/monitoring_stack/tasks/create_directories.yml` | Step 18 | T012 |
+| `ansible/roles/monitoring_stack/templates/alertmanager.yml.j2` | Step 11 | T013 |
+| `ansible/roles/monitoring_stack/tasks/grafana_provision.yml` | Step 18 | T026 |
+| `ansible/roles/monitoring_stack/tasks/compose_stack.yml` | Step 18 | T027 |
+| `ansible/roles/monitoring_stack/tasks/main.yml` | Steps 16, 17, 18 | T040 |
+| `ansible/roles/monitoring_stack/templates/monitoring-stack.service.j2` | Step 19 | T030 |
+| `ansible/roles/reverse_proxy/defaults/main.yml` | Step 4 | T014 |
+| `ansible/roles/reverse_proxy/templates/Caddyfile.j2` | Step 4 | T015 |
+| `ansible/roles/immich/defaults/main.yml` | Step 5 | T017 |
+| `ansible/roles/immich/templates/.env.j2` | Step 5 | T018 |
+| `ansible/roles/immich/templates/docker-compose.yml.j2` | Step 5 | T019 |
+| `ansible/roles/jellyfin/defaults/main.yml` | Step 3 | T022 |
+| `ansible/roles/nextcloud/defaults/main.yml` | Step 3 | T023 |
+| `ansible/roles/proxmox_backup/tasks/main.yml` | Step 22 | T035 |
+| `ansible/roles/proxmox_backup/defaults/main.yml` | Step 22 | T036 |
+| `ansible/roles/proxmox_backup/templates/proxmox-backup.conf.j2` | Step 22 | T037 |
+| `ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2` | Step 22 | T038 |
+| `ansible/host_vars/monitoring/vars.yml` | Step 21 | T032 |
+| `ansible/host_vars/monitoring/vault.yml.example` | Step 21 | T033 |
+| `ansible/group_vars/proxmox_hosts/vars.yml` | Step 23 | T039 |
+| `docs/operations.md` | Step 24 | T041 |
+| `docs/operations/backups-proxmox-config.md` | Step 24 | T042 |
+| `docs/operations/backups-proxmox-config-email-decommission.md` | Step 24 | T043 |
+| `docs/architecture.md` | Step 24 | T044 |
+
+### Files Deleted
+
+| File | Plan Step | Task |
+|------|-----------|------|
+| `ansible/roles/monitoring_stack/files/prometheus/alerts.yml` | Step 9 | T008 |
+| `ansible/roles/uptime_kuma/` (entire directory) | Step 20 | T031 |
+| `ansible/roles/proxmox_backup/tasks/configure_kuma.yml` | Step 22 | T034 |
 
 ---
 
@@ -523,157 +243,95 @@ only declare application-level scrape targets (Caddy port 2019, Immich ports 808
 
 ### Phase Dependencies
 
-- **Phase 1 (Foundational)**: No dependencies — can start immediately
-- **Phase 2 (US-5)**: No dependencies — can run in parallel with Phase 1
-- **Phase 3 (US-1+US-4)**: T007 depends on Phase 1 (T002) and Phase 5 (T011, T012 for contract validation). Other tasks in Phase 3 are parallel-safe.
-- **Phase 4 (US-2)**: T009 depends on T005 (alert labels). T010 depends on T005, T006.
-- **Phase 5 (US-3)**: Independent of other phases (except T013 depends on T011/T012 for contract validation)
-- **Phase 6 (US-4 integration)**: Depends on Phases 3, 4, 5 — all artifacts must exist
-- **Phase 7 (US-6)**: Independent — can run in parallel with Phases 3-5
-- **Phase 8 (Validation)**: Depends on ALL previous phases
-
-### Parallel Opportunities
-
 ```
-Phase 1:  T001 ──► T002
-                         ├──► Phase 3 (T007 depends on T002, T011, T012)
-Phase 2:  T003           │
-                         │
-Phase 3:  T005, T006, T008  (all parallel)
-          T007 (depends on T011, T012 for contract validation)
-                         │
-Phase 4:  T009, T010     │  (parallel with Phase 5)
-                         │
-Phase 5:  T011, T012     │  (parallel with Phase 4)
-          T013 (depends on T011, T012)
-          T014, T015     (parallel)
-                         │
-Phase 6:  T016, T017, T018, T019, T020  (sequential dependencies)
-                         │
-Phase 7:  T021-T026      │  (all parallel, can run alongside Phases 3-5)
-                         │
-Phase 8:  T027-T030 (parallel docs), T031-T034 (sequential validation)
+Phase 1 (Setup)
+  → Phase 2 (Foundational) [T005 depends on T001-T004]
+    → Phase 3 (US1): T009 depends on T006, T007, T008
+    → Phase 4 (US2): T013 depends on T010 (infrastructure alert label schema)
+    → Phase 5 (US3): T021 depends on T014, T017 (contracts define alert schemas)
+      → Phase 6 (US4): T024 depends on T016, T020 (dashboard files must exist); T027 depends on T007, T010, T021
+        → Phase 7 (US5): T028 depends on T006 (Phase 2) and T013 (Phase 4)
+        → Phase 8 (US6): T040 depends on T029 (Phase 8) and T025 (Phase 6)
+          → Phase 9 (Polish): All validation tasks depend on all prior phases complete
 ```
 
-### Critical Path
+### Critical Ordering Notes
 
-T001 → T002 → T011/T012 → T007 → T018 → T020 → T031 (validation)
+- **T006 must complete before T009, T013**: Version alignment determines which Prometheus 3.x/Alertmanager v0.30.0 syntax to use
+- **T007 before T008**: Synology alerts must be created at new path before old path is removed
+- **T034 before T035**: `configure_kuma.yml` must be deleted before main.yml references to it are removed
+- **T029 + T025 before T040**: Both kuma_cleanup.yml and validate_alerts.yml must exist before main.yml is updated to include them
 
----
+### Intra-Phase Parallel Opportunities
 
-## File Manifest
+**Phase 1** — All four tasks parallel: T001 ∥ T002 ∥ T003 ∥ T004
 
-### Files Created (15)
+**Phase 2** — T006 ∥ T007 in parallel; T005 and T008 sequential (T008 after T007):
+```
+T006 ∥ T007 → T008
+T005 (after T001-T004)
+```
 
-| # | File Path | Task |
-|---|-----------|------|
-| 1 | `ansible/roles/node_exporter/defaults/main.yml` | T001 |
-| 2 | `ansible/roles/node_exporter/tasks/main.yml` | T001 |
-| 3 | `ansible/roles/node_exporter/templates/node_exporter.service.j2` | T001 |
-| 4 | `ansible/roles/node_exporter/handlers/main.yml` | T001 |
-| 5 | `ansible/roles/monitoring_stack/files/prometheus/alerts/infrastructure_alerts.yml` | T005 |
-| 6 | `ansible/roles/monitoring_stack/files/prometheus/alerts/synology_alerts.yml` | T006 |
-| 7 | `ansible/roles/monitoring_stack/files/grafana/dashboards/infrastructure-overview.json` | T008 |
-| 8 | `ansible/roles/monitoring_stack/tasks/validate_alerts.yml` | T010 |
-| 9 | `ansible/roles/monitoring_stack/templates/service_alerts.yml.j2` | T013 |
-| 10 | `ansible/roles/reverse_proxy/files/grafana/dashboards/caddy-reverse-proxy.json` | T014 |
-| 11 | `ansible/roles/immich/files/grafana/dashboards/immich-photo-service.json` | T015 |
-| 12 | `ansible/roles/monitoring_stack/tasks/provision_dashboards.yml` | T016 |
-| 13 | `ansible/roles/monitoring_stack/tasks/kuma_cleanup.yml` | T021 |
+**Phase 3 (US1)** — T010 ∥ T011 ∥ T012 in parallel with T009:
+```
+T009 ∥ T010 ∥ T011 ∥ T012
+```
 
-### Files Modified (25)
+**Phase 5 (US3)** — T014-T020 all parallel; T021 after T014 + T017:
+```
+T014 ∥ T015 ∥ T016 ∥ T017 ∥ T018 ∥ T019 ∥ T020 → T021
+```
 
-| # | File Path | Task |
-|---|-----------|------|
-| 1 | `ansible/roles/lxc_base/tasks/main.yml` | T002 |
-| 2 | `ansible/roles/monitoring_stack/defaults/main.yml` | T003 |
-| 3 | `ansible/roles/monitoring_stack/templates/prometheus.yml.j2` | T007 |
-| 4 | `ansible/roles/monitoring_stack/templates/alertmanager.yml.j2` | T009 |
-| 5 | `ansible/roles/reverse_proxy/defaults/main.yml` | T011 |
-| 6 | `ansible/roles/reverse_proxy/templates/Caddyfile.j2` | T011 |
-| 7 | `ansible/roles/immich/defaults/main.yml` | T012 |
-| 8 | `ansible/roles/immich/templates/.env.j2` | T012 |
-| 9 | `ansible/roles/immich/templates/docker-compose.yml.j2` | T012 |
-| 10 | `ansible/roles/monitoring_stack/tasks/create_directories.yml` | T017 |
-| 11 | `ansible/roles/monitoring_stack/tasks/compose_stack.yml` | T018 |
-| 12 | `ansible/roles/monitoring_stack/tasks/grafana_provision.yml` | T019 |
-| 13 | `ansible/roles/monitoring_stack/tasks/main.yml` | T020 |
-| 14 | `ansible/roles/monitoring_stack/templates/monitoring-stack.service.j2` | T022 |
-| 15 | `ansible/host_vars/monitoring/vars.yml` | T024 |
-| 16 | `ansible/host_vars/monitoring/vault.yml.example` | T024 |
-| 17 | `ansible/roles/proxmox_backup/defaults/main.yml` | T025 |
-| 18 | `ansible/roles/proxmox_backup/tasks/main.yml` | T025 |
-| 19 | `ansible/roles/proxmox_backup/templates/proxmox-backup.conf.j2` | T025 |
-| 20 | `ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2` | T025 |
-| 21 | `ansible/group_vars/proxmox_hosts/vars.yml` | T026 |
-| 22 | `docs/operations.md` | T027 |
-| 23 | `docs/operations/backups-proxmox-config.md` | T028 |
-| 24 | `docs/operations/backups-proxmox-config-email-decommission.md` | T029 |
-| 25 | `docs/architecture.md` | T030 |
+**Phase 6 (US4)** — T022 ∥ T023 ∥ T025 in parallel; T024 after Phase 5 complete; T026 after T024; T027 after T021:
+```
+T022 ∥ T023 ∥ T025
+T024 → T026
+T027 (after T021 from Phase 5)
+```
 
-### Files Deleted (14)
+**Phase 8 (US6)** — Most tasks parallel; T035 after T034; T040 after T029+T025:
+```
+T029 ∥ T030 ∥ T031 ∥ T032 ∥ T033 ∥ T034 ∥ T036 ∥ T037 ∥ T038 ∥ T039 ∥ T041 ∥ T042 ∥ T043 ∥ T044
+T034 → T035
+T029 + T025(Phase 6) → T040
+```
 
-| # | File Path | Task |
-|---|-----------|------|
-| 1 | `ansible/roles/monitoring_stack/files/prometheus/alerts.yml` | T006 |
-| 2 | `ansible/roles/uptime_kuma/defaults/main.yml` | T023 |
-| 3 | `ansible/roles/uptime_kuma/tasks/main.yml` | T023 |
-| 4 | `ansible/roles/uptime_kuma/tasks/check_setup.yml` | T023 |
-| 5 | `ansible/roles/uptime_kuma/tasks/setup_admin.yml` | T023 |
-| 6 | `ansible/roles/uptime_kuma/tasks/login.yml` | T023 |
-| 7 | `ansible/roles/uptime_kuma/tasks/wait_for_api.yml` | T023 |
-| 8 | `ansible/roles/uptime_kuma/tasks/get_monitors.yml` | T023 |
-| 9 | `ansible/roles/uptime_kuma/tasks/provision_monitors.yml` | T023 |
-| 10 | `ansible/roles/uptime_kuma/tasks/verify_monitors.yml` | T023 |
-| 11 | `ansible/roles/uptime_kuma/tasks/configure_smtp.yml` | T023 |
-| 12 | `ansible/roles/uptime_kuma/files/configure_uptime_kuma.js` | T023 |
-| 13 | `ansible/roles/uptime_kuma/templates/monitoring_config.json.j2` | T023 |
-| 14 | `ansible/roles/proxmox_backup/tasks/configure_kuma.yml` | T025 |
+**Phase 9 (Polish)** — T045 ∥ T046 ∥ T047 ∥ T048 in parallel; T049 after T047 + T048:
+```
+T045 ∥ T046 ∥ T047 ∥ T048 → T049
+```
 
 ---
 
-## Constitution Check
+## Summary
 
-| # | Principle | Status | Evidence |
-|---|-----------|--------|----------|
-| I | Spec-Driven Workflow | ✅ PASS | Every task traces to FR/US/SC identifiers in spec.md. No tasks add unrequested functionality. |
-| II | Secrets Policy | ✅ PASS | No new secrets introduced. Existing SMTP creds remain in vault. Kuma secrets removed (T024). node_exporter requires no secrets. |
-| III | Separation of Concerns | ✅ PASS | All changes are Ansible configuration. No Terraform files touched. No container creation/sizing changes. |
-| IV | Code Economy (YAGNI) | ✅ PASS | Empty monitoring contracts for jellyfin/nextcloud removed (were stubs with no current function). All new files justified: node_exporter role (new capability, 4 files), alert files (distinct rule sets), dashboards (spec-required), task files (match existing monitoring_stack pattern of ~8 separate task files). Self-registration loops have 2+ consumers today (Caddy + Immich). Variables are multi-use or environment-specific. |
-| V | Dual-Provisioning Parity | ✅ PASS | All tasks produce Ansible roles/playbooks runnable from CI (self-hosted runner) and developer laptop. No CI-only paths introduced. |
-| WF-1 | Test-Driven Changes | ✅ PASS | T010 adds promtool validation. T031-T034 provide ansible-lint, yamllint, and grep-based verification. |
-| WF-2 | CI/CD Expectations | ✅ PASS | No destructive automation. Kuma cleanup (T021) is idempotent. No new workflows needed. |
-| NET-1 | Static IPs | ✅ PASS | All IPs sourced from inventory `ansible_host`. Ports defined as variables in role defaults (9100, 2019, 8081, 8082). |
-| SEC-1 | No plaintext secrets | ✅ PASS | No secrets in any new file. Alertmanager template uses existing vault-encrypted SMTP vars. |
+- **Total tasks**: 49
+- **Tasks by phase**: Phase 1: 4 · Phase 2: 4 · Phase 3: 4 · Phase 4: 1 · Phase 5: 8 · Phase 6: 6 · Phase 7: 1 · Phase 8: 16 · Phase 9: 5
+- **Estimated complexity**: High (6 user stories, 3 new Ansible roles/task files, 2 service integrations, full Kuma decommission)
+- **Parallel tracks**: 8 independent parallel tracks identified across phases
+- **Files created**: 13 · **Files modified**: 27 · **Files deleted**: 3
 
----
+### Independent Test Criteria per User Story
 
-## Self-Critique
+| Story | Independent Test | Key Command |
+|-------|-----------------|-------------|
+| US1 | All 7 containers in Prometheus targets as UP | `curl http://192.168.1.214:9090/api/v1/targets` |
+| US2 | Stop service → email within 5 min; restart → recovery email | Manual + check Alertmanager UI |
+| US3 | Caddy/Immich metrics endpoints return data | `curl http://192.168.1.211:9180/metrics` |
+| US4 | Monitoring role has no caddy/immich name references | `grep -r "caddy\|immich" ansible/roles/monitoring_stack/` returns empty |
+| US5 | Version pins in defaults match group_vars | `grep "_version" ansible/roles/monitoring_stack/defaults/main.yml` |
+| US6 | No Kuma container, files, or code references remain | `find ansible/ -name "*.yml" \| xargs grep -li "kuma"` returns empty |
 
-### Strengths
-- Every task has mechanically verifiable done-conditions using grep, test, ansible-lint, yamllint, or python3 checks
-- File manifest is comprehensive (13 created + 25 modified + 14 deleted = 52 file operations)
-- Design correction documented (monitoring contract scrape targets vs. group-based node_exporter job)
-- YAGNI compliance: empty monitoring contracts for jellyfin/nextcloud removed per Constitution Principle IV (Code Economy) — they were stubs with no current function; monitoring contracts added only to services with actual app metrics (Caddy, Immich)
-- Parallel opportunities clearly marked with dependency chain
-- Constitution check passes all principles including the new YAGNI principle
+### MVP Scope
 
-### Issues Found
-- **[severity: low]** The production inventory currently only has 5 of the 7 services listed in FR-001 (AdGuard and Home Assistant are missing). This is documented in the Inventory Note and is consistent with A-006, but the developer should be aware that FR-001's "every service container" claim is aspirational until these hosts are added to the inventory.
-- **[severity: low]** T010's promtool validation uses `docker run` which requires the Prometheus image to be available. On first deployment before `docker compose pull`, this adds ~30s pull time. The developer could add `docker pull prom/prometheus:{{ prometheus_version }}` as a prerequisite or accept the one-time delay.
-- **[severity: low]** T018 restructures compose_stack.yml by removing the `docker compose up -d` command and moving it to main.yml (T020). This is a refactoring of the existing task orchestration that the plan doesn't explicitly call out. The rationale (validation between config deploy and stack start) is sound but should be tested for idempotency.
-- **[severity: low]** Plan Steps 3, 4, 5 call for node_exporter scrape targets in monitoring contracts, but the Prometheus scrape config contract shows node_exporter handled by a separate group-based job. This tasks.md corrects the discrepancy — monitoring contracts only declare application-level metrics. The plan should be amended to reflect this if a future revision is made.
-- **[severity: low]** The plan calls for monitoring contracts on jellyfin and nextcloud (Step 3). This tasks.md omits them per Constitution Principle IV (YAGNI) — these contracts have empty scrape_targets, empty alert_rules, and null dashboard_file, serving no current function. They can be added in a future iteration when those services gain native metrics.
+Complete Phases 1–4 (Tasks T001–T013) to deliver US1 + US2: infrastructure metrics for all 7 containers and unified service availability alerting. This replaces Uptime Kuma's core function and provides the observability foundation, without requiring application-level metrics or the Kuma decommission steps.
 
-### Verdict
-ACCEPT — All issues are low severity and documented. No blocking gaps.
+### Implementation Strategy
 
----
-
-## Notes
-
-- [P] tasks = different files, no dependencies
-- [Story] label maps task to specific user story for traceability
-- Commit after each phase completion (at checkpoint markers)
-- Run `ansible-lint` incrementally after each role modification
-- The monitoring playbook (`ansible/playbooks/monitoring.yml`) is UNCHANGED — its role list (`lxc_base`, `mdns_base`, `monitoring_stack`) remains the same
+1. **Phase 1 → Phase 2**: Build node_exporter role, integrate into lxc_base, align versions, reorganize alert files — foundation complete
+2. **Phase 3 (US1)**: Wire Prometheus config, create infrastructure alerts and overview dashboard — infrastructure metrics live
+3. **Phase 4 (US2)**: Update Alertmanager inhibition rules — unified alerting complete (MVP deliverable)
+4. **Phase 5 (US3)**: Enable Caddy/Immich metrics, create dashboards — application metrics live
+5. **Phase 6 (US4)**: Complete extensibility wiring — zero-touch onboarding pattern complete
+6. **Phases 7–8 (US5+US6)**: Version confirmation + full Kuma decommission
+7. **Phase 9**: Static validation gate before deployment

@@ -1,0 +1,43 @@
+---
+# Uptime Kuma decommission cleanup tasks
+# Feature: 040-monitoring-overhaul
+# Traces to: FR-023, US-6
+#
+# Idempotent cleanup: stops and removes the uptime-kuma Docker container and volume
+# if they exist. All tasks use failed_when: false to be safe when Kuma is already absent.
+
+- name: Check if uptime-kuma container exists
+  ansible.builtin.command:
+    cmd: docker ps -a --filter "name=uptime-kuma" --format "{{ '{{' }}.Names{{ '}}' }}"
+  register: kuma_container_check
+  changed_when: false
+  failed_when: false
+
+- name: Stop and remove uptime-kuma container
+  ansible.builtin.command:
+    cmd: docker rm -f uptime-kuma
+  when: "'uptime-kuma' in kuma_container_check.stdout"
+  register: kuma_remove_result
+  changed_when: kuma_remove_result.rc == 0
+  failed_when: false
+
+- name: Check if uptime-kuma Docker volume exists
+  ansible.builtin.command:
+    cmd: docker volume ls --filter "name=uptime-kuma_data" --format "{{ '{{' }}.Name{{ '}}' }}"
+  register: kuma_volume_check
+  changed_when: false
+  failed_when: false
+
+- name: Remove uptime-kuma Docker volume
+  ansible.builtin.command:
+    cmd: docker volume rm uptime-kuma_data
+  when: "'uptime-kuma_data' in kuma_volume_check.stdout"
+  register: kuma_volume_remove_result
+  changed_when: kuma_volume_remove_result.rc == 0
+  failed_when: false
+
+- name: Remove residual Kuma data directory
+  ansible.builtin.file:
+    path: /opt/uptime-kuma
+    state: absent
+  failed_when: false

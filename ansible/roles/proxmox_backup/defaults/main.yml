@@ -40,9 +40,8 @@ proxmox_backup_notify_on_success: false
 # proxmox_backup_email_to: ""
 
 # Notification State Machine (Feature 014)
-# Modes: enabled (email only), kuma_only (Kuma push + email code), disabled (no email), removed (packages purged)
-proxmox_backup_email_mode: "kuma_only"
-proxmox_backup_kuma_push_url: ""
+# Modes: enabled (email only), disabled (no email), removed (packages purged)
+proxmox_backup_email_mode: "disabled"
 
 # Safety Flags (Feature 014)
 proxmox_backup_force_remove_email: false      # Override discovery conflicts

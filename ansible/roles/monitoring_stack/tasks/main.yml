@@ -1,7 +1,11 @@
 ---
 # Monitoring Stack Main Task Orchestration
-# Feature: 017-synology-metrics
+# Feature: 017-synology-metrics, 040-monitoring-overhaul
 # Purpose: Orchestrate deployment of Prometheus, Grafana, SNMP Exporter, Alertmanager
+
+- name: Clean up Uptime Kuma (decommission)
+  ansible.builtin.include_tasks: kuma_cleanup.yml
+  tags: [kuma_cleanup]
 
 - name: Install Docker
   ansible.builtin.include_tasks: docker.yml
@@ -20,6 +24,10 @@
 - name: Deploy Docker Compose stack
   ansible.builtin.include_tasks: compose_stack.yml
   tags: [compose]
+
+- name: Validate alert rule syntax
+  ansible.builtin.include_tasks: validate_alerts.yml
+  tags: [validate_alerts]
 
 - name: Provision Grafana datasources and dashboards
   ansible.builtin.include_tasks: grafana_provision.yml

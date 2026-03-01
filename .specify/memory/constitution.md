@@ -13,7 +13,19 @@ Never commit secrets: Proxmox tokens, passwords, private keys, Synology creds, T
 - **Ansible** owns *configuration inside* those machines and on the Proxmox host.
 **Do not generate code that mixes these responsibilities.**
 
-### IV. Dual-Provisioning Parity
+### IV. Code Economy (YAGNI)
+Every line of code, every file, every abstraction layer must justify its existence against a current requirement — not a hypothetical future one. Specifically:
+
+- **Prefer modifying an existing file over creating a new one.** A new file is justified only when separation of concerns demands it or the existing file would become incoherent.
+- **Do not add indirection layers** (wrapper functions, abstract base classes, plugin systems, factory patterns) unless at least two concrete consumers exist today. "We might need this later" is not justification.
+- **Do not generate scaffolding, boilerplate, or stub files** for functionality that is not in the current task list. Empty `__init__.py` files, placeholder roles, and skeleton modules are bloat.
+- **Prefer inline configuration over parameterization.** Extract a value into a variable only when it is referenced in more than one place or must differ between environments. A single-use variable with a default that is never overridden is noise.
+- **Templating and abstraction earn their keep.** A Jinja2 loop over a list is justified when the list has >1 item today. A loop over a list with exactly 1 item is premature abstraction.
+- **Consolidate before adding.** Before creating a new alert rule, dashboard, role, or module, check whether an existing one can be extended. The cost of a new artifact is not just its lines — it is ongoing maintenance, cognitive load, and drift risk.
+
+Violation of this principle produces codebases that are harder to understand, slower to change, and more fragile than the problem warrants. When in doubt, ship less.
+
+### V. Dual-Provisioning Parity
 Every provisioning and deployment operation MUST be executable through **both** CI/CD (GitHub Actions) **and** from a developer laptop. Neither path may have capabilities the other lacks.
 
 - New services must be added to the GitHub Actions workflow dropdowns and service scope allowlist **in the same PR** that introduces the service.
@@ -162,4 +174,4 @@ iterations) to converge on quality before declaring a feature complete.
 ## Governance
 This constitution supersedes all other practices. Amendments require documentation and approval. All PRs and reviews must verify compliance with these principles.
 
-**Version**: 1.3.0 | **Ratified**: 2026-02-22
+**Version**: 1.4.0 | **Ratified**: 2026-02-22 | **Last Amended**: 2026-03-01

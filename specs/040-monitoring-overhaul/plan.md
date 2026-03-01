@@ -84,7 +84,7 @@ ansible/
 │   │
 │   ├── reverse_proxy/
 │   │   ├── defaults/main.yml            # MODIFIED — add caddy_metrics_*, monitoring_contract
-│   │   ├── templates/Caddyfile.j2       # MODIFIED — add metrics + admin listen
+│   │   ├── templates/Caddyfile.j2       # MODIFIED — add metrics global option + dedicated :9180 site block
 │   │   └── files/grafana/dashboards/caddy-reverse-proxy.json # NEW (FR-017, owned by service)
 │   │
 │   ├── immich/
@@ -164,7 +164,7 @@ docs/
 - **Files**:
   - `ansible/roles/reverse_proxy/defaults/main.yml` — MODIFY
   - `ansible/roles/reverse_proxy/templates/Caddyfile.j2` — MODIFY
-- **Description**: Add `caddy_metrics_enabled`, `caddy_metrics_port` (2019), and `caddy_admin_listen` (`0.0.0.0:2019`) variables to reverse_proxy defaults. Modify `Caddyfile.j2` to include `servers { metrics }` and `admin {$CADDY_ADMIN_LISTEN}` in the global options block (conditional on `caddy_metrics_enabled`). Add `monitoring_contract` with scrape targets for both node_exporter (9100) and Caddy metrics (2019), plus alert rules for high 5xx error rate. Include dashboard file reference.
+- **Description**: Add `caddy_metrics_enabled` and `caddy_metrics_port` (9180) variables to reverse_proxy defaults. Modify `Caddyfile.j2` to include `servers { metrics }` in the global options block and add a dedicated `:{{ caddy_metrics_port }}` site block with `metrics /metrics` (conditional on `caddy_metrics_enabled`). The admin API stays on localhost:2019 (default) — not exposed externally. Add `monitoring_contract` with scrape targets for both node_exporter (9100) and Caddy metrics (9180), plus alert rules for high 5xx error rate. Include dashboard file reference.
 - **Traces to**: FR-004, FR-006, FR-007, FR-015, US-3
 - **Dependencies**: None
 - **Parallel-safe**: Yes (with Step 3)
@@ -356,7 +356,7 @@ docs/
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | node_exporter binary not available for architecture | Deployment fails on affected LXC | Pin exact version + architecture in role defaults. Download URL is deterministic. Verified: v1.10.2 has linux-amd64 release. |
-| Caddy admin API binding to 0.0.0.0 exposes admin endpoints | Security: admin API accessible from LAN | Admin API on port 2019 is LAN-only (C-003). Caddy admin API only serves read-only metrics and health. No destructive operations available without explicit config. |
+| Caddy metrics port reachable from LAN | Low: port 9180 serves only /metrics, no admin capabilities | Dedicated metrics-only site block (`:9180 { metrics /metrics }`). Admin API stays on localhost:2019 (default, unreachable externally). No config reload or management exposed. |
 | Immich metrics ports conflict with existing services | Deployment fails, Immich unavailable | Ports 8081/8082 are unoccupied on the Immich LXC (only 2283 in use). Verified: no existing services on these ports. |
 | Self-registration template generates invalid Prometheus config | Monitoring stack fails to start | Step 16 adds `promtool check config` validation before stack restart. Invalid config fails the playbook before activation. |
 | Uptime Kuma container removal on live system | Brief monitoring gap during cleanup | Kuma was already not authoritative (A-010: not in monitoring playbook). Cleanup runs before new stack deployment. Gap is expected and documented. |
@@ -401,3 +401,17 @@ docs/
 ## Complexity Tracking
 
 No constitution violations to justify. All principles PASS.
+
+## Plan Amendment (Implementation Phase)
+
+### Step 4 — Caddy Metrics Approach
+
+**Original plan**: Expose Caddy admin API on `0.0.0.0:2019` via `caddy_admin_listen` and enable
+metrics via `servers { metrics }` in global options.
+
+**As-built**: The admin API remains on `localhost:2019` (default, unreachable externally).
+A dedicated site block `:{caddy_metrics_port}` with `metrics /metrics` is added instead.
+This is more secure: no admin capabilities are exposed, only the `/metrics` endpoint on port 9180.
+
+**Rationale**: Exposing the admin API on all interfaces creates an unnecessary attack surface.
+The dedicated site approach achieves the same Prometheus scraping goal with zero admin exposure.

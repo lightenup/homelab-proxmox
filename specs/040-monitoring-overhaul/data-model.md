@@ -158,7 +158,7 @@ files/grafana/dashboards/
 | `node_exporter_disabled_collectors` | `roles/node_exporter/defaults/main.yml` | `[hwmon, thermal_zone, ...]` | node_exporter systemd unit |
 | `monitoring_contract` | Each service role's `defaults/main.yml` | `{enabled: false}` | prometheus.yml.j2, alert aggregation |
 | `caddy_metrics_enabled` | `roles/reverse_proxy/defaults/main.yml` | `true` | Caddyfile.j2 |
-| `caddy_metrics_port` | `roles/reverse_proxy/defaults/main.yml` | `2019` | Caddyfile.j2, monitoring_contract |
+| `caddy_metrics_port` | `roles/reverse_proxy/defaults/main.yml` | `9180` | Caddyfile.j2, monitoring_contract |
 | `immich_metrics_enabled` | `roles/immich/defaults/main.yml` | `true` | .env.j2, docker-compose.yml.j2 |
 | `immich_metrics_port` | `roles/immich/defaults/main.yml` | `8081` | docker-compose.yml.j2, monitoring_contract |
 | `immich_microservices_metrics_port` | `roles/immich/defaults/main.yml` | `8082` | docker-compose.yml.j2, monitoring_contract |
@@ -192,7 +192,7 @@ files/grafana/dashboards/
 | Port | Service | Host(s) | Direction |
 |------|---------|---------|-----------|
 | 9100 | node_exporter | All service LXCs (210-216) | monitoring → service |
-| 2019 | Caddy admin/metrics | reverse_proxy (211) | monitoring → reverse_proxy |
+| 9180 | Caddy metrics (dedicated site block) | reverse_proxy (211) | monitoring → reverse_proxy |
 | 8081 | Immich API metrics | immich (213) | monitoring → immich |
 | 8082 | Immich microservices metrics | immich (213) | monitoring → immich |
 | 9090 | Prometheus | monitoring (214) | existing |

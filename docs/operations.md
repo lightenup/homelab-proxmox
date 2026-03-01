@@ -61,13 +61,11 @@ To verify that remote access is working correctly:
 - **Main Operations Guide**: [Proxmox Configuration Backup Operations](operations/backups-proxmox-config.md)
 - **Restore Guide**: [Proxmox Configuration Restore](operations/backups-proxmox-config-restore.md)
 
-### Email Decommissioning & Kuma Migration
+### Notification Mode
 
-We have migrated from email notifications to Uptime Kuma Push monitoring.
+Proxmox backup notifications are controlled by `proxmox_backup_email_mode` in `ansible/group_vars/proxmox_hosts/vars.yml`. The current mode is `disabled` — backup monitoring is handled by Prometheus/Alertmanager (`ServiceDown` alert on the node-exporter scrape target). Email mode can be set to `enabled` to activate SMTP notifications, or `removed` to purge email packages entirely.
 
--   **Runbook**: [Proxmox Backup Email Decommissioning](operations/backups-proxmox-config-email-decommission.md)
--   **Current Mode**: `kuma_only` (Email disabled, Kuma active)
--   **Configuration**: `ansible/group_vars/proxmox_hosts/vars.yml`
+**Runbook**: [Proxmox Backup Email Decommissioning](operations/backups-proxmox-config-email-decommission.md)
 
 ## Evidence Governance
 

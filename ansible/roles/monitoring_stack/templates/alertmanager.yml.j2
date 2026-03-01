@@ -33,9 +33,33 @@ receivers:
           </ul>
 
 inhibit_rules:
-  # Inhibit disk/volume alerts if NAS is down
-  - source_match:
-      alertname: 'SynologyNASDown'
-    target_match_re:
-      alertname: 'Synology.*'
+  # 1. SynologyNASDown inhibits generic ServiceDown for Synology targets (FR-028)
+  #    Prevents duplicate alerts when Telegraf SNMP target goes down
+  - source_matchers:
+      - alertname = "SynologyNASDown"
+    target_matchers:
+      - alertname = "ServiceDown"
     equal: ['instance']
+
+  # 2. SynologyNASDown inhibits Synology-specific alerts (existing, migrated to v0.30.0 syntax)
+  - source_matchers:
+      - alertname = "SynologyNASDown"
+    target_matchers:
+      - alertname =~ "Synology.*"
+    equal: ['instance']
+
+  # 3. Agent-down suppresses infrastructure threshold alerts (FR-029)
+  #    When node_exporter is unreachable, CPU/memory/disk thresholds are stale
+  - source_matchers:
+      - alertname = "ServiceDown"
+      - component = "availability"
+    target_matchers:
+      - component = "infrastructure"
+    equal: ['instance']
+
+  # 4. Critical severity suppresses warning for same alertname+instance
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ['alertname', 'instance']
