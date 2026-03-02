@@ -1,0 +1,12 @@
+---
+- name: Configure base for fail2ban hosts
+  hosts: reverse_proxy,nextcloud,jellyfin
+  become: true
+  roles:
+    - lxc_base
+
+- name: Deploy fail2ban and metrics exporter
+  hosts: reverse_proxy,nextcloud,jellyfin
+  become: true
+  roles:
+    - fail2ban

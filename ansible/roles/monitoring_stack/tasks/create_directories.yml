@@ -55,3 +55,9 @@
     path: "{{ prometheus_config_path }}/alerts"
     state: directory
     mode: '0755'
+
+- name: Create Blackbox config directory
+  ansible.builtin.file:
+    path: "{{ blackbox_config_path }}"
+    state: directory
+    mode: '0755'

@@ -1,0 +1,71 @@
+---
+# fail2ban deployment tasks
+# Feature: 042-monitoring-tier-c (FR-009, FR-010, FR-011, FR-012, FR-013, FR-014, FR-016, FR-026)
+
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+    cache_valid_time: 3600
+
+- name: Deploy fail2ban custom filter files
+  ansible.builtin.copy:
+    src: "filter.d/"
+    dest: "/etc/fail2ban/filter.d/"
+    mode: '0644'
+  notify: Restart fail2ban
+
+- name: Deploy fail2ban jail configuration
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+  notify: Restart fail2ban
+
+- name: Enable and start fail2ban service
+  ansible.builtin.service:
+    name: fail2ban
+    enabled: true
+    state: started
+
+- name: Create fail2ban exporter install directory
+  ansible.builtin.file:
+    path: "{{ fail2ban_exporter_install_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Download fail2ban exporter binary archive
+  vars:
+    _f2b_base: "https://gitlab.com/hctrdev/fail2ban-prometheus-exporter/-/releases"
+    _f2b_asset: "fail2ban_exporter_{{ fail2ban_exporter_version }}_{{ fail2ban_exporter_arch }}.tar.gz"
+  ansible.builtin.get_url:
+    url: "{{ _f2b_base }}/v{{ fail2ban_exporter_version }}/downloads/{{ _f2b_asset }}"
+    dest: "/tmp/fail2ban_exporter.tar.gz"
+    mode: '0644'
+
+- name: Extract fail2ban exporter binary
+  ansible.builtin.unarchive:
+    src: "/tmp/fail2ban_exporter.tar.gz"
+    dest: "{{ fail2ban_exporter_install_dir }}"
+    remote_src: true
+    creates: "{{ fail2ban_exporter_install_dir }}/fail2ban_exporter"
+
+- name: Set executable permissions on fail2ban exporter binary
+  ansible.builtin.file:
+    path: "{{ fail2ban_exporter_install_dir }}/fail2ban_exporter"
+    mode: '0755'
+
+- name: Deploy fail2ban exporter systemd service
+  ansible.builtin.template:
+    src: fail2ban-exporter.service.j2
+    dest: /etc/systemd/system/fail2ban-exporter.service
+    mode: '0644'
+  notify:
+    - Reload systemd daemon
+    - Restart fail2ban exporter
+
+- name: Enable and start fail2ban exporter service
+  ansible.builtin.service:
+    name: fail2ban-exporter
+    enabled: true
+    state: started

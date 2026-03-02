@@ -27,5 +27,11 @@
     dest: "{{ grafana_dashboards_path }}/infrastructure-overview.json"
     mode: '0644'
 
+- name: Deploy Security Overview dashboard
+  ansible.builtin.copy:
+    src: grafana/dashboards/security-overview.json
+    dest: "{{ grafana_dashboards_path }}/security-overview.json"
+    mode: '0644'
+
 - name: Deploy service-owned dashboards from monitoring contracts
   ansible.builtin.include_tasks: provision_dashboards.yml

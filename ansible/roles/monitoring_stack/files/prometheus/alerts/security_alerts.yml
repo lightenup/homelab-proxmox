@@ -1,0 +1,79 @@
+# Prometheus alert rules for security and availability monitoring
+# Feature: 042-monitoring-tier-c (FR-017, FR-018, FR-019)
+# Static file — NOT a Jinja2 template
+
+groups:
+  - name: security_alerts
+    interval: 30s
+    rules:
+      # FR-018: HTTPS endpoint availability (US-1)
+      - alert: EndpointDown
+        expr: |
+          probe_success{job="blackbox-https"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: availability
+        annotations:
+          summary: "HTTPS endpoint {{ $labels.instance }} is down"
+          description: "Endpoint {{ $labels.instance }} has been unreachable for more than 2 minutes"
+
+      # FR-018: TLS certificate expiry warning (US-2)
+      - alert: TLSCertExpiringSoon
+        expr: |
+          (probe_ssl_earliest_cert_expiry{job="blackbox-https"} - time()) / 86400 < 14
+        for: 15m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "TLS certificate for {{ $labels.instance }} expires soon"
+          description: "Certificate for {{ $labels.instance }} expires in {{ $value | printf \"%.1f\" }} days (threshold: 14 days)"
+
+      # FR-018: TLS certificate expiry critical (US-2)
+      - alert: TLSCertExpiryCritical
+        expr: |
+          (probe_ssl_earliest_cert_expiry{job="blackbox-https"} - time()) / 86400 < 7
+        for: 15m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "TLS certificate for {{ $labels.instance }} is critically close to expiry"
+          description: "Certificate for {{ $labels.instance }} expires in {{ $value | printf \"%.1f\" }} days (threshold: 7 days)"
+
+      # FR-018: High probe response latency (US-1)
+      - alert: HighProbeLatency
+        expr: |
+          probe_duration_seconds{job="blackbox-https"} > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "High probe latency for {{ $labels.instance }}"
+          description: "Probe response time for {{ $labels.instance }} has been above 5 seconds for 5 minutes (current: {{ $value | printf \"%.2f\" }}s)"
+
+      # FR-018: High fail2ban ban rate (US-3)
+      - alert: Fail2banHighBanRate
+        expr: |
+          sum by (instance) (increase(f2b_jail_banned_total[1h])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "High ban rate on {{ $labels.instance }}"
+          description: "More than 10 new bans in the last hour on {{ $labels.instance }} (current: {{ $value | printf \"%.0f\" }})"
+
+      # FR-018: fail2ban exporter down (US-3)
+      - alert: Fail2banDown
+        expr: |
+          up{job=~"fail2ban-exporter.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: availability
+        annotations:
+          summary: "fail2ban exporter down on {{ $labels.instance }}"
+          description: "fail2ban exporter on {{ $labels.instance }} has been unreachable for more than 2 minutes"

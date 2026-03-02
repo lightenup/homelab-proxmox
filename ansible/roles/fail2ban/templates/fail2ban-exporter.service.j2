@@ -1,0 +1,14 @@
+[Unit]
+Description=fail2ban Prometheus Exporter
+After=network.target fail2ban.service
+Wants=fail2ban.service
+
+[Service]
+Type=simple
+ExecStart={{ fail2ban_exporter_install_dir }}/fail2ban_exporter --collector.f2b.socket={{ fail2ban_socket_path }} --web.listen-address :{{ fail2ban_exporter_port }}
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

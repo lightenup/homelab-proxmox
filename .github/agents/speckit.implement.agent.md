@@ -125,7 +125,28 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Suggest next steps if implementation cannot proceed
    - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file.
 
-9. Completion validation:
+9. **Pre-commit hook validation** (MUST run before finishing):
+   - This repository uses pre-commit hooks (`.pre-commit-config.yaml`) that run on `git commit`
+   - **BEFORE completing implementation**, run the pre-commit checks against all modified files to catch issues early:
+
+     ```sh
+     git diff --name-only HEAD | xargs pre-commit run --files
+     ```
+
+     Or run against all files if pre-commit is available:
+
+     ```sh
+     pre-commit run --all-files
+     ```
+
+   - Key hooks to be aware of:
+     - **yamllint**: Enforces YAML style (e.g., max line length of 200 chars). Config in `.yamllint`
+     - **ansible-lint**: Runs on `ansible/roles/**/*.yml` files
+     - **check-yaml**, **check-json**, **trailing-whitespace**, **end-of-file-fixer**
+   - Fix any failures before attempting the final commit — the commit will be rejected if hooks fail
+   - Common yamllint fix: break long URLs into task-level `vars:` to stay under the line-length limit
+
+10. Completion validation:
    - Verify all required tasks are completed
    - Check that implemented features match the original specification
    - Validate that tests pass and coverage meets requirements

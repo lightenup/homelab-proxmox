@@ -53,5 +53,11 @@ grafana_dashboards_path: "{{ monitoring_install_dir }}/grafana/dashboards"
 telegraf_config_path: "{{ monitoring_install_dir }}/telegraf"
 alertmanager_config_path: "{{ monitoring_install_dir }}/alertmanager"
 
+# Blackbox exporter configuration
+# Feature: 042-monitoring-tier-c (FR-001, FR-002)
+blackbox_exporter_version: "v0.28.0"
+blackbox_exporter_port: 9115
+blackbox_config_path: "{{ monitoring_install_dir }}/blackbox"
+
 # Timezone
 timezone: "Europe/Copenhagen"

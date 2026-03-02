@@ -30,6 +30,20 @@
     mode: '0644'
   notify: Reload prometheus
 
+- name: Deploy security alert rules
+  ansible.builtin.copy:
+    src: prometheus/alerts/security_alerts.yml
+    dest: "{{ prometheus_config_path }}/alerts/security_alerts.yml"
+    mode: '0644'
+  notify: Reload prometheus
+
+- name: Deploy Blackbox exporter configuration
+  ansible.builtin.template:
+    src: blackbox.yml.j2
+    dest: "{{ blackbox_config_path }}/blackbox.yml"
+    mode: '0644'
+  notify: Restart monitoring stack
+
 - name: Deploy service alert rules from monitoring contracts
   ansible.builtin.template:
     src: service_alerts.yml.j2
