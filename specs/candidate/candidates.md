@@ -87,6 +87,22 @@ Deploying nextcloud required 12 incremental fix commits across ~10 CI runs. Ever
 **Problem**: The prod inventory (`inventories/prod/hosts.yml`) only contains the Proxmox host and infra nodes. Service LXCs are not listed — they only exist in dynamically generated inventories created by `pve-service-deploy` on the PVE host. This means config-only changes to existing LXCs (e.g., updating Caddy templates, changing Nextcloud env vars) cannot be run from a developer laptop without ad-hoc inventory hacks.
 **Proposal**: Add a `services` group to `inventories/prod/hosts.yml` with static entries for each service LXC (hostname, `ansible_host` IP, `ansible_user`). This lets `ansible-playbook playbooks/<service>.yml -i inventories/prod/hosts.yml` work directly from a laptop for config-only changes, while `pve-service-deploy` continues to use generated inventories for full provisioning. The service entries should match the hostnames expected by `host_vars/` and playbook `hosts:` directives.
 
-#### 7. Ansible vault bootstrap
+#### 7. PVE HTTPS via Caddy
+**Problem**: PVE host (192.168.1.112:8006) uses a self-signed Proxmox CA cert. Works for direct LAN access but no trusted TLS. Not probed by blackbox.
+**Proposal**: Add `pve.hus-sky.no` behind Caddy with a Let's Encrypt cert. Requires: (a) DNS record + AdGuard DNS rewrite for LAN, (b) `pve.caddy.j2` template with `reverse_proxy https://192.168.1.112:8006` and `tls_insecure_skip_verify` (upstream is self-signed), (c) websocket support for noVNC/xterm.js console (Caddy handles by default), (d) add to blackbox HTTPS probe targets. Small scope — one Caddy template, one reverse_proxy role task, DNS entry. Same pattern as existing services.
+
+#### 8. AdGuard LXC provisioning
+**Problem**: AdGuard LXC does not exist on Proxmox (no container among the 6 running). Terraform module `adguard_lxc` is defined but never applied to prod. The `adguard.hus-sky.no` blackbox probe fails, and the AdGuard exporter (Tier B) has no host to run on.
+**Proposal**: Full service provisioning: (a) `prod.tfvars` with Proxmox API credentials, (b) `terraform apply -target=module.adguard_lxc`, (c) `ansible-playbook playbooks/adguard.yml` (installs AdGuard Home + exporter), (d) AdGuard Home initial setup (web UI wizard), (e) DNS rewrites for `*.hus-sky.no` → 192.168.1.211. Medium scope. Blocks: AdGuard exporter metrics, DNS monitoring, blackbox probe for adguard.hus-sky.no.
+
+#### 9. fail2ban.yml not in site.yml
+**Problem**: `ansible/playbooks/site.yml` imports `services.yml` (which covers adguard, immich, jellyfin, nextcloud, reverse_proxy) and `monitoring.yml`, but does NOT import `fail2ban.yml`. A full `site.yml` run after a rebuild would restore the entire monitoring stack but leave fail2ban unconfigured on all 3 hosts (reverse_proxy, jellyfin, nextcloud).
+**Proposal**: Add `fail2ban.yml` to `site.yml` after `services.yml` and before `monitoring.yml` (fail2ban must be running before Prometheus scrape targets for fail2ban-exporter come online). Needs testing to confirm idempotency and ordering.
+
+#### 10. Rebuild orchestrator has no Ansible phase
+**Problem**: The rebuild orchestrator (`scripts/rebuild/run-rebuild.sh`) has 5 phases: mounts, restore, iac, services, verify. The `services` phase only runs Terraform (creates LXC containers). There is no phase that runs Ansible playbooks to configure the containers. After a rebuild, the operator must manually run `ansible-playbook playbooks/site.yml` (and `fail2ban.yml`, see candidate 9) to restore all service configuration, monitoring, alerting, dashboards, and fail2ban.
+**Proposal**: Add an `ansible` phase to the rebuild orchestrator (after `services`, before `verify`) that runs `site.yml` + `fail2ban.yml` against the freshly provisioned containers. Requires vault password access during rebuild. Medium-high scope — touches rebuild config, rebuild.sh, and needs careful ordering and error handling.
+
+#### 11. Ansible vault bootstrap
 **Problem**: Secrets had to be manually generated and added to a vault file. The vault password file had to be manually placed at the correct path. There was no vault file at all until nextcloud needed one.
 **Proposal**: `task service:scaffold` generates a vault template with placeholder values and instructions. `task vault:init` creates the vault password file at the expected path if it doesn't exist. Document the vault password location in the onboarding checklist.
