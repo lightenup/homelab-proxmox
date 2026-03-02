@@ -46,6 +46,7 @@ smtp_require_tls: true
 smtp_port: 587
 # smtp_server, smtp_username, smtp_password, smtp_from_address, alert_email_recipient → vault.yml
 # pushover_user_key, pushover_api_token → vault.yml (when pushover_enabled=true)
+pushover_enabled: true
 
 # Backup configuration
 backup_retention_days: 30

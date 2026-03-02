@@ -10,6 +10,7 @@ nextcloud_nfs_mount: "/mnt/nextcloud"
 nextcloud_domain: "nextcloud.hus-sky.no"
 nextcloud_trusted_domains_extra:
   - "nextcloud.local"
+  - "nextcloud_app"
 nextcloud_overwrite_protocol: "https"
 nextcloud_require_nas_mount: true
 nextcloud_admin_user: "admin"
