@@ -68,3 +68,14 @@ grafana_provisioning_path: "{{ monitoring_base_path }}/grafana/provisioning"
 grafana_dashboards_path: "{{ monitoring_base_path }}/grafana/dashboards"
 snmp_config_path: "{{ monitoring_base_path }}/snmp"
 alertmanager_config_path: "{{ monitoring_base_path }}/alertmanager"
+
+# Blackbox exporter configuration
+# Feature: 042-monitoring-tier-c (FR-001, FR-003)
+blackbox_exporter_version: "v0.28.0"
+blackbox_exporter_port: 9115
+blackbox_https_targets:
+  - "https://grafana.hus-sky.no"
+  - "https://immich.hus-sky.no"
+  - "https://nextcloud.hus-sky.no"
+  - "https://jellyfin.hus-sky.no"
+  - "https://adguard.hus-sky.no"

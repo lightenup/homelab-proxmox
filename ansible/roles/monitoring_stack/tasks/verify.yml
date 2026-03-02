@@ -10,6 +10,7 @@
     - name: grafana
     - name: telegraf
     - name: alertmanager
+    - name: blackbox-exporter
 
 - name: Wait for monitoring ports to be listening
   ansible.builtin.wait_for:
@@ -26,6 +27,8 @@
       port: "{{ telegraf_port }}"
     - name: alertmanager
       port: "{{ alertmanager_port }}"
+    - name: blackbox-exporter
+      port: "{{ blackbox_exporter_port }}"
 
 - name: Wait for monitoring HTTP endpoints to respond
   ansible.builtin.uri:
@@ -45,3 +48,5 @@
       url: "http://localhost:{{ telegraf_port }}/metrics"
     - name: alertmanager
       url: "http://localhost:{{ alertmanager_port }}/-/ready"
+    - name: blackbox-exporter
+      url: "http://localhost:{{ blackbox_exporter_port }}/metrics"

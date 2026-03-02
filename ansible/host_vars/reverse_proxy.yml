@@ -5,6 +5,14 @@ healthcheck_url:
 healthcheck_profile: both
 healthcheck_expect_status: 200
 
+# fail2ban jail configuration (FR-009, FR-010)
+# Feature: 042-monitoring-tier-c
+fail2ban_jails:
+  - name: sshd
+    maxretry: 5
+    bantime: 3600
+    findtime: 600
+
 # Monitoring contract for Prometheus self-registration (FR-007, US-4)
 monitoring_contract:
   enabled: true
@@ -13,6 +21,9 @@ monitoring_contract:
       port: 9180
       path: "/metrics"
       scrape_interval: "30s"
+    - job_name: "fail2ban-exporter-reverse-proxy"
+      port: 9191
+      path: "/metrics"
   alert_rules:
     - alert: CaddyHighErrorRate
       expr: |

@@ -1,0 +1,12 @@
+---
+# fail2ban Role Default Configuration
+# Feature: 042-monitoring-tier-c (FR-009, FR-013, FR-014)
+
+fail2ban_exporter_version: "0.10.3"
+fail2ban_exporter_port: 9191
+fail2ban_exporter_install_dir: "/opt/fail2ban-exporter"
+fail2ban_exporter_arch: "linux_amd64"
+fail2ban_socket_path: "/var/run/fail2ban/fail2ban.sock"
+fail2ban_sshd_maxretry: 5
+fail2ban_sshd_bantime: 3600
+fail2ban_sshd_findtime: 600

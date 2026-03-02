@@ -5,6 +5,20 @@ healthcheck_url:
 healthcheck_profile: lan
 healthcheck_expect_status: 200
 
+# fail2ban jail configuration (FR-009, FR-010, FR-011)
+# Feature: 042-monitoring-tier-c
+fail2ban_jails:
+  - name: sshd
+    maxretry: 5
+    bantime: 3600
+    findtime: 600
+  - name: nextcloud
+    filter: nextcloud
+    logpath: /mnt/nextcloud/data/nextcloud.log
+    maxretry: 3
+    bantime: 86400
+    findtime: 43200
+
 # Monitoring contract for Prometheus self-registration (FR-014, US-4)
 monitoring_contract:
   enabled: true
@@ -13,6 +27,9 @@ monitoring_contract:
       port: 9205
       path: "/metrics"
       scrape_interval: "90s"
+    - job_name: "fail2ban-exporter-nextcloud"
+      port: 9191
+      path: "/metrics"
   alert_rules:
     - alert: NextcloudDown
       expr: |

@@ -92,6 +92,25 @@ services:
       retries: 3
       start_period: 15s
 
+  blackbox-exporter:
+    container_name: blackbox-exporter
+    image: prom/blackbox-exporter:{{ blackbox_exporter_version }}
+    command:
+      - '--config.file=/etc/blackbox/blackbox.yml'
+    ports:
+      - "{{ blackbox_exporter_port }}:9115"
+    volumes:
+      - {{ blackbox_config_path }}:/etc/blackbox:ro
+    environment:
+      - TZ={{ timezone }}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9115/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
 volumes:
   prometheus_data:
     driver: local

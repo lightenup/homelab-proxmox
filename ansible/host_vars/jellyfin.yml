@@ -5,12 +5,29 @@ healthcheck_url:
 healthcheck_profile: lan
 healthcheck_expect_status: 200
 
+# fail2ban jail configuration (FR-009, FR-010, FR-012)
+# Feature: 042-monitoring-tier-c
+fail2ban_jails:
+  - name: sshd
+    maxretry: 5
+    bantime: 3600
+    findtime: 600
+  - name: jellyfin
+    filter: jellyfin
+    logpath: /var/log/jellyfin/log_*.log
+    maxretry: 3
+    bantime: 86400
+    findtime: 43200
+
 # Monitoring contract for Prometheus self-registration (FR-015, US-5)
 monitoring_contract:
   enabled: true
   scrape_targets:
     - job_name: "jellyfin-exporter"
       port: 9594
+      path: "/metrics"
+    - job_name: "fail2ban-exporter-jellyfin"
+      port: 9191
       path: "/metrics"
   alert_rules: []
   dashboard_file: "grafana/dashboards/jellyfin.json"

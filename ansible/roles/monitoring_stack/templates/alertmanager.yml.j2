@@ -63,3 +63,31 @@ inhibit_rules:
     target_matchers:
       - severity = "warning"
     equal: ['alertname', 'instance']
+
+  # 5. EndpointDown suppresses TLS cert expiry alerts for unreachable endpoints (FR-020)
+  - source_matchers:
+      - alertname = "EndpointDown"
+    target_matchers:
+      - alertname =~ "TLSCert.*"
+    equal: ['instance']
+
+  # 6. EndpointDown suppresses latency alerts for unreachable endpoints (FR-020)
+  - source_matchers:
+      - alertname = "EndpointDown"
+    target_matchers:
+      - alertname = "HighProbeLatency"
+    equal: ['instance']
+
+  # 7. Fail2banDown suppresses ban rate alerts when exporter unreachable (FR-021a)
+  - source_matchers:
+      - alertname = "Fail2banDown"
+    target_matchers:
+      - alertname = "Fail2banHighBanRate"
+    equal: ['instance']
+
+  # 8. Fail2banDown suppresses generic ServiceDown for fail2ban exporter targets (FR-021b)
+  - source_matchers:
+      - alertname = "Fail2banDown"
+    target_matchers:
+      - alertname = "ServiceDown"
+    equal: ['instance']
