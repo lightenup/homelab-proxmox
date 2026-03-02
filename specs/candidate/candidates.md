@@ -126,3 +126,27 @@ Deploying nextcloud required 12 incremental fix commits across ~10 CI runs. Ever
 #### 16. Alertmanager config validation in CI
 **Problem**: Prometheus alert rules are validated with `promtool check rules` during deployment, but the Alertmanager configuration is not validated. A syntax error in `alertmanager.yml.j2` (e.g., bad YAML indentation in a Pushover receiver) would only be caught when Alertmanager fails to start.
 **Proposal**: Add `amtool check-config` to the `validate_alerts.yml` task file, running against the deployed `alertmanager.yml`. Requires `amtool` binary on the monitoring LXC (ships with the Alertmanager Docker image, can be exec'd). Small scope -- one Ansible task.
+
+#### 17. SSH hardening role
+**Problem**: LXC containers are created from Proxmox templates with permissive SSH defaults (root login with password). There is no enforced baseline for SSH configuration across the fleet.
+**Proposal**: Create an `ssh_hardening` Ansible role applied via `lxc_base` that enforces: `PermitRootLogin prohibit-password`, `PasswordAuthentication no`, `MaxAuthTries 3`, `AllowAgentForwarding no`, `X11Forwarding no`. Role deploys `/etc/ssh/sshd_config.d/99-hardening.conf` (drop-in, no clobbering) and restarts `sshd`. Add a monitoring contract alert rule: `node_systemd_unit_state{name="sshd.service"} != 1` to detect sshd crashes post-hardening. Small scope -- one role, one template, one service restart handler.
+
+#### 18. Unattended security updates for LXCs
+**Problem**: Only the Proxmox host has `unattended-upgrades`. The 5 service LXCs receive updates only during manual monthly runs (`update_monthly.yml`). A critical CVE published between monthly runs remains unpatched for up to 30 days.
+**Proposal**: Add `unattended-upgrades` to the `lxc_base` role, configured for security-only updates (aligned with `security_only_repos`). Deploy `/etc/apt/apt.conf.d/50unattended-upgrades` restricting to `Debian-Security` origin, and `/etc/apt/apt.conf.d/20auto-upgrades` enabling daily checks. Add `Unattended-Upgrade::Mail` for notification and `Unattended-Upgrade::Automatic-Reboot "false"` to avoid surprise reboots. Small scope -- two config templates added to `lxc_base`.
+
+#### 19. Proxmox firewall baseline
+**Problem**: The Proxmox host and LXC containers have no proactive firewall. fail2ban provides reactive banning on 3 hosts, but all ports are open by default on all hosts. An accidental service binding to `0.0.0.0` is immediately LAN-exposed.
+**Proposal**: Enable Proxmox's built-in firewall at datacenter + node + container level via Ansible. Define a baseline policy: deny inbound by default, allow SSH (22), allow service ports per container (e.g., 8080 for Nextcloud, 3000 for Grafana), allow Prometheus scrape ports from the monitoring LXC only. Managed via `/etc/pve/firewall/cluster.fw` and per-container `.fw` files. Medium scope -- new role, per-service port definitions in host_vars, integration with Terraform container definitions.
+
+#### 20. Login anomaly alerting (new SSH sessions from unknown IPs)
+**Problem**: fail2ban detects brute-force failures but not successful unauthorized access. A compromised key or leaked password results in a successful login that generates no alert. The first sign of compromise is damage, not the login itself.
+**Proposal**: Deploy Promtail (or Alloy) sidecar on each LXC to ship auth logs (`/var/log/auth.log`) to a Loki instance on the monitoring stack. Create alert rules for: (a) successful SSH login from an IP not in a trusted whitelist, (b) `sudo` commands executed outside expected automation patterns, (c) login outside business hours. Requires: Loki + Promtail containers, one Grafana datasource, LogQL alert rules. Medium-high scope but high security value -- moves from reactive (ban after attack) to proactive (alert on suspicious success).
+
+#### 21. CrowdSec collaborative intrusion prevention
+**Problem**: fail2ban operates independently on each host with local-only ban lists. An attacker that probes one service gets banned on that host but can freely target others. There is no shared threat intelligence across the homelab, and no benefit from community-reported malicious IPs.
+**Proposal**: Replace or supplement fail2ban with CrowdSec on each LXC. CrowdSec provides: (a) shared local ban list across all hosts via the CrowdSec Central API, (b) community blocklists (free tier includes curated IP reputation feeds), (c) bouncers for Caddy (plugin), iptables, and Nextcloud. Deploy CrowdSec agent on each LXC, register with the free CrowdSec Console, install the Caddy bouncer on reverse_proxy. Add a `crowdsec-exporter` scrape target to monitoring contracts for Prometheus metrics. Medium scope -- replaces fail2ban role or runs alongside it.
+
+#### 22. Grafana security overview dashboard
+**Problem**: Security metrics exist (fail2ban bans, blackbox probes, TLS expiry) but are spread across individual service dashboards. There is no single-pane-of-glass view showing the security posture of the homelab.
+**Proposal**: Create a dedicated Grafana dashboard aggregating: (a) fail2ban ban counts and top banned IPs across all hosts, (b) TLS certificate expiry countdown for all endpoints, (c) endpoint availability heatmap, (d) SSH login events (if candidate #20 is implemented), (e) unattended-upgrades status per host (if candidate #18 is implemented). Provisioned via `monitoring_contract.dashboard_file` pattern. Small-medium scope -- one JSON dashboard file, no new data sources required for (a)-(c).
