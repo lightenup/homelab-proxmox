@@ -106,3 +106,23 @@ Deploying nextcloud required 12 incremental fix commits across ~10 CI runs. Ever
 #### 11. Ansible vault bootstrap
 **Problem**: Secrets had to be manually generated and added to a vault file. The vault password file had to be manually placed at the correct path. There was no vault file at all until nextcloud needed one.
 **Proposal**: `task service:scaffold` generates a vault template with placeholder values and instructions. `task vault:init` creates the vault password file at the expected path if it doesn't exist. Document the vault password location in the onboarding checklist.
+
+#### 12. Watchdog / DeadMansSwitch alert
+**Problem**: There is no alert that fires when the alerting pipeline itself is broken. If Prometheus stops evaluating rules, or Alertmanager stops sending notifications, the failure is silent -- no alerts means no alert about missing alerts.
+**Proposal**: Add a `Watchdog` alert rule that always fires (`expr: vector(1)`). Route it to an external heartbeat service (e.g., Healthchecks.io free tier, or Pushover Glances API) that expects a ping every N minutes. If the ping stops, the external service notifies the operator. Requires: (a) one Prometheus rule, (b) one Alertmanager receiver + route, (c) an external heartbeat endpoint. Small scope.
+
+#### 13. Container restart / flapping detection
+**Problem**: `ServiceDown` requires `up == 0` for 2 minutes. A Docker container that crash-loops and restarts every 90 seconds will never trigger it, but is clearly broken. Node reboots also go undetected unless the node stays down for the full `for` duration.
+**Proposal**: (a) Add cAdvisor to the monitoring stack to get `container_start_time_seconds`. Alert on `changes(container_start_time_seconds[10m]) > 2`. (b) For LXC reboots, alert on `changes(node_boot_time_seconds[1h]) > 0`. Medium scope -- cAdvisor is one container + one Prometheus scrape target + two alert rules.
+
+#### 14. Backup job monitoring
+**Problem**: The monitoring stack has a backup cron job (`backup_cron.yml`) but no alert if it fails or misses a scheduled run. A silent backup failure means data loss goes unnoticed until a restore is needed.
+**Proposal**: (a) Add a Prometheus Pushgateway to the monitoring stack. (b) Modify the backup script to push a `backup_last_success_timestamp` metric on completion. (c) Add a `BackupStale` alert: `time() - backup_last_success_timestamp > 86400 * 2` (no successful backup in 48 hours). Alternatively, use `node_textfile_collector` with a timestamp file written by the backup script. Small-medium scope.
+
+#### 15. NFS mount health alerting
+**Problem**: NFS mounts can silently go stale or become read-only. Services that depend on NFS (Nextcloud data, Jellyfin media, monitoring backups) continue running but fail on writes or serve stale data. There is no alert for this condition.
+**Proposal**: (a) Alert on `node_filesystem_readonly{mountpoint=~"/mnt/.*"} == 1` -- catches NFS mounts that flip to read-only. (b) Alert on disappearance of expected mountpoints: `absent(node_filesystem_avail_bytes{mountpoint="/mnt/nextcloud"})` for each known NFS mount. (c) Optionally, a synthetic write-probe (cron job that writes a timestamp file and reads it back, pushing a metric on failure). Small scope for (a) and (b) -- two alert rules.
+
+#### 16. Alertmanager config validation in CI
+**Problem**: Prometheus alert rules are validated with `promtool check rules` during deployment, but the Alertmanager configuration is not validated. A syntax error in `alertmanager.yml.j2` (e.g., bad YAML indentation in a Pushover receiver) would only be caught when Alertmanager fails to start.
+**Proposal**: Add `amtool check-config` to the `validate_alerts.yml` task file, running against the deployed `alertmanager.yml`. Requires `amtool` binary on the monitoring LXC (ships with the Alertmanager Docker image, can be exec'd). Small scope -- one Ansible task.

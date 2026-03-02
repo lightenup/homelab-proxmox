@@ -43,12 +43,15 @@ scrape_configs:
 
   # Infrastructure metrics — one target per service LXC (FR-003, US-1)
   # Iterates over all hosts in the 'services' inventory group via hostvars
+  # Skips hosts whose monitoring_contract is explicitly disabled (not yet provisioned)
   - job_name: 'node-exporter'
     scrape_interval: {{ prometheus_scrape_interval }}
     static_configs:
       - targets:
 {% for host in groups['services'] | default([]) %}
+{% if (hostvars[host].monitoring_contract | default({})).enabled | default(true) %}
           - '{{ hostvars[host].ansible_host }}:{{ node_exporter_port | default(9100) }}'
+{% endif %}
 {% endfor %}
 
   # Application metrics — aggregated from service monitoring contracts (FR-008, US-4)

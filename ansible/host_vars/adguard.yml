@@ -7,7 +7,7 @@ healthcheck_expect_status: 200
 
 # Monitoring contract for Prometheus self-registration (FR-013, US-3)
 monitoring_contract:
-  enabled: true
+  enabled: false  # Re-enable after candidate #8 (AdGuard LXC provisioning)
   scrape_targets:
     - job_name: "adguard-exporter"
       port: 9618

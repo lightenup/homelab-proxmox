@@ -80,4 +80,4 @@ blackbox_https_targets:
   - "https://immich.hus-sky.no"
   - "https://nextcloud.hus-sky.no"
   - "https://jellyfin.hus-sky.no"
-  - "https://adguard.hus-sky.no"
+  # adguard.hus-sky.no — re-enable after candidate #8 (AdGuard LXC provisioning)
