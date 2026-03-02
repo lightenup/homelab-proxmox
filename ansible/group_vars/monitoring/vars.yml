@@ -34,9 +34,8 @@ grafana_admin_user: "admin"
 # Telegraf configuration
 telegraf_port: 9273
 snmp_security_level: "authPriv"
-snmp_auth_protocol: "SHA"
-snmp_priv_protocol: "AES"
-# snmp_username, snmp_auth_password, snmp_priv_password → vault.yml
+# snmp_username, snmp_auth_protocol, snmp_auth_password,
+# snmp_priv_protocol, snmp_priv_password → vault.yml
 
 # Alertmanager configuration
 alertmanager_port: 9093
