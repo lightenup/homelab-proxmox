@@ -43,6 +43,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-04
 - N/A (metrics stored in Prometheus TSDB, already provisioned) (041-monitoring-tier-b)
 - Ansible (YAML), Jinja2 templates, PromQL, Grafana JSON + Prometheus v3.8.1, Grafana 12.3.1, Alertmanager v0.30.0, blackbox_exporter v0.28.0, fail2ban (Debian apt), fail2ban-prometheus-exporter v0.10.3 (042-monitoring-tier-c)
 - Prometheus TSDB (existing, no changes) (042-monitoring-tier-c)
+- Ansible (Jinja2 templates), YAML configuration + Alertmanager v0.30.0 (native `pushover_configs` support), Pushover API (043-alerting-pushover)
+- N/A (configuration change only — no persistent data) (043-alerting-pushover)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -78,9 +80,9 @@ specs/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 043-alerting-pushover: Added Ansible (Jinja2 templates), YAML configuration + Alertmanager v0.30.0 (native `pushover_configs` support), Pushover API
+- 043-alerting-pushover: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 042-monitoring-tier-c: Added Ansible (YAML), Jinja2 templates, PromQL, Grafana JSON + Prometheus v3.8.1, Grafana 12.3.1, Alertmanager v0.30.0, blackbox_exporter v0.28.0, fail2ban (Debian apt), fail2ban-prometheus-exporter v0.10.3
-- 041-monitoring-tier-b: Added Ansible 2.x (YAML/Jinja2), Telegraf TOML, Grafana JSON, Go binaries + Docker (geerlingguy.docker), Telegraf 1.37.0, Prometheus v3.8.1, Grafana 12.3.1
-- 040-monitoring-overhaul: Added Ansible (YAML/Jinja2), Prometheus 3.x PromQL, Grafana 12.x JSON Schema v1 + Ansible roles, Docker Compose, Prometheus node_exporter v1.10.2
 
 
 <!-- MANUAL ADDITIONS START -->

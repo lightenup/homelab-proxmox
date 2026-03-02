@@ -15,6 +15,18 @@ route:
   group_wait: {{ alertmanager_group_wait }}
   group_interval: {{ alertmanager_group_interval }}
   repeat_interval: {{ alertmanager_repeat_interval }}
+{% if pushover_enabled | default(false) | bool %}
+  routes:
+    - receiver: 'pushover-critical'
+      matchers:
+        - severity = "critical"
+      continue: true
+    - receiver: 'pushover-warning'
+      matchers:
+        - severity = "warning"
+      continue: true
+    - receiver: 'email-default'
+{% endif %}
 
 receivers:
   - name: 'email-default'
@@ -31,6 +43,35 @@ receivers:
             <li>{{"{{ .Annotations.summary }}"}}<br/>{{"{{ .Annotations.description }}"}}</li>
           {{"{{ end }}"}}
           </ul>
+{% if pushover_enabled | default(false) | bool %}
+  - name: 'pushover-critical'
+    pushover_configs:
+      - user_key: '{{ pushover_user_key }}'
+        token: '{{ pushover_api_token }}'
+        send_resolved: true
+        priority: '{{"{{ if eq .Status \"firing\" }}2{{ else }}0{{ end }}"}}'
+        retry: {{ pushover_retry_interval }}
+        expire: {{ pushover_expire_duration }}
+        title: '{{"{{ if eq .Status \"firing\" }}"}}[CRITICAL] {{"{{ .GroupLabels.alertname }}"}}{{"{{ else }}"}}[RESOLVED] {{"{{ .GroupLabels.alertname }}"}}{{"{{ end }}"}}'
+        message: |
+          {{"{{ range .Alerts }}"}}
+          {{"{{ .Annotations.summary }}"}}
+          {{"{{ end }}"}}
+        url: '{{ pushover_grafana_url }}'
+
+  - name: 'pushover-warning'
+    pushover_configs:
+      - user_key: '{{ pushover_user_key }}'
+        token: '{{ pushover_api_token }}'
+        send_resolved: true
+        priority: '0'
+        title: '{{"{{ if eq .Status \"firing\" }}"}}[WARNING] {{"{{ .GroupLabels.alertname }}"}}{{"{{ else }}"}}[RESOLVED] {{"{{ .GroupLabels.alertname }}"}}{{"{{ end }}"}}'
+        message: |
+          {{"{{ range .Alerts }}"}}
+          {{"{{ .Annotations.summary }}"}}
+          {{"{{ end }}"}}
+        url: '{{ pushover_grafana_url }}'
+{% endif %}
 
 inhibit_rules:
   # 1. SynologyNASDown inhibits generic ServiceDown for Synology targets (FR-028)

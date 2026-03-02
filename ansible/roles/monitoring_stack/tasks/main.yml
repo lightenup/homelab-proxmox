@@ -21,6 +21,21 @@
   when: monitoring_nfs_enabled | default(true)
   tags: [nfs, backup]
 
+- name: Validate Pushover credentials when enabled
+  ansible.builtin.assert:
+    that:
+      - pushover_user_key is defined
+      - pushover_user_key | length > 0
+      - pushover_api_token is defined
+      - pushover_api_token | length > 0
+    fail_msg: >-
+      Pushover is enabled (pushover_enabled=true) but credentials are missing.
+      Add 'pushover_user_key' and 'pushover_api_token' to
+      ansible/group_vars/monitoring/vault.yml.
+  when: pushover_enabled | default(false) | bool
+  no_log: true
+  tags: [compose, pushover]
+
 - name: Deploy Docker Compose stack
   ansible.builtin.include_tasks: compose_stack.yml
   tags: [compose]

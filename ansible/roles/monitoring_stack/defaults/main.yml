@@ -61,3 +61,10 @@ blackbox_config_path: "{{ monitoring_install_dir }}/blackbox"
 
 # Timezone
 timezone: "Europe/Copenhagen"
+
+# Pushover push notification configuration
+# Feature: 043-alerting-pushover (FR-011, FR-014)
+pushover_enabled: false
+pushover_retry_interval: "1m"
+pushover_expire_duration: "1h"
+pushover_grafana_url: "{{ grafana_protocol | default('https') }}://{{ grafana_domain }}"
