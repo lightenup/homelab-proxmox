@@ -9,7 +9,12 @@ banaction = iptables-multiport
 [{{ jail.name }}]
 enabled = true
 filter = {{ jail.filter | default(jail.name) }}
-logpath = {{ jail.logpath | default('/var/log/auth.log') }}
+{% if jail.backend is defined %}
+backend = {{ jail.backend }}
+{% endif %}
+{% if jail.logpath is defined %}
+logpath = {{ jail.logpath }}
+{% endif %}
 maxretry = {{ jail.maxretry }}
 bantime = {{ jail.bantime }}
 findtime = {{ jail.findtime }}

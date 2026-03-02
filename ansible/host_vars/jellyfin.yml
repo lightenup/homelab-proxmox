@@ -9,12 +9,13 @@ healthcheck_expect_status: 200
 # Feature: 042-monitoring-tier-c
 fail2ban_jails:
   - name: sshd
+    backend: systemd
     maxretry: 5
     bantime: 3600
     findtime: 600
   - name: jellyfin
     filter: jellyfin
-    logpath: /var/log/jellyfin/log_*.log
+    logpath: /var/log/jellyfin/jellyfin*.log
     maxretry: 3
     bantime: 86400
     findtime: 43200
