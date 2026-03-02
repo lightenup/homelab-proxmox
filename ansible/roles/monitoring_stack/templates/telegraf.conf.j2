@@ -76,6 +76,7 @@
   priv_password = "{{ snmp_priv_password }}"
 
   [[inputs.snmp.table]]
+    name = "snmp_synology_disk"
 
     [[inputs.snmp.table.field]]
       name = "diskID"
@@ -114,6 +115,7 @@
   priv_password = "{{ snmp_priv_password }}"
 
   [[inputs.snmp.table]]
+    name = "snmp_synology_volume"
 
     [[inputs.snmp.table.field]]
       name = "raidName"
@@ -156,6 +158,7 @@
   priv_password = "{{ snmp_priv_password }}"
 
   [[inputs.snmp.table]]
+    name = "snmp_synology_network"
 
     [[inputs.snmp.table.field]]
       name = "ifName"
