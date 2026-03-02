@@ -3,6 +3,12 @@
   ansible.builtin.systemd:
     daemon_reload: true
 
+- name: Reload prometheus
+  ansible.builtin.uri:
+    url: "http://localhost:{{ prometheus_port }}/-/reload"
+    method: POST
+    status_code: 200
+
 - name: Restart monitoring stack
   community.docker.docker_compose_v2:
     project_src: "{{ monitoring_install_dir }}"

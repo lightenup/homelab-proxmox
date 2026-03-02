@@ -1,5 +1,5 @@
 # Prometheus alert rules for Synology NAS monitoring
-# Feature: 017-synology-metrics (preserved per FR-019)
+# Feature: 041-monitoring-tier-b (fixes for US-2: job label, metric names, integer comparison)
 # Moved from alerts.yml to alerts/synology_alerts.yml (Feature 040-monitoring-overhaul)
 
 groups:
@@ -15,13 +15,13 @@ groups:
           severity: warning
           component: storage
         annotations:
-          summary: "Synology volume {{ $labels.volume }} usage high"
-          description: "Volume {{ $labels.volume }} is at {{ $value | humanize }}% capacity (threshold: 85%)"
+          summary: "Synology volume {{ $labels.raidName }} usage high"
+          description: "Volume {{ $labels.raidName }} is at {{ $value | humanize }}% capacity (threshold: 85%)"
 
       # FR-005: NAS availability monitoring
       - alert: SynologyNASDown
         expr: |
-          up{job="synology-snmp"} == 0
+          up{job="telegraf-snmp"} == 0
         for: 2m
         labels:
           severity: critical
@@ -30,14 +30,14 @@ groups:
           summary: "Synology NAS unreachable"
           description: "SNMP scrape target {{ $labels.instance }} has been down for more than 2 minutes"
 
-      # FR-008: Disk SMART status (best-effort: dependent on DSM exposing SMART OIDs)
+      # FR-008: Disk SMART status (integer comparison: 1=Normal)
       - alert: SynologyDiskSMARTWarning
         expr: |
-          snmp_synology_disk_status{status!~"Normal|Good"} == 1
+          snmp_synology_disk_status != 1
         for: 5m
         labels:
           severity: warning
           component: disk_health
         annotations:
-          summary: "Synology disk {{ $labels.disk }} health issue"
-          description: "Disk {{ $labels.disk }} reports abnormal SMART status (value: {{ $value }})"
+          summary: "Synology disk {{ $labels.diskID }} health issue"
+          description: "Disk {{ $labels.diskID }} reports abnormal status (value: {{ $value }}, expected: 1=Normal)"

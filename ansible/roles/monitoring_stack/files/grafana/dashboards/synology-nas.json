@@ -1,300 +1,421 @@
 {
-  "title": "Synology NAS Health",
-  "uid": "synology-nas-health",
-  "version": 2,
-  "description": "Core metrics dashboard for Synology NAS monitoring via Telegraf SNMP",
-  "tags": ["synology", "nas", "snmp", "telegraf"],
-  "timezone": "browser",
-  "schemaVersion": 27,
-  "refresh": "30s",
-  "time": {
-    "from": "now-6h",
-    "to": "now"
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
   },
+  "description": "Synology NAS health metrics via Telegraf SNMP — Feature 041-monitoring-tier-b",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
   "panels": [
     {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 1,
-      "type": "stat",
-      "title": "Memory Usage",
-      "description": "RAM usage percentage",
-      "targets": [
-        {
-          "expr": "100 * (1 - (snmp_memAvailReal / snmp_memTotalReal))",
-          "legendFormat": "Memory Used %",
-          "refId": "A"
-        }
-      ],
+      "title": "Volumes",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "color": { "mode": "thresholds" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "green"},
-              {"value": 70, "color": "yellow"},
-              {"value": 85, "color": "red"}
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
             ]
           },
+          "unit": "percent",
           "max": 100,
+          "min": 0,
           "decimals": 1
         }
       },
-      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
-    },
-    {
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
       "id": 2,
-      "type": "stat",
-      "title": "Disk Temperature",
-      "description": "Primary disk temperature",
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "orientation": "horizontal",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
       "targets": [
         {
-          "expr": "snmp_disk1Temp",
-          "legendFormat": "Disk 1 Temp",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "100 * (1 - (snmp_synology_volume_available_bytes / snmp_synology_volume_size_bytes))",
+          "legendFormat": "{{ raidName }}",
           "refId": "A"
         }
       ],
+      "title": "Volume Usage",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "unit": "celsius",
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            {
+              "options": {
+                "1": { "color": "green", "text": "Normal" },
+                "2": { "color": "yellow", "text": "Repairing" },
+                "3": { "color": "yellow", "text": "Migrating" },
+                "4": { "color": "yellow", "text": "Expanding" },
+                "5": { "color": "orange", "text": "Deleting" },
+                "6": { "color": "yellow", "text": "Creating" },
+                "7": { "color": "yellow", "text": "RAID Syncing" },
+                "8": { "color": "yellow", "text": "Parity Checking" },
+                "9": { "color": "yellow", "text": "Assembling" },
+                "10": { "color": "orange", "text": "Canceling" },
+                "11": { "color": "red", "text": "Degraded" },
+                "12": { "color": "red", "text": "Crashed" }
+              },
+              "type": "value"
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"value": 0, "color": "blue"},
-              {"value": 40, "color": "green"},
-              {"value": 50, "color": "yellow"},
-              {"value": 60, "color": "red"}
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 },
+              { "color": "red", "value": 2 }
+            ]
+          },
+          "unit": "none"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "textMode": "auto",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_synology_volume_status",
+          "legendFormat": "{{ raidName }}",
+          "refId": "A"
+        }
+      ],
+      "title": "RAID Status",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 4,
+      "title": "Disks",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Status" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "1": { "color": "green", "text": "Normal" },
+                      "2": { "color": "yellow", "text": "Initialized" },
+                      "3": { "color": "orange", "text": "Not Initialized" },
+                      "4": { "color": "red", "text": "Partition Failed" },
+                      "5": { "color": "red", "text": "Crashed" }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Temperature" },
+            "properties": [
+              { "id": "unit", "value": "celsius" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "blue", "value": null },
+                    { "color": "green", "value": 20 },
+                    { "color": "yellow", "value": 45 },
+                    { "color": "red", "value": 55 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+      "id": 5,
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "Disk", "desc": false }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_synology_disk_status",
+          "legendFormat": "{{ diskID }}",
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_synology_disk_temperature_celsius",
+          "legendFormat": "{{ diskID }}",
+          "refId": "B",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "title": "Disk Health",
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "diskID": "Disk",
+              "Value #A": "Status",
+              "Value #B": "Temperature"
+            },
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "device": true,
+              "instance": true,
+              "job": true,
+              "location": true,
+              "source": true
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "id": 6,
+      "title": "CPU & Memory",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
             ]
           }
         }
       },
-      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0}
-    },
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "Disk Status",
-      "description": "Disk health status (1=Normal)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "id": 7,
+      "options": {
+        "tooltip": { "mode": "single" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
       "targets": [
         {
-          "expr": "snmp_disk1Status",
-          "legendFormat": "Disk 1",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_synology_cpu_usage_percent",
+          "legendFormat": "CPU Usage %",
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "red"},
-              {"value": 1, "color": "green"},
-              {"value": 2, "color": "red"}
-            ]
-          },
-          "mappings": [
-            {"type": 1, "options": {"1": {"text": "Normal", "color": "green"}}},
-            {"type": 1, "options": {"2": {"text": "Initialized", "color": "yellow"}}},
-            {"type": 1, "options": {"3": {"text": "Not Initialized", "color": "orange"}}},
-            {"type": 1, "options": {"4": {"text": "System Partition Failed", "color": "red"}}},
-            {"type": 1, "options": {"5": {"text": "Crashed", "color": "red"}}}
-          ]
-        }
-      },
-      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0}
-    },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "RAID Status",
-      "description": "RAID array health status (1=Normal)",
-      "targets": [
-        {
-          "expr": "snmp_raid1Status",
-          "legendFormat": "RAID 1",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {"value": null, "color": "red"},
-              {"value": 1, "color": "green"},
-              {"value": 2, "color": "yellow"},
-              {"value": 11, "color": "red"}
-            ]
-          },
-          "mappings": [
-            {"type": 1, "options": {"1": {"text": "Normal", "color": "green"}}},
-            {"type": 1, "options": {"2": {"text": "Repairing", "color": "yellow"}}},
-            {"type": 1, "options": {"3": {"text": "Migrating", "color": "yellow"}}},
-            {"type": 1, "options": {"4": {"text": "Expanding", "color": "yellow"}}},
-            {"type": 1, "options": {"5": {"text": "Deleting", "color": "orange"}}},
-            {"type": 1, "options": {"6": {"text": "Creating", "color": "yellow"}}},
-            {"type": 1, "options": {"7": {"text": "RAID Syncing", "color": "yellow"}}},
-            {"type": 1, "options": {"8": {"text": "RAID Parity Checking", "color": "yellow"}}},
-            {"type": 1, "options": {"9": {"text": "RAID Assembling", "color": "yellow"}}},
-            {"type": 1, "options": {"10": {"text": "Canceling", "color": "orange"}}},
-            {"type": 1, "options": {"11": {"text": "Degraded", "color": "red"}}},
-            {"type": 1, "options": {"12": {"text": "Crashed", "color": "red"}}}
-          ]
-        }
-      },
-      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}
-    },
-    {
-      "id": 5,
-      "type": "graph",
       "title": "CPU Usage",
-      "description": "CPU time by type (user, system, idle)",
-      "targets": [
-        {
-          "expr": "rate(snmp_ssCpuRawUser[5m])",
-          "legendFormat": "User CPU",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(snmp_ssCpuRawSystem[5m])",
-          "legendFormat": "System CPU",
-          "refId": "B"
-        },
-        {
-          "expr": "rate(snmp_ssCpuRawIdle[5m])",
-          "legendFormat": "Idle CPU",
-          "refId": "C"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit"
-        }
-      },
-      "yaxes": [
-        {"format": "percentunit", "label": "CPU %"},
-        {"format": "short"}
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}
+      "type": "timeseries"
     },
     {
-      "id": 6,
-      "type": "graph",
-      "title": "Memory Details",
-      "description": "Memory usage breakdown",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "bytes",
+          "min": 0
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "id": 8,
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
       "targets": [
         {
-          "expr": "snmp_memTotalReal",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_memTotalReal * 1024",
           "legendFormat": "Total Memory",
           "refId": "A"
         },
         {
-          "expr": "snmp_memAvailReal",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_memAvailReal * 1024",
           "legendFormat": "Available Memory",
           "refId": "B"
         },
         {
-          "expr": "snmp_memBuffer",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_memBuffer * 1024",
           "legendFormat": "Buffer",
           "refId": "C"
         },
         {
-          "expr": "snmp_memCached",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_memCached * 1024",
           "legendFormat": "Cached",
           "refId": "D"
         }
       ],
+      "title": "Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "id": 9,
+      "title": "Network",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "unit": "deckbytes"
-        }
-      },
-      "yaxes": [
-        {"format": "deckbytes", "label": "Memory (KB)"},
-        {"format": "short"}
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}
-    }
-  ]
-}
-          "legendFormat": "{{disk}}",
-          "refId": "A",
-          "format": "table"
-        },
-        {
-          "expr": "snmp_synology_disk_temperature_celsius",
-          "legendFormat": "{{disk}}",
-          "refId": "B",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "overrides": [
-          {
-            "matcher": {"id": "byName", "options": "Temperature"},
-            "properties": [{"id": "unit", "value": "celsius"}]
-          }
-        ]
-      },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
-    },
-    {
-      "id": 3,
-      "type": "graph",
-      "title": "CPU & Memory Usage",
-      "description": "NAS CPU and RAM utilization over time",
-      "targets": [
-        {
-          "expr": "snmp_synology_cpu_usage_percent",
-          "legendFormat": "CPU",
-          "refId": "A"
-        },
-        {
-          "expr": "100 * (snmp_synology_memory_used_bytes / snmp_synology_memory_total_bytes)",
-          "legendFormat": "Memory",
-          "refId": "B"
-        }
-      ],
-      "yaxes": [
-        {
-          "format": "percent",
-          "min": 0,
-          "max": 100
-        }
-      ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
-    },
-    {
-      "id": 4,
-      "type": "graph",
-      "title": "Network Throughput",
-      "description": "Network interface traffic (bytes in/out)",
-      "targets": [
-        {
-          "expr": "rate(snmp_synology_network_rx_bytes[5m])",
-          "legendFormat": "{{interface}} RX",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(snmp_synology_network_tx_bytes[5m])",
-          "legendFormat": "{{interface}} TX",
-          "refId": "B"
-        }
-      ],
-      "yaxes": [
-        {
-          "format": "Bps",
+          "color": { "mode": "palette-classic" },
+          "unit": "Bps",
           "min": 0
         }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "id": 10,
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(snmp_synology_network_rx_bytes[5m])",
+          "legendFormat": "{{ ifName }} RX",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "rate(snmp_synology_network_tx_bytes[5m])",
+          "legendFormat": "{{ ifName }} TX",
+          "refId": "B"
+        }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      "title": "Network Throughput",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
+      "id": 11,
+      "title": "System",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "s",
+          "decimals": 0
+        }
+      },
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 37 },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "snmp_sysUpTime / 100",
+          "legendFormat": "Uptime",
+          "refId": "A"
+        }
+      ],
+      "title": "System Uptime",
+      "type": "stat"
     }
   ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["synology", "nas", "snmp", "telegraf"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
   },
-  "annotations": {
-    "list": []
-  }
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Synology NAS Health",
+  "uid": "synology-nas-health",
+  "version": 1
 }
