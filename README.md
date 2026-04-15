@@ -9,9 +9,10 @@ Infrastructure-as-code for my Proxmox-based homelab.
 
 See:
 
-- `docs/architecture.md` – overall design.
-- `docs/network-layout.md` – planned network segmentation.
-- `.github/copilot-instructions.md` – how AI assistants should work with this repo.
+- `docs/architecture.md` -- overall design
+- `docs/network-layout.md` -- planned network segmentation
+- `docs/operations/` -- operations manual and topic index
+- `docs/runbooks/` -- step-by-step operational procedures
 
 ## Prerequisites
 
@@ -20,39 +21,12 @@ See:
 - **Proxmox VE** 8.x
 - **go-task** (the `task` command)
 - A `terraform/environments/prod.tfvars` file (see `terraform/terraform.tfvars.example`) with your Proxmox credentials.
+- Proxmox API token for Terraform -- see [API Token Setup](docs/runbooks/proxmox-api-token-setup.md)
 
 Install `task`:
 
 ```bash
 brew install go-task/tap/go-task
-```
-
-### Proxmox User Setup
-
-To allow Terraform to manage resources, create a dedicated API user and token:
-
-1.  **Create User**:
-    *   Datacenter → Permissions → Users → Add
-    *   User name: `terraform`
-    *   Realm: `Proxmox VE authentication server`
-2.  **Create API Token**:
-    *   Datacenter → Permissions → API Tokens → Add
-    *   User: `terraform@pve`
-    *   Token ID: `terraform-token`
-    *   **Uncheck "Privilege Separation"**: This allows the token to inherit the user's permissions. If you leave it checked, you must assign permissions to the token specifically.
-    *   **Save the Secret**: You only see it once.
-3.  **Assign Permissions**:
-    *   Datacenter → Permissions → Add → ACL
-    *   Path: `/`
-    *   User: `terraform@pve`
-    *   Role: `Administrator` (or `PVEAdmin` if available/sufficient)
-    *   Propagate: Checked
-
-Update your local `terraform/environments/prod.tfvars`:
-
-```hcl
-proxmox_api_token_id     = "terraform@pve!terraform-token"
-proxmox_api_token_secret = "YOUR_SECRET_HERE"
 ```
 
 ## Usage
@@ -133,48 +107,25 @@ ansible-playbook playbooks/update_monthly.yml -e "allow_host_reboot=true"
 
 ## Documentation
 
-### Disaster Recovery
-
-Disaster recovery procedures for Immich photo backups and Proxmox configuration backups.
-
-- **Immich DR**: [docs/runbooks/disaster-recovery-drill.md](docs/runbooks/disaster-recovery-drill.md)
-- **Proxmox Backup**: [docs/operations/backups-proxmox-config.md](docs/operations/backups-proxmox-config.md)
-- **Proxmox Restore**: [docs/operations/backups-proxmox-config-restore.md](docs/operations/backups-proxmox-config-restore.md)
-- **Last Drill**: See `scripts/dr/drill-reports/` for execution history
-
-#### Proxmox Configuration Backup (Feature 013)
-
-**Automated daily backups** of Proxmox VE configuration to NAS:
-- **Schedule**: Daily at 2:00 AM via systemd timer
-- **Location**: `192.168.1.109:/volume1/homelab_backups/proxmox/`
-- **Retention**: 30 daily + 12 monthly backups
-- **Contents**: LXC configs, storage config, network config, fstab, IaC artifacts (optional)
-- **Encryption**: Age (age-encryption.org) with public key cryptography
-- **Verification**: Automated post-backup checksum validation
-- **Notifications**: Email alerts on backup failures (Gmail SMTP relay)
-
-**Quick Recovery**:
-1. Mount NAS: `mount -t nfs 192.168.1.109:/volume1/homelab_backups/proxmox /mnt/nas-backup`
-2. Decrypt latest: `age --decrypt -i /root/.age/proxmox-backup.key backup.tar.zst.age > backup.tar.zst`
-3. Extract: `tar --use-compress-program=zstd -xvf backup.tar.zst`
-4. Follow [restore runbook](docs/operations/backups-proxmox-config-restore.md)
-
-**Manual Backup**: `ssh root@192.168.1.112 /usr/local/sbin/proxmox-config-backup`
-
-### Operational Runbooks
-
-- [Monthly Patching](docs/runbooks/monthly-patching.md) - Security updates and reboot orchestration
-- [Tailscale Subnet Router Setup](docs/runbooks/tailscale-setup.md) - Remote access configuration and troubleshooting
-
 ### Architecture & Design
 
-- [Architecture Overview](docs/architecture.md) - Overall system design
-- [Network Layout](docs/network-layout.md) - Network segmentation and VLAN planning
-- [Naming and mDNS](docs/naming-and-mdns.md) - Hostname resolution strategy
-- [Reverse Proxy](docs/reverse-proxy.md) - Caddy reverse proxy configuration
-- [Operations Guide](docs/operations.md) - Day-to-day operational procedures
+- [Architecture Overview](docs/architecture.md) -- overall system design
+- [Network Layout](docs/network-layout.md) -- network segmentation and VLAN planning
+- [Naming and mDNS](docs/naming-and-mdns.md) -- hostname resolution strategy
 
-### Service-Specific
+### Operations
 
-- [Immich Backup/Restore](docs/immich-backup-restore.md) - Photo backup and recovery procedures
-- [Immich Maintenance](docs/immich-maintenance.md) - Routine maintenance tasks
+- [Operations Manual](docs/operations/) -- promotion workflows, CI posture, evidence governance, and topic index
+- [Backups](docs/operations/backups-proxmox-config.md) -- automated daily Proxmox config backup (age-encrypted, NAS-stored)
+- [Restore](docs/operations/backups-proxmox-config-restore.md) -- step-by-step restore procedure
+- [Monitoring](docs/operations/monitoring/quickstart.md) -- Prometheus/Grafana/Alertmanager stack
+
+### Runbooks
+
+- [All Runbooks](docs/runbooks/) -- full index
+- [Monthly Patching](docs/runbooks/monthly-patching.md) -- security updates and reboot orchestration
+- [Disaster Recovery Drill](docs/runbooks/disaster-recovery-drill.md) -- Immich backup recovery from Hetzner S3
+- [Rebuild Orchestrator Restore](docs/runbooks/rebuild-orchestrator-restore.md) -- bare-metal to operational
+- [Tailscale Setup](docs/runbooks/tailscale-setup.md) -- remote access configuration
+- [Immich Maintenance](docs/runbooks/immich-maintenance.md) -- upgrades, troubleshooting, health checks
+- [Reverse Proxy](docs/runbooks/reverse-proxy.md) -- Caddy reverse proxy configuration
