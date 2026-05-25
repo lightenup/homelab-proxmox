@@ -35,7 +35,7 @@ If you are using the rebuild orchestrator (task rebuild:plan / task rebuild:appl
 - Apply runs require an explicit confirmation string even in lab.
 - Network and fstab restores require opt-in flags (`--apply-network`, `--apply-fstab`).
 
-See [docs/operations/rebuild-orchestrator.md](docs/operations/rebuild-orchestrator.md) for usage details.
+See [rebuild-orchestrator.md](rebuild-orchestrator.md) for usage details.
 
 ### 1. Verify Backup Availability
 

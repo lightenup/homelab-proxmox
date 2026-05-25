@@ -13,7 +13,7 @@ Audience: operators running `proxmox-apply` on pi-ci. Goal: keep all automation 
 
 Related:
 
-- LXC gated service deploy workflow: [docs/operations/lxc-deploy-ci.md](docs/operations/lxc-deploy-ci.md)
+- LXC gated service deploy workflow: [ci-deploy.md](ci-deploy.md)
 
 ## Sudoers Policy (ci)
 

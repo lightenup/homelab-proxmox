@@ -334,8 +334,8 @@ For hardware-level access to Proxmox host:
 
 - Feature Specification: `specs/010-patch-management-reboots/spec.md`
 - Implementation Plan: `specs/010-patch-management-reboots/plan.md`
-- Tailscale Mobile Access: `docs/runbooks/tailscale-mobile.md`
-- Immich Backup/Restore: `docs/immich-backup-restore.md`
+- Tailscale Setup: [docs/runbooks/tailscale-setup.md](tailscale-setup.md)
+- Immich Backup/Restore: [docs/runbooks/immich-backup-restore.md](immich-backup-restore.md)
 
 ## Troubleshooting Contacts
 

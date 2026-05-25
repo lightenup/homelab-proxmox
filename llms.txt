@@ -4,6 +4,8 @@
 - README.md
 - docs/architecture.md
 - docs/network-layout.md
+- docs/operations/README.md
+- docs/runbooks/README.md
 
 ## Terraform
 - terraform/providers.tf
@@ -18,5 +20,9 @@
 
 ## CI/CD
 - .github/workflows/ci.yml
-- .github/workflows/deploy.yml
-- .github/copilot-instructions.md
+- .github/workflows/lxc-deploy-lab.yml
+- .github/workflows/lxc-promote-lab.yml
+- .github/workflows/lxc-promote-prod.yml
+- .github/workflows/lxc-apply-prod.yml
+- .github/workflows/lxc-lifecycle.yml
+- .github/workflows/proxmox-apply.yml
