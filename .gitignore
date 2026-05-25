@@ -37,6 +37,7 @@ ansible/playbooks/artifacts/
 **/*.key
 **/*.pem
 ansible/.vault-pass.txt
+sec_pve
 
 # Disaster Recovery drill files (local only)
 scripts/dr/rclone.conf
