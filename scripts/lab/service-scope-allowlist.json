@@ -2,6 +2,9 @@
   "adguard": [
     "module.adguard_lxc"
   ],
+  "financial-scenario": [
+    "module.financial_scenario_lxc"
+  ],
   "homeassistant": [
     "module.homeassistant_lxc"
   ],

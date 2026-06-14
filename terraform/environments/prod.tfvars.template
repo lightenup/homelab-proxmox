@@ -49,7 +49,8 @@ service_ips = {
   immich         = "192.168.1.213/24"
   monitoring     = "192.168.1.214/24"
   jellyfin       = "192.168.1.215/24"
-  nextcloud      = "192.168.1.216/24"
+  nextcloud            = "192.168.1.216/24"
+  financial-scenario   = "192.168.1.217/24"
 }
 
 ssh_public_keys = [

@@ -1,0 +1,39 @@
+---
+- name: Assert GHCR pull credentials are defined
+  ansible.builtin.assert:
+    that:
+      - ghcr_pull_username is defined
+      - ghcr_pull_username | length > 0
+      - ghcr_pull_token is defined
+      - ghcr_pull_token | length > 0
+    fail_msg: >-
+      Missing vault variables: ghcr_pull_username and/or ghcr_pull_token —
+      run 'ansible-vault edit group_vars/services/vault.yml' to add them.
+      These must be a GitHub username and a read:packages PAT for ghcr.io.
+
+- name: Assert MCP bearer token is defined
+  ansible.builtin.assert:
+    that:
+      - financial_scenario_mcp_token is defined
+      - financial_scenario_mcp_token | length > 0
+    fail_msg: >-
+      Missing vault variable: financial_scenario_mcp_token —
+      run 'ansible-vault edit group_vars/services/vault.yml' to add it.
+      Without this token the MCP endpoint would be unauthenticated.
+
+- name: Assert image version is pinned
+  ansible.builtin.assert:
+    that:
+      - financial_scenario_version is defined
+      - financial_scenario_version != ""
+      - financial_scenario_version != "latest"
+    fail_msg: >-
+      financial_scenario_version must be a pinned tag (e.g. "1.0.0"), not empty or "latest".
+
+- name: Check Docker daemon is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+  check_mode: true
+  register: docker_status
+  failed_when: docker_status.failed

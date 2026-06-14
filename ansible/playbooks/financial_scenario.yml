@@ -1,0 +1,13 @@
+---
+- name: Configure base for financial-scenario
+  hosts: financial-scenario
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure financial-scenario
+  hosts: financial-scenario
+  become: true
+  roles:
+    - geerlingguy.docker
+    - financial_scenario
