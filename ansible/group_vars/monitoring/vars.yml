@@ -75,9 +75,12 @@ alertmanager_config_path: "{{ monitoring_base_path }}/alertmanager"
 # Feature: 042-monitoring-tier-c (FR-001, FR-003)
 blackbox_exporter_version: "v0.28.0"
 blackbox_exporter_port: 9115
-blackbox_https_targets:
-  - "https://grafana.hus-sky.no"
-  - "https://immich.hus-sky.no"
-  - "https://nextcloud.hus-sky.no"
-  - "https://jellyfin.hus-sky.no"
-  # adguard.hus-sky.no — re-enable after candidate #8 (AdGuard LXC provisioning)
+# Generated from caddy_services (group_vars/services/vars.yml) — the single source of truth.
+# Add/remove services there; this list follows automatically.
+blackbox_https_targets: >-
+  {{ caddy_services
+     | selectattr('enabled')
+     | selectattr('user_facing')
+     | map(attribute='host')
+     | map('regex_replace', '^(.+)$', 'https://\1.' ~ caddy_base_domain)
+     | list }}

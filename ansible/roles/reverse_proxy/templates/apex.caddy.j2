@@ -1,0 +1,9 @@
+{{ caddy_base_domain }} {
+    root * {{ caddy_landing_root }}
+    file_server
+
+    handle /api/status {
+        rewrite * /api/v1/query?query=probe_success
+        reverse_proxy {{ monitoring_ip }}:9090
+    }
+}

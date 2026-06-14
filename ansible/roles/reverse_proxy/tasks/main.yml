@@ -151,45 +151,48 @@
     state: started
     enabled: true
 
-- name: Deploy Immich Caddy configuration
+- name: Deploy per-service Caddy configurations
   ansible.builtin.template:
-    src: immich.caddy.j2
-    dest: "{{ caddy_conf_dir }}/immich.caddy"
+    src: service.caddy.j2
+    dest: "{{ caddy_conf_dir }}/{{ item.host }}.caddy"
     mode: '0644'
+  loop: "{{ caddy_services | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.host }}"
   notify: Restart caddy
 
-- name: Deploy Nextcloud Caddy configuration
-  ansible.builtin.template:
-    src: nextcloud.caddy.j2
-    dest: "{{ caddy_conf_dir }}/nextcloud.caddy"
-    mode: '0644'
+# Remove site files for services that are no longer enabled (e.g. adguard, ha) so a
+# disabled caddy_services entry tears down its route instead of leaving a dangling backend.
+- name: Remove Caddy configurations for disabled services
+  ansible.builtin.file:
+    path: "{{ caddy_conf_dir }}/{{ item.host }}.caddy"
+    state: absent
+  loop: "{{ caddy_services | rejectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.host }}"
   notify: Restart caddy
 
-- name: Deploy Grafana Caddy configuration
+- name: Ensure landing page web root exists
+  ansible.builtin.file:
+    path: "{{ caddy_landing_root }}"
+    state: directory
+    mode: '0755'
+    owner: caddy
+    group: caddy
+
+- name: Deploy landing page index.html
   ansible.builtin.template:
-    src: grafana.caddy.j2
-    dest: "{{ caddy_conf_dir }}/grafana.caddy"
+    src: index.html.j2
+    dest: "{{ caddy_landing_root }}/index.html"
     mode: '0644'
+    owner: caddy
+    group: caddy
   notify: Restart caddy
 
-- name: Deploy Jellyfin Caddy configuration
+- name: Deploy apex Caddy configuration
   ansible.builtin.template:
-    src: jellyfin.caddy.j2
-    dest: "{{ caddy_conf_dir }}/jellyfin.caddy"
-    mode: '0644'
-  notify: Restart caddy
-
-- name: Deploy AdGuard Caddy configuration
-  ansible.builtin.template:
-    src: adguard.caddy.j2
-    dest: "{{ caddy_conf_dir }}/adguard.caddy"
-    mode: '0644'
-  notify: Restart caddy
-
-- name: Deploy Home Assistant Caddy configuration
-  ansible.builtin.template:
-    src: homeassistant.caddy.j2
-    dest: "{{ caddy_conf_dir }}/homeassistant.caddy"
+    src: apex.caddy.j2
+    dest: "{{ caddy_conf_dir }}/apex.caddy"
     mode: '0644'
   notify: Restart caddy
 

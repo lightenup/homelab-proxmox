@@ -2,7 +2,7 @@
 caddy_conf_dir: /etc/caddy/conf.d
 
 # HTTPS and DNS-01 ACME configuration (FR-001, FR-011, FR-012)
-caddy_base_domain: "hus-sky.no"
+# caddy_base_domain is defined in group_vars/services/vars.yml (shared with monitoring_stack)
 caddy_acme_dns_provider: "domainnameshop"
 caddy_custom_binary: true
 caddy_xcaddy_plugins:
@@ -13,6 +13,9 @@ go_version: "1.22.0"
 
 # Home Assistant conditional flag (FR-015, A-009)
 homeassistant_active: false
+
+# Apex landing page web root (045-landing-page)
+caddy_landing_root: /var/www/hus-sky
 
 # Caddy Prometheus metrics (Feature: 040-monitoring-overhaul, FR-004, R-04)
 # Dedicated metrics-only site block on port 9180 (admin API stays on localhost:2019)

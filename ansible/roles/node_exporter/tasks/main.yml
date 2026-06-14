@@ -38,7 +38,9 @@
     src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
     dest: /tmp/
     remote_src: true
-  when: node_exporter_needs_install
+  # Skipped in check mode: the download above is a no-op under --check, so the
+  # tarball does not exist and unarchive would fail on a dry run.
+  when: node_exporter_needs_install and not ansible_check_mode
 
 - name: Install node_exporter binary
   ansible.builtin.copy:
@@ -48,7 +50,8 @@
     owner: root
     group: root
     remote_src: true
-  when: node_exporter_needs_install
+  # Skipped in check mode: depends on the extracted source, absent on a dry run.
+  when: node_exporter_needs_install and not ansible_check_mode
   notify: Restart node_exporter
 
 - name: Clean up downloaded archive

@@ -1,5 +1,5 @@
-nextcloud.{{ caddy_base_domain }} {
-    reverse_proxy {{ nextcloud_ip }}:{{ nextcloud_port }} {
+{{ item.host }}.{{ caddy_base_domain }} {
+    reverse_proxy {{ item.ip }}:{{ item.port }} {
         header_up X-Forwarded-Proto https
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
