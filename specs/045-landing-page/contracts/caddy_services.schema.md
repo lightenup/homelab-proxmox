@@ -14,9 +14,13 @@ caddy_services:
     port: "{{ immich_port }}" # required (when enabled): backend port  central var, do NOT duplicate
     title: "Immich"         # optional: card heading (default: host, capitalized)
     desc: "Photos"          # optional: card description (default: "")
-    enabled: true           # optional: default true
-    user_facing: true       # optional: default true
+    enabled: true           # required: gates route + probe + card (set explicitly)
+    user_facing: true       # required: gates probe + card (set explicitly)
 ```
+
+> **`enabled`/`user_facing` are set explicitly on every entry.** The generating filters
+> (`selectattr('enabled')`, etc.) read the attribute directly, so an omitted flag fails the
+> deploy rather than defaulting — both booleans are required, not optional.
 
 > **IP/port form**: each entry references the existing central backend vars (`{{ immich_ip }}`,
 > `{{ immich_port }}`, etc.) rather than hard-coding an address. This keeps IP strings defined in
@@ -32,8 +36,8 @@ caddy_services:
 | `port` | yes if `enabled` | — | 1–65535, **as a Jinja ref** to the central var (`"{{ <svc>_port }}"`) |
 | `title` | no | `host \| capitalize` | display only |
 | `desc` | no | `""` | display only |
-| `enabled` | no | `true` | gates route + probe + card |
-| `user_facing` | no | `true` | gates probe + card (not route) |
+| `enabled` | yes | — | bool; gates route + probe + card (read directly — must be present) |
+| `user_facing` | yes | — | bool; gates probe + card (not route) |
 
 ## Behavioural contract (acceptance-testable)
 

@@ -80,7 +80,13 @@
             badge.textContent = state;
           });
         })
-        .catch(function () {});
+        .catch(function () {
+          // Prometheus unreachable: degrade every card back to unknown (FR-010).
+          document.querySelectorAll('.health').forEach(function (badge) {
+            badge.setAttribute('data-state', 'unknown');
+            badge.textContent = 'unknown';
+          });
+        });
     }
     update();
     setInterval(update, 30000);
