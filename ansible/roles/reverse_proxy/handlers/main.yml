@@ -9,3 +9,12 @@
     name: caddy
     state: restarted
   listen: Restart caddy
+
+# Graceful, zero-downtime config reload (caddy reload via systemd ExecReload).
+# Used for config-file changes so the :443 listener is never dropped — a full
+# restart briefly fails the blackbox HTTPS probes and flaps the landing-page health.
+- name: Reload caddy service
+  ansible.builtin.service:
+    name: caddy
+    state: reloaded
+  listen: Reload caddy

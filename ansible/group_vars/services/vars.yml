@@ -57,3 +57,54 @@ homeassistant_port: 8123
 # not in the nextcloud or monitoring roles' scope.
 monitoring_ip: "192.168.1.214"
 grafana_port: 3000
+
+# Shared base domain — single source consumed by reverse_proxy role, monitoring_stack role,
+# and any other role that needs to construct *.hus-sky.no URLs.
+caddy_base_domain: "hus-sky.no"
+
+# Single declarative source for all services (routes, blackbox targets, landing page cards).
+# Fields: host (required), ip/port (required when enabled), title, desc, enabled, user_facing.
+# ip/port MUST reference existing central vars to keep IPs defined in exactly one place.
+caddy_services:
+  - host: grafana
+    ip: "{{ monitoring_ip }}"
+    port: "{{ grafana_port }}"
+    title: "Grafana"
+    desc: "Monitoring dashboards"
+    enabled: true
+    user_facing: true
+  - host: immich
+    ip: "{{ immich_ip }}"
+    port: "{{ immich_port }}"
+    title: "Immich"
+    desc: "Photo library"
+    enabled: true
+    user_facing: true
+  - host: nextcloud
+    ip: "{{ nextcloud_ip }}"
+    port: "{{ nextcloud_port }}"
+    title: "Nextcloud"
+    desc: "Files and collaboration"
+    enabled: true
+    user_facing: true
+  - host: jellyfin
+    ip: "{{ jellyfin_ip }}"
+    port: "{{ jellyfin_port }}"
+    title: "Jellyfin"
+    desc: "Media server"
+    enabled: true
+    user_facing: true
+  - host: adguard
+    ip: "{{ adguard_ip }}"
+    port: "{{ adguard_web_port }}"
+    title: "AdGuard"
+    desc: "DNS ad blocking"
+    enabled: false
+    user_facing: true
+  - host: ha
+    ip: "{{ homeassistant_ip }}"
+    port: "{{ homeassistant_port }}"
+    title: "Home Assistant"
+    desc: "Home automation"
+    enabled: false
+    user_facing: true

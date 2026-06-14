@@ -1,7 +1,0 @@
-jellyfin.{{ caddy_base_domain }} {
-    reverse_proxy {{ jellyfin_ip }}:{{ jellyfin_port }} {
-        header_up X-Forwarded-Proto https
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-    }
-}

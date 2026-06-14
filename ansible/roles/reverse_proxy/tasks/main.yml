@@ -139,7 +139,7 @@
     src: Caddyfile.j2
     dest: /etc/caddy/Caddyfile
     mode: '0644'
-  notify: Restart caddy
+  notify: Reload caddy
 
 - name: Reload systemd before starting Caddy
   ansible.builtin.systemd:
@@ -151,47 +151,62 @@
     state: started
     enabled: true
 
-- name: Deploy Immich Caddy configuration
+- name: Deploy per-service Caddy configurations
   ansible.builtin.template:
-    src: immich.caddy.j2
-    dest: "{{ caddy_conf_dir }}/immich.caddy"
+    src: service.caddy.j2
+    dest: "{{ caddy_conf_dir }}/{{ item.host }}.caddy"
     mode: '0644'
-  notify: Restart caddy
+  loop: "{{ caddy_services | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.host }}"
+  notify: Reload caddy
 
-- name: Deploy Nextcloud Caddy configuration
-  ansible.builtin.template:
-    src: nextcloud.caddy.j2
-    dest: "{{ caddy_conf_dir }}/nextcloud.caddy"
-    mode: '0644'
-  notify: Restart caddy
+# Reconcile conf.d against the desired set so removing/disabling an entry actually
+# tears down its route (SC-003) — not only disabled entries still in caddy_services,
+# but any orphaned *.caddy left from a deleted entry or a prior naming scheme.
+- name: Find existing Caddy site files
+  ansible.builtin.find:
+    paths: "{{ caddy_conf_dir }}"
+    patterns: "*.caddy"
+  register: caddy_existing_files
 
-- name: Deploy Grafana Caddy configuration
-  ansible.builtin.template:
-    src: grafana.caddy.j2
-    dest: "{{ caddy_conf_dir }}/grafana.caddy"
-    mode: '0644'
-  notify: Restart caddy
+- name: Remove Caddy site files not in the desired set
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ caddy_existing_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: (item.path | basename) not in caddy_managed_site_files
+  notify: Reload caddy
+  vars:
+    caddy_managed_site_files: >-
+      {{ (caddy_services | selectattr('enabled') | map(attribute='host')
+          | map('regex_replace', '$', '.caddy') | list) + ['apex.caddy'] }}
 
-- name: Deploy Jellyfin Caddy configuration
-  ansible.builtin.template:
-    src: jellyfin.caddy.j2
-    dest: "{{ caddy_conf_dir }}/jellyfin.caddy"
-    mode: '0644'
-  notify: Restart caddy
+- name: Ensure landing page web root exists
+  ansible.builtin.file:
+    path: "{{ caddy_landing_root }}"
+    state: directory
+    mode: '0755'
+    owner: caddy
+    group: caddy
 
-- name: Deploy AdGuard Caddy configuration
+- name: Deploy landing page index.html
   ansible.builtin.template:
-    src: adguard.caddy.j2
-    dest: "{{ caddy_conf_dir }}/adguard.caddy"
+    src: index.html.j2
+    dest: "{{ caddy_landing_root }}/index.html"
     mode: '0644'
-  notify: Restart caddy
+    owner: caddy
+    group: caddy
+  # No caddy notify: file_server serves this from disk live; no reload needed.
 
-- name: Deploy Home Assistant Caddy configuration
+- name: Deploy apex Caddy configuration
   ansible.builtin.template:
-    src: homeassistant.caddy.j2
-    dest: "{{ caddy_conf_dir }}/homeassistant.caddy"
+    src: apex.caddy.j2
+    dest: "{{ caddy_conf_dir }}/apex.caddy"
     mode: '0644'
-  notify: Restart caddy
+  notify: Reload caddy
 
 - name: Validate full Caddy configuration
   ansible.builtin.command:
