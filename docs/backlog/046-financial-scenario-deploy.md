@@ -2,7 +2,7 @@
 
 **Feature Branch**: `046-financial-scenario-deploy`
 **Created**: 2026-06-14
-**Status**: Draft (Backlog)
+**Status**: Implemented — reconciled against the shipped PFS 045 images (2026-06-18)
 **Input**: User description: "Host the personal-financial-scenarios app (a 3-container Docker stack: FastAPI api, FastMCP server, React/nginx gui) in the homelab by pulling pre-built private images from GHCR onto a new LXC. Tailscale/LAN-only, no public route. MCP exposed over the tailnet behind its auth gate. Further development continues, so this must follow the existing deploy pipeline and conventions exactly — no shortcuts."
 
 ## Summary
@@ -19,6 +19,14 @@ The app's own repo publishes two versioned images to GHCR
 **pulls pinned tags** of those images — it never builds from source on the LXC. The `api` image
 serves both the `api` container and the `mcp` container (same image, different `command`), so the
 Compose stack is three containers from two images.
+
+**Port/proxy model (matches the app's own `docker-compose.yml`):** only the **GUI** container
+publishes a host port; its nginx fronts the stack, proxying `/api`, `/docs`, and `/mcp` to the
+internal `api:8000` and `mcp:8001` services. The `api` and `mcp` containers are **not** published
+directly. The MCP container must run with `MCP_TRANSPORT=http` (it defaults to stdio) and the
+reference-data bind-mount targets `/app/config/reference_data` (where the app actually reads it).
+There is no `/health` endpoint, so container healthchecks use `/docs` (api), a TCP connect (mcp),
+and `/` (gui).
 
 Two deliberate departures from the existing pattern, both first-of-their-kind in this repo:
 
@@ -98,9 +106,10 @@ tools against the real engine — and so that an unauthenticated caller is rejec
 hosting it for remote use is a primary goal, but the stack is useful via the GUI even before MCP
 access is wired, so it ranks below US1/US2.
 
-**Independent Test**: From a tailnet client, call the MCP endpoint at the LXC address with a valid
-bearer token and successfully list/invoke a tool. Repeat with no token / a wrong token and confirm
-the request is rejected.
+**Independent Test**: From a tailnet client, call the MCP endpoint at
+`http://192.168.1.217:<gui_port>/mcp` (the GUI nginx route) with the bearer/`X-MCP-Secret` token and
+successfully list/invoke a tool. Repeat with no token / a wrong token and confirm the request is
+rejected with `401`.
 
 **Acceptance Scenarios**:
 
@@ -108,8 +117,9 @@ the request is rejected.
    tailnet client connects with the correct bearer token, **Then** it can list and invoke MCP tools.
 2. **Given** the auth gate, **When** a client connects without a token or with a wrong token,
    **Then** the request is rejected.
-3. **Given** the LAN/tailnet-only posture, **When** the MCP port is inspected, **Then** it is
-   reachable at the LXC address over LAN/tailnet but has no public route.
+3. **Given** the LAN/tailnet-only posture, **When** the stack's exposure is inspected, **Then** MCP
+   is reachable only via the GUI nginx `/mcp` route over LAN/tailnet (the `mcp` container is not
+   published directly) and has no public route.
 
 ---
 
@@ -163,8 +173,9 @@ the down-alert fires.
   public image.
 - **First deploy vs upgrade**: First deploy has an empty host data dir (must seed); an upgrade
   re-pulls a new tag against an existing data dir (must not clobber). The role must handle both.
-- **MCP without a token configured**: If the MCP auth secret is not in vault, the deploy MUST fail
-  the same way as the GHCR credential check rather than exposing an unauthenticated MCP endpoint.
+- **MCP auth**: The MCP gate is enforced in the GUI image's nginx with a baked-in secret, so there is
+  no vault secret to assert here. The deploy MUST NOT publish the `mcp` container directly (which
+  would expose it unauthenticated); MCP is only reachable through the gated GUI `/mcp` route.
 - **`EXTRACTION_BASE_URL` unset**: There is no LM Studio / LLM in the homelab. The catalog
   AI-ingestion admin feature will be inert; the engine, GUI, and MCP MUST be unaffected. This is an
   accepted limitation, not a failure.
@@ -188,8 +199,9 @@ the down-alert fires.
 - **FR-003**: A new Ansible role `financial_scenario` MUST render
   `templates/docker-compose.yml.j2` describing three services — `api`, `mcp`, `gui` — built from
   **two** pinned GHCR images, where `mcp` reuses the api image with
-  `command: ["python", "-m", "src.mcp_server.server"]`. Image versions MUST be pinned via role/group
-  vars (no `:latest` in the deployed Compose). *(US1)*
+  `command: ["python", "-m", "src.mcp_server.server"]` **and `MCP_TRANSPORT=http` + `MCP_PORT=8001`**
+  (the server defaults to stdio and would otherwise never bind a port). Image versions MUST be pinned
+  via role/group vars (no `:latest` in the deployed Compose). *(US1)*
 - **FR-004**: The role's `tasks/main.yml` MUST: ensure install/data directories exist →
   **authenticate to `ghcr.io`** → template the Compose file → run
   `community.docker.docker_compose_v2` with `pull: always` → `wait_for` the GUI/API health, mirroring
@@ -202,18 +214,25 @@ the down-alert fires.
   `lxc_base` → `geerlingguy.docker` → `financial_scenario`, matching the existing service playbooks.
   *(US1)*
 - **FR-007**: Per-service vars MUST be added to `ansible/group_vars/services/vars.yml`:
-  `financial_scenario_ip` (`192.168.1.217`), `financial_scenario_gui_port`,
-  `financial_scenario_api_port`, `financial_scenario_mcp_port`, and the pinned image
-  tag/version(s). *(US1)*
-- **FR-008**: The GUI and API MUST be reachable at the LXC IP over LAN and tailnet. The service MUST
-  have **no** `caddy_services` entry, **no** Caddy site block, and **no** landing-page card.
-  *(US2)*
-- **FR-009**: The MCP container MUST be exposed at the LXC IP over LAN/tailnet and MUST enforce its
-  bearer-token auth gate (from PFS `044`), with the token supplied from vault. Unauthenticated
-  requests MUST be rejected. *(US3)*
-- **FR-010**: The app's reference-data directory MUST be a host bind-mount (recommended
-  `/opt/financial-scenario-data/reference_data`) seeded on first deploy and preserved across image
-  re-pulls. *(US4)*
+  `financial_scenario_ip` (`192.168.1.217`), `financial_scenario_gui_port` (the **only** published
+  host port — api `8000` and mcp `8001` are internal container ports reached via the GUI nginx), and
+  the pinned image tag (`financial_scenario_version`, currently `0.1.0`). *(US1)*
+- **FR-008**: The GUI MUST be reachable at the LXC IP over LAN and tailnet on the published GUI port;
+  the API MUST be reachable through the GUI nginx proxy (`/api`, `/docs`) at the same address. The
+  service MUST have **no** `caddy_services` entry, **no** Caddy site block, and **no** landing-page
+  card. *(US2)*
+- **FR-009**: The MCP endpoint MUST be reachable at the LXC IP over LAN/tailnet **via the GUI nginx
+  `/mcp` route**, which is where the PFS `044` shared-secret/bearer gate is enforced (single
+  enforcement point at the proxy). Unauthenticated requests MUST be rejected. The `mcp` container
+  MUST NOT be published directly (that would expose an unauthenticated MCP server). **Caveat:** the
+  gate's secret is currently **hard-coded into the GUI image** (`mcp-local-secret`), so it is *not*
+  vault-configurable with the shipped images — a clean per-deploy secret requires a PFS change (see
+  Dependencies). For now the LAN/tailnet-only posture is the primary boundary and the image secret is
+  defense-in-depth. *(US3)*
+- **FR-010**: The app's reference-data directory MUST be a host bind-mount
+  (`/opt/financial-scenario-data/reference_data`) mapped to **`/app/config/reference_data`** (the
+  path the app's `ReferenceDataLoader` actually reads), seeded on first deploy and preserved across
+  image re-pulls. *(US4)*
 - **FR-011**: A `host_vars/financial-scenario.yml` MUST define a `healthcheck_url` (GUI port, path
   `/`) and a `monitoring_contract` providing a **blackbox HTTP liveness probe** of the LXC IP plus a
   down-alert. Because the app exposes no Prometheus exporter, `scrape_targets` is empty/omitted.
@@ -236,10 +255,12 @@ the down-alert fires.
   and `…-gui`, pulled at a pinned `:X.Y.Z` defined in vars.
 - **GHCR pull credential**: `ghcr_pull_username` + `ghcr_pull_token` (`read:packages` PAT) in the
   services vault; the single secret enabling authenticated private pulls.
-- **MCP auth token**: Bearer/shared secret in vault, injected into the `mcp` container, enforcing the
-  044 auth gate.
-- **Reference-data bind-mount**: Host dir mapped into the api/mcp containers; the persistence
-  boundary for catalog/admin edits.
+- **MCP auth secret**: Shared secret/bearer enforced at the GUI nginx `/mcp` route (PFS 044). With
+  the shipped images this secret is **baked into the GUI image** (`mcp-local-secret`), not injected
+  from vault; the `mcp` container itself runs without auth and is never published directly.
+- **Reference-data bind-mount**: Host dir `/opt/financial-scenario-data/reference_data` mapped to
+  `/app/config/reference_data` in the api/mcp containers; the persistence boundary for catalog/admin
+  edits.
 - **Monitoring contract**: `host_vars` healthcheck + blackbox liveness probe + down-alert (no app
   exporter).
 
@@ -269,8 +290,10 @@ the down-alert fires.
 ## Assumptions
 
 - **A-001**: The PFS images exist in GHCR at the pinned tag before this deploy runs (depends on PFS
-  backlog `045`); their coordinates are `ghcr.io/lightenup/financial-scenario-{api,gui}` and they are
-  private.
+  backlog `045`, now **shipped**); their coordinates are
+  `ghcr.io/lightenup/financial-scenario-{api,gui}`, they are confirmed **private**, and the **first
+  published tag is `0.1.0`** (`1.0.0` does not exist). The two images always release together at the
+  same version (045 enforces version coherence), so a single pinned tag drives both.
 - **A-002**: The Proxmox host runs Tailscale as a subnet router advertising `192.168.1.0/24`
   (role `tailscale_router`, `tailscale_subnet_routes: "192.168.1.0/24"`), so tailnet clients reach
   `192.168.1.217` directly with no per-host Tailscale agent on the new LXC.
@@ -301,9 +324,12 @@ the down-alert fires.
 
 ## Dependencies
 
-- **PFS backlog `045` (Publish Service Images to GHCR)** — hard prerequisite; without published
-  private images there is nothing to pull. This spec consumes its image names, the `vX.Y.Z` tag
-  convention, and the `read:packages`-token requirement.
+- **PFS backlog `045` (Publish Service Images to GHCR)** — hard prerequisite; **shipped** (first tag
+  `v0.1.0`, both images private). This spec consumes its image names, the `vX.Y.Z` tag convention,
+  and the `read:packages`-token requirement.
+- **PFS follow-up (new, optional)** — make the MCP nginx shared secret **env-configurable** instead of
+  hard-coded (`mcp-local-secret`) so the homelab can supply a vault-backed per-deploy secret. Until
+  then FR-009 relies on the image-baked secret plus the LAN/tailnet-only posture (D-011).
 - **`039-https-services` / reverse-proxy posture** — only to confirm this service deliberately does
   **not** use it (no Caddy route).
 - **`042`/`043` monitoring stack** — reused for the blackbox liveness probe and alerting (US5).
@@ -316,7 +342,10 @@ the down-alert fires.
 | D-002 | Public route vs LAN/tailnet-only | LAN/tailnet-only; no `caddy_services` entry, no public name. | Personal financial data must not be internet-exposed. The subnet router already makes the LXC IP reachable over the tailnet, so a clean access path exists without a public route. |
 | D-003 | Three images vs two | Two images; `mcp` reuses the api image with a command override. | The app's Compose builds `api` and `mcp` from the same context/target; publishing/pulling two images is the minimal, accurate surface. |
 | D-004 | Private-registry auth (none exists in repo) | Add a vault-backed `community.docker.docker_login` to `ghcr.io`. | First private pull in this repo; an explicit, asserted credential is the sound way to do it, consistent with the repo's vault-assertion convention. |
-| D-005 | Expose MCP or keep internal | Expose MCP over LAN/tailnet behind the 044 bearer-token gate. | Hosting the MCP server for remote AI-assistant use is a primary goal; the auth gate keeps the new surface from being an open compute endpoint. |
+| D-005 | Expose MCP or keep internal | Expose MCP over LAN/tailnet **only through the GUI nginx `/mcp` route**, where the 044 gate lives; never publish `mcp:8001` directly. | Hosting the MCP server for remote AI-assistant use is a primary goal; the 044 gate is a proxy-layer enforcement point, so publishing the container directly would be unauthenticated. |
+| D-010 | Per-service published ports | Publish **only** the GUI port; reach api/mcp via the GUI nginx (`/api`, `/docs`, `/mcp`), mirroring the app's own `docker-compose.yml`. | The shipped images are built for this topology (nginx already proxies all three paths and holds the MCP gate); it minimises surface and is the only correct way to keep MCP authenticated. |
+| D-011 | MCP secret source | Accept the **image-baked** `mcp-local-secret` for now; raise a PFS follow-up to make it env-configurable. | The shipped GUI image hard-codes the secret in nginx; it cannot be vault-injected without a PFS change. LAN/tailnet-only is the primary boundary, so this is acceptable interim defense-in-depth. |
+| D-012 | Health signal (no `/health`) | api → `/docs`; mcp → TCP connect to 8001; gui → `/`. | The app exposes no `/health`; these are the same signals the app's own compose uses. `ENV` stays unset so `/docs` remains enabled. |
 | D-006 | Reference-data persistence | Host bind-mount seeded on first deploy. | The catalog/admin feature writes to reference data; immutable images are re-pulled on upgrade, so a persistent mount is required to avoid data loss. |
 | D-007 | Monitoring shape (no app exporter) | Blackbox HTTP liveness probe + down-alert via `host_vars` `monitoring_contract`; no `scrape_targets`. | The app exposes no `/metrics`; liveness is the honest, available signal and matches the existing monitoring contract mechanism. |
 | D-008 | LXC sizing | 2 cores / 2048 MB / 16 GB. | Stateless calc engine + static GUI + MCP; cheap to start, trivially bumped later if profiling shows a need. |
@@ -324,17 +353,13 @@ the down-alert fires.
 
 ## Open Questions
 
-- **Q-001**: Exact port mapping for `gui`, `api`, and `mcp` on the LXC — publish all three on the
-  host network/IP, or only `gui` + `mcp` (with `api` reachable only via the GUI nginx proxy as in the
-  app's Compose)? Resolve during planning by reading the app's `docker-compose.yml` and
-  `services/gui/nginx.conf` (the GUI already proxies `/api`, `/docs`, and `/mcp`).
-- **Q-002**: Should the deployed stack reuse the app's own `docker-compose.yml` shape (GUI nginx
-  fronting `/api` and `/mcp`) so only the GUI port needs publishing, simplifying FR-008/FR-009? This
-  likely reduces exposed ports to one; confirm against the nginx `/mcp` auth-enforcement decision
-  from PFS `044`.
-- **Q-003**: Pin strategy for the image tag var — a single `financial_scenario_version` driving both
-  images (they release together in PFS `045`) vs per-image tags. Single version is simpler if the app
-  repo always tags both together.
-- **Q-004**: Does the blackbox exporter need a new probe *profile* for a plain-HTTP target on a
-  non-standard port/IP (existing probes are HTTPS subdomains), or does an `http_2xx`-style module
-  already exist? Confirm in the `042` blackbox config during planning.
+_All resolved during reconciliation (2026-06-18) against the shipped PFS 045 images._
+
+- **Q-001 / Q-002 (RESOLVED)**: Publish **only the GUI port**; `api` and `mcp` stay internal and are
+  reached through the GUI nginx (`/api`, `/docs`, `/mcp`), exactly as the app's own
+  `docker-compose.yml` does. This is also the only topology that keeps MCP behind its 044 gate (which
+  lives in that nginx). See D-005/D-010.
+- **Q-003 (RESOLVED)**: **Single `financial_scenario_version`** drives both images — PFS 045 enforces
+  version coherence so they always tag together. First/current tag is `0.1.0`.
+- **Q-004 (RESOLVED)**: The `monitoring_stack` blackbox config gained an `http_2xx` module for the
+  plain-HTTP LXC target (added in the implementing commit); no further probe profile is needed.

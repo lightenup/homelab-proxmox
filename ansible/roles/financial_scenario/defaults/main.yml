@@ -1,10 +1,11 @@
 ---
-financial_scenario_version: "1.0.0"
+# Pinned GHCR tag — must match an existing release (PFS 045 first published v0.1.0).
+financial_scenario_version: "0.1.0"
 financial_scenario_install_dir: "/opt/financial-scenario"
 financial_scenario_data_dir: "/opt/financial-scenario-data"
+# Single published host port; the GUI nginx fronts the api and mcp services
+# (/api, /docs, /mcp), so api:8000 and mcp:8001 are internal only.
 financial_scenario_gui_port: 3000
-financial_scenario_api_port: 8000
-financial_scenario_mcp_port: 8001
 financial_scenario_ghcr_registry: "ghcr.io"
 financial_scenario_api_image: "ghcr.io/lightenup/financial-scenario-api"
 financial_scenario_gui_image: "ghcr.io/lightenup/financial-scenario-gui"
