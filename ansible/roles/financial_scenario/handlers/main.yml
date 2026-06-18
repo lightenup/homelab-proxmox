@@ -1,0 +1,5 @@
+---
+- name: Restart financial-scenario
+  community.docker.docker_compose_v2:
+    project_src: "{{ financial_scenario_install_dir }}"
+    state: restarted

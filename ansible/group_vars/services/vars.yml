@@ -12,6 +12,12 @@ docker_install_compose_plugin: true
 docker_compose_package: docker-compose-plugin
 docker_compose_package_state: present
 
+# Financial Scenario Configuration
+# Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.
+financial_scenario_ip: "192.168.1.217"
+financial_scenario_gui_port: 3000
+financial_scenario_version: "0.1.0"
+
 # Immich Configuration
 immich_vmid: 101
 immich_ip: "192.168.1.213"

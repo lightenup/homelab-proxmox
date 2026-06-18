@@ -12,6 +12,7 @@ on:
         type: choice
         options:
           - adguard
+          - financial-scenario
           - homeassistant
           - immich
           - jellyfin

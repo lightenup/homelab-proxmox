@@ -1,0 +1,22 @@
+healthcheck_url:
+  scheme: http
+  port: 3000
+  path: /
+healthcheck_profile: lan
+healthcheck_expect_status: 200
+
+monitoring_contract:
+  enabled: true
+  scrape_targets: []
+  liveness_targets:
+    - job_name: "financial-scenario-gui"
+      url: "http://192.168.1.217:3000/"
+      module: http_2xx
+  alert_rules:
+    - alert: FinancialScenarioDown
+      expr: |
+        probe_success{job="financial-scenario-gui"} == 0
+      for: "5m"
+      severity: critical
+      summary: !unsafe "financial-scenario is down on {{ $labels.instance }}"
+      description: !unsafe "The financial-scenario GUI has been unreachable for more than 5 minutes (instance: {{ $labels.instance }})."
