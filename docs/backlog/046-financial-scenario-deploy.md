@@ -189,10 +189,16 @@ the down-alert fires.
 
 ### Functional Requirements
 
-- **FR-001**: A new Terraform `module "financial_scenario_lxc"` MUST be declared (modeled on the
-  Immich block in `terraform/main.tf`) using the shared `modules/lxc_service`, with
-  `hostname = "financial-scenario"`, `ip = var.service_ips["financial-scenario"]`, and modest
-  sizing (recommended **2** cores / **2048** MB / **16** GB). *(US1)*
+- **FR-001**: A new **per-service Terraform root** MUST be created at
+  `terraform/services/financial-scenario/` (`main.tf`, `outputs.tf`, `providers.tf`, `variables.tf`,
+  modeled on `terraform/services/homeassistant/`) — the gated `pve-service-deploy` pipeline plans
+  each service from its own root and **fails** if one is missing ("Missing per-service Terraform
+  root"). Its `main.tf` declares `module "financial_scenario_lxc"` using the shared
+  `../../modules/lxc_service`, with `hostname = "financial-scenario"`,
+  `ip = var.service_ips["financial-scenario"]`, and modest sizing (recommended **2** cores /
+  **2048** MB / **16** GB); no LXC mountpoints are needed (reference data is a Docker bind-mount
+  inside the LXC, see FR-010). The matching block in the aggregate `terraform/main.tf` is kept for
+  parity with other services. *(US1)*
 - **FR-002**: `service_ips` MUST gain `financial-scenario = "192.168.1.217/24"` in **both**
   `terraform/environments/lab.tfvars.template` and `prod.tfvars.template` (and the live tfvars).
   *(US1)*
