@@ -216,9 +216,11 @@ the down-alert fires.
   `community.docker.docker_login` task using `ghcr_pull_username` + `ghcr_pull_token` (a
   `read:packages` PAT) stored in `ansible/group_vars/services/vault.yml`. The role MUST `assert`
   these are defined before pulling, failing with a clear remediation message. *(US1)*
-- **FR-006**: A playbook `ansible/playbooks/financial_scenario.yml` MUST apply
+- **FR-006**: A playbook `ansible/playbooks/financial-scenario.yml` MUST apply
   `lxc_base` → `geerlingguy.docker` → `financial_scenario`, matching the existing service playbooks.
-  *(US1)*
+  The filename MUST be the **hyphenated service id** (`<service>.yml`) — the `pve-service-deploy`
+  orchestrator resolves the playbook as `ansible/playbooks/${SERVICE}.yml` and fails otherwise. (The
+  role directory keeps the underscore form, `roles/financial_scenario`.) *(US1)*
 - **FR-007**: Per-service vars MUST be added to `ansible/group_vars/services/vars.yml`:
   `financial_scenario_ip` (`192.168.1.217`), `financial_scenario_gui_port` (the **only** published
   host port — api `8000` and mcp `8001` are internal container ports reached via the GUI nginx), and
