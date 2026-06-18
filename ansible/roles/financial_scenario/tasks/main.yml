@@ -21,6 +21,34 @@
     password: "{{ ghcr_pull_token }}"
   no_log: true
 
+# The compose bind-mount maps the host reference-data dir over the image's
+# baked-in /app/config/reference_data, which would mask the defaults on a first
+# deploy (empty host dir). Seed the host dir from the image once, so the app
+# starts with its reference data and later operator/catalog edits persist.
+- name: Detect whether reference data has been seeded
+  ansible.builtin.find:
+    paths: "{{ financial_scenario_data_dir }}/reference_data"
+    patterns: "*.yaml,*.yml"
+    recurse: true
+  register: financial_scenario_refdata
+
+- name: Pull api image for first-deploy reference-data seeding
+  community.docker.docker_image:
+    name: "{{ financial_scenario_api_image }}:{{ financial_scenario_version }}"
+    source: pull
+  when: financial_scenario_refdata.matched == 0
+
+- name: Seed reference data from the image on first deploy
+  community.docker.docker_container:
+    name: financial-scenario-seed
+    image: "{{ financial_scenario_api_image }}:{{ financial_scenario_version }}"
+    command: ["sh", "-c", "cp -a /app/config/reference_data/. /seed/"]
+    volumes:
+      - "{{ financial_scenario_data_dir }}/reference_data:/seed"
+    detach: false
+    cleanup: true
+  when: financial_scenario_refdata.matched == 0
+
 - name: Deploy docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2

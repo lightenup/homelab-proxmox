@@ -231,17 +231,21 @@ the down-alert fires.
   defense-in-depth. *(US3)*
 - **FR-010**: The app's reference-data directory MUST be a host bind-mount
   (`/opt/financial-scenario-data/reference_data`) mapped to **`/app/config/reference_data`** (the
-  path the app's `ReferenceDataLoader` actually reads), seeded on first deploy and preserved across
-  image re-pulls. *(US4)*
+  path the app's `ReferenceDataLoader` actually reads). Because the bind-mount **masks** the image's
+  baked-in defaults, the role MUST **seed** the host dir from the image when it is empty (first
+  deploy) before starting the stack; on later deploys the existing data (incl. operator/catalog
+  edits) MUST be preserved across image re-pulls. *(US4)*
 - **FR-011**: A `host_vars/financial-scenario.yml` MUST define a `healthcheck_url` (GUI port, path
   `/`) and a `monitoring_contract` providing a **blackbox HTTP liveness probe** of the LXC IP plus a
   down-alert. Because the app exposes no Prometheus exporter, `scrape_targets` is empty/omitted.
   *(US5)*
 - **FR-012**: The service MUST be registered in the gated deploy pipeline by adding
-  `financial-scenario` to the `service` choice options in `.github/workflows/lxc-deploy-lab.yml` and
-  `"financial-scenario": ["module.financial_scenario_lxc"]` to
-  `scripts/lab/service-scope-allowlist.json`. No orchestrator (`python/src/...`) code change is
-  required — it validates `--service` solely against the allowlist. *(US1)*
+  `financial-scenario` to the `service` choice options in `.github/workflows/lxc-deploy-lab.yml`
+  **and in both promotion workflows (`lxc-promote-lab.yml`, `lxc-promote-prod.yml`)** so lab→prod
+  promotion (SC-008) is selectable, plus `"financial-scenario": ["module.financial_scenario_lxc"]`
+  in `scripts/lab/service-scope-allowlist.json` (the single allowlist shared by the deploy and
+  promote workflows). No orchestrator (`python/src/...`) code change is required — it validates
+  `--service` solely against the allowlist. *(US1)*
 - **FR-013**: The deployed Compose MUST leave `EXTRACTION_BASE_URL` unset (or empty); the stack MUST
   start and serve healthy without any external LLM. *(Edge case)*
 - **FR-014**: All changes MUST be deployable both from CI/CD (GitHub Actions, self-hosted runner)
