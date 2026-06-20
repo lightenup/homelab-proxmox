@@ -1,7 +1,5 @@
 ---
 # Defaults for nextcloud role
-nextcloud_version: "32"
-nextcloud_exporter_version: "0.9.0"
 nextcloud_exporter_port: 9205
 nextcloud_port: 8080
 nextcloud_install_dir: "/opt/nextcloud"

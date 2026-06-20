@@ -1,7 +1,7 @@
 # Spec: Consolidate Service Version Variables into group_vars
 
 **Created**: 2026-06-20
-**Status**: Draft (Backlog)
+**Status**: Delivered — `specs/047-consolidate-service-versions/`
 
 ## Summary
 
