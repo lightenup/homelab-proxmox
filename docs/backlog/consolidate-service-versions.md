@@ -5,27 +5,55 @@
 
 ## Summary
 
-Service image versions are currently defined in three different places:
-- `ansible/group_vars/services/vars.yml` — immich, financial-scenario
-- `ansible/group_vars/monitoring/vars.yml` — prometheus, grafana, telegraf, alertmanager, blackbox-exporter
-- `ansible/roles/nextcloud/defaults/main.yml` — nextcloud, nextcloud-exporter
-- `ansible/roles/adguard/defaults/main.yml` — adguard-exporter
+Service image versions are currently split across role `defaults/` files and `group_vars`, meaning a version bump requires knowing which file a given service uses:
 
-This means a version bump requires knowing which file a given service uses, rather than having one canonical place to look.
+| Variable(s) | Current location |
+|---|---|
+| `immich_version`, `financial_scenario_version` | `group_vars/services/vars.yml` ✓ |
+| `prometheus_version`, `grafana_version`, `telegraf_version`, `alertmanager_version`, `blackbox_exporter_version` | `group_vars/monitoring/vars.yml` ✓ |
+| `nextcloud_version`, `nextcloud_exporter_version` | `roles/nextcloud/defaults/main.yml` ✗ |
+| `adguard_exporter_version` | `roles/adguard/defaults/main.yml` ✗ |
 
-The goal is to move all version variables into the appropriate `group_vars` file, so every version pin lives alongside its peers and is visible without opening role internals.
+The goal is to move the three outlier version variables into `group_vars/services/vars.yml` so that all service version pins live in one file and role internals don't need to be opened for routine upgrades.
 
-## Change
+## Changes
 
-1. Move `nextcloud_version` and `nextcloud_exporter_version` from `roles/nextcloud/defaults/main.yml` into `group_vars/services/vars.yml`.
-2. Move `adguard_exporter_version` from `roles/adguard/defaults/main.yml` into `group_vars/services/vars.yml`.
-3. Remove the version variables from the role `defaults/` files (or leave them absent — the group_vars value takes precedence anyway, but removing avoids confusion about which is canonical).
+### 1. `ansible/group_vars/services/vars.yml`
+
+Add a `# Service versions` section at the top of the file (matching the style of `group_vars/monitoring/vars.yml`) containing all service version pins:
+
+```yaml
+# Service versions
+nextcloud_version: "32"
+nextcloud_exporter_version: "0.9.0"
+adguard_exporter_version: "1.2.1"
+# immich_version and financial_scenario_version already present — move into this block
+immich_version: "v2.4.0"
+financial_scenario_version: "0.1.0"
+```
+
+The existing `immich_version` and `financial_scenario_version` entries stay in this file but are relocated into the new section.
+
+### 2. `ansible/roles/nextcloud/defaults/main.yml`
+
+Delete the `nextcloud_version` and `nextcloud_exporter_version` lines entirely. No comment, no placeholder — the role has no default for these; they must be set in inventory.
+
+### 3. `ansible/roles/adguard/defaults/main.yml`
+
+Delete the `adguard_exporter_version` line entirely for the same reason.
 
 ## Out of Scope
 
-- Hardcoded images in compose templates (`mariadb:11`, `redis:7-alpine`) — these use floating minor-version tags and are a separate decision.
-- Digest-pinned images (Immich's Postgres and Valkey entries) — intentionally locked inline for reproducibility; a different upgrade mechanism applies.
+- **Image registry paths** (`financial_scenario_api_image`, `financial_scenario_gui_image`) — stable infrastructure values; left in role `defaults/`.
+- **Hardcoded floating tags** in compose templates (`mariadb:11`, `redis:7-alpine`) — separate decision.
+- **Digest-pinned images** (Immich's Postgres and Valkey) — intentionally locked inline for reproducibility; a different upgrade mechanism applies.
+
+## Verification
+
+1. Run the nextcloud and adguard playbooks against a host and confirm no `undefined variable` errors — proving group_vars is resolved correctly without the role defaults.
+2. Confirm `grep -r "nextcloud_version\|nextcloud_exporter_version\|adguard_exporter_version" ansible/roles/` returns no results.
+3. Confirm all five version pins appear under the `# Service versions` block in `group_vars/services/vars.yml`.
 
 ## Acceptance
 
-After the change, all version bumps are done by editing `group_vars/services/vars.yml` or `group_vars/monitoring/vars.yml` only. No role `defaults/` file needs touching for a routine upgrade.
+After the change, all service version bumps are done by editing `group_vars/services/vars.yml` or `group_vars/monitoring/vars.yml` only. No role `defaults/` file needs touching for a routine upgrade.
