@@ -1,6 +1,5 @@
 ---
 # Defaults for immich role
-immich_version: "v2.4.0"
 immich_port: 2283
 immich_install_dir: "/opt/immich-app"
 immich_data_dir: "/opt/immich-data"

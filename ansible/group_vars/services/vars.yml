@@ -12,11 +12,17 @@ docker_install_compose_plugin: true
 docker_compose_package: docker-compose-plugin
 docker_compose_package_state: present
 
+# Service versions
+nextcloud_version: "32"
+nextcloud_exporter_version: "0.9.0"
+adguard_exporter_version: "1.2.1"
+immich_version: "v2.4.0"
+financial_scenario_version: "0.1.0"
+
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.
 financial_scenario_ip: "192.168.1.217"
 financial_scenario_gui_port: 3000
-financial_scenario_version: "0.1.0"
 
 # Immich Configuration
 immich_vmid: 101
@@ -24,7 +30,6 @@ immich_ip: "192.168.1.213"
 immich_port: 2283
 immich_install_dir: "/opt/immich-app"
 immich_data_dir: "/opt/immich-data"
-immich_version: "v2.4.0"
 immich_external_library_mounts:
   - host_path: "/mnt/immich-external/photo"
     container_path: "/mnt/immich-external/photo"

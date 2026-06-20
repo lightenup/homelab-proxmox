@@ -1,6 +1,5 @@
 ---
 # Pinned GHCR tag — must match an existing release (PFS 045 first published v0.1.0).
-financial_scenario_version: "0.1.0"
 financial_scenario_install_dir: "/opt/financial-scenario"
 financial_scenario_data_dir: "/opt/financial-scenario-data"
 # Single published host port; the GUI nginx fronts the api and mcp services
