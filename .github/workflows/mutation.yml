@@ -1,0 +1,145 @@
+name: Mutation gate
+
+"on":
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Single shared PVE/Pi host: queue per PR branch, never cancel a running job.
+concurrency:
+  group: mutation-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Cheap path guard so non-Python PRs skip the (heavy) self-hosted run while the
+  # required `result` check still reports. Do NOT use a top-level paths: filter —
+  # that would leave a required check permanently pending on non-Python PRs.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect python/** changes
+        id: changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE:-}" ] || [ -z "${HEAD:-}" ]; then
+            # Non-PR dispatch: run by default.
+            echo "run=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base_ref="$(git merge-base "$BASE" "$HEAD")"
+          if git diff --name-only "$base_ref" "$HEAD" | grep -qE '^python/'; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "run=false" >>"$GITHUB_OUTPUT"
+          fi
+
+  mutation:
+    needs: gate
+    if: ${{ needs.gate.outputs.run == 'true' }}
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure rsync/ssh
+        run: |
+          if ! command -v rsync >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y rsync openssh-client
+          fi
+
+      - name: Sync repo to PVE
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'artifacts/' \
+            --exclude '.venv' \
+            --exclude '.mutmut-cache' \
+            ./ ci@pve:/home/ci/homelab-proxmox/
+
+      - name: Prepare mutmut cache on PVE (seed from main baseline)
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          ssh ci@pve bash -s -- "$HEAD_REF" <<'EOF'
+          set -euo pipefail
+          branch="${1:-unknown}"
+          safe_branch="${branch//\//_}"
+          cache_root="/mnt/nas/homelab_ci/mutmut-cache"
+
+          if [ ! -d "/mnt/nas/homelab_ci" ]; then
+            echo "::error::Shared cache mount missing at /mnt/nas/homelab_ci on PVE."
+            exit 1
+          fi
+
+          mkdir -p "$cache_root"
+          cache_path="$cache_root/$safe_branch"
+
+          if [ ! -e "$cache_path" ] && [ -e "$cache_root/main" ]; then
+            echo "Seeding cache for '$safe_branch' from main baseline"
+            cp "$cache_root/main" "$cache_path"
+          fi
+
+          if ! touch "$cache_path"; then
+            echo "::error::Shared cache path is not writable on PVE: $cache_path"
+            exit 1
+          fi
+
+          cd /home/ci/homelab-proxmox
+          rm -f .mutmut-cache
+          ln -sfn "$cache_path" .mutmut-cache
+          ls -la .mutmut-cache
+          EOF
+
+      - name: Prepare Python venv on PVE
+        run: |
+          set -euo pipefail
+          ssh ci@pve 'set -euo pipefail; \
+            if ! command -v uv >/dev/null 2>&1; then \
+              curl -LsSf https://astral.sh/uv/install.sh | sh; \
+            fi; \
+            export PATH="$HOME/.local/bin:$PATH"; \
+            if ! command -v python3.11 >/dev/null 2>&1; then \
+              uv python install 3.11; \
+            fi; \
+            cd /home/ci/homelab-proxmox && \
+            uv venv --python 3.11 && \
+            uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt'
+
+      - name: Run mutation gate on PVE
+        run: |
+          set -euo pipefail
+          ssh ci@pve 'cd /home/ci/homelab-proxmox && \
+            PYTHON_BIN=.venv/bin/python bash scripts/ci/mutmut-threshold.sh'
+
+  # Single required status check. Always runs; passes when mutation was skipped
+  # (non-Python PR) and fails only when the mutation job actually failed.
+  result:
+    needs: [gate, mutation]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate mutation gate
+        run: |
+          set -euo pipefail
+          echo "gate.run=${{ needs.gate.outputs.run }}  mutation.result=${{ needs.mutation.result }}"
+          case "${{ needs.mutation.result }}" in
+            failure|cancelled)
+              echo "::error::Mutation gate failed."
+              exit 1
+              ;;
+            *)
+              echo "Mutation gate OK (skipped or passed)."
+              ;;
+          esac
