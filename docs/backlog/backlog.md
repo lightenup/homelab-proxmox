@@ -10,15 +10,17 @@ Items are listed in intended implementation order.
 | --- | --- | --- | --- |
 | — | [Service landing page at hus-sky.no](./045-landing-page.md) | Draft (Backlog) | Independent; apex landing page generated from `caddy_services`. Not on the PFS path. |
 | ✓ | [Financial-scenario service deploy](./046-financial-scenario-deploy.md) | Implemented (2026-06-18) | Original 3-container deploy of PFS `0.1.0` (stateless). Baseline the v2 deploy builds on. |
-| 1 | [Consolidate service version variables](./consolidate-service-versions.md) | Draft (Backlog) | **Do before 047.** Moves all image-version pins into `group_vars`, so the v2 version bump lands in one canonical place. |
-| 2 | [Financial-scenario v2 deploy (stateful)](./047-financial-scenario-v2-deploy.md) | Draft (Backlog) — high-level | Deploy the new PFS version: new `scenarios.db` persistent volume on `api`, `mcp` becomes a stateless HTTP client. Depends on PFS `046`/`047`. Revisit before implementation. |
+| ✓ | [Consolidate service version variables](./consolidate-service-versions.md) | Delivered (`specs/047-consolidate-service-versions/`) | All image-version pins now live in `group_vars`; the v2 tag bump is a one-line edit there. |
+| 1 | [Financial-scenario v2 deploy (stateful)](./047-financial-scenario-v2-deploy.md) | Ready for planning (detailed spec) | Deploy PFS **`v0.2.2`** (`046`+`047`): host bind-mount `scenarios.db` on `api`, `mcp` → stateless HTTP client, new `financial_scenario_backup` role → Synology NFS. PFS prereqs shipped; open questions resolved. |
+| — | [Migrate host-bind NFS services to in-guest](./migrate-host-bind-mounts-to-in-guest-nfs.md) | Idea (Backlog) — sparse stub | Move **immich** + **nextcloud** off the host-mount + `pct set` bind pattern onto the in-guest NFS pattern (jellyfin/financial-scenario). Removes the fstab/`pct set`/orchestrator seam. Watch uid/gid mapping + DR-orchestrator coupling. |
+| — | [Improvement candidates (consolidated)](./improvement-candidates.md) | Ideas (Backlog) — sparse | Operability / monitoring / security backlog carried over from the retired `specs/candidate/`. Grouped one-liners with Open/Done status. |
 
 ## Sequencing note
 
-The PFS application work lands first in its own repo (`personal-financial-scenarios`):
-**PFS 046 (MCP-as-HTTP-adapter refactor) → PFS 047 (scenario persistence / SQLite)**.
-Only once those ship as a new versioned image pair does the homelab side become actionable.
+The PFS application work landed first in its own repo (`personal-financial-scenarios`):
+**PFS 046 (MCP-as-HTTP-adapter refactor) → PFS 047 (scenario persistence / SQLite)**, released
+together as **`v0.2.2`**. The homelab side is now actionable.
 
-On the homelab side: **consolidate-service-versions → 047 financial-scenario v2 deploy**.
-Consolidation first means the v2 image-tag bump (and every future bump) is a one-line edit in
+On the homelab side: **consolidate-service-versions (✓ delivered) → 047 financial-scenario v2
+deploy**. Consolidation means the v2 image-tag bump (and every future bump) is a one-line edit in
 the canonical `group_vars` location rather than scattered across role defaults.

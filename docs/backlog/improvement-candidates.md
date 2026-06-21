@@ -1,0 +1,75 @@
+# Improvement candidates (consolidated)
+
+Sparse backlog of operability / monitoring / security improvements, carried over from the retired
+`specs/candidate/candidates.md` (full original text in git history). Grouped, one line each. Status:
+**Open** = not started · **Done** = shipped, kept only for context.
+
+## Onboarding & operability
+
+- **Service scaffold generator** — `task service:scaffold` from a per-service `service.yml` manifest;
+  generate the ~17 boilerplate files (Terraform root, Ansible role skeleton, host_vars, playbook
+  import, healthcheck, scope allowlist, workflow option, docs). Extends today’s `service:add`. *Open*
+- **`task deploy:preflight`** — statically validate before any CI run: all Jinja `{{ var }}` refs
+  resolve; files referenced by tasks are git-tracked (catches `.gitignore` exclusions); `service_ips`
+  subnet matches `network_gateway`; `nameserver` set when PVE uses Tailscale; healthcheck script,
+  scope allowlist entry, and workflow option exist. *Open*
+- **NFS root_squash guard + docs** — document the constraint (no `owner:`/`group:` on NFS paths; keep
+  NFS out of Docker-entrypoint `rsync --chown` targets) and lint/preflight flag for it. Caused 3
+  separate nextcloud failures. *Open*
+- **PVE tfvars drift detection** — CI step comparing PVE tfvars *keys* (not values) against the
+  `.tfvars.example` files; flag missing/extra keys. *Done (038-tfvars-template-separation)*
+- **Subnet validation in Terraform** — `validation` block asserting `service_ips` share the gateway’s
+  /24. *Done (037-ci-fresh-deploy-fixes)*
+- **Ansible vault bootstrap** — `task vault:init` to create the vault password file; scaffold a vault
+  template with placeholders + onboarding doc. *Open*
+- **LAB inventory snapshot artifact** — per apply/plan: containers (vmid/hostname/status/IP), per-service
+  evidence pointers, workload-check summary, links to state/evidence. *Open*
+- **DR scripts as a portable bundle** — versioned tarball/task so drills don’t depend on manual copy
+  into `~/dr-drill-sources/` on PVE. *Open*
+- **Prerequisite gating regardless of branch** — allow check-prerequisites on `main` with an explicit
+  hotfix override (currently blocks hotfixes). *Open*
+- **Static prod inventory for config-only deploys** — `services` group in `inventories/prod/hosts.yml`
+  so laptop `ansible-playbook` works without generated inventory. *Done*
+
+## Monitoring gaps
+
+- **Watchdog / dead-man’s-switch** — always-firing `vector(1)` alert routed to an external heartbeat
+  (Healthchecks.io / Pushover Glances) so a broken alert pipeline is itself detected. *Open*
+- **Restart/flapping + reboot detection** — cAdvisor for `container_start_time_seconds`
+  (`changes(...[10m]) > 2`) and `changes(node_boot_time_seconds[1h]) > 0`. *Open*
+- **Backup job monitoring** — Pushgateway (or node textfile collector) + `BackupStale` alert
+  (`time() - backup_last_success_timestamp > 48h`). *Open*
+- **NFS mount health alerting** — `node_filesystem_readonly{mountpoint=~"/mnt/.*"} == 1` and
+  `absent(node_filesystem_avail_bytes{mountpoint="…"})` per known mount. *Open*
+- **Alertmanager config validation in CI** — `amtool check-config` in `validate_alerts.yml`. *Open*
+- **Grafana security overview dashboard** — single pane: fail2ban bans, TLS expiry, availability
+  heatmap, (SSH logins / upgrade status if those candidates land). *Open*
+
+## Security hardening
+
+- **SSH hardening role** — `ssh_hardening` via `lxc_base`: `PermitRootLogin prohibit-password`,
+  `PasswordAuthentication no`, `MaxAuthTries 3`, drop-in config + sshd-alive alert. *Open*
+- **Unattended security updates for LXCs** — `unattended-upgrades` (security-only, no auto-reboot) in
+  `lxc_base`; today only the PVE host has it. *Open*
+- **Proxmox firewall baseline** — datacenter/node/container deny-inbound default + per-service allow
+  rules; integrate with Terraform container defs. *Open*
+- **Login anomaly alerting** — Promtail/Alloy → Loki; alert on successful SSH from non-whitelisted IP,
+  unexpected `sudo`, off-hours login. *Open*
+- **CrowdSec** — replace/supplement fail2ban with shared ban lists + community blocklists + Caddy
+  bouncer; add exporter to monitoring. *Open*
+- **PVE HTTPS via Caddy** — `pve.hus-sky.no` → `reverse_proxy https://192.168.1.112:8006`
+  (`tls_insecure_skip_verify`), DNS rewrite, add to blackbox HTTPS probes. *Open*
+- **AdGuard LXC provisioning** — module `adguard_lxc` is defined but never applied to prod (no
+  container, `adguard.hus-sky.no` probe + exporter have no host). Provision + DNS rewrites. *Open*
+- **fail2ban in `site.yml`** — `fail2ban.yml` is not imported by `site.yml`; a full rebuild leaves
+  fail2ban unconfigured on reverse_proxy/jellyfin/nextcloud. *Open*
+- **Ansible phase in rebuild orchestrator** — add an `ansible` phase (after `services`, before
+  `verify`) running `site.yml` + `fail2ban.yml` so config/monitoring is restored without a manual run.
+  *Open (partial — mount remediation already calls `task ansible:mounts`)*
+
+## Manual steps to eliminate (from prod operations)
+
+- Prod `prod.tfvars` is maintained by hand on PVE (`/var/lib/homelab-proxmox/tfvars/`) incl. the real
+  API token secret; source `TF_VAR_proxmox_api_token_*` from a managed secret store instead.
+  *Done (026-separate-prod-apply / 036-token-privilege-separation)*
+- Manual Proxmox API token rotation/paste + token-ID alignment. *Done (036)*
