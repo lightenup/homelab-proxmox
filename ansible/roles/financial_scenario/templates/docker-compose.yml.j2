@@ -6,6 +6,8 @@
 # the internal api/mcp services. The MCP auth gate is enforced in that nginx
 # layer with an image-baked shared secret (PFS 044), so the mcp service is NEVER
 # published directly — doing so would bypass the gate (unauthenticated MCP).
+#
+# v0.2.2 topology: mcp is a stateless HTTP client of api (single engine authority).
 
 services:
   api:
@@ -14,6 +16,11 @@ services:
     # No host port: reached internally by the gui nginx as api:8000 (/api, /docs).
     volumes:
       - "{{ financial_scenario_data_dir }}/reference_data:/app/config/reference_data"
+      # Persisted scenario store — bind-mount so the backup role can reach scenarios.db
+      # directly on the host. SCENARIOS_DB_PATH is intentionally unset; the app default
+      # /app/data/scenarios.db is correct given this mount. To relocate the DB, set
+      # SCENARIOS_DB_PATH here and change the host path in financial_scenario_data_dir.
+      - "{{ financial_scenario_data_dir }}/scenarios:/app/data"
       - "/etc/localtime:/etc/localtime:ro"
     environment:
       EXTRACTION_BASE_URL: ""
@@ -34,13 +41,17 @@ services:
     # No host port: reached internally by the gui nginx as mcp:8001 (/mcp), which
     # enforces the shared-secret gate. MCP_TRANSPORT=http is REQUIRED — the server
     # defaults to stdio and would otherwise never bind the port.
+    # v0.2.2: mcp is a stateless HTTP client of api; reference_data mount removed.
     volumes:
-      - "{{ financial_scenario_data_dir }}/reference_data:/app/config/reference_data"
       - "/etc/localtime:/etc/localtime:ro"
     environment:
       MCP_TRANSPORT: "http"
       MCP_PORT: "8001"
+      API_BASE_URL: "http://api:8000"
       EXTRACTION_BASE_URL: ""
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       # FastMCP serves /mcp (not /health); a TCP connect is the available signal.

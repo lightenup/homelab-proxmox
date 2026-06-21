@@ -11,3 +11,4 @@
   roles:
     - geerlingguy.docker
     - financial_scenario
+    - financial_scenario_backup

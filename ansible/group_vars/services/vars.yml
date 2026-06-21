@@ -17,12 +17,21 @@ nextcloud_version: "32"
 nextcloud_exporter_version: "0.9.0"
 adguard_exporter_version: "1.2.1"
 immich_version: "v2.4.0"
-financial_scenario_version: "0.1.0"
+financial_scenario_version: "0.2.2"
 
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.
 financial_scenario_ip: "192.168.1.217"
 financial_scenario_gui_port: 3000
+
+# Financial Scenario Backup Configuration
+financial_scenario_backup_path: "/mnt/financial-scenario/backups"
+financial_scenario_backup_nfs_server: "192.168.1.109"
+financial_scenario_backup_nfs_export: "/volume1/homelab_financial_scenario"
+financial_scenario_backup_retention_days: 7
+financial_scenario_backup_retention_weeks: 4
+financial_scenario_backup_retention_months: 6
+financial_scenario_backup_schedule: "*-*-* 04:15:00"
 
 # Immich Configuration
 immich_vmid: 101
