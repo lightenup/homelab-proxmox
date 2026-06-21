@@ -39,8 +39,9 @@ the PFS app and is **not** managed by this repo.
 - **Archive contents**:
   - `scenarios.db` — the consistent snapshot (single file; WAL already merged by the online backup).
   - `docker-compose.yml` — the rendered stack definition for reference.
-- **Destination**: `/mnt/financial-scenario/backups/` (in-guest NFS mount →
-  `192.168.1.109:/volume1/homelab_financial_scenario`).
+- **Destination**: `/mnt/financial-scenario/backups/` — a bind-mount of the host NFS mount
+  `/mnt/nas/homelab_financial_scenario` (← `192.168.1.109:/volume1/homelab_financial_scenario`). See
+  the D-006 correction in research.md (host-mount + bind, not in-guest NFS).
 - **Retention**: GFS — keep `_retention_days` daily, `_retention_weeks` Sundays, `_retention_months`
   first-of-month; same policy shape as `nextcloud_backup`.
 - **Integrity invariant**: a restored `scenarios.db` MUST pass `PRAGMA integrity_check` → `ok`, run via
@@ -53,9 +54,7 @@ Defined in `ansible/group_vars/services/vars.yml` (canonical service-version + s
 | Variable | Value | Notes |
 |----------|-------|-------|
 | `financial_scenario_version` | `"0.2.2"` (was `0.1.0`) | FR-001 |
-| `financial_scenario_backup_path` | `/mnt/financial-scenario/backups` | in-guest NFS target |
-| `financial_scenario_backup_nfs_server` | `192.168.1.109` | Synology |
-| `financial_scenario_backup_nfs_export` | `/volume1/homelab_financial_scenario` | rw export |
+| `financial_scenario_backup_path` | `/mnt/financial-scenario/backups` | in-container bind-mount path |
 | `financial_scenario_backup_retention_days` | `7` | mirror nextcloud/immich |
 | `financial_scenario_backup_retention_weeks` | `4` | |
 | `financial_scenario_backup_retention_months` | `6` | |

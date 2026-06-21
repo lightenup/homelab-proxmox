@@ -25,9 +25,10 @@ financial_scenario_ip: "192.168.1.217"
 financial_scenario_gui_port: 3000
 
 # Financial Scenario Backup Configuration
+# Destination is the in-container path of the host-NFS bind-mount (see
+# service_mountpoints.financial-scenario in the environment tfvars and the
+# /mnt/nas/homelab_financial_scenario host mount in the proxmox_mounts role).
 financial_scenario_backup_path: "/mnt/financial-scenario/backups"
-financial_scenario_backup_nfs_server: "192.168.1.109"
-financial_scenario_backup_nfs_export: "/volume1/homelab_financial_scenario"
 financial_scenario_backup_retention_days: 7
 financial_scenario_backup_retention_weeks: 4
 financial_scenario_backup_retention_months: 6

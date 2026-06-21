@@ -48,28 +48,37 @@ patterns verified against the live codebase. No `NEEDS CLARIFICATION` markers re
 
 ## D-006 / FR-006, FR-007 — Backup-destination mount pattern (NAS → LXC)
 
-- **Decision**: **In-guest NFS mount** (jellyfin pattern): set `features_mount = "nfs"` on the LXC
-  module (FR-007) and mount `192.168.1.109:/volume1/homelab_financial_scenario` →
-  `/mnt/financial-scenario/backups` with opts `rw,nolock,nofail,_netdev,x-systemd.automount` from Ansible
-  (`nolock` is required — a rw NFSv3 mount in an unprivileged LXC otherwise tries to start `rpc.statd`
-  and fails `Operation not permitted`; jellyfin's in-guest mount avoids this only because it is `ro`)
-  (FR-006). **No** PVE `/etc/fstab` entry, **no** `pct set` bind-mount.
-- **Rationale**: Keeps the whole deploy self-contained in Terraform + Ansible and conforms to Spec
-  `023` (no host-path bind mounts in Terraform). The immich/nextcloud host-mount + bind pattern has a
-  manual PVE-fstab seam; the in-guest pattern avoids it. `nofail` + `x-systemd.automount` make the
-  mount resilient to the NAS being unavailable at boot.
-- **Where the mount lives**: performed **inside the `financial_scenario_backup` role**, not via
-  `shared_nfs_mount`. `shared_nfs_mount` is hardcoded `ro` and asserts `SD-003` (read-only) into the
-  evidence pack; it cannot serve a rw destination without conditional branching. A single one-off rw
-  `ansible.builtin.mount` (same opts shape, minus `ro`) in the consuming role is the lower-coupling
-  choice (see plan Complexity Tracking).
-- **`features_mount` application**: the `lxc_service` module declares the feature but the comment notes
-  it is applied host-side by the orchestrator via `pct set` (Tier 2), and `features` is in the module's
-  `ignore_changes`. So the TF edit is image-independent and takes effect through the existing
-  orchestrator post-create step — no LXC recreate.
-- **Operator pre-req (done)**: the Synology share `homelab_financial_scenario` with rw export rules for
-  `192.168.1.217/32` (prod) and `192.168.20.218/32` (lab) was created by the operator on 2026-06-21
-  (out of pipeline; the only manual step). Verify in quickstart with `showmount -e 192.168.1.109`.
+> **CORRECTION (2026-06-21, post-deploy).** The original decision below (in-guest NFS) was **wrong and
+> has been reversed.** It rested on a false premise: that jellyfin performs an in-guest NFS mount via
+> `features_mount = "nfs"` + `shared_nfs_mount`. It does not — jellyfin's media path is a **host
+> bind-mount** (`mp0: /mnt/nas/video,mp=/media/video,ro=1`), and `shared_nfs_mount` silently *skips*
+> because the path is already mounted. There has never been a working in-guest NFS mount in this
+> homelab. Empirically, an **unprivileged LXC cannot perform the NFS `mount(2)` syscall at all**
+> (kernel user-namespace restriction → `Operation not permitted`), regardless of `features_mount`,
+> AppArmor (the container runs `unconfined`), NFS version, or `nolock`. Confirmed on `pve` against
+> container 106 after a reboot.
+>
+> **Reversed decision (now implemented): host-NFS-mount + bind-mount** — the immich/nextcloud/jellyfin
+> pattern (D-006's originally-rejected alternative):
+> - `proxmox_mounts` role mounts `192.168.1.109:/volume1/homelab_financial_scenario` →
+>   `/mnt/nas/homelab_financial_scenario` on the **PVE host** (`rw,nofail`).
+> - `service_mountpoints.financial-scenario` (environment tfvars) bind-mounts that host path →
+>   `/mnt/financial-scenario/backups` in the container; the orchestrator applies it via `pct set` and
+>   reboots the CT (existing Tier-2 `apply_host_path_bind_mounts`). The `/mnt/nas/` prefix is already
+>   on the bind-mount allowlist.
+> - No `features_mount`, no in-guest NFS, no `nolock` (all removed).
+> - Trade-off accepted: this reintroduces the PVE host seam D-006 wanted to avoid (Spec `023`), but that
+>   avoidance is impossible for unprivileged + NFS — the whole fleet already lives with this seam.
+> - **Operator pre-req (updated):** the Synology export for `homelab_financial_scenario` must grant rw to
+>   the **PVE host** `192.168.1.112` (as the immich/nextcloud shares do), not only the container IPs
+>   `192.168.1.217/32` / `192.168.20.218/32`. The host tfvars under `/var/lib/homelab-proxmox/tfvars/`
+>   must also carry the new `service_mountpoints.financial-scenario` block.
+
+*Original (superseded) decision — retained for the record:*
+
+- ~~**In-guest NFS mount** (jellyfin pattern): set `features_mount = "nfs"` and mount the share directly
+  in the LXC with `rw,nolock,nofail,_netdev,x-systemd.automount`, no PVE fstab / no bind-mount.~~
+- ~~Rationale: self-contained in TF+Ansible, conforms to Spec `023`, avoids the host-mount seam.~~
 
 ## D-004 / FR-009 — MCP shared secret stays image-baked
 
