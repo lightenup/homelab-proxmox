@@ -4,4 +4,4 @@
 #
 # PLACEHOLDER: 0.0 disables the gate. Replace with the measured baseline on `main`
 # (run scripts/ci/mutmut-threshold.sh on PVE once) before marking the check required.
-0.0
+41.0
