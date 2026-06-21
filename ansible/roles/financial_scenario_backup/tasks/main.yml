@@ -16,12 +16,17 @@
 # In-guest NFS mount (jellyfin pattern) — rw, resilient to NAS-down at boot.
 # shared_nfs_mount cannot be reused here: it is hardcoded read-only and asserts
 # SD-003 (RO) into the evidence pack.
+#
+# nolock is REQUIRED: a rw NFSv3 mount otherwise tries to start rpc.statd (NSM
+# lock manager), which an unprivileged LXC may not do ("mount.nfs: Operation not
+# permitted"). jellyfin's in-guest mount avoids this only because it is ro.
+# A single-writer backup destination needs no client-side NLM/NSM locking.
 - name: Mount Synology NFS backup share in-guest
   ansible.builtin.mount:
     path: "{{ financial_scenario_backup_path }}"
     src: "{{ financial_scenario_backup_nfs_server }}:{{ financial_scenario_backup_nfs_export }}"
     fstype: nfs
-    opts: "rw,nofail,_netdev,x-systemd.automount"
+    opts: "rw,nolock,nofail,_netdev,x-systemd.automount"
     state: mounted
   notify: Reload systemd
 

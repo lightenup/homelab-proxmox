@@ -7,7 +7,10 @@
 - **Mount** (performed in `financial_scenario_backup` role):
   - src: `192.168.1.109:/volume1/homelab_financial_scenario`
   - target: `/mnt/financial-scenario/backups`
-  - opts: `rw,nofail,_netdev,x-systemd.automount`
+  - opts: `rw,nolock,nofail,_netdev,x-systemd.automount`
+- **`nolock`**: required for a `rw` NFS mount in an unprivileged LXC — without it `mount.nfs`
+  tries to start `rpc.statd` (NSM) and fails with `Operation not permitted`. A single-writer
+  backup destination needs no client-side NLM/NSM locking.
 - **Resilience**: `nofail` + `x-systemd.automount` → NAS-down at boot does not block the LXC.
 - **Contract assertion**: `findmnt --target /mnt/financial-scenario/backups` shows the NFS source,
   rw. `showmount -e 192.168.1.109` lists the export.

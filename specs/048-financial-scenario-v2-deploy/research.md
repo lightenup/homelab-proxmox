@@ -50,7 +50,9 @@ patterns verified against the live codebase. No `NEEDS CLARIFICATION` markers re
 
 - **Decision**: **In-guest NFS mount** (jellyfin pattern): set `features_mount = "nfs"` on the LXC
   module (FR-007) and mount `192.168.1.109:/volume1/homelab_financial_scenario` →
-  `/mnt/financial-scenario/backups` with opts `rw,nofail,_netdev,x-systemd.automount` from Ansible
+  `/mnt/financial-scenario/backups` with opts `rw,nolock,nofail,_netdev,x-systemd.automount` from Ansible
+  (`nolock` is required — a rw NFSv3 mount in an unprivileged LXC otherwise tries to start `rpc.statd`
+  and fails `Operation not permitted`; jellyfin's in-guest mount avoids this only because it is `ro`)
   (FR-006). **No** PVE `/etc/fstab` entry, **no** `pct set` bind-mount.
 - **Rationale**: Keeps the whole deploy self-contained in Terraform + Ansible and conforms to Spec
   `023` (no host-path bind mounts in Terraform). The immich/nextcloud host-mount + bind pattern has a
