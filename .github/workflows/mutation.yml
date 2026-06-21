@@ -114,7 +114,7 @@ jobs:
               uv python install 3.11; \
             fi; \
             cd /home/ci/homelab-proxmox && \
-            uv venv --python 3.11 && \
+            uv venv --python 3.11 --clear && \
             uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt'
 
       - name: Run mutation gate on PVE
