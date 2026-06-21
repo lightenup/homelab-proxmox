@@ -156,10 +156,10 @@ module "financial_scenario_lxc" {
   searchdomain    = var.searchdomain
   ssh_public_keys = join("\n", var.ssh_public_keys)
 
-  # Required for the financial_scenario_backup role to mount the Synology NFS
-  # share in-guest (backup destination). Applied host-side by the orchestrator
-  # via pct set; image-independent (no LXC recreate needed).
-  features_mount = "nfs"
+  # Backup destination is a host-NFS-mount + bind-mount (see service_mountpoints
+  # in the environment tfvars) — the proven fleet pattern. In-guest NFS is NOT
+  # used here: an unprivileged LXC cannot issue the NFS mount syscall (EPERM),
+  # so features_mount = "nfs" would be dead config.
 }
 
 # Baseline example for specs/022-lxc-gated-deploy

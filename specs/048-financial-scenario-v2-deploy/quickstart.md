@@ -3,26 +3,32 @@
 Deploy, upgrade-safety, topology, persistence, backup, and posture verification. Runs through the
 existing gated pipeline (CI or laptop — dual-provisioning parity).
 
-## Prerequisites
+## Prerequisites (operator, one-time)
 
-- Synology NFS share `homelab_financial_scenario` created with rw export for `192.168.1.217/32`
-  (prod) and `192.168.20.218/32` (lab) — **done by operator 2026-06-21**.
-- GHCR pull creds present in `ansible/group_vars/services/vault.yml` (`ghcr_pull_username`,
-  `ghcr_pull_token`).
+Backups use the host-NFS-mount + bind pattern (in-guest NFS is impossible on an unprivileged LXC).
+So, before deploy:
 
-## 0. Apply Terraform (enable in-guest NFS feature)
+- Synology export `homelab_financial_scenario` must grant **rw to the PVE host `192.168.1.112`**
+  (as immich/nextcloud already do). Confirm from the host: `showmount -e 192.168.1.109` lists the share
+  to `192.168.1.112`.
+- Host tfvars `/var/lib/homelab-proxmox/tfvars/{lab,prod}.tfvars` must carry the
+  `service_mountpoints.financial-scenario` block (matching the repo tfvars).
+- GHCR pull creds present in `ansible/group_vars/services/vault.yml`.
+
+## 0. Mount the share on the host, then deploy
 
 ```bash
-# via gated pipeline — sets features_mount = "nfs" on financial_scenario_lxc.
-# Image-independent (LXC feature flag only, applied via pct set by the orchestrator).
+# 1) Host NFS mount (proxmox_mounts role, via the host-config playbook):
+ansible-playbook -i inventories/prod/hosts.yml playbooks/host_proxmox.yml   # mounts /mnt/nas/homelab_financial_scenario
+findmnt /mnt/nas/homelab_financial_scenario                                 # on the PVE host → NFS source
+
+# 2) Service deploy — orchestrator bind-mounts the host path into the container (pct set mpN, CT reboot)
+#    and then runs the financial-scenario playbook (incl. financial_scenario_backup).
 scripts/lab/pve-service-deploy plan  financial-scenario
 scripts/lab/pve-service-deploy apply financial-scenario
-```
 
-From the LXC, confirm the share is visible:
-
-```bash
-showmount -e 192.168.1.109   # lists /volume1/homelab_financial_scenario
+# 3) Confirm the bind-mount landed inside the container:
+#    findmnt --target /mnt/financial-scenario/backups   (run in the LXC) → bind source /mnt/nas/...
 ```
 
 ## 1. Upgrade-safety drill (SC-001) — do this first on a real upgrade

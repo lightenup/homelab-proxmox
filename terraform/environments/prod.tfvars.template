@@ -40,6 +40,12 @@ service_mountpoints = {
       volume = "/mnt/nas/homelab_nextcloud"
     }
   }
+  financial-scenario = {
+    backups = {
+      mp     = "/mnt/financial-scenario/backups"
+      volume = "/mnt/nas/homelab_financial_scenario"
+    }
+  }
 }
 
 service_ips = {

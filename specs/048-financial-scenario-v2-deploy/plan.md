@@ -3,6 +3,15 @@
 **Branch**: `048-financial-scenario-v2-deploy` | **Date**: 2026-06-21 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/048-financial-scenario-v2-deploy/spec.md`
 
+> **CORRECTION (2026-06-21, post-deploy):** The backup-destination design below describes **in-guest
+> NFS** (`features_mount = "nfs"`, an in-role NFS mount). That approach was reversed after LAB deploy
+> proved an unprivileged LXC cannot perform an NFS `mount(2)` syscall (EPERM). The implemented design is
+> **host-NFS-mount + bind-mount** (the immich/nextcloud/jellyfin pattern): `proxmox_mounts` mounts the
+> share on the PVE host, `service_mountpoints.financial-scenario` bind-mounts it in. Wherever this plan
+> says "in-guest NFS" / "features_mount" / "shared_nfs_mount rw", read the corrected design — see the
+> **D-006 correction in research.md** (authoritative). Constitution III still holds: Terraform owns the
+> `service_mountpoints` data; Ansible (`proxmox_mounts`) owns the host mount.
+
 ## Summary
 
 Upgrade the existing financial-scenario deploy from PFS `0.1.0` (stateless 3-container stack) to

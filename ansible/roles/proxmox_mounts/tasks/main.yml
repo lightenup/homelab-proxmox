@@ -29,6 +29,10 @@
         src: 192.168.1.109:/volume1/homelab_dr_test
         opts: rw,nofail
         purpose: "Disaster recovery testing"
+      - path: /mnt/nas/homelab_financial_scenario
+        src: 192.168.1.109:/volume1/homelab_financial_scenario
+        opts: rw,nofail
+        purpose: "Financial-scenario saved-scenario backups"
 
 - name: Mount NAS NFS shares
   ansible.posix.mount:

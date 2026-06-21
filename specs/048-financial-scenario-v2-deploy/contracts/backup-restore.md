@@ -1,19 +1,25 @@
 # Contract: Backup & Restore
 
-## In-guest NFS mount (FR-006/FR-007)
+## Backup destination: host-NFS-mount + bind-mount (FR-006)
 
-- **TF feature flag**: `features_mount = "nfs"` on `financial_scenario_lxc` (applied host-side by the
-  orchestrator via `pct set`; image-independent, no recreate).
-- **Mount** (performed in `financial_scenario_backup` role):
+In-guest NFS is impossible (unprivileged LXC → `mount(2)` EPERM); use the fleet host-mount + bind
+pattern. No `features_mount`.
+
+- **Host NFS mount** (`proxmox_mounts` role, on the PVE host):
   - src: `192.168.1.109:/volume1/homelab_financial_scenario`
-  - target: `/mnt/financial-scenario/backups`
-  - opts: `rw,nolock,nofail,_netdev,x-systemd.automount`
-- **`nolock`**: required for a `rw` NFS mount in an unprivileged LXC — without it `mount.nfs`
-  tries to start `rpc.statd` (NSM) and fails with `Operation not permitted`. A single-writer
-  backup destination needs no client-side NLM/NSM locking.
-- **Resilience**: `nofail` + `x-systemd.automount` → NAS-down at boot does not block the LXC.
-- **Contract assertion**: `findmnt --target /mnt/financial-scenario/backups` shows the NFS source,
-  rw. `showmount -e 192.168.1.109` lists the export.
+  - target: `/mnt/nas/homelab_financial_scenario`
+  - opts: `rw,nofail`
+- **Bind-mount into container** (`service_mountpoints.financial-scenario` in env tfvars; applied by the
+  orchestrator's Tier-2 `apply_host_path_bind_mounts` via `pct set mpN`, container rebooted on first
+  apply):
+  - volume (host): `/mnt/nas/homelab_financial_scenario`
+  - mp (container): `/mnt/financial-scenario/backups`
+- **Resilience**: `nofail` on the host mount → NAS-down at boot blocks neither the PVE host nor the LXC.
+- **Role guard**: `financial_scenario_backup` runs `findmnt --target /mnt/financial-scenario/backups`
+  and fails fast if the bind-mount is absent (prevents backups silently landing in the container rootfs).
+- **Contract assertions**: on the host `findmnt /mnt/nas/homelab_financial_scenario` shows the NFS
+  source; in the container `findmnt --target /mnt/financial-scenario/backups` shows the bind-mount;
+  `showmount -e 192.168.1.109` lists the export to `192.168.1.112`.
 
 ## Backup script contract (`backup_financial_scenario.sh`)
 

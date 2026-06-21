@@ -59,7 +59,7 @@ As the operator, the saved-scenario store is included in the homelab backup regi
 - **First deploy vs. upgrade**: On a brand-new LXC with no existing store, the scenario store must be created by the app itself (idempotent table creation on startup), and the host directory must exist with correct ownership/mode — but the deploy must never seed, copy, or initialise a database file. On upgrade, an existing store must never be clobbered.
 - **Backup under concurrent writes**: Because the store is WAL-mode SQLite, a raw file copy taken during a concurrent write can capture a torn database. The backup must use a consistent online-backup mechanism, not a plain copy.
 - **MCP starts before api**: The MCP container is now a thin client of the api; if it starts before the api is healthy it has no authority to forward to. It must wait for the api to be healthy before starting.
-- **NAS share unavailable at boot**: The in-guest backup mount must not block the LXC from booting if the NAS is temporarily unreachable.
+- **NAS share unavailable at boot**: The host NFS mount (`nofail`) must not block the PVE host or the LXC from booting if the NAS is temporarily unreachable.
 - **Restore validation**: A restored snapshot must pass an integrity check before it is trusted as a recovery source.
 
 ## Requirements *(mandatory)*
@@ -71,9 +71,9 @@ As the operator, the saved-scenario store is included in the homelab backup regi
 - **FR-003**: The deploy MUST rely on the application's default store path rather than overriding it, given the mount point established in FR-002. The override path MUST be documented so a future relocation is a single change.
 - **FR-004**: The deploy MUST reconfigure the MCP service to be a stateless HTTP client of the api: remove its reference-data bind-mount, point it at the api base URL, and make it wait for the api to be healthy before starting, while preserving the transport/port settings the server needs to bind.
 - **FR-005**: The deploy MUST preserve first-deploy-vs-upgrade safety for both stateful stores: keep seed-when-empty logic for reference data (seed from image on first deploy only), and for the scenario store ensure the host directory exists with correct ownership/mode but never seed, copy, or initialise a database file. An existing store MUST NOT be clobbered on upgrade.
-- **FR-006**: The deploy MUST mount the backup destination in-guest (the LXC mounts the NAS share directly), requiring no PVE host fstab entry and no host bind-mount, conforming to the in-guest NFS convention. The mount MUST be resilient to the NAS being unavailable at boot.
-- **FR-007**: The deploy MUST enable in-guest NFS on the LXC (the LXC feature flag required for an unprivileged container to mount NFS in-guest).
-- **FR-008**: The deploy MUST add a backup role plus systemd service/timer mirroring the existing homelab backup roles that: takes a consistent (WAL-safe) online-backup snapshot of the scenario store, archives the snapshot together with a copy of the rendered compose file to the in-guest NAS mount, and applies grandfather-father-son retention with the same policy shape as the existing nextcloud backup.
+- **FR-006**: The deploy MUST make the backup destination available to the container via the **host-NFS-mount + bind-mount** pattern used by the rest of the fleet (immich/nextcloud/jellyfin): the PVE host mounts the NAS share at `/mnt/nas/homelab_financial_scenario`, and the container receives it as a bind-mount at the backup path. The host mount MUST be resilient to the NAS being unavailable at boot (`nofail`). **Superseded the original in-guest-NFS requirement** — see D-006 correction; an unprivileged LXC cannot perform an NFS mount syscall, so in-guest NFS is not an option.
+- **FR-007**: *(Withdrawn.)* The original requirement to enable an in-guest NFS LXC feature flag no longer applies under FR-006's host-mount + bind pattern. No `features_mount` is needed (and it would be dead config).
+- **FR-008**: The deploy MUST add a backup role plus systemd service/timer mirroring the existing homelab backup roles that: takes a consistent (WAL-safe) online-backup snapshot of the scenario store, archives the snapshot together with a copy of the rendered compose file to the bind-mounted NAS destination, and applies grandfather-father-son retention with the same policy shape as the existing nextcloud backup.
 - **FR-009**: The deploy MUST NOT change the exposure posture, the registry pull credential, the GUI-only published-port model, the image-baked MCP shared-secret gate, or the monitoring contract carried over from the prior deploy.
 
 ### Key Entities *(include if feature involves data)*
@@ -99,7 +99,7 @@ As the operator, the saved-scenario store is included in the homelab backup regi
 - The application released as `v0.2.2` behaves as described: MCP is a thin HTTP client of the api, and the api creates and migrates its scenario store idempotently on startup (idempotent table creation, WAL mode, run once at lifespan).
 - The current LXC sizing (2 cores / 2048 MB) remains sufficient now that the api also serves all MCP traffic; the workload is light (one human plus a few agents). Sizing will be confirmed during planning and bumped only if the api shows memory pressure under concurrent saves.
 - The MCP shared secret remains image-baked; making it per-deploy/vault-configurable is out of scope and requires a separate application change.
-- The NAS backup share has already been created by the operator (one-time, outside the codified pipeline) with read/write permission for the LXC IPs; everything downstream is codified and runs through the gated pipeline.
+- The NAS backup share has been created by the operator (one-time, outside the codified pipeline). Because backups now use the host-mount + bind pattern (FR-006), the export MUST grant read/write to the **PVE host** IP `192.168.1.112` (as the immich/nextcloud shares already do), not only the container IPs. The host tfvars (`/var/lib/homelab-proxmox/tfvars/{lab,prod}.tfvars`) must also carry the `service_mountpoints.financial-scenario` entry that the repo tfvars now define. Everything else is codified and runs through the gated pipeline.
 - The backup mechanism uses the application's own SQLite online-backup capability (executed inside the api container) or an equivalent consistent-snapshot path, rather than a raw file copy.
 
 ## Dependencies
@@ -107,7 +107,7 @@ As the operator, the saved-scenario store is included in the homelab backup regi
 - **Application `v0.2.2`** (the single-engine topology + persisted scenario store) — hard prerequisite; the image tag this deploy pins.
 - **Canonical service-version configuration** — already delivered; the pinned version lives in the shared services vars.
 - **The prior financial-scenario deploy** — the baseline this extends (topology, exposure posture, registry pull, monitoring contract).
-- **NAS backup share** (operator pre-requisite, already created) — mounted in-guest by the backup role, modelled on the existing jellyfin NFS mount for the mount and the nextcloud backup for the snapshot/retention/timer.
+- **NAS backup share** (operator pre-requisite) — mounted on the PVE host by the `proxmox_mounts` role and bind-mounted into the container via `service_mountpoints` (immich/nextcloud pattern), with the `nextcloud_backup` role as the model for the snapshot/retention/timer.
 
 ## Out of Scope
 
