@@ -3,7 +3,7 @@
 **Feature Branch**: `047-financial-scenario-v2-deploy`
 **Created**: 2026-06-20
 **Updated**: 2026-06-21 — PFS `0.2.2` shipped (PFS `046`+`047`); open questions resolved, decisions locked.
-**Status**: Ready for planning — detailed spec (was: high-level draft)
+**Status**: Delivered → `specs/048-financial-scenario-v2-deploy/`
 **Input**: Host the next version of the `personal-financial-scenarios` app (released as **`v0.2.2`**),
 which introduces (1) a single-engine topology where the MCP server is a thin HTTP client of the api
 (PFS `046`) and (2) a persisted scenario store backed by SQLite on the api service (PFS `047`).

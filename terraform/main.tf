@@ -155,6 +155,11 @@ module "financial_scenario_lxc" {
   nameserver      = var.nameserver
   searchdomain    = var.searchdomain
   ssh_public_keys = join("\n", var.ssh_public_keys)
+
+  # Required for the financial_scenario_backup role to mount the Synology NFS
+  # share in-guest (backup destination). Applied host-side by the orchestrator
+  # via pct set; image-independent (no LXC recreate needed).
+  features_mount = "nfs"
 }
 
 # Baseline example for specs/022-lxc-gated-deploy

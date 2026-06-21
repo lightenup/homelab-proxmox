@@ -14,6 +14,17 @@
     state: directory
     mode: '0755'
 
+# The api container runs as root (confirmed by 046 persisting reference-data writes
+# to a root-owned 0755 dir). Never seed, copy, or initialise a .db file here —
+# the app creates and migrates scenarios.db idempotently on startup.
+- name: Ensure scenario store directory exists
+  ansible.builtin.file:
+    path: "{{ financial_scenario_data_dir }}/scenarios"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
 - name: Authenticate to GHCR
   community.docker.docker_login:
     registry_url: "{{ financial_scenario_ghcr_registry }}"

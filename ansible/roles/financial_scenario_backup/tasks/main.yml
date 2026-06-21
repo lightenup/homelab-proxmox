@@ -1,0 +1,71 @@
+---
+- name: Install NFS client
+  ansible.builtin.apt:
+    name:
+      - nfs-common
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure backup mount target exists
+  ansible.builtin.file:
+    path: "{{ financial_scenario_backup_path }}"
+    state: directory
+    mode: '0755'
+
+# In-guest NFS mount (jellyfin pattern) — rw, resilient to NAS-down at boot.
+# shared_nfs_mount cannot be reused here: it is hardcoded read-only and asserts
+# SD-003 (RO) into the evidence pack.
+- name: Mount Synology NFS backup share in-guest
+  ansible.builtin.mount:
+    path: "{{ financial_scenario_backup_path }}"
+    src: "{{ financial_scenario_backup_nfs_server }}:{{ financial_scenario_backup_nfs_export }}"
+    fstype: nfs
+    opts: "rw,nofail,_netdev,x-systemd.automount"
+    state: mounted
+  notify: Reload systemd
+
+- name: Deploy backup script
+  ansible.builtin.template:
+    src: backup_financial_scenario.sh.j2
+    dest: /usr/local/bin/backup_financial_scenario.sh
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Create systemd service for financial-scenario backup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/financial-scenario-backup.service
+    content: |
+      [Unit]
+      Description=Financial Scenario Backup Service
+      After=docker.service network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/backup_financial_scenario.sh
+      User=root
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Create systemd timer for financial-scenario backup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/financial-scenario-backup.timer
+    content: |
+      [Unit]
+      Description=Run financial-scenario backup daily
+
+      [Timer]
+      OnCalendar={{ financial_scenario_backup_schedule }}
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Enable and start financial-scenario backup timer
+  ansible.builtin.systemd:
+    name: financial-scenario-backup.timer
+    state: started
+    enabled: true
