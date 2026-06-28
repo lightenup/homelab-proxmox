@@ -121,6 +121,13 @@ caddy_services:
     desc: "Media server"
     enabled: true
     user_facing: true
+  - host: market-model
+    ip: "{{ market_model_ip }}"
+    port: "{{ market_model_api_port }}"
+    title: "Market Model"
+    desc: "Market path-set API"
+    enabled: true
+    user_facing: true
   - host: adguard
     ip: "{{ adguard_ip }}"
     port: "{{ adguard_web_port }}"
