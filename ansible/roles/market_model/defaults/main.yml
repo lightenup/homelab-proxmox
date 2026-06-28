@@ -1,0 +1,6 @@
+---
+# Pinned GHCR tag — must match an existing release (never empty or "latest").
+market_model_install_dir: "/opt/market-model"
+market_model_data_dir: "/opt/market-model-data"
+market_model_ghcr_registry: "ghcr.io"
+market_model_image: "ghcr.io/lightenup/market-model"

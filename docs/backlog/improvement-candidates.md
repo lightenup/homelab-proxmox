@@ -26,6 +26,10 @@ Sparse backlog of operability / monitoring / security improvements, carried over
   evidence pointers, workload-check summary, links to state/evidence. *Open*
 - **DR scripts as a portable bundle** — versioned tarball/task so drills don’t depend on manual copy
   into `~/dr-drill-sources/` on PVE. *Open*
+- **Cheaper off-site backup target for NAS** — evaluate replacing Hetzner object storage (current DR
+  off-site target in `scripts/dr/`) with a cheaper provider (e.g. Hetzner Storage Box, Backblaze B2,
+  Cloudflare R2); compare per-GB + egress cost, rclone backend support, and DR-restore workflow impact.
+  *Open*
 - **Prerequisite gating regardless of branch** — allow check-prerequisites on `main` with an explicit
   hotfix override (currently blocks hotfixes). *Open*
 - **Static prod inventory for config-only deploys** — `services` group in `inventories/prod/hosts.yml`

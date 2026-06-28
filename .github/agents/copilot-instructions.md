@@ -45,6 +45,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-04
 - Prometheus TSDB (existing, no changes) (042-monitoring-tier-c)
 - Ansible (Jinja2 templates), YAML configuration + Alertmanager v0.30.0 (native `pushover_configs` support), Pushover API (043-alerting-pushover)
 - N/A (configuration change only — no persistent data) (043-alerting-pushover)
+- HCL (Terraform, `telmate/proxmox` `2.9.11`), YAML (Ansible 2.x), Jinja2. No + `lxc_service` Terraform module; `geerlingguy.docker` + (049-market-model-deploy)
+- SQLite `path-sets.sqlite` at `/app/data/` inside the `api` container, backed by hos (049-market-model-deploy)
 
 - Bash (Harness), Ansible 2.14+ (Playbooks) + `pve-lab` script, Proxmox VE 9 (Debian 13) repositories (019b-proxmox-lab-harness-tier2)
 
@@ -80,9 +82,9 @@ specs/
 Bash (Harness), Ansible 2.14+ (Playbooks): Follow standard conventions
 
 ## Recent Changes
+- 049-market-model-deploy: Added HCL (Terraform, `telmate/proxmox` `2.9.11`), YAML (Ansible 2.x), Jinja2. No + `lxc_service` Terraform module; `geerlingguy.docker` +
 - 043-alerting-pushover: Added Ansible (Jinja2 templates), YAML configuration + Alertmanager v0.30.0 (native `pushover_configs` support), Pushover API
 - 043-alerting-pushover: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
-- 042-monitoring-tier-c: Added Ansible (YAML), Jinja2 templates, PromQL, Grafana JSON + Prometheus v3.8.1, Grafana 12.3.1, Alertmanager v0.30.0, blackbox_exporter v0.28.0, fail2ban (Debian apt), fail2ban-prometheus-exporter v0.10.3
 
 
 <!-- MANUAL ADDITIONS START -->

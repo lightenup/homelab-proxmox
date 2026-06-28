@@ -10,6 +10,7 @@ on:
         options:
           - adguard
           - financial-scenario
+          - market-model
           - homeassistant
           - immich
           - jellyfin

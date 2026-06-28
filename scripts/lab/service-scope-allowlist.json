@@ -14,6 +14,9 @@
   "jellyfin": [
     "module.jellyfin_lxc"
   ],
+  "market-model": [
+    "module.market_model_lxc"
+  ],
   "monitoring": [
     "module.monitoring_lxc"
   ],
