@@ -61,7 +61,7 @@ case "${environment}" in
   *) echo "ERROR: --environment must be 'lab' or 'prod'" >&2; exit 2 ;;
  esac
 
-if ! [[ "${service}" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]]; then
+if ! [[ "${service}" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]]; then
   echo "ERROR: Invalid service name '${service}'" >&2
   exit 2
 fi
