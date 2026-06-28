@@ -1,0 +1,61 @@
+---
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Ensure install directory exists
+  ansible.builtin.file:
+    path: "{{ market_model_install_dir }}"
+    state: directory
+    mode: '0755'
+
+# The api container runs as non-root (appuser, uid 100 / gid 65534 — D-006).
+# The host data dir MUST be owned by 100:65534 so the app can create the
+# path-sets.sqlite store. Use state: directory only (no recurse chown that
+# would fight the app). Never seed, copy, or initialise a .db file here —
+# the app creates and migrates path-sets.sqlite idempotently on startup (D-001).
+- name: Ensure data directory exists with correct ownership
+  ansible.builtin.file:
+    path: "{{ market_model_data_dir }}/data"
+    state: directory
+    mode: '0755'
+    owner: "100"
+    group: "65534"
+
+- name: Authenticate to GHCR
+  community.docker.docker_login:
+    registry_url: "{{ market_model_ghcr_registry }}"
+    username: "{{ ghcr_pull_username }}"
+    password: "{{ ghcr_pull_token }}"
+  no_log: true
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ market_model_install_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart market-model
+
+- name: Ensure market-model stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ market_model_install_dir }}"
+    state: present
+    remove_orphans: true
+    pull: always
+
+- name: Wait for api to be reachable
+  ansible.builtin.wait_for:
+    port: "{{ market_model_api_port }}"
+    host: "127.0.0.1"
+    delay: 5
+    timeout: 120
+
+- name: Verify api health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ market_model_api_port }}/healthz"
+    method: GET
+    status_code: 200
+  register: api_health
+  retries: 12
+  delay: 5
+  until: api_health.status == 200
+  changed_when: false

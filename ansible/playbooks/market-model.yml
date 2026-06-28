@@ -1,0 +1,13 @@
+---
+- name: Configure base for market-model
+  hosts: market-model
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure market-model
+  hosts: market-model
+  become: true
+  roles:
+    - geerlingguy.docker
+    - market_model
