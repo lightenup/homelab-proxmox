@@ -16,4 +16,10 @@
 }
 
 {% endif %}
+# Plain-HTTP health endpoint for the gated-deploy healthcheck (dedicated
+# port bypasses the automatic :80 -> :443 redirect).
+:{{ caddy_health_port | default(2021) }} {
+    respond /healthz "OK" 200
+}
+
 import {{ caddy_conf_dir }}/*.caddy

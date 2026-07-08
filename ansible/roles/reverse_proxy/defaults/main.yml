@@ -21,3 +21,10 @@ caddy_landing_root: /var/www/hus-sky
 # Dedicated metrics-only site block on port 9180 (admin API stays on localhost:2019)
 caddy_metrics_enabled: true
 caddy_metrics_port: 9180
+
+# Plain-HTTP health endpoint for the gated-deploy post-apply healthcheck
+# (Feature: 053). Dedicated port so it bypasses Caddy's automatic
+# :80 -> :443 redirect: probing :80 / returns 308 and the healthcheck
+# follows it into a bare-IP TLS handshake that Caddy rejects (no cert
+# for the IP -> TLSV1_ALERT_INTERNAL_ERROR).
+caddy_health_port: 2021
