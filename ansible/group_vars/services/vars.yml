@@ -128,6 +128,13 @@ caddy_services:
     desc: "Market path-set API"
     enabled: true
     user_facing: true
+  - host: financial-scenario
+    ip: "{{ financial_scenario_ip }}"
+    port: "{{ financial_scenario_gui_port }}"
+    title: "Financial Scenario"
+    desc: "Savings scenario projections"
+    enabled: true
+    user_facing: true
   - host: adguard
     ip: "{{ adguard_ip }}"
     port: "{{ adguard_web_port }}"
