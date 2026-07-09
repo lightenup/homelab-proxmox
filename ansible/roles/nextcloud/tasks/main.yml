@@ -155,30 +155,25 @@
     - '"No such app" not in app_disable_result.stderr'
   changed_when: app_disable_result.rc == 0
 
-- name: Disable apps scheduled for removal
-  ansible.builtin.command:
-    cmd: docker exec -u www-data nextcloud_app php occ app:disable {{ item }}
-  loop: "{{ nextcloud_apps_remove | default([]) }}"
-  register: app_remove_disable_result
-  failed_when:
-    - app_remove_disable_result.rc != 0
-    - '"not installed" not in app_remove_disable_result.stdout'
-    - '"not installed" not in app_remove_disable_result.stderr'
-    - '"No such app" not in app_remove_disable_result.stderr'
-    - '"already disabled" not in app_remove_disable_result.stdout'
-  changed_when: app_remove_disable_result.rc == 0
-
-- name: Remove apps scheduled for removal
-  ansible.builtin.command:
-    cmd: docker exec -u www-data nextcloud_app php occ app:remove {{ item }}
+# occ app:remove disables+removes in one step, but errors ("<app> is not enabled")
+# if the app is already disabled. Ensure the app is enabled first so removal always
+# succeeds; skip cleanly when the app is not installed (idempotent).
+- name: Uninstall apps scheduled for removal (disable + remove, idempotent)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      app="{{ item }}"
+      list=$(docker exec -u www-data nextcloud_app php occ app:list --output=json)
+      if ! echo "$list" | grep -q "\"${app}\":"; then
+        echo "not-installed: ${app}"
+        exit 0
+      fi
+      docker exec -u www-data nextcloud_app php occ app:enable "$app" >/dev/null 2>&1 || true
+      docker exec -u www-data nextcloud_app php occ app:remove "$app"
+    executable: /bin/bash
   loop: "{{ nextcloud_apps_remove | default([]) }}"
   register: app_remove_result
-  failed_when:
-    - app_remove_result.rc != 0
-    - '"not installed" not in app_remove_result.stdout'
-    - '"not installed" not in app_remove_result.stderr'
-    - '"No such app" not in app_remove_result.stderr'
-  changed_when: app_remove_result.rc == 0
+  changed_when: "'removed' in app_remove_result.stdout"
 
 - name: Update all Nextcloud apps
   ansible.builtin.command:
