@@ -56,7 +56,7 @@ docker exec "$APP_CONTAINER" php occ maintenance:mode --on
 # 2. Dump Database
 echo "Starting database dump..."
 if ! docker exec "$DB_CONTAINER" \
-    mysqldump \
+    mariadb-dump \
     --single-transaction \
     --default-character-set=utf8mb4 \
     -u"$MYSQL_USER" \
