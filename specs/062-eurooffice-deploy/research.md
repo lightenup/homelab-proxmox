@@ -16,32 +16,34 @@ All open questions from the spec/backlog resolved below. No `NEEDS CLARIFICATION
 
 ## D-002 — Pinned image tag
 
-- **Decision**: `onlyoffice/documentserver:9.3` from Docker Hub, recorded as
-  `eurooffice_version: "9.3"` in `group_vars/services/vars.yml`. No GHCR credentials needed.
-- **Rationale**: **Euro-Office does not publish Docker images.** Exhaustive GHCR tag enumeration
-  (anonymous + authenticated) confirms only CI build-artifact tags exist (`build-*`, `*-stage`,
-  `*-buildcache`); no release tags (`9.3.1`, `latest`, `nightly`, etc.) exist in the registry.
-  GitHub releases publish only `.deb`/`.rpm` packages — no Docker images. The upstream ONLYOFFICE
-  DocumentServer (`onlyoffice/documentserver:9.3`) is API-compatible: Euro-Office is a downstream
-  fork of ONLYOFFICE 9.3.x that shares the same REST/WebSocket API protocol, and the Nextcloud
-  `eurooffice` connector app (v11.0.1) was confirmed to install successfully and is API-compatible
-  with the ONLYOFFICE document server. The `9.3` tag on Docker Hub is actively maintained (latest
-  9.3.x patch), which avoids drift while keeping the minor-version pinned.
-- **Alternatives**: `latest` (onlyoffice/documentserver) — rejected (unpinned, may jump to 9.4+).
-  Build Euro-Office from Dockerfile — rejected (violates Code Economy; adds maintenance burden).
-  Use ONLYOFFICE connector app (`onlyoffice`) + ONLYOFFICE DS — partially considered but the user
-  already has `eurooffice` (v11.0.1) installed on production NC; switching connectors would require
-  uninstalling it first.
+- **Decision**: `ghcr.io/euro-office/documentserver:v9.3.2` (the real Euro-Office image), recorded as
+  `eurooffice_version: "v9.3.2"` in `group_vars/services/vars.yml`. Public GHCR image — no credentials.
+- **History / correction**: An earlier revision of this decision pivoted to `onlyoffice/documentserver:9.3`
+  on the belief that Euro-Office publishes no Docker image. **That was a false negative.** The Euro-Office
+  GHCR image does exist and is public/multi-arch (amd64+arm64); the earlier "404" came from two mistakes:
+  (a) the tags are **`v`-prefixed** (`v9.3.2`, not `9.3.2`), and (b) manifest checks omitted the
+  `Accept: application/vnd.oci.image.index.v1+json` header, so GHCR returned 404 for the multi-arch
+  image index. Re-verified via the registry API: tags `latest`, `v9.3.1`, `v9.3.2`, `v9.3.2-rc.1` all
+  return HTTP 200 with an anonymous token.
+- **Rationale**: Euro-Office is the intended product (AGPL fork of ONLYOFFICE 9.3.x) and gives correct
+  Euro-Office editor branding. Pin `v9.3.2` (latest stable release, 2026-06-25) for reproducibility;
+  the `!= "latest"` preflight assertion enforces a pinned tag.
+- **Accepted risk**: the Euro-Office README labels the Docker image "for testing and integration
+  purposes" (deb/rpm packages planned, no date). Acceptable for a homelab; documents live in Nextcloud
+  so the container holds only caches/config, and rollback to `onlyoffice/documentserver:9.3` is trivial.
+- **Alternatives**: `latest` — rejected (unpinned drift). `onlyoffice/documentserver:9.3` — the
+  production-grade upstream; kept as the documented rollback target since the connector protocol is
+  identical.
 
 ## D-003 — Container config surface (env + volumes)
 
 - **Decision**: Compose env `JWT_ENABLED=true`, `JWT_SECRET={{ eurooffice_jwt_secret }}` (vault, ≥32
-  chars), `EXAMPLE_ENABLED=false`. Persist four bind-mount volumes under `/opt/eurooffice-data/`:
-  `data` → `/var/www/onlyoffice/Data`, `logs` → `/var/log/onlyoffice`,
-  `lib` → `/var/lib/onlyoffice`, `fonts` → `/usr/share/fonts/truetype/custom`.
+  chars), `EXAMPLE_ENABLED=false`. Persist three bind-mount volumes under `/opt/eurooffice-data/`
+  (per the Euro-Office Docker docs): `data` → `/var/lib/euro-office/documentserver`,
+  `logs` → `/var/log/euro-office/documentserver`, `config` → `/etc/euro-office/documentserver`.
   Publish container `:80` on the LXC for the LAN callback + Caddy upstream.
-- **Rationale**: Volume paths verified by pulling `onlyoffice/documentserver:9.3` on the market-model
-  LXC and running `docker inspect`. Bind-mounts under `/opt/eurooffice-data` keep parity with
+- **Rationale**: The Euro-Office image uses rebranded internal paths (`/var/lib|/var/log|/etc/euro-office/documentserver`),
+  documented in its Docker install guide. Bind-mounts under `/opt/eurooffice-data` keep parity with
   `market_model_data_dir` for easy inspection. Bundled Postgres/RabbitMQ/Redis run inside the image
   with defaults (no external DB needed — homelab scale). `.deb` + Apache install rejected — violates
   the repo's `docker_compose_v2`-in-LXC convention.

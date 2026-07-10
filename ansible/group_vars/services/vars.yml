@@ -19,7 +19,7 @@ adguard_exporter_version: "1.2.1"
 immich_version: "v2.4.0"
 financial_scenario_version: "0.2.2"
 market_model_version: "0.3.0"
-eurooffice_version: "9.3"
+eurooffice_version: "v9.3.2"
 
 # Euro-Office Configuration
 eurooffice_ip: "192.168.1.219"

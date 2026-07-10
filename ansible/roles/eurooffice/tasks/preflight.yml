@@ -6,7 +6,7 @@
       - eurooffice_version != ""
       - eurooffice_version != "latest"
     fail_msg: >-
-      eurooffice_version must be a pinned tag (e.g. "9.3"), not empty or "latest".
+      eurooffice_version must be a pinned tag (e.g. "v9.3.2"), not empty or "latest".
 
 - name: Assert JWT secret is defined and meets minimum length
   ansible.builtin.assert:

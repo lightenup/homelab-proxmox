@@ -16,8 +16,7 @@
   loop:
     - data
     - logs
-    - lib
-    - fonts
+    - config
 
 - name: Deploy docker-compose.yml
   ansible.builtin.template:
