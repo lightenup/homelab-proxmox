@@ -49,10 +49,9 @@ resource "proxmox_lxc" "this" {
     ignore_changes = [
       features,
       mountpoint,
-      # Ignore changes to these as they are reset to defaults by provider if not specified
-      # but we want to keep them if they were set manually or by other means
-      # Actually, we set them explicitly now, so maybe we don't need to ignore them?
-      # But mountpoint is definitely needed to be ignored if we manage it via Ansible.
+      # The deploy script injects a ci@pve key at LXC creation time; ignore drift
+      # so key changes never force a destructive LXC replacement.
+      ssh_public_keys,
     ]
   }
 
