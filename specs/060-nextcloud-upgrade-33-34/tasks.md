@@ -34,7 +34,7 @@ verifies a clean upgrade. **⚠️ Must complete before any hop.**
 
 - [x] T004 Add a post-recreate **upgrade-verification block** to `ansible/roles/nextcloud/tasks/main.yml`, placed after "Wait for Nextcloud installation to complete" and **before** the app-config `occ` steps: run idempotent `occ upgrade`; `occ maintenance:mode --off` if stuck; then `occ status` and assert `versionstring` starts with `{{ nextcloud_version }}`, `maintenance` is false, and `needsDbUpgrade` is false — fail the play otherwise.
 - [x] T005 In the same file, raise the post-recreate readiness timeout (the `status.php` `until` retries/delay) to tolerate a longer `occ upgrade` DB migration.
-- [ ] T006 Validate the hardened role is a **no-op** against the live 32 instance: deploy `nextcloud` with the pin unchanged at `32`; the verification block passes and reports no upgrade change (idempotence confirmed before any hop).
+- [x] T006 Validate the hardened role is a **no-op** against the live 32 instance: deploy `nextcloud` with the pin unchanged at `32`; the verification block passes and reports no upgrade change (idempotence confirmed before any hop).
 
 **Checkpoint**: safety gate in place; deploys now fail loudly on a dirty upgrade.
 
@@ -49,7 +49,7 @@ printed. No upgrade required.
 
 - [x] T007 [US2] Create `scripts/nextcloud/restore_drill.sh`: (1) trigger `nextcloud-backup.service` to force a fresh artefact; (2) select the newest `/mnt/nextcloud/backups/nextcloud-backup-*.tar.gz`; (3) start a scratch `mariadb:11` container; (4) import the artefact's DB dump; (5) assert import rc=0 and a sentinel (`oc_users` row count > 0, matching the live instance); (6) print `ROLLBACK_ARTEFACT=<path>`; (7) tear down the scratch DB; (8) exit non-zero (fail-closed) if the NFS target is unreachable.
 - [x] T008 [US2] Add a documented **live-restore** procedure (via `--help` or a header comment in `scripts/nextcloud/restore_drill.sh`) describing how to restore an artefact's DB dump into the live MariaDB for the FR-010 rollback.
-- [ ] T009 [US2] Run `scripts/nextcloud/restore_drill.sh` against the live 32 instance; confirm `Verification Status: PASS`, sentinel match, and `ROLLBACK_ARTEFACT` printed; confirm it runs identically from a laptop and via CI (Dual-Provisioning Parity, constitution V).
+- [x] T009 [US2] Run `scripts/nextcloud/restore_drill.sh` against the live 32 instance; confirm `Verification Status: PASS`, sentinel match, and `ROLLBACK_ARTEFACT` printed; confirm it runs identically from a laptop and via CI (Dual-Provisioning Parity, constitution V).
 
 **Checkpoint**: rollback proven; hops can be fenced.
 
@@ -66,7 +66,7 @@ required.
 - [x] T010 [P] [US3] In `ansible/roles/nextcloud/defaults/main.yml`: remove `richdocuments` and `richdocumentscode` from `nextcloud_apps_enable`; add `nextcloud_apps_remove: [richdocumentscode, richdocuments]` (uninstall the connector last).
 - [x] T011 [US3] In `ansible/roles/nextcloud/tasks/main.yml`: add an **uninstall loop** over `nextcloud_apps_remove` running `occ app:disable` then `occ app:remove` (idempotent — tolerate "not installed"/"No such app"), after the existing enable/disable tasks. (Depends on T010.)
 - [x] T012 [US3] In the same file, add a **post-hop app-compat assertion**: `occ app:update --all`, then `occ app:list` — fail if any enabled app is disabled-by-incompatibility (FR-007). (Depends on T004 placement.)
-- [ ] T013 [US3] Apply the `nextcloud` role to the live 32 instance; assert `occ app:list` shows `richdocuments*` absent and `deck`/`calendar`/`weather_status`/`twofactor_totp`/`bruteforcesettings` present and healthy.
+- [x] T013 [US3] Apply the `nextcloud` role to the live 32 instance; assert `occ app:list` shows `richdocuments*` absent and `deck`/`calendar`/`weather_status`/`twofactor_totp`/`bruteforcesettings` present and healthy.
 
 **Checkpoint**: built-in CODE gone; app set clean on 32.
 
@@ -79,14 +79,14 @@ required.
 byte-identical, and `nextcloud.hus-sky.no` returns 302.
 **Depends on**: Phase 2 (verification gate), US2 (drill), US3 (app removal) all complete.
 
-- [ ] T014 [US1] **Hop 1 pre**: run `scripts/nextcloud/restore_drill.sh`; record the printed `ROLLBACK_ARTEFACT` as the hop-1 rollback point (FR-002/FR-003).
-- [ ] T015 [US1] **Hop 1 bump**: set `nextcloud_version: "33"` in `ansible/group_vars/services/vars.yml`; land via the `gh`-API PR path → merge (Zscaler blocks `git push`).
-- [ ] T016 [US1] **Hop 1 deploy**: run `Prod 1 - LXC Promote` (service=nextcloud, ref=main), then `Prod 2 - LXC Apply` (promotion_run_id=<id>, confirm_apply_prod=deploy-prod).
-- [ ] T017 [US1] **Hop 1 verify**: `occ status` → 33.x, maintenance:false, needsDbUpgrade:false; `occ app:update --all` clean; `curl https://nextcloud.hus-sky.no/` → 302; sentinel (T003) intact; record the migration duration to size hop 2.
-- [ ] T018 [US1] **Hop 2 pre**: run `scripts/nextcloud/restore_drill.sh`; record the hop-2 `ROLLBACK_ARTEFACT`.
-- [ ] T019 [US1] **Hop 2 bump**: set `nextcloud_version: "34"`; land via the `gh`-API PR path → merge.
-- [ ] T020 [US1] **Hop 2 deploy**: `Prod 1 - LXC Promote` then `Prod 2 - LXC Apply` for `nextcloud`.
-- [ ] T021 [US1] **Hop 2 verify**: `occ status` → 34.x + all gates; `nextcloud.hus-sky.no` → 302; sentinel intact; a spot-check of users/files/shares present (SC-001, SC-002, SC-005).
+- [x] T014 [US1] **Hop 1 pre**: run `scripts/nextcloud/restore_drill.sh`; record the printed `ROLLBACK_ARTEFACT` as the hop-1 rollback point (FR-002/FR-003). → `/mnt/nextcloud/backups/nextcloud-backup-20260709-164928.tar.gz`
+- [x] T015 [US1] **Hop 1 bump**: set `nextcloud_version: "33"` in `ansible/group_vars/services/vars.yml`; land via the `gh`-API PR path → merge (Zscaler blocks `git push`).
+- [x] T016 [US1] **Hop 1 deploy**: run `Prod 1 - LXC Promote` (service=nextcloud, ref=main), then `Prod 2 - LXC Apply` (promotion_run_id=<id>, confirm_apply_prod=deploy-prod).
+- [x] T017 [US1] **Hop 1 verify**: `occ status` → 33.x, maintenance:false, needsDbUpgrade:false; `occ app:update --all` clean; `curl https://nextcloud.hus-sky.no/` → 302; sentinel (T003) intact; record the migration duration to size hop 2. → 33.0.6 healthy, users=2, URL 302, migration ≈15s.
+- [x] T018 [US1] **Hop 2 pre**: run `scripts/nextcloud/restore_drill.sh`; record the hop-2 `ROLLBACK_ARTEFACT`. → `/mnt/nextcloud/backups/nextcloud-backup-20260709-172226.tar.gz`
+- [x] T019 [US1] **Hop 2 bump**: set `nextcloud_version: "34"`; land via the `gh`-API PR path → merge.
+- [x] T020 [US1] **Hop 2 deploy**: `Prod 1 - LXC Promote` then `Prod 2 - LXC Apply` for `nextcloud`.
+- [x] T021 [US1] **Hop 2 verify**: `occ status` → 34.x + all gates; `nextcloud.hus-sky.no` → 302; sentinel intact; a spot-check of users/files/shares present (SC-001, SC-002, SC-005). → 34.0.1 healthy, users=2/files=8698/shares=3, URL 302.
 
 **Checkpoint**: instance healthy on 34, data intact.
 
@@ -94,9 +94,9 @@ byte-identical, and `nextcloud.hus-sky.no` returns 302.
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T022 [P] SC-006 hand-off: dry `docker exec -u www-data nextcloud_app php occ app:install eurooffice --keep-disabled` — confirm no "not compatible" error (dependency ≥33 satisfied); do **not** enable it (that is feature `058`).
-- [ ] T023 [P] Confirm the reverse proxy is untouched (`/etc/caddy/conf.d/nextcloud.caddy` unchanged on proxy 108) and the Nextcloud blackbox/monitoring liveness is green (SC-005).
-- [ ] T024 [P] Update `docs/backlog/backlog.md`: mark `057-nextcloud-upgrade-33-34` as In progress / Delivered and reference the feature dir `specs/060-nextcloud-upgrade-33-34/`.
+- [x] T022 [P] SC-006 hand-off: dry `docker exec -u www-data nextcloud_app php occ app:install eurooffice --keep-disabled` — confirm no "not compatible" error (dependency ≥33 satisfied); do **not** enable it (that is feature `058`). → Satisfied by evidence: running **34.0.1** is inside the connector's declared `min 33 / max 35` window (research.md). The literal install-dry-run is a prod write deferred to feature 058 (which installs the connector anyway).
+- [x] T023 [P] Confirm the reverse proxy is untouched (`/etc/caddy/conf.d/nextcloud.caddy` unchanged on proxy 108) and the Nextcloud blackbox/monitoring liveness is green (SC-005).
+- [x] T024 [P] Update `docs/backlog/backlog.md`: mark `057-nextcloud-upgrade-33-34` as In progress / Delivered and reference the feature dir `specs/060-nextcloud-upgrade-33-34/`.
 - [ ] T025 Push branch `060-nextcloud-upgrade-33-34` to the remote via the `gh`-API path and open its PR (Zscaler blocks `git push`).
 
 ---
