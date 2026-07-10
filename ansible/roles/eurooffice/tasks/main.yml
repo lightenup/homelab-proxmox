@@ -36,8 +36,8 @@
   ansible.builtin.wait_for:
     port: "{{ eurooffice_port }}"
     host: "127.0.0.1"
-    delay: 10
-    timeout: 180
+    delay: 30
+    timeout: 360
 
 - name: Verify document server health endpoint
   ansible.builtin.uri:
