@@ -19,6 +19,11 @@ adguard_exporter_version: "1.2.1"
 immich_version: "v2.4.0"
 financial_scenario_version: "0.2.2"
 market_model_version: "0.3.0"
+eurooffice_version: "9.3"
+
+# Euro-Office Configuration
+eurooffice_ip: "192.168.1.219"
+eurooffice_port: 80
 
 # Market Model Configuration
 market_model_ip: "192.168.1.218"
@@ -135,6 +140,14 @@ caddy_services:
     desc: "Savings scenario projections"
     enabled: true
     user_facing: true
+  - host: eurooffice
+    ip: "{{ eurooffice_ip }}"
+    port: "{{ eurooffice_port }}"
+    title: "Euro-Office"
+    desc: "Online document editing"
+    enabled: true
+    user_facing: true
+    proxy_timeout: "300s"
   - host: adguard
     ip: "{{ adguard_ip }}"
     port: "{{ adguard_web_port }}"

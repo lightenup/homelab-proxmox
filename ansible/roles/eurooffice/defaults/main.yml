@@ -1,0 +1,6 @@
+---
+# Image: upstream ONLYOFFICE DocumentServer (Euro-Office is a fork; no pullable Docker release exists).
+# eurooffice_version is defined in group_vars/services/vars.yml — pin to a specific tag, not "latest".
+eurooffice_install_dir: "/opt/eurooffice"
+eurooffice_data_dir: "/opt/eurooffice-data"
+eurooffice_image: "onlyoffice/documentserver"
