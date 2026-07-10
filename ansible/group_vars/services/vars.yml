@@ -13,7 +13,7 @@ docker_compose_package: docker-compose-plugin
 docker_compose_package_state: present
 
 # Service versions
-nextcloud_version: "32"
+nextcloud_version: "34"
 nextcloud_exporter_version: "0.9.0"
 adguard_exporter_version: "1.2.1"
 immich_version: "v2.4.0"

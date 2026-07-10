@@ -34,13 +34,16 @@ nextcloud_php_upload_limit: "16G"
 
 # Apps to install and enable
 nextcloud_apps_enable:
-  - richdocuments
-  - richdocumentscode
   - deck
   - twofactor_totp
   - bruteforcesettings
   - calendar
   - weather_status
+
+# Apps to fully uninstall (disable then remove); order matters — connector before server
+nextcloud_apps_remove:
+  - richdocumentscode
+  - richdocuments
 
 # Apps to disable
 nextcloud_apps_disable:
