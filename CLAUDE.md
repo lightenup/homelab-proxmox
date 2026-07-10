@@ -34,4 +34,19 @@ HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse pr
 
 
 <!-- MANUAL ADDITIONS START -->
+
+## Working with Git (Zscaler constraint)
+
+**`git push` and SSH to GitHub are blocked by Zscaler on the dev Mac** — the `git-receive-pack`
+upload returns HTTP 403, and SSH is dropped on ports 22/443. This affects any shell on the Mac.
+Committing locally works; only the push leg is blocked. (A non-fast-forward rejection can appear
+first and look normal — that's git bailing before it uploads; a force-push still 403s.)
+
+To land commits, **push via the GitHub Git-Data API with `gh api`** (blobs → tree → commit → ref),
+then `git fetch origin <branch> && git reset --hard origin/<branch>` to realign local history.
+Open PRs with `gh pr create`. `git fetch`/`clone` over HTTPS work.
+
+Pipeline deploys run on the `pve` host (which has unrestricted GitHub access) and are **unaffected**
+by the Mac's push block. Full procedure and gotchas: [AGENTS.md](./AGENTS.md).
+
 <!-- MANUAL ADDITIONS END -->
