@@ -10,7 +10,7 @@ monitoring_contract:
   scrape_targets: []
   liveness_targets:
     - job_name: "financial-scenario-gui"
-      url: "http://192.168.1.217:3000/"
+      url: "https://financial-scenario.hus-sky.no/"
       module: http_2xx
   alert_rules:
     - alert: FinancialScenarioDown

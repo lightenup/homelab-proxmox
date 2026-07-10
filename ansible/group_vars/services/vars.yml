@@ -148,6 +148,7 @@ caddy_services:
     enabled: true
     user_facing: true
     proxy_timeout: "300s"
+    link: "https://nextcloud.hus-sky.no/apps/files"
   - host: adguard
     ip: "{{ adguard_ip }}"
     port: "{{ adguard_web_port }}"

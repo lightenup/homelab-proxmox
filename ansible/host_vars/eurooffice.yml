@@ -10,7 +10,7 @@ monitoring_contract:
   scrape_targets: []
   liveness_targets:
     - job_name: "eurooffice"
-      url: "http://192.168.1.219:80/healthcheck"
+      url: "https://eurooffice.hus-sky.no/healthcheck"
       module: http_2xx
   alert_rules:
     - alert: EuroOfficeDown

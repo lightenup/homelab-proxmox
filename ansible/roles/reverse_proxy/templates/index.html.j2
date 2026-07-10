@@ -54,7 +54,7 @@
   <div class="cards">
 {% for svc in caddy_services | selectattr('enabled') | selectattr('user_facing') %}
     <a class="card"
-       href="https://{{ svc.host }}.{{ caddy_base_domain }}"
+       href="{{ svc.link | default('https://' + svc.host + '.' + caddy_base_domain) }}"
        data-probe="https://{{ svc.host }}.{{ caddy_base_domain }}">
       <h2>{{ svc.title | default(svc.host | capitalize) }}</h2>
       <p>{{ svc.desc | default('') }}</p>
