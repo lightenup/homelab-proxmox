@@ -19,8 +19,6 @@ services:
       EXAMPLE_ENABLED: "false"
     volumes:
       - "{{ eurooffice_data_dir }}/data:/var/lib/euro-office/documentserver"
-      - "{{ eurooffice_data_dir }}/logs:/var/log/euro-office/documentserver"
-      - "{{ eurooffice_data_dir }}/config:/etc/euro-office/documentserver"
       - "/etc/localtime:/etc/localtime:ro"
     restart: unless-stopped
     healthcheck:

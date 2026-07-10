@@ -15,8 +15,6 @@
     mode: '0755'
   loop:
     - data
-    - logs
-    - config
 
 - name: Deploy docker-compose.yml
   ansible.builtin.template:
