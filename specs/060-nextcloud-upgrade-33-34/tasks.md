@@ -97,7 +97,7 @@ byte-identical, and `nextcloud.hus-sky.no` returns 302.
 - [x] T022 [P] SC-006 hand-off: dry `docker exec -u www-data nextcloud_app php occ app:install eurooffice --keep-disabled` — confirm no "not compatible" error (dependency ≥33 satisfied); do **not** enable it (that is feature `058`). → Satisfied by evidence: running **34.0.1** is inside the connector's declared `min 33 / max 35` window (research.md). The literal install-dry-run is a prod write deferred to feature 058 (which installs the connector anyway).
 - [x] T023 [P] Confirm the reverse proxy is untouched (`/etc/caddy/conf.d/nextcloud.caddy` unchanged on proxy 108) and the Nextcloud blackbox/monitoring liveness is green (SC-005).
 - [x] T024 [P] Update `docs/backlog/backlog.md`: mark `057-nextcloud-upgrade-33-34` as In progress / Delivered and reference the feature dir `specs/060-nextcloud-upgrade-33-34/`.
-- [ ] T025 Push branch `060-nextcloud-upgrade-33-34` to the remote via the `gh`-API path and open its PR (Zscaler blocks `git push`).
+- [x] T025 Push branch `060-nextcloud-upgrade-33-34` to the remote via the `gh`-API path and open its PR (Zscaler blocks `git push`). → PR #186
 
 ---
 
