@@ -1,0 +1,26 @@
+---
+- name: Assert image version is pinned
+  ansible.builtin.assert:
+    that:
+      - eurooffice_version is defined
+      - eurooffice_version != ""
+      - eurooffice_version != "latest"
+    fail_msg: >-
+      eurooffice_version must be a pinned tag (e.g. "9.3"), not empty or "latest".
+
+- name: Assert JWT secret is defined and meets minimum length
+  ansible.builtin.assert:
+    that:
+      - eurooffice_jwt_secret is defined
+      - eurooffice_jwt_secret | length >= 32
+    fail_msg: >-
+      eurooffice_jwt_secret must be defined and at least 32 characters long.
+      Run 'ansible-vault edit group_vars/services/vault.yml' to set it.
+
+- name: Check Docker daemon is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+  check_mode: true
+  register: docker_status
+  failed_when: docker_status.failed

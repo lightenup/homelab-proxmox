@@ -197,6 +197,34 @@
       incompatible with Nextcloud {{ nextcloud_version }}. Run 'occ app:list' for details.
   loop: "{{ nextcloud_apps_enable }}"
 
+# Euro-Office connector configuration (FR-007, FR-003)
+# The connector app is already installed/enabled via nextcloud_apps_enable above.
+# These occ config:app:set calls are idempotent — safe to re-run on every deploy.
+- name: Configure Euro-Office connector DocumentServerUrl (public)
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data {{ nextcloud_app_container_name }}
+      php occ config:app:set eurooffice DocumentServerUrl
+      --value="{{ nextcloud_eurooffice_public_url }}"
+  changed_when: false
+
+- name: Configure Euro-Office connector DocumentServerInternalUrl (LAN callback)
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data {{ nextcloud_app_container_name }}
+      php occ config:app:set eurooffice DocumentServerInternalUrl
+      --value="{{ nextcloud_eurooffice_internal_url }}"
+  changed_when: false
+
+- name: Configure Euro-Office connector JWT secret
+  ansible.builtin.command:
+    cmd: >
+      docker exec -u www-data {{ nextcloud_app_container_name }}
+      php occ config:app:set eurooffice jwt_secret
+      --value="{{ eurooffice_jwt_secret }}"
+  changed_when: false
+  no_log: true
+
 # Configure trusted domains via occ (env var only applies on first install)
 - name: Set Nextcloud trusted domain 0 (primary)
   ansible.builtin.command:

@@ -62,3 +62,24 @@
       - nextcloud_admin_password is defined
       - nextcloud_admin_user is defined
     fail_msg: "Required Nextcloud variables are not properly defined"
+
+# FR-009: The eurooffice connector requires Nextcloud >= 33. Fail early and loudly
+# if the running instance is below that; the connector install will fail at runtime
+# otherwise and leave the system in a partially-configured state.
+- name: Get running Nextcloud version for connector compatibility check
+  ansible.builtin.command:
+    cmd: docker exec -u www-data {{ nextcloud_app_container_name }} php occ status --output=json
+  register: _nc_status_preflight
+  changed_when: false
+  failed_when: _nc_status_preflight.rc != 0
+
+- name: Assert Nextcloud >= 33 before installing eurooffice connector
+  vars:
+    _nc_major: "{{ (_nc_status_preflight.stdout | from_json).versionstring.split('.')[0] | int }}"
+  ansible.builtin.assert:
+    that:
+      - _nc_major | int >= 33
+    fail_msg: >-
+      The eurooffice connector requires Nextcloud >= 33 (min-version in appinfo/info.xml).
+      Current version: {{ (_nc_status_preflight.stdout | from_json).versionstring }}.
+      Complete the Nextcloud upgrade first.

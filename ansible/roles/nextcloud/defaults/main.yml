@@ -32,6 +32,12 @@ nextcloud_backup_schedule: "*-*-* 04:00:00"
 nextcloud_php_memory_limit: "1024M"
 nextcloud_php_upload_limit: "16G"
 
+# Euro-Office connector configuration
+# URLs reference central vars (eurooffice_ip defined in group_vars/services/vars.yml).
+# jwt_secret must match eurooffice_jwt_secret in vault — shared between server and connector.
+nextcloud_eurooffice_public_url: "https://eurooffice.hus-sky.no/"
+nextcloud_eurooffice_internal_url: "http://{{ eurooffice_ip }}/"
+
 # Apps to install and enable
 nextcloud_apps_enable:
   - deck
@@ -39,6 +45,7 @@ nextcloud_apps_enable:
   - bruteforcesettings
   - calendar
   - weather_status
+  - eurooffice
 
 # Apps to fully uninstall (disable then remove); order matters — connector before server
 nextcloud_apps_remove:

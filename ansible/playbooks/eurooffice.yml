@@ -1,0 +1,13 @@
+---
+- name: Configure base for eurooffice
+  hosts: eurooffice
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure eurooffice
+  hosts: eurooffice
+  become: true
+  roles:
+    - geerlingguy.docker
+    - eurooffice

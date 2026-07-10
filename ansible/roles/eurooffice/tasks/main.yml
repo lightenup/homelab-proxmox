@@ -1,0 +1,52 @@
+---
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Ensure install directory exists
+  ansible.builtin.file:
+    path: "{{ eurooffice_install_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Ensure data directories exist
+  ansible.builtin.file:
+    path: "{{ eurooffice_data_dir }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - data
+    - logs
+    - lib
+    - fonts
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ eurooffice_install_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart eurooffice
+
+- name: Ensure eurooffice stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ eurooffice_install_dir }}"
+    state: present
+    remove_orphans: true
+    pull: always
+
+- name: Wait for document server port to be reachable
+  ansible.builtin.wait_for:
+    port: "{{ eurooffice_port }}"
+    host: "127.0.0.1"
+    delay: 10
+    timeout: 180
+
+- name: Verify document server health endpoint
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ eurooffice_port }}/healthcheck"
+    method: GET
+    status_code: 200
+  register: eurooffice_health
+  retries: 18
+  delay: 10
+  until: eurooffice_health.status == 200
+  changed_when: false

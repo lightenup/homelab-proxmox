@@ -3,5 +3,11 @@
         header_up X-Forwarded-Proto https
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
+{% if item.proxy_timeout is defined %}
+        transport http {
+            read_timeout {{ item.proxy_timeout }}
+            write_timeout {{ item.proxy_timeout }}
+        }
+{% endif %}
     }
 }

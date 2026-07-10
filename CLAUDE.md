@@ -9,6 +9,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-25
 - SQLite (WAL mode) scenario store at `/app/data/scenarios.db` inside the `api` container, (048-financial-scenario-v2-deploy)
 - YAML (Ansible 2.x), Jinja2, Bash — no new language. + `community.docker.docker_compose_v2`; official `nextcloud:33` / `nextcloud:34` (060-nextcloud-upgrade-33-34)
 - MariaDB on local LXC disk (`/opt/nextcloud/mariadb`); **user data on Synology NFS** (060-nextcloud-upgrade-33-34)
+- HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Caddyfile — no new language + `modules/lxc_service` (Terraform), `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible), upstream image `onlyoffice/documentserver:9.3` (Euro-Office publishes no Docker image; the connector is API-compatible with ONLYOFFICE), Nextcloud `eurooffice` connector app v11.0.1 (062-eurooffice-deploy)
+- Docker bind volumes on the LXC's local disk for data/logs (`/opt/eurooffice-data`); no NFS bind-mount (documents live in Nextcloud). No user-data backup in scope. (062-eurooffice-deploy)
 
 - HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy) + `telmate/proxmox` Terraform provider, `lxc_service` Terraform module, `geerlingguy.docker` Ansible role, `community.docker.docker_compose_v2` Ansible module (044-transcriber-proxmox-deploy)
 
@@ -28,9 +30,9 @@ tests/
 HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy): Follow standard conventions
 
 ## Recent Changes
+- 062-eurooffice-deploy: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Caddyfile — no new language + `modules/lxc_service` (Terraform), `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible), upstream image `onlyoffice/documentserver:9.3`, Nextcloud `eurooffice` connector app v11.0.1
 - 060-nextcloud-upgrade-33-34: Added YAML (Ansible 2.x), Jinja2, Bash — no new language. + `community.docker.docker_compose_v2`; official `nextcloud:33` / `nextcloud:34`
 - 048-financial-scenario-v2-deploy: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash (backup + `lxc_service` Terraform module; `geerlingguy.docker` + `community.docker`
-- 045-landing-page: Added YAML (Ansible 2.x), Jinja2 templates, Caddyfile syntax, static HTML/CSS + vanilla JS (no framework) + Caddy (custom xcaddy build w/ Domeneshop DNS, already deployed); Prometheus v3.8.1 + blackbox_exporter v0.28.0 (already deployed, feature `042`); `community.general` / builtin Ansible modules only
 
 
 <!-- MANUAL ADDITIONS START -->
