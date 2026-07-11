@@ -1,4 +1,20 @@
 {{ item.host }}.{{ caddy_base_domain }} {
+{% if item.mcp_port is defined %}
+    handle /mcp* {
+        reverse_proxy {{ item.ip }}:{{ item.mcp_port }} {
+            header_up X-Forwarded-Proto https
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+        }
+    }
+    handle {
+        reverse_proxy {{ item.ip }}:{{ item.port }} {
+            header_up X-Forwarded-Proto https
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+        }
+    }
+{% else %}
     reverse_proxy {{ item.ip }}:{{ item.port }} {
         header_up X-Forwarded-Proto https
         header_up X-Real-IP {remote_host}
@@ -10,4 +26,5 @@
         }
 {% endif %}
     }
+{% endif %}
 }
