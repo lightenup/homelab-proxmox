@@ -129,6 +129,7 @@ caddy_services:
   - host: market-model
     ip: "{{ market_model_ip }}"
     port: "{{ market_model_api_port }}"
+    mcp_port: "{{ market_model_mcp_port }}"
     title: "Market Model"
     desc: "Market path-set API"
     enabled: true
