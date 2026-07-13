@@ -14,20 +14,24 @@
 
 - name: Deploy service-owned Grafana dashboards from monitoring contracts
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../roles/{{ item }}/files/{{ hostvars[item].monitoring_contract.dashboard_file }}"
-    dest: "{{ grafana_dashboards_path }}/{{ hostvars[item].monitoring_contract.dashboard_file | basename }}"
+    src: "{{ playbook_dir }}/../roles/{{ item }}/files/{{ (hostvars[item].monitoring_contract | default({})).dashboard_file }}"
+    dest: "{{ grafana_dashboards_path }}/{{ ((hostvars[item].monitoring_contract | default({})).dashboard_file) | basename }}"
     mode: '0644'
   loop: "{{ groups['all'] | default([]) }}"
   when:
     - hostvars[item].monitoring_contract is defined
     - hostvars[item].monitoring_contract.enabled | default(false)
-    - hostvars[item].monitoring_contract.dashboard_file is defined
-    - hostvars[item].monitoring_contract.dashboard_file is not none
-    - hostvars[item].monitoring_contract.dashboard_file | length > 0
+    - (hostvars[item].monitoring_contract | default({})).dashboard_file | default(none) is not none
+    - (hostvars[item].monitoring_contract | default({})).dashboard_file | default('') | length > 0
   loop_control:
+    # `| default({})` before the nested `.dashboard_file` access is required: some contracts
+    # (e.g. financial-scenario) define monitoring_contract with no dashboard_file key at all,
+    # and this label is templated for every loop item regardless of the `when:` result — a bare
+    # `.dashboard_file` attribute access on such a dict raises AttributeError here (unlike in
+    # the `when:` list, where Jinja's Undefined handling tolerates it).
     label: >-
       {{
-        item + ': ' + (hostvars[item].monitoring_contract.dashboard_file | default('no dashboard', true))
-        if (hostvars[item].monitoring_contract is defined and hostvars[item].monitoring_contract.dashboard_file is not none)
+        item + ': ' + ((hostvars[item].monitoring_contract | default({})).dashboard_file | default('no dashboard', true))
+        if (hostvars[item].monitoring_contract is defined and (hostvars[item].monitoring_contract | default({})).dashboard_file | default(none) is not none)
         else item + ': no contract'
       }}
