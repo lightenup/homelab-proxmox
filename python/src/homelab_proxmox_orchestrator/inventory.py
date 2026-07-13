@@ -25,6 +25,13 @@ def _strip_cidr(value: str) -> str:
 
 
 def render_inventory_yaml(*, services: dict[str, str], ssh_private_key_file: str | None) -> str:
+    # Connection vars are emitted per-host (not at the group level) so that when this
+    # generated inventory is layered after a committed environment inventory (the monitoring
+    # deploy adds `-i inventories/prod/hosts.yml -i inventories/generated/hosts.yml` to make
+    # other services' monitoring_contract available via hostvars), the generated host-level
+    # connection vars win by precedence. Otherwise the committed inventory's host-level
+    # `ansible_user: root` would override a group-level default and the deploy would connect
+    # as root instead of the CI user.
     lines: list[str] = [
         "all:",
         "  children:",
@@ -37,16 +44,10 @@ def render_inventory_yaml(*, services: dict[str, str], ssh_private_key_file: str
         ip = _strip_cidr(str(host_value))
         lines.append(f"        {service_name}:")
         lines.append(f"          ansible_host: {ip}")
-
-    lines.extend(
-        [
-            "      vars:",
-            "        ansible_user: ansible",
-            "        ansible_become: true",
-        ]
-    )
-    if ssh_private_key_file:
-        lines.append(f"        ansible_ssh_private_key_file: {ssh_private_key_file}")
+        lines.append("          ansible_user: ansible")
+        lines.append("          ansible_become: true")
+        if ssh_private_key_file:
+            lines.append(f"          ansible_ssh_private_key_file: {ssh_private_key_file}")
 
     return "\n".join(lines) + "\n"
 
