@@ -25,13 +25,6 @@ def _strip_cidr(value: str) -> str:
 
 
 def render_inventory_yaml(*, services: dict[str, str], ssh_private_key_file: str | None) -> str:
-    # Connection vars are emitted per-host (not at the group level) so that when this
-    # generated inventory is layered after a committed environment inventory (the monitoring
-    # deploy adds `-i inventories/prod/hosts.yml -i inventories/generated/hosts.yml` to make
-    # other services' monitoring_contract available via hostvars), the generated host-level
-    # connection vars win by precedence. Otherwise the committed inventory's host-level
-    # `ansible_user: root` would override a group-level default and the deploy would connect
-    # as root instead of the CI user.
     lines: list[str] = [
         "all:",
         "  children:",
@@ -44,10 +37,16 @@ def render_inventory_yaml(*, services: dict[str, str], ssh_private_key_file: str
         ip = _strip_cidr(str(host_value))
         lines.append(f"        {service_name}:")
         lines.append(f"          ansible_host: {ip}")
-        lines.append("          ansible_user: ansible")
-        lines.append("          ansible_become: true")
-        if ssh_private_key_file:
-            lines.append(f"          ansible_ssh_private_key_file: {ssh_private_key_file}")
+
+    lines.extend(
+        [
+            "      vars:",
+            "        ansible_user: ansible",
+            "        ansible_become: true",
+        ]
+    )
+    if ssh_private_key_file:
+        lines.append(f"        ansible_ssh_private_key_file: {ssh_private_key_file}")
 
     return "\n".join(lines) + "\n"
 
@@ -89,11 +88,35 @@ def update_inventory(*, repo_root: Path) -> Path:
     inventory_file = inventory_dir / "hosts.yml"
     inventory_dir.mkdir(parents=True, exist_ok=True)
 
+    # Ansible's host_group_vars plugin only loads host_vars/ located next to the
+    # inventory source. The committed prod inventory has `inventories/prod/host_vars`
+    # symlinked to `../../host_vars`, but this generated inventory had none — so a
+    # per-service deploy (which runs `ansible-playbook -i inventories/generated/hosts.yml`)
+    # never loaded ansible/host_vars/<service>.yml, leaving host-scoped vars (e.g.
+    # fail2ban_jails) undefined. Mirror prod's symlink so the deployed host's own
+    # host_vars resolve. The generated inventory is single-host, so only that service's
+    # host_vars load.
+    _ensure_host_vars_symlink(inventory_dir)
+
     ssh_key_file = os.environ.get("ANSIBLE_SSH_PRIVATE_KEY_FILE", "").strip() or None
     yaml_text = render_inventory_yaml(services=services, ssh_private_key_file=ssh_key_file)
 
     inventory_file.write_text(yaml_text, encoding="utf-8")
     return inventory_file
+
+
+def _ensure_host_vars_symlink(inventory_dir: Path) -> None:
+    """Ensure inventories/generated/host_vars -> ../../host_vars (idempotent)."""
+    link_path = inventory_dir / "host_vars"
+    target = Path("../../host_vars")  # relative to inventory_dir, mirrors prod
+    if link_path.is_symlink():
+        if link_path.readlink() == target:
+            return
+        link_path.unlink()
+    elif link_path.exists():
+        # A real dir/file is unexpected here; leave it untouched rather than clobber.
+        return
+    link_path.symlink_to(target)
 
 
 def main(argv: list[str] | None = None) -> int:
