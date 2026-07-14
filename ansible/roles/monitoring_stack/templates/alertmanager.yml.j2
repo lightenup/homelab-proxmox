@@ -10,7 +10,15 @@ global:
   smtp_require_tls: {{ smtp_require_tls | lower }}
 
 route:
+{% if pushover_enabled | default(false) | bool %}
+  # Pushover-only: every alert is delivered via Pushover. The root receiver is the
+  # catch-all for alerts without a matching severity. Email is intentionally NOT wired
+  # in — a permanently-failing email receiver (unconfigured SMTP) previously stalled
+  # notification dispatch and blocked Pushover delivery.
+  receiver: 'pushover-warning'
+{% else %}
   receiver: 'email-default'
+{% endif %}
   group_by: ['alertname', 'severity']
   group_wait: {{ alertmanager_group_wait }}
   group_interval: {{ alertmanager_group_interval }}
@@ -20,15 +28,13 @@ route:
     - receiver: 'pushover-critical'
       matchers:
         - severity = "critical"
-      continue: true
     - receiver: 'pushover-warning'
       matchers:
         - severity = "warning"
-      continue: true
-    - receiver: 'email-default'
 {% endif %}
 
 receivers:
+{% if not (pushover_enabled | default(false) | bool) %}
   - name: 'email-default'
     email_configs:
       - to: '{% if alert_email_recipient and alert_email_recipient != "" %}{{ alert_email_recipient }}{% else %}admin@localhost{% endif %}'
@@ -43,6 +49,7 @@ receivers:
             <li>{{"{{ .Annotations.summary }}"}}<br/>{{"{{ .Annotations.description }}"}}</li>
           {{"{{ end }}"}}
           </ul>
+{% endif %}
 {% if pushover_enabled | default(false) | bool %}
   - name: 'pushover-critical'
     pushover_configs:
