@@ -14,3 +14,7 @@
     - geerlingguy.docker
     - nextcloud
     - nextcloud_backup
+    # fail2ban + metrics exporter (:9191). Deployed as part of this service so a
+    # rebuild of the LXC doesn't silently drop it (previously only installed by the
+    # standalone playbooks/fail2ban.yml, which the gated pipeline never runs).
+    - fail2ban
