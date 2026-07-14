@@ -1,8 +1,8 @@
 # Feature Specification: Path-gate the Promote confidence suite
 
-**Feature Branch**: `063-ci-confidence-suite-path-gate`
+**Feature Branch**: `063-ci-confidence-path-gate`
 **Created**: 2026-07-14
-**Status**: Backlog — independent (CI/pipeline change, no service/data impact)
+**Status**: Delivered — implemented via [specs/063-ci-confidence-path-gate/](../../specs/063-ci-confidence-path-gate/)
 **Input**: The `Prod 1 - LXC Promote` pipeline spends ~20 of its ~22 minutes on the best-effort
 "Confidence suite", which validates the lab hypervisor/provisioning stack and is **identical for
 every service and every change** (a function of the git SHA, not the diff). Make it run only when a

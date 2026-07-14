@@ -32,10 +32,10 @@ on:
         type: string
         default: ""
       run_confidence_suite:
-        description: "Run confidence suite (best-effort)"
+        description: "Force-run the confidence suite even if the path gate would skip it (best-effort)"
         required: false
         type: boolean
-        default: true
+        default: false
 
 jobs:
   setup:
@@ -91,6 +91,59 @@ jobs:
             git --no-pager log -n 10 --date=short --decorate=short --pretty=format:'%h %ad %s'
             echo "\`\`\`"
           } >>"$GITHUB_STEP_SUMMARY"
+
+  confidence_gate:
+    name: Confidence gate (path check)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [setup]
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the confidence suite must run
+        id: decide
+        env:
+          FORCE: ${{ github.event.inputs.run_confidence_suite }}
+          SHA: ${{ needs.setup.outputs.checked_sha }}
+        run: |
+          set -euo pipefail
+
+          # Operator force-run wins (FR-003).
+          if [[ "${FORCE}" == "true" ]]; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Fail-safe: no SHA to diff from ⇒ run (FR-007).
+          if [[ -z "${SHA}" ]]; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base="$(git merge-base origin/main "${SHA}" 2>/dev/null || true)"
+          if [[ -z "${base}" ]]; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          diff="$(git diff --name-only "${base}" "${SHA}" 2>/dev/null || true)"
+          if [[ -z "${diff}" ]]; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Provisioning-relevant paths — see specs/063-ci-confidence-path-gate/spec.md
+          # (keep conservative: prefer false-run over false-skip).
+          if printf '%s\n' "${diff}" | grep -qE '^terraform/|^scripts/lab/|^ansible/playbooks/lab_.*\.ya?ml$|^ansible/inventories/|^ansible/roles/lxc_base/'; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "run=false" >>"$GITHUB_OUTPUT"
+          fi
 
   apply_lab:
     name: Apply (LAB)
@@ -260,8 +313,8 @@ jobs:
   confidence_suite:
     name: Confidence suite (best-effort)
     runs-on: [self-hosted]
-    needs: [setup, apply_lab]
-    if: ${{ github.event.inputs.run_confidence_suite == true || github.event.inputs.run_confidence_suite == 'true' }}
+    needs: [setup, apply_lab, confidence_gate]
+    if: ${{ needs.confidence_gate.outputs.run == 'true' }}
     outputs:
       run_id: ${{ steps.suite_on_pve.outputs.run_id }}
       ok: ${{ steps.outcome.outputs.ok }}
@@ -632,6 +685,14 @@ jobs:
           lab_sha_ok="${{ needs.apply_lab.outputs.sha_ok }}"
           suite_sha_ok="${{ needs.confidence_suite.outputs.sha_ok }}"
           plan_sha_ok="${{ needs.plan_prod.outputs.sha_ok }}"
+
+          # A path-gated skip is a pass, not a failure: a skipped job emits empty
+          # outputs, so without this both suite_ok and suite_sha_ok would wrongly
+          # read as not-true and block PROD apply. See specs/063-ci-confidence-path-gate/spec.md (FR-005).
+          if [[ "${{ needs.confidence_suite.result }}" == "skipped" ]]; then
+            suite_ok=true
+            suite_sha_ok=true
+          fi
 
           lab_gate_failed=false
           if [[ "${lab_ok}" != "true" || "${suite_ok}" != "true" ]]; then
