@@ -1980,7 +1980,26 @@ sys.exit(3)
     if [[ ! -f "${playbook}" ]]; then
         die "missing ansible playbook for service=${SERVICE}: ${playbook}"
     fi
-    ansible-playbook -i "${inventory_file}" "${playbook}" \
+
+    # Inventory sources for the main play. The generated single-host inventory is always
+    # supplied last so its per-host connection vars (CI user) win by precedence.
+    #
+    # The monitoring deploy additionally needs every other service's hostvars
+    # (ansible_host + monitoring_contract) so its templates can render the full
+    # Prometheus scrape config, service alerts, and Grafana dashboards — these iterate
+    # groups['services']/groups['all'] via hostvars. A per-service deploy only generates a
+    # single-host inventory, so without this the monitoring stack silently drops every
+    # other service's targets/alerts/dashboards. Layer the committed environment inventory
+    # first to make those hosts available; --limit monitoring still restricts execution (and
+    # any SSH connection) to the monitoring host only.
+    local -a inventory_args=(-i "${inventory_file}")
+    if [[ "${SERVICE}" == "monitoring" ]]; then
+        local committed_inventory="${REPO_ROOT}/ansible/inventories/${ENVIRONMENT}/hosts.yml"
+        if [[ -f "${committed_inventory}" ]]; then
+            inventory_args=(-i "${committed_inventory}" -i "${inventory_file}")
+        fi
+    fi
+    ansible-playbook "${inventory_args[@]}" "${playbook}" \
         --limit "${SERVICE}" \
         --ssh-common-args "${ssh_common_args}" \
         -e "deploy_environment=${ENVIRONMENT}" \

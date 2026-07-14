@@ -21,6 +21,15 @@ def test_render_inventory_strips_cidr_and_sets_defaults() -> None:
     assert "ansible_user: ansible" in yaml_text
     assert "ansible_become: true" in yaml_text
 
+    # Connection vars must be emitted per-host (10-space indent), not at the group
+    # `vars:` level (8-space indent), so a layered committed inventory can't override them.
+    assert "          ansible_user: ansible" in yaml_text
+    assert "          ansible_become: true" in yaml_text
+    assert "      vars:" not in yaml_text
+    # One ansible_host + ansible_user pair per service host.
+    assert yaml_text.count("ansible_user: ansible") == 2
+    assert yaml_text.count("ansible_host:") == 2
+
 
 def test_update_inventory_writes_expected_file_from_env_json(tmp_path: Path, monkeypatch) -> None:
     repo_root = tmp_path
