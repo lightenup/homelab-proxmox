@@ -48,6 +48,19 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Alertmanager config validation in CI** — `amtool check-config` in `validate_alerts.yml`. *Open*
 - **Grafana security overview dashboard** — single pane: fail2ban bans, TLS expiry, availability
   heatmap, (SSH logins / upgrade status if those candidates land). *Open*
+- **Application-level error/log alerting** — Promtail/Alloy → Loki; alert on app error-rate spikes,
+  stack traces, and OOM-kills (`kernel: Out of memory`) per service. Current alerting is host/infra +
+  endpoint only, so a wedged app that still answers its port and doesn't saturate CPU/disk is invisible
+  (only Caddy 5xx rate covers app correctness today). Highest-value gap alongside backup monitoring. *Open*
+- **Per-container liveness** — cAdvisor (or docker exporter) `up`/health per container, not just host
+  node_exporter + blackbox endpoint probes; catches a crashed/wedged container whose port still listens
+  or whose host is otherwise healthy. Overlaps with the restart/flapping candidate above. *Open*
+- **ACME/TLS renewal-failure alert** — detect Caddy failing to *renew* (DNS-01 error, rate-limit)
+  before the cert is near expiry, rather than only alerting on raw `TLSCertExpiringSoon`. *Open*
+- **Predictive disk-fill** — `predict_linear(node_filesystem_avail_bytes[6h], 24*3600) < 0` to warn on
+  fast-filling disks before the static 85/95% thresholds trip. *Open*
+- **Proxmox host/guest + storage health** — `pve` node_exporter/pve-exporter for per-VM/LXC state and
+  ZFS/LVM pool health (degraded pool, failing disk); today only blackbox/self-metrics touch the PVE host. *Open*
 
 ## Security hardening
 
@@ -65,8 +78,10 @@ Sparse backlog of operability / monitoring / security improvements, carried over
   (`tls_insecure_skip_verify`), DNS rewrite, add to blackbox HTTPS probes. *Open*
 - **AdGuard LXC provisioning** — module `adguard_lxc` is defined but never applied to prod (no
   container, `adguard.hus-sky.no` probe + exporter have no host). Provision + DNS rewrites. *Open*
-- **fail2ban in `site.yml`** — `fail2ban.yml` is not imported by `site.yml`; a full rebuild leaves
-  fail2ban unconfigured on reverse_proxy/jellyfin/nextcloud. *Open*
+- **fail2ban in `site.yml`** — `fail2ban.yml` is not imported by `site.yml`. *Partially done (PR #195):*
+  the `fail2ban` role is now in the reverse_proxy/nextcloud/jellyfin service playbooks, so the gated
+  per-service pipeline (Promote→Apply) deploys and keeps it in sync — a rebuild via the pipeline no
+  longer drops it. `site.yml` / the rebuild orchestrator still don't import it (see next item). *Partial*
 - **Ansible phase in rebuild orchestrator** — add an `ansible` phase (after `services`, before
   `verify`) running `site.yml` + `fail2ban.yml` so config/monitoring is restored without a manual run.
   *Open (partial — mount remediation already calls `task ansible:mounts`)*
