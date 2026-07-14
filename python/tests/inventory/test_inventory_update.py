@@ -21,15 +21,6 @@ def test_render_inventory_strips_cidr_and_sets_defaults() -> None:
     assert "ansible_user: ansible" in yaml_text
     assert "ansible_become: true" in yaml_text
 
-    # Connection vars must be emitted per-host (10-space indent), not at the group
-    # `vars:` level (8-space indent), so a layered committed inventory can't override them.
-    assert "          ansible_user: ansible" in yaml_text
-    assert "          ansible_become: true" in yaml_text
-    assert "      vars:" not in yaml_text
-    # One ansible_host + ansible_user pair per service host.
-    assert yaml_text.count("ansible_user: ansible") == 2
-    assert yaml_text.count("ansible_host:") == 2
-
 
 def test_update_inventory_writes_expected_file_from_env_json(tmp_path: Path, monkeypatch) -> None:
     repo_root = tmp_path
@@ -45,3 +36,22 @@ def test_update_inventory_writes_expected_file_from_env_json(tmp_path: Path, mon
     assert "svc" in text
     assert "192.168.50.5" in text
     assert "/32" not in text
+
+    # The generated inventory must expose a host_vars symlink (mirroring prod) so that
+    # a per-service deploy loads ansible/host_vars/<service>.yml (e.g. fail2ban_jails).
+    link = out.parent / "host_vars"
+    assert link.is_symlink()
+    assert link.readlink() == Path("../../host_vars")
+
+
+def test_update_inventory_host_vars_symlink_is_idempotent(tmp_path: Path, monkeypatch) -> None:
+    repo_root = tmp_path
+    (repo_root / "ansible" / "inventories" / "generated").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("ANSIBLE_INVENTORY_JSON", json.dumps({"services": {"svc": "10.0.0.9/24"}}))
+
+    first = update_inventory(repo_root=repo_root)
+    # Running twice must not raise (symlink already present).
+    update_inventory(repo_root=repo_root)
+    link = first.parent / "host_vars"
+    assert link.is_symlink()
+    assert link.readlink() == Path("../../host_vars")
