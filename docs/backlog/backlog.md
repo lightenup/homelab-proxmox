@@ -17,6 +17,8 @@ Items are listed in intended implementation order.
 | ✓ | [Euro-Office document server deploy](./058-eurooffice-deploy.md) | **Delivered** — see `specs/062-eurooffice-deploy/` | Deployed **Euro-Office** (AGPLv3 sovereign fork of ONLYOFFICE DocumentServer, `ghcr.io/euro-office/documentserver:v9.3.2` via `docker_compose_v2` on its own LXC), routed `eurooffice.hus-sky.no` through Caddy (TLS+WS), wired the `eurooffice` connector into Nextcloud via `occ`. Replaces flaky built-in CODE; OnlyOffice-grade `.docx` fidelity. |
 | — | [Migrate host-bind NFS services to in-guest](./migrate-host-bind-mounts-to-in-guest-nfs.md) | Idea (Backlog) — sparse stub | Move **immich** + **nextcloud** off the host-mount + `pct set` bind pattern onto the in-guest NFS pattern (jellyfin/financial-scenario). Removes the fstab/`pct set`/orchestrator seam. Watch uid/gid mapping + DR-orchestrator coupling. |
 | — | [Path-gate the Promote confidence suite](./063-ci-confidence-suite-path-gate.md) | Backlog — CI perf | The Promote pipeline spends ~20 of ~22 min on a **generic** lab-hypervisor confidence suite that's identical for every service/change. Gate it on provisioning-relevant paths (mirroring `mutation.yml`'s `gate`→`result` split) so role/template/host_vars/docs promotes drop to ~2 min, while provisioning changes still run the full gate. Skipped ≠ failed, so prod apply needs no override. Independent; no service/data impact. |
+| — | [LLM router (gateway LXC)](./064-llm-router.md) | Backlog — ready to spec | One OpenAI-compatible endpoint on its own LXC, addressed by **intent aliases** (`hermes-fast`/`-balanced`/`-deep`) rather than model IDs. Backends: the Mac on the tailnet (Ollama/LM Studio — free, private, **intermittent**), an aggregator (OpenRouter), an Anthropic **API key**. Background health checks + ordered fallbacks make the Mac's availability invisible to callers; alias→model mapping is `group_vars` data, so the Mac's 32 GB → 128 GB upgrade is a one-line edit. Tailnet-only. **Open: which gateway (LiteLLM vs Bifrost) — decided in the spec.** |
+| — | [Hermes service + Claude plan door](./065-hermes-service.md) | Backlog — **blocked on `064`** | Hermes as a gated LXC consuming `064` by alias; **state on local disk + `hermes_backup` → Synology**, bulk artifacts on in-guest NFS (the `nextcloud`/`financial-scenario` split — SQLite/vector stores must not sit on NFS). Plus an always-on **plan-door LXC** running the *unmodified* Claude Code CLI, logged in once by the account owner, that Hermes triggers headlessly — the subscription can't be a router backend under Anthropic's terms. Quota-aware: models the **5-hour rolling** window + weekly per-model allowance from `--output-format json` + `ccusage`/OTEL, and fills windows that would otherwise expire unused. **Open: what Hermes actually is.** |
 | — | [Improvement candidates (consolidated)](./improvement-candidates.md) | Ideas (Backlog) — sparse | Operability / monitoring / security backlog carried over from the retired `specs/candidate/`. Grouped one-liners with Open/Done status. |
 
 ## Sequencing note
@@ -35,3 +37,13 @@ the canonical `group_vars` location rather than scattered across role defaults.
 against live user data, fenced by a restore-verified backup per hop). With NC on **34**, `058` landed
 as a familiar `lxc_service` + `docker_compose_v2` deploy plus one `caddy_services` route, replacing
 the flaky built-in CODE (`richdocumentscode`) with an OnlyOffice-grade, AGPLv3, EU-sovereign editor.
+
+**LLM path**: **`064` (router) → `065` (Hermes + plan door)**. Split deliberately — the router is
+independently useful, testable and deployable (an LXC, a templated config, a healthcheck), and its
+acceptance turns on one drill: stop the Mac's inference server mid-test and confirm requests fall back
+rather than fail. Hermes is blocked behind it so that Hermes never holds provider credentials. Two
+decisions are carried into the specs on purpose: **which gateway** (LiteLLM vs Bifrost — lean LiteLLM
+on documentation depth for the intermittent-backend case) in `064`, and **what Hermes actually is** in
+`065`. Note the standing hazard `065` inherits: the plan-door LXC holds an interactively-established
+session that an LXC rebuild silently drops — the same class of gap as the standalone `fail2ban.yml`
+playbook — hence a liveness monitor and a rebuild-path runbook step rather than a manual habit.
