@@ -15,6 +15,7 @@ on:
           - homeassistant
           - immich
           - jellyfin
+          - llm-router
           - monitoring
           - nextcloud
           - reverse_proxy

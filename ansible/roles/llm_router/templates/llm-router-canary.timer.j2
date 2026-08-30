@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the LLM Router synthetic canary every {{ llm_router_canary_interval_minutes }} minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ llm_router_canary_interval_minutes }}min
+Unit=llm-router-canary.service
+
+[Install]
+WantedBy=timers.target

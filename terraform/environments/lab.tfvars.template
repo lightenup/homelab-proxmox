@@ -54,6 +54,7 @@ service_ips = {
   financial-scenario   = "192.168.1.217/24"
   market-model         = "192.168.1.218/24"
   eurooffice           = "192.168.1.219/24"
+  llm-router           = "192.168.1.220/24"
 }
 
 ssh_public_keys = [

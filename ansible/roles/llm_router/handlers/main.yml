@@ -1,0 +1,9 @@
+---
+- name: Restart llm-router
+  community.docker.docker_compose_v2:
+    project_src: "{{ llm_router_install_dir }}"
+    state: restarted
+
+- name: Reload systemd for llm-router canary
+  ansible.builtin.systemd:
+    daemon_reload: true

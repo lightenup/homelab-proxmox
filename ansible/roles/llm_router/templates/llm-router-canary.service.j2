@@ -1,0 +1,7 @@
+[Unit]
+Description=LLM Router synthetic canary (spec 064-llm-router, FR-018)
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ llm_router_install_dir }}/canary.sh

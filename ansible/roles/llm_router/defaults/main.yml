@@ -1,0 +1,25 @@
+---
+# Pinned image repositories — tags come from ansible/group_vars/services/vars.yml
+# (llm_router_version, llm_router_postgres_version, llm_router_tailscale_version).
+llm_router_install_dir: "/opt/llm-router"
+llm_router_data_dir: "/opt/llm-router-data"
+llm_router_image: "ghcr.io/berriai/litellm"
+llm_router_postgres_image: "postgres"
+llm_router_tailscale_image: "tailscale/tailscale"
+
+# Tailscale sidecar (research D-102) — userspace networking, no TUN device, no privileged
+# container. LiteLLM reaches the Mac's MagicDNS name through this outbound HTTP proxy.
+llm_router_tailscale_proxy_port: 1055
+llm_router_tailscale_hostname: "llm-router"
+
+# Health checks (FR-005, research D-101) — background checks are scoped to local-tier
+# deployments only so probing never bills real tokens.
+llm_router_health_check_interval: 60
+llm_router_allowed_fails: 2
+llm_router_cooldown_time: 60
+
+# Synthetic canary (FR-018) — detects an all-backends-failing gateway independently of
+# client traffic. Runs against the cheapest alias on a low cadence; this is client
+# traffic, not a health probe, so it sits outside SC-011's probe budget.
+llm_router_canary_alias: hermes-fast
+llm_router_canary_interval_minutes: 60

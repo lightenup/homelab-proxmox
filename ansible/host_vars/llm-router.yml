@@ -1,0 +1,76 @@
+healthcheck_url:
+  scheme: http
+  port: 4000
+  path: /health/readiness
+healthcheck_profile: lan
+healthcheck_expect_status: 200
+
+# D-105 (verified empirically, see research.md): LiteLLM's OSS /metrics IS populated once
+# `litellm_settings.callbacks: [prometheus]` is set (config.yaml.j2 does this). Real metric
+# names confirmed against the pinned v1.83.3-stable image: litellm_deployment_state,
+# litellm_deployment_success_responses_total, litellm_deployment_failure_responses_total,
+# litellm_spend_metric_total, litellm_remaining_api_key_budget_metric,
+# litellm_remaining_team_budget_metric. No bearer_token is set below — deliberately: LiteLLM's
+# `require_auth_for_metrics_endpoint: true` hangs indefinitely on the master key against this
+# pinned version (reproduced locally), so the endpoint is left at LiteLLM's own open default.
+# See config.yaml.j2 and research.md D-105 for the full account.
+monitoring_contract:
+  enabled: true
+  scrape_targets:
+    - job_name: "llm-router"
+      port: 4000
+      path: /metrics/
+  liveness_targets:
+    - job_name: "llm-router-readiness"
+      url: "http://192.168.1.220:4000/health/readiness"
+      module: http_2xx
+  dashboard_file: "grafana/dashboards/llm-router.json"
+  alert_rules:
+    - alert: LlmRouterDown
+      expr: |
+        probe_success{job="llm-router-readiness"} == 0
+      for: "5m"
+      severity: critical
+      summary: !unsafe "llm-router is down on {{ $labels.instance }}"
+      description: !unsafe "The llm-router gateway (or its database) has been unreachable for more than 5 minutes (instance: {{ $labels.instance }})."
+    - alert: LlmRouterLocalTierDown
+      expr: |
+        litellm_deployment_state{model_id=~".*-local"} != 0
+      for: "5m"
+      severity: info
+      summary: !unsafe "llm-router local tier (Mac) is down"
+      description: !unsafe >-
+        A local-tier deployment has left the healthy pool for more than 5 minutes. This is
+        expected when the Mac is asleep or off the tailnet — informational only, not an
+        incident (FR-009).
+    - alert: LlmRouterAllBackendsFailing
+      expr: |
+        sum(rate(litellm_deployment_failure_responses_total[10m])) / (sum(rate(litellm_deployment_failure_responses_total[10m])) + sum(rate(litellm_deployment_success_responses_total[10m]))) > 0.9
+      for: "10m"
+      severity: critical
+      summary: !unsafe "llm-router: over 90% of requests are failing across all deployments"
+      description: !unsafe >-
+        The gateway is up but every backend is failing under load — the readiness probe alone
+        would miss this (FR-018). This alert requires client traffic to fire;
+        LlmRouterCanaryFailing covers the no-traffic case.
+    - alert: LlmRouterCanaryFailing
+      expr: |
+        llm_router_canary_success == 0
+      for: "0m"
+      severity: critical
+      summary: !unsafe "llm-router: synthetic canary request failed"
+      description: !unsafe >-
+        The low-cadence canary against {{ $labels.alias }} failed. Unlike
+        LlmRouterAllBackendsFailing, this fires even with zero client traffic (FR-018, SC-013)
+        — the metric comes from a systemd-timer script via node_exporter's textfile collector,
+        not from LiteLLM itself.
+    - alert: LlmRouterBudgetCapExhausted
+      expr: |
+        litellm_remaining_team_budget_metric{team_alias="llm-router-gateway-wide"} <= 0
+      for: "1m"
+      severity: critical
+      summary: !unsafe "llm-router: gateway-wide spend cap exhausted"
+      description: !unsafe >-
+        The gateway-wide backstop budget is exhausted — every client is now refused, not just
+        one (FR-010, SC-012). Distinguish this from a per-client budget breach, which is
+        expected behaviour and not alerted.

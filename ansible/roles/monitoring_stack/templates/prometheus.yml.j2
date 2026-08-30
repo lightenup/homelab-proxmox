@@ -69,6 +69,14 @@ scrape_configs:
         labels:
           instance: '{{ host }}'
     metrics_path: {{ target.path | default('/metrics') }}
+{% if target.bearer_token is defined and target.bearer_token %}
+    # Optional bearer-auth for scrape targets whose /metrics requires a token (e.g.
+    # llm-router — LiteLLM's /metrics defaults to requiring one). Default-off: existing
+    # contracts that don't set bearer_token render byte-identically (research D-105,
+    # spec 064-llm-router).
+    authorization:
+      credentials: '{{ target.bearer_token }}'
+{% endif %}
 {% endfor %}
 {% endif %}
 {% endfor %}

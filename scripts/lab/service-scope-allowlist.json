@@ -17,6 +17,9 @@
   "jellyfin": [
     "module.jellyfin_lxc"
   ],
+  "llm-router": [
+    "module.llm_router_lxc"
+  ],
   "market-model": [
     "module.market_model_lxc"
   ],

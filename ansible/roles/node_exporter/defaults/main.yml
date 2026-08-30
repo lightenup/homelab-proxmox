@@ -20,3 +20,8 @@ node_exporter_disabled_collectors:
   - infiniband
   - fibrechannel
   - wifi
+
+# Textfile collector — the standard Prometheus pattern for ad-hoc metrics that don't come
+# from node_exporter itself (e.g. a cron/timer-driven canary). Backward compatible: an empty
+# or absent directory means node_exporter reports nothing extra (added for spec 064-llm-router).
+node_exporter_textfile_directory: "/var/lib/node_exporter/textfile_collector"

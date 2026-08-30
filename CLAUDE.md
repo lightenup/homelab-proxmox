@@ -13,6 +13,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-25
 - Docker bind volumes on the LXC's local disk for data/logs (`/opt/eurooffice-data`); no NFS bind-mount (documents live in Nextcloud). No user-data backup in scope. (062-eurooffice-deploy)
 - GitHub Actions workflow YAML; Bash (POSIX/`bash`) in `run:` steps; `git` for + `actions/checkout@v4` (with `fetch-depth: 0` for merge-base), `git`, (063-ci-confidence-path-gate)
 - N/A — no persistent data. Decision lives only in a job output for the run's lifetime. (063-ci-confidence-path-gate)
+- HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash. No new language. + `modules/lxc_service` (Terraform); `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible); `ghcr.io/berriai/litellm` (pinned, non-`latest`); `postgres:17-alpine`; `tailscale/tailscale` (userspace sidecar) (064-llm-router)
+- PostgreSQL on the LXC's local disk (`/opt/llm-router-data/postgres`) for virtual keys, budgets and `LiteLLM_SpendLogs`. No NFS mount (`features_mount` omitted) — FR-012. No user data persisted; prompt/response bodies not logged. (064-llm-router)
 
 - HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy) + `telmate/proxmox` Terraform provider, `lxc_service` Terraform module, `geerlingguy.docker` Ansible role, `community.docker.docker_compose_v2` Ansible module (044-transcriber-proxmox-deploy)
 
@@ -32,9 +34,9 @@ tests/
 HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy): Follow standard conventions
 
 ## Recent Changes
+- 064-llm-router: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash. No new language. + `modules/lxc_service` (Terraform); `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible); `ghcr.io/berriai/litellm` (pinned, non-`latest`); `postgres:17-alpine`; `tailscale/tailscale` (userspace sidecar)
 - 063-ci-confidence-path-gate: Added GitHub Actions workflow YAML; Bash (POSIX/`bash`) in `run:` steps; `git` for + `actions/checkout@v4` (with `fetch-depth: 0` for merge-base), `git`,
 - 062-eurooffice-deploy: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Caddyfile — no new language + `modules/lxc_service` (Terraform), `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible), public image `ghcr.io/euro-office/documentserver:v9.3.2`, Nextcloud `eurooffice` connector app v11.0.1
-- 060-nextcloud-upgrade-33-34: Added YAML (Ansible 2.x), Jinja2, Bash — no new language. + `community.docker.docker_compose_v2`; official `nextcloud:33` / `nextcloud:34`
 
 
 <!-- MANUAL ADDITIONS START -->
