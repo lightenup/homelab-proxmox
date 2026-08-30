@@ -41,8 +41,13 @@ llm_router_ip: "192.168.1.220"
 llm_router_port: 4000
 
 # Alias -> ordered deployment mapping (FR-003). Local deployments MUST use the Mac's
-# MagicDNS name (*.ts.net), never a LAN IP (FR-013). Replace <mac-hostname>.<tailnet>.ts.net
-# and the model names below with the real values before first deploy.
+# MagicDNS name (*.ts.net), never a LAN IP (FR-013).
+#
+# Model names verified against `ollama list` on the Mac 2026-08-30 — llama3.1:8b and
+# gemma4:26b are pulled and present. STILL A PLACEHOLDER: <mac-hostname>.<tailnet>.ts.net
+# (x2 below) — the Mac's Tailscale CLI is unreachable behind Zscaler, so read the MagicDNS
+# name from the menu-bar icon or admin console. Preflight fails loudly if it is left as-is.
+# See specs/064-llm-router/quickstart.md § 0b for the full observed environment state.
 llm_router_aliases:
   - name: hermes-fast
     fallback_to: hermes-balanced
@@ -66,13 +71,13 @@ llm_router_aliases:
     deployments:
       - id: balanced-local
         tier: local
-        provider_model: "ollama_chat/qwen2.5:32b"
+        provider_model: "ollama_chat/gemma4:26b"
         api_base: "http://<mac-hostname>.<tailnet>.ts.net:11434"
         context_window: 32768
         health_checked: true
       - id: balanced-hosted
         tier: aggregator
-        provider_model: "openrouter/qwen/qwen-2.5-32b-instruct"
+        provider_model: "openrouter/google/gemma-3-27b-it"
         api_key_env: OPENROUTER_API_KEY
         context_window: 32768
         health_checked: false

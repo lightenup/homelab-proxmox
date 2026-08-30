@@ -54,12 +54,86 @@ The homelab Proxmox host (`ci@pve`) has **unrestricted GitHub access** (HTTPS 20
 If the API path becomes painful it can serve as a git push relay. Pipeline deploys already run on
 `pve`, so they are unaffected by the Mac's push block.
 
+## Zscaler also blocks Tailscale (dev Mac)
+
+Same proxy, same class of block as the git push above — **the entire `tailscale.com` domain is
+403'd** on the dev Mac, so Tailscale cannot log in there at all:
+
+```text
+login.tailscale.com        → 403   Server: Zscaler/6.2
+controlplane.tailscale.com → 403
+api.tailscale.com          → 403
+derp1.tailscale.com        → 403
+```
+
+DNS for those names resolves into Zscaler's synthetic `192.200.0.x` range, and the TLS cert is
+`O=Zscaler Inc., CN=Zscaler Intermediate Root CA`, not Tailscale's.
+
+**Symptom to recognise:** clicking *Log in* in the Tailscale GUI silently does nothing — no browser
+tab, no error. The app POSTs to `controlplane.tailscale.com`, gets an HTML block page instead of
+JSON, fails to parse it, and gives up quietly.
+
+**Consequences:**
+
+- A pre-shared auth key does **not** help — `tailscale up --auth-key=…` still has to reach the
+  control plane.
+- Switching Wi-Fi or tethering does **not** help; the Zscaler Client Connector
+  (`com.zscaler.zscaler.TRPTunnel`, on `utun5`) follows the Mac onto any network.
+- `tailscale status` **hangs** rather than failing fast. If a `tailscale` command appears stuck,
+  this is why — kill it rather than waiting.
+- The GUI (App Store) build also does not expose `/var/run/tailscaled.socket`, so the CLI cannot
+  talk to a *working* daemon either. Read the device's MagicDNS name from the menu-bar icon or the
+  admin console instead of scripting it.
+
+**Unaffected:** the `pve` host and the LXCs — neither is behind Zscaler. The `064-llm-router`
+Tailscale sidecar runs on its LXC and is fine. Only *reaching the tailnet from the Mac* is broken.
+
 ## Deploys
 
 Service deploys go through the gated GitHub Actions pipeline
 (`Prod 1 - LXC Promote` → `Prod 2 - LXC Apply`, both `workflow_dispatch`), which can target any
 branch ref — no merge to `main` is required to deploy. Trigger with `gh workflow run`. Per-feature
 runbooks live in `specs/*/quickstart.md`.
+
+## PR gotcha: the protected-path label must exist *before* the event fires
+
+`ci.yml`'s **Guardrail: protected paths must not change** reads labels from the webhook payload:
+
+```js
+const labels = (context.payload.pull_request.labels || []).map(l => l.name);
+```
+
+That payload is a **snapshot taken when the event fired**. Two consequences that look like bugs:
+
+- Adding `allow-protected-path-changes` *after* opening the PR does not fix a failed run.
+  `gh run rerun` replays the original, label-less payload — so it fails identically, forever.
+- `ci.yml` declares bare `pull_request:` with no `types:`, so it defaults to
+  `opened, synchronize, reopened`. **`labeled` is not among them**, so adding the label triggers
+  nothing on its own.
+
+**Fix:** force a fresh event carrying the label — close and reopen the PR:
+
+```bash
+gh api -X PATCH repos/OWNER/REPO/pulls/N -f state=closed
+gh api -X PATCH repos/OWNER/REPO/pulls/N -f state=open
+```
+
+Protected paths are `.specify/**`, `adapter/**`, `scripts/lab/**`, `mkdir/**`
+(`.guardrails/protected-paths.json`). Any new service touching
+`scripts/lab/service-scope-allowlist.json` hits this, so label such PRs at creation time.
+
+A durable alternative, if this keeps biting: add `types: [opened, synchronize, reopened, labeled]`
+to `ci.yml` so labelling retriggers naturally.
+
+## Note on `gh` and Zscaler
+
+`gh pr create` may fail where plain API calls succeed — the proxy blocks the git pack upload and
+SSH, but `api.github.com` POSTs go through fine. Prefer the non-interactive form for anything
+write-shaped:
+
+```bash
+gh api repos/OWNER/REPO/pulls --input pr.json
+```
 
 ## Spec-driven workflow
 
