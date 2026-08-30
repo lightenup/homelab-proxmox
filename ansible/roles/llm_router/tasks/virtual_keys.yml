@@ -1,0 +1,91 @@
+---
+# Provision the two-level budget structure (FR-010, FR-015) using LiteLLM's native team
+# primitive rather than a bespoke object — verified live against the pinned v1.83.3-stable
+# image during implementation:
+#
+#   - One LiteLLM TEAM ("llm-router-gateway-wide") carries the gateway-wide backstop cap.
+#     Its remaining budget is what litellm_remaining_team_budget_metric reports, so this is
+#     also what makes the metric usable for the LlmRouterBudgetCapExhausted alert
+#     (contracts/monitoring.md) — a standalone /budget/new object (tried first) has NO
+#     corresponding Prometheus metric, which is why this uses a team instead.
+#   - Every client's virtual key is generated ON that team, with its own max_budget — this
+#     is LiteLLM's documented "team member budget": an individual limit enforced within the
+#     team's shared budget. One client breaching its own limit does not touch the others;
+#     the team running out refuses everyone (exactly FR-010's two levels).
+#
+# Both /team/new and /key/generate are fast and correct (confirmed live); LiteLLM has no
+# idempotent upsert for either, so idempotency here is achieved by looking up first.
+
+- name: Look up the gateway-wide team by alias
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ llm_router_port }}/team/list"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ litellm_master_key }}"
+    status_code: 200
+  register: llm_router_team_list
+  changed_when: false
+
+- name: Extract the gateway-wide team id, if it already exists
+  ansible.builtin.set_fact:
+    llm_router_gateway_team_id: >-
+      {{ (llm_router_team_list.json | selectattr('team_alias', 'equalto', 'llm-router-gateway-wide') | list | first | default({})).get('team_id', '') }}
+
+- name: Create the gateway-wide team, if it does not already exist
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ llm_router_port }}/team/new"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ litellm_master_key }}"
+    body_format: json
+    body:
+      team_alias: "llm-router-gateway-wide"
+      max_budget: "{{ llm_router_gateway_budget.max_budget }}"
+      budget_duration: "{{ llm_router_gateway_budget.budget_duration }}"
+    status_code: 200
+  register: llm_router_team_created
+  when: llm_router_gateway_team_id == ""
+
+- name: Resolve the team id for this run
+  ansible.builtin.set_fact:
+    llm_router_gateway_team_id: >-
+      {{ llm_router_gateway_team_id if llm_router_gateway_team_id != '' else llm_router_team_created.json.team_id }}
+
+- name: Look up existing virtual keys by alias
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ llm_router_port }}/key/info"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ litellm_master_key }}"
+    body_format: json
+    body:
+      key_alias: "{{ item.alias }}"
+    status_code: [200, 404]
+  register: llm_router_existing_key
+  loop: "{{ llm_router_clients }}"
+  loop_control:
+    label: "{{ item.alias }}"
+  changed_when: false
+  failed_when: false
+
+- name: Generate a virtual key on the gateway-wide team for each client not already provisioned
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ llm_router_port }}/key/generate"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ litellm_master_key }}"
+    body_format: json
+    body:
+      key: "{{ lookup('vars', item.item.key_env | lower) }}"
+      key_alias: "{{ item.item.alias }}"
+      team_id: "{{ llm_router_gateway_team_id }}"
+      max_budget: "{{ item.item.max_budget }}"
+      budget_duration: "{{ item.item.budget_duration }}"
+      rpm_limit: "{{ item.item.rpm_limit | default(omit) }}"
+    status_code: 200
+  loop: "{{ llm_router_existing_key.results }}"
+  loop_control:
+    label: "{{ item.item.alias }}"
+  when: item.status == 404
+  register: llm_router_key_created
+  no_log: true

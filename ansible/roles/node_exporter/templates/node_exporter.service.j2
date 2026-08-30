@@ -12,6 +12,7 @@ Restart=on-failure
 ExecStart=/usr/local/bin/node_exporter \
   --web.listen-address=:{{ node_exporter_port }} \
   --collector.filesystem.mount-points-exclude="^/(sys|proc|dev|run)($|/)" \
+  --collector.textfile.directory={{ node_exporter_textfile_directory }} \
 {% for collector in node_exporter_disabled_collectors %}
   --no-collector.{{ collector }} \
 {% endfor %}

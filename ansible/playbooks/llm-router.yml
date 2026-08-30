@@ -1,0 +1,13 @@
+---
+- name: Configure base for llm-router
+  hosts: llm-router
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure llm-router
+  hosts: llm-router
+  become: true
+  roles:
+    - geerlingguy.docker
+    - llm_router

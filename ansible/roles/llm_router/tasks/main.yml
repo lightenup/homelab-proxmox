@@ -1,0 +1,88 @@
+---
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Ensure install directory exists
+  ansible.builtin.file:
+    path: "{{ llm_router_install_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Ensure data directories exist
+  ansible.builtin.file:
+    path: "{{ llm_router_data_dir }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - postgres
+    - tailscale-state
+
+- name: Deploy config.yaml
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ llm_router_install_dir }}/config.yaml"
+    mode: '0640'
+  notify: Restart llm-router
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ llm_router_install_dir }}/docker-compose.yml"
+    mode: '0640'
+  notify: Restart llm-router
+
+- name: Ensure llm-router stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ llm_router_install_dir }}"
+    state: present
+    remove_orphans: true
+    pull: always
+
+- name: Wait for the gateway to be reachable
+  ansible.builtin.wait_for:
+    port: "{{ llm_router_port }}"
+    host: "127.0.0.1"
+    delay: 5
+    timeout: 120
+
+- name: Verify gateway readiness (covers gateway liveness AND database reachability — research D-103)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ llm_router_port }}/health/readiness"
+    method: GET
+    status_code: 200
+  register: llm_router_health
+  retries: 12
+  delay: 5
+  until: llm_router_health.status == 200
+  changed_when: false
+
+- name: Include virtual key provisioning (FR-015, FR-010)
+  ansible.builtin.include_tasks: virtual_keys.yml
+
+- name: Resolve the canary client's vault-sourced key
+  ansible.builtin.set_fact:
+    llm_router_canary_key: "{{ lookup('vars', (llm_router_clients | selectattr('alias', 'equalto', 'canary') | first).key_env | lower) }}"
+
+- name: Deploy the canary script
+  ansible.builtin.template:
+    src: canary.sh.j2
+    dest: "{{ llm_router_install_dir }}/canary.sh"
+    mode: '0700'  # contains the canary's vault-sourced key — root-readable only
+  no_log: true
+
+- name: Deploy the canary systemd service and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: '0644'
+  loop:
+    - llm-router-canary.service
+    - llm-router-canary.timer
+  notify: Reload systemd for llm-router canary
+
+- name: Enable and start the canary timer (FR-018)
+  ansible.builtin.systemd:
+    name: llm-router-canary.timer
+    enabled: true
+    state: started
+    daemon_reload: true

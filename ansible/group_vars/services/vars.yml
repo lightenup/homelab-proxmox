@@ -20,6 +20,9 @@ immich_version: "v3.0.2"
 financial_scenario_version: "0.2.2"
 market_model_version: "0.3.0"
 eurooffice_version: "v9.3.2"
+llm_router_version: "v1.83.3-stable"
+llm_router_postgres_version: "17.11-alpine3.24"
+llm_router_tailscale_version: "v1.102.3"
 
 # Euro-Office Configuration
 eurooffice_ip: "192.168.1.219"
@@ -29,6 +32,85 @@ eurooffice_port: 80
 market_model_ip: "192.168.1.218"
 market_model_api_port: 8000
 market_model_mcp_port: 8001
+
+# LLM Router Configuration (spec 064)
+# Tailnet-egress is provided by an in-container tailscaled sidecar (userspace networking,
+# no TUN device — see specs/064-llm-router/research.md D-102). No Redis: single worker, no
+# consumer for shared cross-worker state (FR-014, research D-104).
+llm_router_ip: "192.168.1.220"
+llm_router_port: 4000
+
+# Alias -> ordered deployment mapping (FR-003). Local deployments MUST use the Mac's
+# MagicDNS name (*.ts.net), never a LAN IP (FR-013). Replace <mac-hostname>.<tailnet>.ts.net
+# and the model names below with the real values before first deploy.
+llm_router_aliases:
+  - name: hermes-fast
+    fallback_to: hermes-balanced
+    context_window_fallback_to: hermes-deep
+    deployments:
+      - id: fast-local
+        tier: local
+        provider_model: "ollama_chat/llama3.1:8b"
+        api_base: "http://<mac-hostname>.<tailnet>.ts.net:11434"
+        context_window: 32768
+        health_checked: true
+      - id: fast-hosted
+        tier: aggregator
+        provider_model: "openrouter/meta-llama/llama-3.1-8b-instruct"
+        api_key_env: OPENROUTER_API_KEY
+        context_window: 32768
+        health_checked: false
+  - name: hermes-balanced
+    fallback_to: hermes-deep
+    context_window_fallback_to: hermes-deep
+    deployments:
+      - id: balanced-local
+        tier: local
+        provider_model: "ollama_chat/qwen2.5:32b"
+        api_base: "http://<mac-hostname>.<tailnet>.ts.net:11434"
+        context_window: 32768
+        health_checked: true
+      - id: balanced-hosted
+        tier: aggregator
+        provider_model: "openrouter/qwen/qwen-2.5-32b-instruct"
+        api_key_env: OPENROUTER_API_KEY
+        context_window: 32768
+        health_checked: false
+  - name: hermes-deep
+    fallback_to: null
+    context_window_fallback_to: null
+    deployments:
+      - id: deep-frontier
+        tier: frontier
+        provider_model: "anthropic/claude-sonnet-5"
+        api_key_env: ANTHROPIC_API_KEY
+        context_window: 1000000
+        health_checked: false
+
+# Per-client virtual keys (FR-015). Budgets set against Claude Sonnet 5 LIST pricing
+# ($3/$15 per 1M tokens) — NOT the introductory rate, which expires 2026-08-31
+# (research D-106). Add one entry per real consumer before first deploy.
+llm_router_clients:
+  - alias: hermes
+    key_env: LLM_ROUTER_CLIENT_HERMES_KEY
+    max_budget: 20.00
+    budget_duration: "30d"
+    rpm_limit: 60
+  # Synthetic canary (FR-018) — deliberately modelled as an ordinary client, not a special
+  # case, so it rides the same virtual-key provisioning, preflight validation and budget
+  # headroom math as every other consumer. Its own tiny budget means a canary loop can't
+  # itself become the runaway-client scenario FR-010 exists to prevent.
+  - alias: canary
+    key_env: LLM_ROUTER_CANARY_KEY
+    max_budget: 1.00
+    budget_duration: "30d"
+    rpm_limit: 10
+
+# Gateway-wide backstop cap (FR-010, SC-012). MUST stay above the sum of client budgets
+# with real headroom — the preflight fails the deploy otherwise (data-model.md § Gateway Budget).
+llm_router_gateway_budget:
+  max_budget: 50.00
+  budget_duration: "30d"
 
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.

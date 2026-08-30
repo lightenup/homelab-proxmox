@@ -2,7 +2,12 @@
 
 **Feature Branch**: `064-llm-router`
 **Created**: 2026-08-29
-**Status**: Backlog — ready to spec. Independent; no blocking dependency.
+**Status**: Spec, plan, tasks and implementation complete on branch `064-llm-router` — see
+`specs/064-llm-router/`. **Not yet deployed**: registration, Terraform module, Ansible role,
+monitoring and alerting are all built and validated (syntax/lint/render/live-image testing), but no
+LXC exists yet in LAB or PROD. Remaining work is live deployment and the acceptance drills
+(`specs/064-llm-router/tasks.md` T009, T023–T043, T050–T057, T062–T064) plus vault secrets, which
+need real credentials only the account owner holds. Independent; no blocking dependency.
 **Input**: Deploy a self-hosted LLM gateway on its own gated LXC that exposes **one
 OpenAI-compatible endpoint** to homelab clients, addressed by **intent aliases** (`hermes-fast`,
 `hermes-balanced`, `hermes-deep`) rather than provider model IDs. Backends: a Mac on the tailnet

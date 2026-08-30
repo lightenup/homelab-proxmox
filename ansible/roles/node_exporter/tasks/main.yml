@@ -75,6 +75,14 @@
     create_home: false
     comment: "node_exporter service user"
 
+- name: Ensure textfile collector directory exists
+  ansible.builtin.file:
+    path: "{{ node_exporter_textfile_directory }}"
+    state: directory
+    owner: "{{ node_exporter_user }}"
+    group: "{{ node_exporter_user }}"
+    mode: '0755'
+
 - name: Deploy node_exporter systemd unit
   ansible.builtin.template:
     src: node_exporter.service.j2

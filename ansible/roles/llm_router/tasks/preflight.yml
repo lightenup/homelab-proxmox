@@ -1,0 +1,152 @@
+---
+# Preflight validation for the LLM Router (spec 064-llm-router).
+# Rendering config.yaml.j2 is not attempted until all of these pass — a malformed alias
+# mapping should fail the deploy, not produce a subtly wrong routing table
+# (contracts/alias-mapping.md § Preflight assertions).
+
+- name: Assert image version is pinned
+  ansible.builtin.assert:
+    that:
+      - llm_router_version is defined
+      - llm_router_version != ""
+      - llm_router_version != "latest"
+    fail_msg: >-
+      llm_router_version must be a pinned tag (e.g. "v1.83.3-stable"), not empty or "latest" (FR-001).
+
+- name: Assert Postgres and Tailscale versions are pinned
+  ansible.builtin.assert:
+    that:
+      - llm_router_postgres_version is defined
+      - llm_router_postgres_version != ""
+      - llm_router_postgres_version != "latest"
+      - llm_router_tailscale_version is defined
+      - llm_router_tailscale_version != ""
+      - llm_router_tailscale_version != "latest"
+    fail_msg: "llm_router_postgres_version and llm_router_tailscale_version must both be pinned, non-latest tags."
+
+- name: Assert vault-sourced provider credentials are defined
+  ansible.builtin.assert:
+    that:
+      - openrouter_api_key is defined
+      - openrouter_api_key | length > 0
+      - anthropic_api_key is defined
+      - anthropic_api_key | length > 0
+      - litellm_master_key is defined
+      - litellm_master_key | length > 0
+      - litellm_db_password is defined
+      - litellm_db_password | length > 0
+      - tailscale_authkey is defined
+      - tailscale_authkey | length > 0
+    fail_msg: >-
+      Missing vault variables: openrouter_api_key, anthropic_api_key, litellm_master_key,
+      litellm_db_password and/or tailscale_authkey — run
+      'ansible-vault edit group_vars/services/vault.yml' to add them (FR-007, Constitution II).
+
+- name: Assert Docker daemon is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+  check_mode: true
+  register: docker_status
+  failed_when: docker_status.failed
+
+# --- Alias mapping shape (data-model.md § Entity: Alias, § Entity: Deployment) ---
+
+- name: Build the set of defined alias names
+  ansible.builtin.set_fact:
+    llm_router_alias_names: "{{ llm_router_aliases | map(attribute='name') | list }}"
+
+- name: Assert at least one alias is defined
+  ansible.builtin.assert:
+    that:
+      - llm_router_aliases | length > 0
+    fail_msg: "llm_router_aliases must define at least one alias."
+
+- name: Assert every fallback_to / context_window_fallback_to references a defined alias
+  ansible.builtin.assert:
+    that:
+      - item.fallback_to is none or item.fallback_to in llm_router_alias_names
+      - item.context_window_fallback_to is none or item.context_window_fallback_to in llm_router_alias_names
+    fail_msg: >-
+      Alias '{{ item.name }}' has a fallback_to or context_window_fallback_to that does not
+      name a defined alias.
+  loop: "{{ llm_router_aliases }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Assert the fallback graph terminates (no alias with a non-null fallback_to has an empty deployment list downstream forever)
+  ansible.builtin.assert:
+    that:
+      # Every alias with fallback_to == null MUST exist and terminate the chain — a cycle
+      # is only possible if EVERY alias has a non-null fallback_to, which this rules out.
+      - llm_router_aliases | selectattr('fallback_to', 'none') | list | length > 0
+    fail_msg: >-
+      The alias fallback graph has no terminus — at least one alias must have
+      fallback_to: null (contracts/alias-mapping.md).
+
+- name: Assert exactly one local-tier deployment per alias at most
+  ansible.builtin.assert:
+    that:
+      - (item.deployments | selectattr('tier', 'equalto', 'local') | list | length) <= 1
+    fail_msg: "Alias '{{ item.name }}' declares more than one local-tier deployment."
+  loop: "{{ llm_router_aliases }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Assert local-tier deployments address the Mac by MagicDNS name, never an IP (FR-013)
+  ansible.builtin.assert:
+    that:
+      - dep.api_base is defined and dep.api_base | length > 0
+      - "'.ts.net' in dep.api_base"
+      - dep.api_base is not regex('^https?://\\d+\\.\\d+\\.\\d+\\.\\d+')
+    fail_msg: >-
+      Deployment '{{ dep.id }}' on alias '{{ alias_item.name }}' is tier:local but its
+      api_base is not a *.ts.net MagicDNS name, or looks like a bare IP literal (FR-013).
+  vars:
+    alias_item: "{{ item.0 }}"
+    dep: "{{ item.1 }}"
+  loop: "{{ llm_router_aliases | subelements('deployments') }}"
+  loop_control:
+    label: "{{ item.1.id }}"
+  when: item.1.tier == 'local'
+
+- name: Assert non-local deployments name a credential env var
+  ansible.builtin.assert:
+    that:
+      - dep.api_key_env is defined
+      - dep.api_key_env | length > 0
+    fail_msg: >-
+      Deployment '{{ dep.id }}' on alias '{{ alias_item.name }}' is not tier:local but
+      declares no api_key_env.
+  vars:
+    alias_item: "{{ item.0 }}"
+    dep: "{{ item.1 }}"
+  loop: "{{ llm_router_aliases | subelements('deployments') }}"
+  loop_control:
+    label: "{{ item.1.id }}"
+  when: item.1.tier != 'local'
+
+# --- Budgets (data-model.md § Entity: Gateway Budget) ---
+
+- name: Assert every client's vault-sourced key is defined
+  ansible.builtin.assert:
+    that:
+      - lookup('vars', item.key_env | lower, default='') | length > 0
+    fail_msg: >-
+      Client '{{ item.alias }}' declares key_env '{{ item.key_env }}', but no vault variable
+      named '{{ item.key_env | lower }}' is defined. The vault variable name is always the
+      lowercased key_env — add it to group_vars/services/vault.yml (FR-015).
+  loop: "{{ llm_router_clients }}"
+  loop_control:
+    label: "{{ item.alias }}"
+
+- name: Assert the gateway-wide cap exceeds the sum of per-client budgets with headroom
+  ansible.builtin.assert:
+    that:
+      - llm_router_gateway_budget.max_budget | float > (llm_router_clients | map(attribute='max_budget') | map('float') | sum)
+    fail_msg: >-
+      llm_router_gateway_budget.max_budget ({{ llm_router_gateway_budget.max_budget }}) must be
+      strictly greater than the sum of llm_router_clients[*].max_budget
+      ({{ llm_router_clients | map(attribute='max_budget') | map('float') | sum }}) — a cap at or
+      below the client sum turns normal usage into a homelab-wide outage
+      (data-model.md § Entity: Gateway Budget). This fails rather than warns deliberately.

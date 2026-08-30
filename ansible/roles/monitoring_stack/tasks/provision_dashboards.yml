@@ -9,12 +9,16 @@
 #
 # The monitoring_stack role never references service names directly — it follows contract
 # references via hostvars. The role path is derived from the inventory hostname, which
-# matches the Ansible role name by project convention (e.g., host 'reverse_proxy' uses
-# role 'reverse_proxy').
+# matches the Ansible role name by project convention for single-word services (e.g., host
+# 'reverse_proxy' uses role 'reverse_proxy'). For a hyphenated host name the role directory
+# still uses underscores (Ansible role-naming convention: host 'llm-router' -> role
+# 'llm_router', same as host 'market-model' -> role 'market_model'), so hyphens are replaced
+# before resolving the path — this was a latent gap (never previously exercised, since no
+# hyphenated-name service had set dashboard_file until spec 064-llm-router).
 
 - name: Deploy service-owned Grafana dashboards from monitoring contracts
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../roles/{{ item }}/files/{{ (hostvars[item].monitoring_contract | default({})).dashboard_file }}"
+    src: "{{ playbook_dir }}/../roles/{{ item | replace('-', '_') }}/files/{{ (hostvars[item].monitoring_contract | default({})).dashboard_file }}"
     dest: "{{ grafana_dashboards_path }}/{{ ((hostvars[item].monitoring_contract | default({})).dashboard_file) | basename }}"
     mode: '0644'
   loop: "{{ groups['all'] | default([]) }}"
