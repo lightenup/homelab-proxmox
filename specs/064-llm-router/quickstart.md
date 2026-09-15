@@ -6,6 +6,13 @@ Deploy, verify, and run the drills that make the acceptance criteria real rather
 
 ## 0. Prerequisites
 
+> **Stale as of 2026-09-15 — use [`RUNBOOK.md`](./RUNBOOK.md).** The three bullets below
+> describe Ollama-over-tailnet with a tailscaled sidecar. The local tier is now oMLX over
+> the LAN ([`amendment-local-tier-omlx.md`](./amendment-local-tier-omlx.md)) and the sidecar
+> has been removed (FR-017 withdrawn), so `tailscale_authkey` is **not** a vault key any
+> more and the stack is **two** containers. `omlx_api_key` replaces it in the vault. Kept
+> below for the PVE headroom figure and as a record of the original shape.
+
 - **On the Mac**: Ollama running headless and keeping models resident (FR-016) —
   `OLLAMA_HOST=0.0.0.0 OLLAMA_KEEP_ALIVE=-1`, with the `hermes-fast` and `hermes-balanced` models
   pulled. Tailscale up; note the MagicDNS name.

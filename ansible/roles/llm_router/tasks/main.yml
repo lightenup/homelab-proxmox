@@ -15,7 +15,6 @@
     mode: '0755'
   loop:
     - postgres
-    - tailscale-state
 
 - name: Deploy config.yaml
   ansible.builtin.template:

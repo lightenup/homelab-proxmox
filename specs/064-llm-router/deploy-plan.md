@@ -52,6 +52,11 @@ it is merely slow.
 
 ## B · Linux laptop — authenticate `pve` onto the tailnet
 
+> **Promoted to a PROD prerequisite 2026-09-15.** The LXC's tailscaled sidecar has been
+> removed (FR-017 withdrawn), so this subnet route is now the only tailnet path to the
+> gateway. FR-008's tailnet clause is unsatisfied until this is done. It still does not
+> gate the LAB deploy.
+
 `pve` is **deauthenticated but retains its config**: `tailscale status` reports
 `Logged out` while `debug prefs` reports `"LoggedOut": false`. That is why
 `tailscale up` validated flags instead of offering a fresh login, and why it
@@ -121,7 +126,9 @@ ansible-vault edit ansible/group_vars/services/vault.yml
 | `openrouter_api_key` | |
 | `anthropic_api_key` | API key, never a subscription credential (FR-007) |
 | `litellm_db_password` | |
-| `tailscale_authkey` | reusable + ephemeral + tagged, for the LXC sidecar |
+
+~~`tailscale_authkey`~~ — **withdrawn 2026-09-15** along with the sidecar it served.
+No consumer remains anywhere in the repo.
 
 ```bash
 echo "sk-$(openssl rand -hex 24)"     # for the three sk- keys
@@ -168,6 +175,50 @@ server rather than quitting Ollama.app, unpin a model rather than unsetting
 hop on the backend leg. `T034`/`T035` stand and remain the most likely to bite —
 a stopped oMLX refuses fast, an absent Mac can hang to timeout, and that
 difference is the one LiteLLM's routing-pool defect shows up in.
+
+---
+
+## LAB and the local tier — deferred deliberately (2026-09-15)
+
+**LAB cannot reach the local tier, and this is not a defect to fix before deploying.**
+
+`docs/naming-and-mdns.md` states the constraint: mDNS is multicast and does not cross
+subnet boundaries. LAB is `192.168.20.219`; the Mac is on `192.168.1.0/24`. No container
+or LXC-side fix changes that — the multicast never arrives. PROD at `192.168.1.220` shares
+the Mac's subnet and does not have this problem.
+
+There is a second wall, which applies to PROD too: `libnss-mdns` is a glibc NSS module, and
+the litellm **container** resolves through Docker's embedded DNS at `127.0.0.11`, which
+never consults host NSS. Installing `mdns_base` on the LXC therefore does not make `.local`
+resolvable inside the container. Note that `ansible/playbooks/llm-router.yml` does not
+include `mdns_base` at all today.
+
+**The decision: deploy LAB with the local tier configured and unreachable.** The options
+considered were an AdGuard DNS rewrite (AdGuard is not deployed and not in use — ruled out),
+a compose `extra_hosts` entry pinning the Mac's IP (reintroduces the literal IP FR-013
+exists to prevent), and this. LAB-without-the-Mac is a faithful rehearsal of the state
+SC-001 is written about: the Mac is *supposed* to be absent, and every alias must still
+answer. That is the property most worth proving, and LAB proves it for free.
+
+### What this means for the LAB run
+
+| | |
+|---|---|
+| **not a blocker** | § A (oMLX on `0.0.0.0`) — LAB cannot reach it regardless |
+| **not a blocker** | § B (`pve` tailnet auth) — the local tier is LAN-addressed; the tailnet carries no backend leg |
+| **still required** | § C1 (vault secrets) — the only hard prerequisite |
+| **expected red** | the doctor's two local-tier checks, `oMLX reachable` and `serves the declared context, resident` |
+| **must be green** | `every alias answers right now` — this is SC-001 and the whole point of the run |
+
+A red local tier with green aliases is the **correct** LAB result. Read it as the
+fault-injection table's row 2 arriving for free rather than as a failed deploy.
+
+### Still open for PROD
+
+Resolving `.local` from inside the container is unsolved and blocks the local tier in PROD.
+The candidates are `network_mode: host` on the litellm container (the host's glibc NSS, and
+so `libnss-mdns`, then applies), or a real DNS record once a resolver exists. Decide before
+promoting; nothing in the LAB run depends on it.
 
 ---
 

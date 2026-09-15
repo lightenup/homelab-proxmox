@@ -3,12 +3,41 @@
 Execute from the **Linux laptop** unless a step says otherwise. Branch
 `064-llm-router-handoff` is already checked out there.
 
-Two steps run elsewhere and are called out explicitly: **§1 on the new Mac**, and
-**§2 on `pve` over SSH**.
+Two steps run elsewhere and are called out explicitly: **§1 on the new Mac** — written as a
+self-contained brief to hand to an agent there — and **§2 on `pve` over SSH**.
 
 Verified before writing: none of this branch's changed files touch a protected
 path (`.specify/**`, `adapter/**`, `scripts/lab/**`, `mkdir/**`), so **no
 `allow-protected-path-changes` label is needed** on the PR.
+
+---
+
+## Revision 2026-09-15 — read this before executing
+
+**§1 and §2 are not prerequisites for the LAB deploy, and §4's gate does not apply
+to it.** LAB is `192.168.20.219`; the Mac is on `192.168.1.0/24`; mDNS is multicast
+and does not cross subnets. LAB cannot reach the local tier by any configuration, so
+the local tier is deployed configured-and-unreachable by decision, not by accident.
+Rationale and the PROD consequence: [`deploy-plan.md`](./deploy-plan.md) § *LAB and
+the local tier*.
+
+**Design change 2026-09-15, pending:** the metered tiers (OpenRouter, Anthropic) are being
+dropped and the local tier re-chained through the **Mac's own LiteLLM** on `:4000` rather
+than oMLX on `:8000`. SC-001 is withdrawn — the Mac becomes a dependency, and the gateway
+fails clean when it is away. §1 is rewritten for this; the alias mapping, `spec.md` and the
+doctor are not yet. Do not run §5 onward until that lands.
+
+**The only hard prerequisite for LAB is §3, the vault** — and it is one key shorter
+than the table below was written for: the tailscaled sidecar has been removed, so
+`tailscale_authkey` is not needed at all.
+
+Four role bugs were fixed on 2026-09-15 that would each have failed this deploy —
+the preflight FR-013 assertion still required `.ts.net`, `OMLX_API_KEY` was never
+passed to the container, `HTTP_PROXY` still diverted the backend leg through the
+Tailscale sidecar, and the doctor's residency check could not fail. Fixed and
+fault-injected; the runbook below is otherwise unchanged.
+
+Two things it still says that are now wrong are marked inline below.
 
 ---
 
@@ -34,29 +63,80 @@ If `--layer config` is not 5/5, stop — the tree is wrong.
 
 ---
 
-## 1 · NEW MAC — expose oMLX (prerequisite, not optional)
+## 1 · NEW MAC — expose the LiteLLM gateway  *(brief for an agent on the Mac)*
 
-**Run on `xmjdvvw39y2t`, not the laptop.** Everything after §4 fails without it.
+> **Supersedes the old §1** (expose oMLX on `0.0.0.0`). Design changed 2026-09-15: the
+> homelab gateway now chains to **this Mac's LiteLLM**, not to oMLX directly. **oMLX must
+> stay on `127.0.0.1:8000` — do not expose it.**
 
-In the oMLX UI: **Settings → Server → Host** → `0.0.0.0`, restart the server.
+---
+
+**Copy everything below to an agent running on `xmjdvvw39y2t` (192.168.1.177).**
+
+You are on a Mac that runs LiteLLM in front of local models (oMLX). A gateway LXC in the
+homelab needs to reach this LiteLLM over the LAN. It currently binds `127.0.0.1:4000`
+(confirmed by `lsof`), so it is unreachable. Two jobs: rebind it, and report its config.
+
+**Job 1 — bind LiteLLM to `0.0.0.0:4000`.** Find how it is launched, then change that one thing:
 
 ```bash
-lsof -nP -iTCP:8000 -sTCP:LISTEN
-#   want:  *:8000            (LISTEN)
-#   wrong: 127.0.0.1:8000    (LISTEN)
-
-curl -s localhost:8000/admin/api/models \
-  | python3 -c "import json,sys;[print(f\"{m['id']:26} loaded={m['loaded']} pinned={m['pinned']}\") for m in json.load(sys.stdin)['models'] if m['loaded']]"
-#   Qwen3.8-27B-8bit           loaded=True pinned=True
-#   Qwen3.8-27B-oQ4e-mtp       loaded=True pinned=True
+lsof -nP -iTCP:4000 -sTCP:LISTEN
+ps aux | grep -i litellm | grep -v grep
+launchctl list 2>/dev/null | grep -i litellm
 ```
 
-Both **must** be `pinned=True`. An unpinned model can be evicted; the cold load
-that follows trips the gateway timeout into a *false* fallback (FR-016).
+| launched via | change |
+|---|---|
+| `litellm --host 127.0.0.1` | `--host 0.0.0.0` |
+| `docker compose` | `ports:` → `"4000:4000"`, not `"127.0.0.1:4000:4000"` |
+| a `host:` key in the LiteLLM config | set it to `0.0.0.0` |
+| launchd plist | edit the `ProgramArguments` host flag, then `launchctl kickstart -k` the service |
+
+Restart, then verify — **both** lines must pass:
+
+```bash
+lsof -nP -iTCP:4000 -sTCP:LISTEN            # want *:4000, NOT 127.0.0.1:4000
+curl -s -m5 http://192.168.1.177:4000/health/liveliness   # must answer from the LAN IP, not just localhost
+/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+```
+
+If `lsof` shows `*:4000` but the LAN-IP curl fails, it is the macOS firewall — allow the
+LiteLLM binary inbound, do not disable the firewall.
+
+**Do NOT** expose oMLX. Leave `:8000` on `127.0.0.1`. Only LiteLLM talks to it.
+
+**Job 2 — report these back**, so the homelab side can map its aliases onto yours:
+
+```bash
+KEY=<a LiteLLM key on this host>
+curl -s localhost:4000/v1/models -H "Authorization: Bearer $KEY"
+curl -s localhost:4000/model/info -H "Authorization: Bearer $KEY"
+```
+
+Report:
+1. Every **alias name** served (the doc on file says `coder`, `reasoner`, `fast`, `diagram` —
+   confirm and correct), and the model + profile behind each. One is believed to be a
+   long-context profile, possibly named `Long` — name it exactly.
+2. Which alias is the **long-context / highest-reasoning** one. It will back `hermes-deep`.
+3. `router_settings` — `fallbacks`, `context_window_fallbacks`, `enable_pre_call_checks`.
+4. The declared `context_window` / `max_input_tokens` per alias, if set.
+5. **Whether you can mint a virtual key** for the LXC (`POST /key/generate`), rather than
+   sharing the master key. Preferred: a virtual key scoped to the aliases above. Report the
+   key out-of-band, not in a shared transcript.
+
+Do not change any model, alias, fallback or budget setting on this host. Job 1 is the only
+edit. Everything else is read-and-report.
 
 ---
 
 ## 2 · `pve` — authenticate onto the tailnet
+
+> **Not required for the LAB deploy, but now REQUIRED before PROD** (revision
+> 2026-09-15). The local tier is LAN-addressed, so no backend leg crosses the
+> tailnet and nothing here gates the LAB run. But with the LXC's tailscaled sidecar
+> removed, `pve`'s subnet route is the *only* tailnet path to the gateway — so this
+> step is now the whole of FR-008's tailnet reach, not a redundant second path.
+> FR-008 is unsatisfied over the tailnet until it is done. See FR-017 (withdrawn).
 
 ### 2a · Laptop — generate a tagged auth key
 
@@ -113,7 +193,10 @@ ansible-vault edit ansible/group_vars/services/vault.yml
 | `openrouter_api_key` | |
 | `anthropic_api_key` | API key only, never a subscription credential (FR-007) |
 | `litellm_db_password` | |
-| `tailscale_authkey` | **reusable + ephemeral + tagged** — for the LXC sidecar, a *different* key from §2a |
+
+> ~~`tailscale_authkey`~~ — **no longer needed** (2026-09-15). The LXC's tailscaled
+> sidecar was removed; nothing in the repo consumes this variable any more. Do not
+> generate one.
 
 ```bash
 for i in 1 2 3; do echo "sk-$(openssl rand -hex 24)"; done
@@ -138,8 +221,14 @@ ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:8000/health"
 #   {"status":"healthy",...}
 ```
 
-**That second command is the gate.** It proves `pve` resolves the Mac's mDNS name
-*and* reaches oMLX on the LAN. If it fails:
+> **Wrong for LAB** (revision 2026-09-15). This tests **`pve`'s** resolver — a
+> different machine from the LXC, and a different resolver from the Docker container
+> that makes the actual call. It can pass while the real path fails. For LAB it is
+> moot entirely; treat it as a PROD check, and see `deploy-plan.md` for the
+> container-resolution problem it does not cover.
+
+**That second command was written as the gate.** It proves `pve` resolves the Mac's
+mDNS name *and* reaches oMLX on the LAN. If it fails:
 
 | symptom | cause |
 |---|---|
@@ -189,7 +278,16 @@ export LLM_ROUTER_CANARY_KEY="sk-..."          # the canary key from §3
   --json /tmp/doctor-lab.json
 ```
 
-Expect all green. Also run the existing liveness check — it answers a different
+**Expect all green *except* the two local-tier checks** (revision 2026-09-15):
+`oMLX reachable on the LAN` and `oMLX serves the declared context, resident` both
+go red in LAB, correctly — the Mac is unreachable from that subnet.
+
+**`every alias answers right now` must be GREEN.** That is SC-001, it is the point
+of the LAB run, and a red there is a real failure of the fallback chain. A red local
+tier alongside green aliases is the correct LAB result — fault-injection row 2,
+arriving for free.
+
+Also run the existing liveness check — it answers a different
 question and is what the pipeline gates on:
 
 ```bash
@@ -202,6 +300,12 @@ question and is what the pipeline gates on:
 
 Full detail in [`doctor-fault-injection.md`](./doctor-fault-injection.md).
 **Green is the starting point, not the finish.** Restore after each.
+
+> **Rows 1–3 need the Mac and therefore need PROD** (revision 2026-09-15). In LAB
+> the local tier is already unreachable, so row 1 is the steady state, row 2 is the
+> steady state, and row 3 cannot be staged. Rows 4 and 5 run in LAB today.
+> Row 3's check was verified against a simulated oMLX on 2026-09-15 and fails
+> correctly on unpinned, evicted, and short-context — it is no longer unfailable.
 
 | # | where | break | expect |
 |---|---|---|---|

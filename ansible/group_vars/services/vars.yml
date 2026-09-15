@@ -22,7 +22,6 @@ market_model_version: "0.3.0"
 eurooffice_version: "v9.3.2"
 llm_router_version: "v1.83.3-stable"
 llm_router_postgres_version: "17.11-alpine3.24"
-llm_router_tailscale_version: "v1.102.3"
 
 # Euro-Office Configuration
 eurooffice_ip: "192.168.1.219"
@@ -34,14 +33,15 @@ market_model_api_port: 8000
 market_model_mcp_port: 8001
 
 # LLM Router Configuration (spec 064)
-# Tailnet-egress is provided by an in-container tailscaled sidecar (userspace networking,
-# no TUN device — see specs/064-llm-router/research.md D-102). No Redis: single worker, no
-# consumer for shared cross-worker state (FR-014, research D-104).
+# No tailscaled sidecar as of 2026-09-15: every backend leg is direct (local tier over the
+# LAN, metered tiers over the internet), and FR-008's tailnet reach to the gateway comes
+# from the PVE host's 192.168.1.0/24 subnet route. See FR-017 as amended. No Redis: single
+# worker, no consumer for shared cross-worker state (FR-014, research D-104).
 llm_router_ip: "192.168.1.220"
 llm_router_port: 4000
 
-# Alias -> ordered deployment mapping (FR-003). Local deployments MUST use the Mac's
-# MagicDNS name (*.ts.net), never a LAN IP (FR-013).
+# Alias -> ordered deployment mapping (FR-003). Local deployments MUST address the Mac by
+# its stable mDNS .local name, never a DHCP-assigned IP (FR-013 as amended).
 #
 # Local tier amended 2026-09-14: oMLX on the LAN, not Ollama over the tailnet — the Mac
 # the original mapping targeted is being returned. Model IDs verified served by

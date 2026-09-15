@@ -134,6 +134,16 @@ def aliases_from_vars() -> list[dict]:
         m = re.match(r"\s*api_base:\s*[\"']?(\S+?)[\"']?\s*$", line)
         if m and cur["deployments"]:
             cur["deployments"][-1]["api_base"] = m.group(1)
+        # provider_model and context_window are what the residency check asserts against.
+        # They were omitted here originally, which left want_models empty and made that
+        # check return "nothing to assert" — a PASS it could never not return. Parsing
+        # them is what gives the check something to be wrong about.
+        m = re.match(r"\s*provider_model:\s*[\"']?(\S+?)[\"']?\s*$", line)
+        if m and cur["deployments"]:
+            cur["deployments"][-1]["provider_model"] = m.group(1)
+        m = re.match(r"\s*context_window:\s*(\d+)\s*$", line)
+        if m and cur["deployments"]:
+            cur["deployments"][-1]["context_window"] = int(m.group(1))
     return out
 
 
@@ -301,7 +311,12 @@ def check_local_tier(d: Doctor, aliases) -> None:
                     want_models[base_id] = a["name"]
                 want_ctx = max(want_ctx, int(dep.get("context_window") or 0))
         if not want_models:
-            return True, "no local deployments declared — nothing to assert"
+            # Reaching here means the parser found local deployments with no
+            # provider_model — a parser fault, not a healthy backend. Returning
+            # True here is what made this check unfailable for the whole of 064.
+            return False, ("no provider_model parsed for any local deployment — "
+                           "this check cannot assert anything; fix the parser "
+                           "rather than trusting the result")
 
         by_id = {m.get("id"): m for m in models}
         missing = [i for i in want_models if i not in by_id]
@@ -315,15 +330,21 @@ def check_local_tier(d: Doctor, aliases) -> None:
         bad = [f"{i}={by_id[i].get('model_context_length')}"
                for i in want_models
                if (by_id[i].get("model_context_length") or 0) < want_ctx]
-        unpinned = [i for i in want_models if not by_id[i].get("pinned")]
-        want = want_ctx
-        names = ",".join(f"{i}{'' if i not in unpinned else ' (unpinned)'}"
-                         for i in want_models)
         if bad:
-            return False, (f"serving below the declared {want}: {bad} — oversized "
+            return False, (f"serving below the declared {want_ctx}: {bad} — oversized "
                            f"input is truncated instead of escalating a tier, "
                            f"defeating SC-009")
-        return True, f"{len(loaded)} resident at >={want}: {names}"
+        # Pinning is the lever that keeps residency true between runs. An unpinned
+        # model is loaded right now and evictable a moment later, so passing on
+        # `loaded` alone reports a state with no shelf life. FR-016 asks for
+        # residency to be guaranteed, not merely observed once.
+        unpinned = [i for i in want_models if not by_id[i].get("pinned")]
+        if unpinned:
+            return False, (f"aliased model loaded but NOT pinned: {unpinned} — "
+                           f"evictable, and the cold load that follows trips the "
+                           f"gateway timeout into a FALSE fallback (FR-016)")
+        return True, (f"{len(want_models)} resident and pinned at >={want_ctx}: "
+                      f"{','.join(sorted(want_models))}")
     d.check("local", "oMLX serves the declared context, resident", "obs",
             "FR-016", context_and_residency)
 
