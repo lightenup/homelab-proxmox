@@ -55,6 +55,12 @@ Not just YAML-parsed — these were exercised properly:
 `vault.yml` is tracked and encrypted in git, so editing locally and committing is the correct
 flow — `pve` picks it up on checkout.
 
+> **Superseded 2026-09-14 by [`deploy-plan.md`](./deploy-plan.md).** The old Mac is
+> being returned, the local tier moved to oMLX over the LAN
+> ([`amendment-local-tier-omlx.md`](./amendment-local-tier-omlx.md)), and Zscaler now
+> blocks the interactive Tailscale login as well as pushes. The section below is kept
+> for its IPs and prerequisites; the machine-by-machine split is in `deploy-plan.md`.
+
 ## Deploying from the Linux laptop
 
 Needs: `gh` authenticated, `ansible` + the vault password file, SSH to `pve` (192.168.1.112).
