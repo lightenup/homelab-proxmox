@@ -17,3 +17,17 @@ llm_router_cooldown_time: 60
 # traffic, not a health probe, so it sits outside SC-011's probe budget.
 llm_router_canary_alias: hermes-fast
 llm_router_canary_interval_minutes: 60
+
+# Where the canary drops its .prom file for node_exporter's textfile collector.
+#
+# node_exporter_textfile_directory is owned by the node_exporter role, which lxc_base
+# pulls in with include_role — and include_role does not export a role's defaults to the
+# rest of the play, let alone to the SEPARATE play that runs this role. So the variable is
+# reliably undefined here even though node_exporter is installed and running on the host,
+# with exactly this directory. Referencing it directly failed the deploy at template time
+# with "'node_exporter_textfile_directory' is undefined" (2026-09-19).
+#
+# Prefer the shared variable when something does put it in scope; fall back to
+# node_exporter's own default otherwise. The literal appears once, next to the name of the
+# role that owns it, rather than being silently duplicated.
+llm_router_canary_textfile_dir: "{{ node_exporter_textfile_directory | default('/var/lib/node_exporter/textfile_collector') }}"
