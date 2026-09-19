@@ -103,9 +103,12 @@ rm ~/Library/LaunchAgents/no.hus-sky.hermes-mdns-announce.plist ~/.local/bin/her
 - **It does not cross subnets.** mDNS is multicast; LAB (`192.168.20.0/24`) still
   cannot resolve or reach the Mac, by design (`deploy-plan.md` § *LAB and the local
   tier*). This buys PROD (`192.168.1.220`), which shares the Mac's subnet.
-- **The container needs the host's resolver.** Docker's embedded DNS at `127.0.0.11`
-  never consults host NSS, so `libnss-mdns` on the LXC is invisible to a
-  bridge-network container. The litellm container therefore runs
-  `network_mode: host`, and the LXC installs `mdns_base`. Both are in the role.
+- **The container cannot resolve `.local` at all, by any container-side setting.** Docker's
+  embedded DNS at `127.0.0.11` never consults host NSS, and `network_mode: host` does not
+  help either — it shares the network namespace, not the filesystem, so the container keeps
+  its own `nsswitch.conf` (`hosts: files dns`) and NSS libraries. A local resolver cannot
+  bridge the gap either, because this Mac never *answers* a query: only avahi's cache on the
+  LXC knows the mapping. So the role resolves the name on the LXC (hence `mdns_base`) and
+  passes the result to the container as `extra_hosts`, refreshed on every deploy.
 - **If the Mac's IP changes**, nothing here breaks: the name is announced with
   whatever address the Mac holds.

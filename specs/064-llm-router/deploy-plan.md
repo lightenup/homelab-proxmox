@@ -243,10 +243,21 @@ PROD. Both halves are now fixed, and the first half was not the one this section
    that re-announces every 45 s — no firewall or MDM change needed, because announcing is
    the half that already worked. See
    [`mac-mdns-announcer/README.md`](./mac-mdns-announcer/README.md).
-2. **The container half** took the first candidate listed here: `network_mode: host` on the
-   litellm container, plus `mdns_base` on the LXC so there is a host resolver to inherit.
-   Postgres stays on the bridge network and is published on `127.0.0.1:5432` only, since a
-   host-networked container cannot reach a compose service by name.
+2. **The container half did NOT take either candidate listed here.** `network_mode: host`
+   was tried first and does not work: it shares the network namespace, not the filesystem,
+   so the container keeps its own `nsswitch.conf` (`hosts: files dns`) and its own NSS
+   libraries, with no `libnss-mdns`. Measured on the LXC 2026-09-19 — by IP the container
+   reached the Mac (HTTP 200), by name it raised `gaierror`, which surfaced as HTTP 500
+   "Connection error" on every alias. A local resolver cannot fix it either: this Mac never
+   *answers* an mDNS query, so only avahi's cache on the LXC knows the mapping.
+
+   What works: `mdns_base` gives the LXC a resolver that does know the name, the role
+   resolves it there at deploy time, and the result is passed to the container as
+   `extra_hosts`. The `api_base` stays a name, no IP literal enters the repo, and the
+   address is rediscovered on every deploy. Residual risk is an IP change between deploys —
+   the gateway then fails clean against a stale address and the doctor catches it; a DHCP
+   reservation for the Mac removes it. litellm stays on the bridge network with its normal
+   published port, and Postgres is not published at all.
 
 Verified from `pve` against a flushed avahi cache: `getent hosts xmjdvvw39y2t.local` →
 `192.168.1.177`, and `curl http://xmjdvvw39y2t.local:4000/health/liveliness` → HTTP 200.

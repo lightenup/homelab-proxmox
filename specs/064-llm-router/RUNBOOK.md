@@ -150,9 +150,13 @@ If `--layer config` is not 5/5, stop — the tree is wrong.
 > Verified from `pve` against a **flushed** avahi cache (a warm cache proves nothing here —
 > that is what hid this for so long): resolves in under 2 s, stayed resolved across a 100 s
 > poll, and §4's gate returns HTTP 200 by name. Two role changes go with it, both landed:
-> `mdns_base` in `ansible/playbooks/llm-router.yml`, and `network_mode: host` on the litellm
-> container — Docker's embedded DNS never consults host NSS, so `libnss-mdns` on the LXC is
-> invisible to a bridge-network container.
+> `mdns_base` in `ansible/playbooks/llm-router.yml`, and deploy-time resolution of the Mac's
+> name on the LXC, passed to the litellm container as `extra_hosts`.
+>
+> **`network_mode: host` does not work here and was reverted** — it shares the network
+> namespace, not the filesystem, so the container keeps its own `nsswitch.conf` and NSS
+> libraries and still cannot resolve `.local`. Measured on the LXC: by IP the container
+> reached the Mac (HTTP 200), by name `gaierror`, surfacing as HTTP 500 on every alias.
 >
 > **What's left after this** is off-Mac: §3 (vault `mac_litellm_key`, drop the metered keys)
 > then §5 (LAB deploy). The rest of §1 below is the original brief, kept for provenance.
