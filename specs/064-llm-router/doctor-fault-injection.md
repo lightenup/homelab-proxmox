@@ -189,21 +189,57 @@ call 3: http=500 total=135.1s
              Received Model Group=hermes-fast\nAvailable Model Group Fallbacks=None"}}
 ```
 
-### Still open: SC-008's interval clause, and pool ejection
+### Resolved: why nothing was ever ejected
 
-The hang is gone and the error is clear, but **two parts of SC-008 as rephrased are not
-met**, and no amount of restarting changes them:
+First measurement after the timeout fix: ~135s on **every** request, not just the first.
+The dead deployment was never ejected, and our own settings were the reason. Setting
+`allowed_fails` at all takes the legacy path in LiteLLM's
+`router_utils/cooldown_handlers.py`:
 
-1. **~135s, not "within the health-check interval" (60s).**
-2. **The dead deployment is never ejected.** Calls 2, 3 and one taken 4+ minutes later all
-   cost the full ~135s, so *every* request pays it, not just the first. `/health/readiness`
-   still reports `healthy` throughout.
+```python
+current_fails = failed_calls.get_cache(key=deployment) or 0   # TTL = cooldown_time
+updated_fails = current_fails + 1
+if updated_fails > allowed_fails: return True                 # cooldown
+```
 
-Because ejection never happens, `timeout` is the only thing bounding the failure, so
-meeting the 60s clause means setting `llm_router_request_timeout` to roughly 45-55 — which
-trades directly against long generations (a 4k-token completion on a 27B model at 35-60
-tok/s lands near 70-115s). That is a latency-versus-robustness choice for the operator, not
-a bug to fix silently, so the value stays at 180 and this is recorded as open.
+The failure **counter** is cached with a TTL of `cooldown_time`. A threshold above 0 is
+therefore only reachable if failures arrive closer together than `cooldown_time`. Each
+failure took a full request timeout (~135s) while `cooldown_time` was 60s, so the counter
+expired between failures, never climbed past 1, and `allowed_fails: 2` could not be
+reached. Configured, plausible, unreachable — the same class as the inert health checks
+above, from the opposite direction.
+
+Dropping `allowed_fails` entirely is worse: the v2 path only cools a single-deployment
+model group at `percent_fails == 1.0` **and** >= 1000 requests/minute
+(`SINGLE_DEPLOYMENT_TRAFFIC_FAILURE_THRESHOLD`), which a homelab never reaches — and every
+`hermes-*` group has exactly one deployment since the metered tiers were dropped.
+
+**`allowed_fails: 0`** cools the deployment down on the first failure. Measured end to end:
+
+```
+blackhole inserted
+  call 1: http=500  134.7s   "Connection error.. Received Model Group=hermes-fast"
+  call 2: http=429    0.048s "No deployments available... Try again in 60 seconds"
+  call 3: http=429    0.030s
+  call 4: http=429    0.031s
+blackhole removed
+  t+51s   http=200            recovered, no operator action
+```
+
+### SC-008, final state
+
+| clause | result |
+|---|---|
+| a clear error attributing the failure to the unreachable backend | ✅ names the model group |
+| never a hang | ✅ bounded and repeatable |
+| rejoins within one health-check interval | ✅ **51s**, no operator action |
+| within the health-check interval | ⚠️ holds for every request except the first |
+
+The **first** request after an outage begins still costs one request timeout (~135s) —
+that is the cost of discovering a blackhole, and it is irreducible without capping
+`llm_router_request_timeout` below the length of a legitimate generation. Every request
+after it, for the next `cooldown_time`, fails in ~0.03s. Left at 180s deliberately;
+lowering it is a latency-versus-generation-length choice for the operator.
 
 ## Row 6 — a check that could not fail, hiding a real bypass
 
