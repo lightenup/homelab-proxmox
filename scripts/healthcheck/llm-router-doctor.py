@@ -25,16 +25,25 @@ and where a behavioural check is possible it is preferred, because a config file
 is a statement of intent and this repo's own handoff notes are full of intent
 that had not yet met an LXC.
 
-    ./scripts/healthcheck/llm-router-doctor.py --base-url http://192.168.20.219:4000
+    ./scripts/healthcheck/llm-router-doctor.py --base-url http://192.168.1.220:4000
     ./scripts/healthcheck/llm-router-doctor.py --profile tailscale --json out.json
     ./scripts/healthcheck/llm-router-doctor.py --list        # what it would check
 
-UNVERIFIED AGAINST LIVE INFRASTRUCTURE. Written on the dev Mac, which Zscaler
-keeps off the tailnet, so no check here has ever been observed to fail against a
-real gateway. By this repo's own standard that means it has been run, not
-tested. Fault-inject each check once on first use — the sibling project found a
-check that could never fail while reporting success, and it was the tool built
-specifically to catch that class of bug.
+Two credentials, for two different gateways — the local-tier layer is skipped
+rather than wrong if the second is missing:
+
+    LLM_ROUTER_CANARY_KEY   a virtual key on THIS gateway   (vault: llm_router_canary_key)
+    MAC_LITELLM_KEY         the Mac's scoped virtual key    (vault: mac_litellm_key)
+
+FIRST RUN AGAINST LIVE INFRASTRUCTURE: 2026-09-19, against the deployed gateway
+at 192.168.1.220. Several checks were observed both red and green in the course
+of that deploy — the three `alias answers` checks went red on a container that
+could not resolve the Mac's name and green once it could, and this layer's own
+`every alias maps onto a live Mac role alias` went red because it was presenting
+the wrong credential. So these are no longer merely run. The remaining
+fault-injection rows in `doctor-fault-injection.md` are still outstanding; the
+sibling project found a check that could never fail while reporting success, and
+that is what those rows exist to rule out.
 """
 
 from __future__ import annotations
@@ -305,9 +314,19 @@ def check_local_tier(d: Doctor, aliases) -> None:
                 if dep.get("tier") == "local"]
         if not want:
             return False, "no local deployments declared — the mapping is empty"
+        # The Mac is a SEPARATE gateway with its own credentials. This call has to carry
+        # MAC_LITELLM_KEY — the scoped virtual key the Mac mints for the LXC — not d.key,
+        # which is the canary key issued by *this* gateway and meaningless there. Passing
+        # d.key made the Mac answer 401 and this check report "cannot list the Mac's
+        # models: HTTPError", which reads like the Mac being down rather than the probe
+        # presenting the wrong credential.
+        mac_key = os.environ.get("MAC_LITELLM_KEY", "")
+        if not mac_key:
+            return False, ("MAC_LITELLM_KEY not set — the Mac needs its own key; the "
+                           "gateway's key is not valid there (vault: mac_litellm_key)")
         try:
             req = urllib.request.Request(f"{root}/v1/models",
-                                         headers={"Authorization": f"Bearer {d.key}"})
+                                         headers={"Authorization": f"Bearer {mac_key}"})
             with urllib.request.urlopen(req, timeout=15) as r:
                 have = {m["id"] for m in json.loads(r.read()).get("data", [])}
         except Exception as e:
@@ -333,7 +352,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-url", default=os.environ.get(
-        "LLM_ROUTER_URL", "http://192.168.20.219:4000"))
+        "LLM_ROUTER_URL", "http://192.168.1.220:4000"))
     ap.add_argument("--key", default=os.environ.get("LLM_ROUTER_CANARY_KEY", ""))
     ap.add_argument("--layer", choices=sorted(LAYERS), action="append")
     ap.add_argument("--json", help="write results here")

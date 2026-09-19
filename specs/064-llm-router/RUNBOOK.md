@@ -50,6 +50,25 @@ Two things it still says that are now wrong are marked inline below.
 
 ---
 
+> **CORRECTION 2026-09-19 — "LAB" is not a separate network.** Everything below that
+> assumes LAB sits on `192.168.20.0/24`, isolated from the Mac, is **wrong for the
+> pipeline path.** `scripts/lab/pve-service-deploy` resolves tfvars from
+> `TFVARS_DIR=/var/lib/homelab-proxmox/tfvars`, rendered from
+> `terraform/environments/lab.tfvars.template` — which is byte-identical to
+> `prod.tfvars.template` apart from a comment and one immich mount, and puts
+> `llm-router` at **`192.168.1.220/24`** on node `pve`, bridge `vmbr0`. The repo's
+> `terraform/environments/lab.tfvars` (gateway `192.168.20.1`) is a fallback the pipeline
+> never reaches. So the LAB and PROD stages build the *same LXC at the same address*;
+> "lab" is a gating stage, not an environment. The isolated `vmbr99` / `10.99.0.0/24` rig
+> exists, but it serves the nested VM rebuild pipeline, not per-service LXC deploys.
+>
+> The consequence for 064 is the opposite of what was planned, and good: the gateway
+> shares the Mac's subnet, so the local tier **works** rather than being correctly red.
+> Confirmed by the deploy of 2026-09-19 — doctor 13/13, all three aliases served from the
+> Mac. Every "expect red in LAB" passage below is therefore obsolete.
+
+---
+
 ## 0 · Laptop — confirm you have the right tree
 
 ```bash
@@ -372,7 +391,7 @@ gh workflow run lxc-deploy-lab.yml \
 gh run watch $(gh run list --workflow=lxc-deploy-lab.yml --limit=1 --json databaseId --jq '.[0].databaseId')
 ```
 
-LAB lands on **`192.168.20.219`**.
+LAB lands on **`192.168.1.220`** — see the correction at the top; it is not `192.168.20.219`, and it is the same address PROD uses.
 
 ---
 
@@ -382,7 +401,7 @@ LAB lands on **`192.168.20.219`**.
 export LLM_ROUTER_CANARY_KEY="sk-..."          # the canary key from §3
 
 ./scripts/healthcheck/llm-router-doctor.py \
-  --base-url http://192.168.20.219:4000 \
+  --base-url http://192.168.1.220:4000 \
   --json /tmp/doctor-lab.json
 ```
 

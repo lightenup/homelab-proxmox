@@ -168,13 +168,14 @@ gh workflow run lxc-deploy-lab.yml --ref main -f service=llm-router -f apply=fal
 gh workflow run lxc-deploy-lab.yml --ref main -f service=llm-router -f apply=true
 ```
 
-LAB lands on `192.168.20.219`; PROD on `192.168.1.220`.
+LAB and PROD both land on `192.168.1.220` — the two tfvars templates are byte-identical for this service, so the LAB stage is a gate, not a separate
+environment. Corrected 2026-09-19; see RUNBOOK.md's correction banner.
 
 **C4 — verify the deploy.**
 
 ```bash
 export LLM_ROUTER_CANARY_KEY="sk-..."
-./scripts/healthcheck/llm-router-doctor.py --base-url http://192.168.20.219:4000
+./scripts/healthcheck/llm-router-doctor.py --base-url http://192.168.1.220:4000
 ```
 
 ---
