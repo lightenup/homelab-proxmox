@@ -21,15 +21,24 @@ the local tier is deployed configured-and-unreachable by decision, not by accide
 Rationale and the PROD consequence: [`deploy-plan.md`](./deploy-plan.md) § *LAB and
 the local tier*.
 
-**Design change 2026-09-15, pending:** the metered tiers (OpenRouter, Anthropic) are being
-dropped and the local tier re-chained through the **Mac's own LiteLLM** on `:4000` rather
-than oMLX on `:8000`. SC-001 is withdrawn — the Mac becomes a dependency, and the gateway
-fails clean when it is away. §1 is rewritten for this; the alias mapping, `spec.md` and the
-doctor are not yet. Do not run §5 onward until that lands.
+**Design change 2026-09-15, LANDED in config:** the metered tiers (OpenRouter, Anthropic)
+have been dropped and the local tier re-chained through the **Mac's own LiteLLM** on `:4000`
+rather than oMLX on `:8000`. SC-001 is withdrawn — the Mac becomes a dependency, and the
+gateway fails clean when it is away. The alias mapping, `spec.md`, the doctor and §1 are all
+rewritten for this; the anchor is [`amendment-drop-metered-tiers.md`](./amendment-drop-metered-tiers.md).
 
-**The only hard prerequisite for LAB is §3, the vault** — and it is one key shorter
-than the table below was written for: the tailscaled sidecar has been removed, so
-`tailscale_authkey` is not needed at all.
+**§1 on the Mac is now DONE (2026-09-16):** LiteLLM is rebound to `0.0.0.0:4000` and the
+LXC's virtual key (`mac_litellm_key`) is minted — see §1's status banner and the amendment.
+**The remaining live steps are: §3 the vault** (`mac_litellm_key` in, the three metered keys
+out) **then §5 the LAB deploy.** If the Mac has been restarted since 2026-09-16, run §1's
+*"Resume after a Mac restart"* block first to bring Docker + oMLX back and re-verify the LAN
+path.
+
+**The only hard prerequisite for LAB is §3, the vault** — and it is two keys shorter
+than the table below was first written for: the tailscaled sidecar has been removed, so
+`tailscale_authkey` is not needed, and the metered tiers are gone, so neither
+`openrouter_api_key` nor `anthropic_api_key` is consumed any more. The local tier's key is
+now `mac_litellm_key`, not `omlx_api_key`.
 
 Four role bugs were fixed on 2026-09-15 that would each have failed this deploy —
 the preflight FR-013 assertion still required `.ts.net`, `OMLX_API_KEY` was never
@@ -47,13 +56,13 @@ Two things it still says that are now wrong are marked inline below.
 cd ~/path/to/homelab-proxmox
 git rev-parse --abbrev-ref HEAD                 # 064-llm-router-handoff
 git log --oneline -2
-#   0201dcb Repoint 064's local tier to oMLX over the LAN, and replan the deploy
-#   32b3db7 docs(llm-router): handoff notes, verified model mapping, environment findings
+#   5469240 fix(llm-router)!: land the oMLX amendment in the role, drop the tailscaled sidecar
+#   1b24518 docs(064): command-by-command runbook for the LAB deploy
 
 ./scripts/healthcheck/llm-router-doctor.py --list
-#   alias hermes-fast        -> [local,aggregator]  fallback=hermes-balanced
-#   alias hermes-balanced    -> [local,aggregator]  fallback=hermes-deep
-#   alias hermes-deep        -> [frontier]  fallback=None
+#   alias hermes-fast        -> [local]  fallback=None
+#   alias hermes-balanced    -> [local]  fallback=None
+#   alias hermes-deep        -> [local]  fallback=None
 
 ./scripts/healthcheck/llm-router-doctor.py --layer config
 #   expect 5/5
@@ -64,6 +73,62 @@ If `--layer config` is not 5/5, stop — the tree is wrong.
 ---
 
 ## 1 · NEW MAC — expose the LiteLLM gateway  *(brief for an agent on the Mac)*
+
+> ## ✅ STATUS: DONE on the Mac — 2026-09-16
+>
+> Both jobs were executed on `XMJDVVW39Y2T` (192.168.1.177) itself. Full write-up:
+> [`amendment-drop-metered-tiers.md`](./amendment-drop-metered-tiers.md) § *Executed on
+> the Mac*. Summary:
+>
+> - **Job 1 — LiteLLM rebound to `0.0.0.0:4000`.** It runs via `docker compose` at
+>   `~/Development/private/local-llm/proxy`; `docker-compose.yml` line ~45 changed
+>   `127.0.0.1:4000:4000` → `0.0.0.0:4000:4000`, `docker compose up -d`. Verified `*:4000`,
+>   healthy, answers on loopback **and** the LAN IP; `fast`/`coder`/`reasoner` serve over the
+>   LAN. **oMLX stayed on `127.0.0.1:8000`.** macOS firewall untouched (Docker already
+>   permitted inbound).
+> - **Job 2 — virtual key minted.** `key_alias: homelab-lxc-064-llm-router`, scoped
+>   `models: ["local"]`. **This is the vault's `mac_litellm_key`.** The plaintext was handed
+>   over out-of-band on 2026-09-16; it is **not recoverable from Postgres** (only its hash is
+>   stored). If it was not saved, **re-mint** — see the restart-recovery block below.
+>
+> ### ⟳ Resume after a Mac restart (do this first when the Mac comes back)
+>
+> Nothing here auto-starts reliably: **Docker Desktop is not a login item**, and **oMLX is a
+> GUI app**. Bring the stack back, then confirm the LAN path, before touching the deploy:
+>
+> ```bash
+> open -a Docker            # wait for the whale icon to settle; containers are unless-stopped
+> open -a oMLX              # auto_start_on_launch:true — its server comes up on 127.0.0.1:8000
+>
+> # once both are up, verify (from the Mac):
+> lsof -nP -iTCP:4000 -sTCP:LISTEN                                   # want *:4000
+> lsof -nP -iTCP:8000 -sTCP:LISTEN                                   # want 127.0.0.1:8000 (NOT *)
+> curl -s -m5 http://192.168.1.177:4000/health/liveliness           # "I'm alive!"
+> cd ~/Development/private/local-llm/proxy && set -a && . ./.env && set +a
+> for a in fast coder reasoner; do curl -s -m60 http://192.168.1.177:4000/v1/chat/completions \
+>   -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H 'Content-Type: application/json' \
+>   -d "{\"model\":\"$a\",\"max_tokens\":8,\"messages\":[{\"role\":\"user\",\"content\":\"ok\"}]}" \
+>   -o /dev/null -w "$a %{http_code}\n"; done                        # each 200
+> ```
+>
+> Check oMLX re-pinned the aliased models (residency, FR-016) after the cold boot — it drives
+> `~/.omlx/model_settings.json`. Confirm `Qwen3.8-27B-8bit` and `Qwen3.8-27B-oQ4e-mtp` are
+> loaded in the oMLX UI. *(Note: this cannot be scripted with `OMLX_API_KEY` — `/admin/api/models`
+> needs a separate admin credential not in `proxy/.env`; see the amendment's findings.)*
+>
+> **If the minted key was lost**, re-mint an identical one and re-vault it:
+>
+> ```bash
+> cd ~/Development/private/local-llm/proxy && set -a && . ./.env && set +a
+> curl -s -X POST http://127.0.0.1:4000/key/generate -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+>   -H 'Content-Type: application/json' \
+>   -d '{"models":["local"],"key_alias":"homelab-lxc-064-llm-router-v2"}' | python3 -m json.tool
+> ```
+>
+> **What's left after this** is off-Mac: §3 (vault `mac_litellm_key`, drop the metered keys)
+> then §5 (LAB deploy). The rest of §1 below is the original brief, kept for provenance.
+
+---
 
 > **Supersedes the old §1** (expose oMLX on `0.0.0.0`). Design changed 2026-09-15: the
 > homelab gateway now chains to **this Mac's LiteLLM**, not to oMLX directly. **oMLX must
@@ -189,11 +254,14 @@ ansible-vault edit ansible/group_vars/services/vault.yml
 | `litellm_master_key` | `sk-` prefix **required** |
 | `llm_router_client_hermes_key` | `sk-` prefix **required** |
 | `llm_router_canary_key` | `sk-` prefix **required** |
-| `omlx_api_key` | **new** — the local tier's key, from `~/.omlx/settings.json` → `auth.api_key` on the Mac |
-| `openrouter_api_key` | |
-| `anthropic_api_key` | API key only, never a subscription credential (FR-007) |
+| `mac_litellm_key` | **the local tier's key** — a virtual key the Mac's LiteLLM mints for the LXC (§1, `POST /key/generate`), scoped to `fast`/`coder`/`reasoner`. `sk-` prefix. Replaces `omlx_api_key`. |
 | `litellm_db_password` | |
 
+> ~~`omlx_api_key`~~, ~~`openrouter_api_key`~~, ~~`anthropic_api_key`~~ — **no longer
+> consumed** (2026-09-15). The gateway no longer talks to oMLX directly, and the metered
+> tiers are gone, so no deployment names any of these. Drop them from the vault. See
+> [`amendment-drop-metered-tiers.md`](./amendment-drop-metered-tiers.md).
+>
 > ~~`tailscale_authkey`~~ — **no longer needed** (2026-09-15). The LXC's tailscaled
 > sidecar was removed; nothing in the repo consumes this variable any more. Do not
 > generate one.
@@ -217,8 +285,8 @@ git push                                   # plain push works here, no Zscaler
 ```bash
 ./scripts/healthcheck/llm-router-doctor.py --layer config    # 5/5
 
-ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:8000/health"
-#   {"status":"healthy",...}
+ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:4000/health/liveliness"
+#   HTTP 200 from the Mac's LiteLLM (oMLX stays on 127.0.0.1:8000, do not probe it)
 ```
 
 > **Wrong for LAB** (revision 2026-09-15). This tests **`pve`'s** resolver — a
@@ -228,11 +296,12 @@ ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:8000/health"
 > container-resolution problem it does not cover.
 
 **That second command was written as the gate.** It proves `pve` resolves the Mac's
-mDNS name *and* reaches oMLX on the LAN. If it fails:
+mDNS name *and* reaches the Mac's **LiteLLM** on the LAN (not oMLX — that stays on
+`127.0.0.1`). If it fails:
 
 | symptom | cause |
 |---|---|
-| connection refused | §1 not done — oMLX still on `127.0.0.1` |
+| connection refused | §1 not done — the Mac's LiteLLM still on `127.0.0.1:4000` |
 | name not resolved | avahi not resolving `.local` from `pve` — try the Mac's IP to isolate |
 | timeout | Mac asleep, or off the LAN |
 
@@ -278,14 +347,20 @@ export LLM_ROUTER_CANARY_KEY="sk-..."          # the canary key from §3
   --json /tmp/doctor-lab.json
 ```
 
-**Expect all green *except* the two local-tier checks** (revision 2026-09-15):
-`oMLX reachable on the LAN` and `oMLX serves the declared context, resident` both
-go red in LAB, correctly — the Mac is unreachable from that subnet.
+**Expect the two local-tier checks to go RED in LAB** (revision 2026-09-15):
+`Mac LiteLLM reachable on the LAN` and `every alias maps onto a live Mac role alias`
+both fail from LAB's subnet, correctly — the Mac is on `192.168.1.0/24` and mDNS does
+not cross into `192.168.20.0/24`.
 
-**`every alias answers right now` must be GREEN.** That is SC-001, it is the point
-of the LAB run, and a red there is a real failure of the fallback chain. A red local
-tier alongside green aliases is the correct LAB result — fault-injection row 2,
-arriving for free.
+**SC-001 is WITHDRAWN, so the aliases will ALSO fail clean in LAB.** With the metered
+tiers gone there is no fallback: the Mac is the only backend, and from LAB it is
+unreachable, so each `alias answers` gateway check returns a **prompt error naming the
+unreachable backend, not a hang**. That failing-clean-within-the-health-interval *is*
+the property to confirm in LAB — a hang is the only real failure. The full alias-serving
+proof now belongs to PROD, which shares the Mac's subnet.
+
+What must still be GREEN in LAB: the whole **config** layer and the gateway's own
+`endpoint answers` liveness. Those prove the deploy itself is sound independent of the Mac.
 
 Also run the existing liveness check — it answers a different
 question and is what the pipeline gates on:
@@ -302,26 +377,28 @@ Full detail in [`doctor-fault-injection.md`](./doctor-fault-injection.md).
 **Green is the starting point, not the finish.** Restore after each.
 
 > **Rows 1–3 need the Mac and therefore need PROD** (revision 2026-09-15). In LAB
-> the local tier is already unreachable, so row 1 is the steady state, row 2 is the
-> steady state, and row 3 cannot be staged. Rows 4 and 5 run in LAB today.
-> Row 3's check was verified against a simulated oMLX on 2026-09-15 and fails
-> correctly on unpinned, evicted, and short-context — it is no longer unfailable.
+> the local tier is already unreachable, so row 1 is the steady state and row 2 is the
+> steady state. Rows 4 and 5 run in LAB today. Row 3 (residency/pinning) can no longer
+> be observed from here at all — oMLX is behind `127.0.0.1` on the Mac — so it moved to
+> the **Mac side of §1** and is verified there, not by this doctor.
 
 | # | where | break | expect |
 |---|---|---|---|
-| 1 | new Mac | stop the oMLX server | `oMLX reachable on the LAN` → **FAIL** |
-| 2 | laptop | with oMLX still stopped, re-run the doctor | **every alias still PASSES** ← inverted |
-| 3 | new Mac | unpin `Qwen3.8-27B-oQ4e-mtp`, let it evict | `serves the declared context, resident` → **FAIL** |
+| 1 | new Mac | stop the Mac's LiteLLM | `Mac LiteLLM reachable on the LAN` → **FAIL** |
+| 2 | laptop | with the Mac's LiteLLM still stopped, re-run the doctor | **every alias FAILS CLEAN** — an error naming the backend, never a hang ← inverted |
+| 3 | new Mac | (on the Mac) unpin `Qwen3.8-27B-oQ4e-mtp`, let it evict | Mac-side residency check in §1 → **FAIL** |
 | 4 | laptop | run the doctor with a budget-less key | `calling key carries a budget` → **FAIL** |
 | 5 | laptop | set `enable_pre_call_checks: false`, deploy | that check → **FAIL** |
 
-**#2 is inverted and is the important one.** With oMLX down, every alias must
-still answer — that is SC-001 and the fallback working. A red there means the
-fallback is broken, not the doctor.
+**#2 is inverted and is the important one.** With the Mac's LiteLLM down, every alias
+must **fail clean** — a prompt error attributing the failure to the unreachable backend,
+returned within the health-check interval. A *hang* there is the real failure (SC-008,
+rephrased); a clean error is the pass. SC-001's old "must still answer" expectation is
+withdrawn — there is nothing left to fall back to.
 
 Then **power the Mac fully off** and re-run. That is `T035`, a different failure
-mode from a stopped server: a stopped server refuses fast, a vanished host can
-hang to timeout. Watch the wall clock; a hang is the result.
+mode from a stopped server: a stopped LiteLLM refuses fast, a vanished host can
+hang to timeout. Watch the wall clock; a hang is the result to catch.
 
 Record which checks refused to go red — that is a finding, not a formality.
 
@@ -331,8 +408,8 @@ Record which checks refused to go red — that is a finding, not a formality.
 
 ```bash
 gh pr create --base main --head 064-llm-router-handoff \
-  --title "feat(llm-router): oMLX local tier over LAN, revised deploy plan" \
-  --body "Repoints 064's local tier from Ollama-over-tailnet to oMLX-over-LAN; the original Mac is being returned. Amends FR-009/013/016/017, adds a behaviour-asserting doctor and a machine-by-machine deploy plan. LAB deployed and fault-injected — see specs/064-llm-router/doctor-fault-injection.md for results."
+  --title "feat(llm-router): chain local tier through the Mac's LiteLLM, drop metered tiers" \
+  --body "Re-chains 064's local tier from oMLX-direct to the Mac's own LiteLLM on :4000, and drops the metered tiers (OpenRouter, Anthropic). oMLX returns to 127.0.0.1. Withdraws SC-001/FR-004 (no fallback; fail clean), makes FR-010's spend half and SC-012 inert. Amends FR-014/016 and SC-008. Anchor: specs/064-llm-router/amendment-drop-metered-tiers.md. LAB deployed and fault-injected — see specs/064-llm-router/doctor-fault-injection.md for results."
 ```
 
 No `allow-protected-path-changes` label needed — verified, nothing in this branch

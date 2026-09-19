@@ -164,8 +164,21 @@ def check_config(d: Doctor, aliases) -> None:
                         "would pass review and fail in production"))
     d.check("config", "context_window_fallbacks declared", "cfg", "SC-009",
             lambda: tpl(lambda t: "context_window_fallbacks:" in t, ""))
-    d.check("config", "ordered fallbacks declared", "cfg", "FR-004",
-            lambda: tpl(lambda t: "fallbacks:" in t, ""))
+
+    def fallbacks_withdrawn():
+        # FR-004 is WITHDRAWN (amendment-drop-metered-tiers.md): with no remote
+        # tier there is nothing to fall back to, and cross-alias fallback within
+        # one host is slower, not safer. Assert the withdrawal actually held —
+        # every alias must declare fallback_to null — rather than asserting a
+        # `fallbacks:` key that the template emits empty regardless. A check that
+        # passes no matter what the config says is the anti-pattern this doctor exists
+        # to avoid.
+        declared = [a["name"] for a in aliases if a.get("fallback_to")]
+        return not declared, ("all aliases fallback=null (FR-004 withdrawn)"
+                              if not declared else
+                              f"alias still declares a fallback (FR-004 is withdrawn): {declared}")
+    d.check("config", "cross-alias fallbacks withdrawn", "cfg", "FR-004",
+            fallbacks_withdrawn)
 
     def no_placeholder():
         if not VARS.exists():
@@ -249,7 +262,7 @@ def check_gateway(d: Doctor, aliases) -> None:
 # --------------------------------------------------------------------------
 
 def check_local_tier(d: Doctor, aliases) -> None:
-    print("\nLOCAL TIER — oMLX on the LAN; the Mac is a discount, never a dependency (SC-001)")
+    print("\nLOCAL TIER — the Mac's LiteLLM on the LAN; SC-001 withdrawn, it must fail CLEAN")
 
     base = next((dep.get("api_base") for a in aliases for dep in a["deployments"]
                  if dep.get("tier") == "local" and dep.get("api_base")), None)
@@ -262,112 +275,55 @@ def check_local_tier(d: Doctor, aliases) -> None:
     # endpoints sit at the root, not under /v1.
     root = base[:-3].rstrip("/") if base.rstrip("/").endswith("/v1") else base.rstrip("/")
 
-    def omlx_reachable():
+    def mac_gateway_reachable():
+        # The Mac now runs LiteLLM in front of oMLX, so the probe is LiteLLM's
+        # liveness endpoint, not oMLX's /health. oMLX is not LAN-reachable at
+        # all by design (FR-016) and cannot be probed from here.
         try:
-            with urllib.request.urlopen(f"{root}/health", timeout=10) as r:
-                h = json.loads(r.read())
-            return h.get("status") == "healthy", f"status={h.get('status')}"
+            with urllib.request.urlopen(f"{root}/health/liveliness", timeout=10) as r:
+                return r.status == 200, f"HTTP {r.status}"
         except Exception as e:
             # Not a gateway failure. SC-001 requires this to be survivable, and
             # the replacement Mac is a laptop that leaves the LAN by design.
             return False, (f"unreachable ({type(e).__name__}) — SC-001 says "
                            f"the gateway must still serve every alias")
-    d.check("local", "oMLX reachable on the LAN", "obs", "FR-016", omlx_reachable)
+    d.check("local", "Mac LiteLLM reachable on the LAN", "obs", "FR-016",
+            mac_gateway_reachable)
 
-    def context_and_residency(aliases=aliases):
-        """Ask oMLX what it is ACTUALLY serving, not what this machine's env says.
+    def aliases_resolve(aliases=aliases):
+        """Each hermes alias must resolve to a Mac role alias that answers.
 
-        The first version of this check read os.environ["OLLAMA_CONTEXT_LENGTH"]
-        — the environment of whatever box runs the doctor, which is the LXC or a
-        laptop, never the Mac. It would have reported on the wrong machine and
-        passed or failed for reasons unrelated to Ollama. That is the same
-        mistake as the sibling project's env check, which inherited a variable
-        from its caller and could therefore never fail.
-
-        /admin/api/models reports every model with its loaded state and context
-        length, covering both FR-016 requirements at once: the declared window
-        must match, and the aliased models must stay resident so a swap cannot
-        trip the gateway timeout into a false fallback.
+        Residency can no longer be observed from here. oMLX is bound to
+        127.0.0.1 behind the Mac's LiteLLM (FR-016), so /admin/api/models is
+        unreachable and the pinning check that lived here cannot run. It moved
+        to the Mac side of RUNBOOK § 1 rather than being silently dropped — a
+        check that cannot reach its subject must be removed, not left returning
+        a pass.
         """
+        want = [dep.get("provider_model", "").split("/", 1)[-1]
+                for a in aliases for dep in a["deployments"]
+                if dep.get("tier") == "local"]
+        if not want:
+            return False, "no local deployments declared — the mapping is empty"
         try:
-            req = urllib.request.Request(f"{root}/admin/api/models")
-            with urllib.request.urlopen(req, timeout=10) as r:
-                models = json.loads(r.read()).get("models", [])
+            req = urllib.request.Request(f"{root}/v1/models",
+                                         headers={"Authorization": f"Bearer {d.key}"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                have = {m["id"] for m in json.loads(r.read()).get("data", [])}
         except Exception as e:
-            return False, f"cannot reach /admin/api/models: {type(e).__name__}"
-        # Only the models the ALIASES reference. The first version asserted over
-        # every loaded model, so an unrelated resident checkpoint failed the
-        # check — observed with a 3B at 32k context sitting alongside the two
-        # aliased 27Bs. A doctor that fails on things outside its remit trains
-        # people to ignore it.
-        want_models, want_ctx = {}, 0
-        for a in aliases:
-            for dep in a["deployments"]:
-                if dep.get("tier") != "local":
-                    continue
-                pm = dep.get("provider_model", "")
-                base_id = pm.split("/", 1)[-1].split(":", 1)[0]
-                if base_id:
-                    want_models[base_id] = a["name"]
-                want_ctx = max(want_ctx, int(dep.get("context_window") or 0))
-        if not want_models:
-            # Reaching here means the parser found local deployments with no
-            # provider_model — a parser fault, not a healthy backend. Returning
-            # True here is what made this check unfailable for the whole of 064.
-            return False, ("no provider_model parsed for any local deployment — "
-                           "this check cannot assert anything; fix the parser "
-                           "rather than trusting the result")
+            return False, f"cannot list the Mac's models: {type(e).__name__}"
+        missing = [w for w in want if w not in have]
+        return not missing, (f"all {len(want)} map onto Mac aliases: {','.join(want)}"
+                             if not missing else
+                             f"hermes alias points at a Mac alias that does not exist: {missing}")
+    d.check("local", "every alias maps onto a live Mac role alias", "obs", "FR-016",
+            aliases_resolve)
 
-        by_id = {m.get("id"): m for m in models}
-        missing = [i for i in want_models if i not in by_id]
-        if missing:
-            return False, f"aliased model not present on the Mac: {missing}"
-        not_loaded = [i for i in want_models if not by_id[i].get("loaded")]
-        if not_loaded:
-            return False, (f"aliased model not resident: {not_loaded} — a swap or "
-                           f"cold load can trip the gateway timeout into a FALSE "
-                           f"fallback, reporting the Mac down when it is merely slow")
-        bad = [f"{i}={by_id[i].get('model_context_length')}"
-               for i in want_models
-               if (by_id[i].get("model_context_length") or 0) < want_ctx]
-        if bad:
-            return False, (f"serving below the declared {want_ctx}: {bad} — oversized "
-                           f"input is truncated instead of escalating a tier, "
-                           f"defeating SC-009")
-        # Pinning is the lever that keeps residency true between runs. An unpinned
-        # model is loaded right now and evictable a moment later, so passing on
-        # `loaded` alone reports a state with no shelf life. FR-016 asks for
-        # residency to be guaranteed, not merely observed once.
-        unpinned = [i for i in want_models if not by_id[i].get("pinned")]
-        if unpinned:
-            return False, (f"aliased model loaded but NOT pinned: {unpinned} — "
-                           f"evictable, and the cold load that follows trips the "
-                           f"gateway timeout into a FALSE fallback (FR-016)")
-        return True, (f"{len(want_models)} resident and pinned at >={want_ctx}: "
-                      f"{','.join(sorted(want_models))}")
-    d.check("local", "oMLX serves the declared context, resident", "obs",
-            "FR-016", context_and_residency)
-
-    def survives_absence():
-        # SC-001 in its cheap form: every alias answers right now. If the Mac is
-        # up this proves nothing about fallback; run it again with the Mac off,
-        # which is what T035 is for and what this cannot do unattended.
-        failed = []
-        for a in aliases:
-            try:
-                d.post({"model": a["name"], "max_tokens": 8,
-                        "messages": [{"role": "user", "content": "ok"}]},
-                       timeout=120)
-            except Exception:
-                failed.append(a["name"])
-        return not failed, ("all aliases answer" if not failed
-                            else f"NOT answering: {failed}")
-    d.check("local", "every alias answers right now", "obs", "SC-001",
-            survives_absence)
-    print("       note: SC-001 is only truly exercised with the Mac POWERED OFF "
-          "(T035),\n       which is a different failure mode from a stopped "
-          "daemon (T034). Neither\n       is automatable here — a stopped daemon "
-          "refuses fast, a vanished tailnet\n       peer can hang to timeout.")
+    print("       note: SC-001 is WITHDRAWN. With no remote tier the requirement is "
+          "that every\n       alias FAILS CLEAN when the Mac is away — an error naming the "
+          "backend, never a\n       hang. Powering the Mac off (T035) is still the only way "
+          "to exercise it, and is\n       still a different failure mode from a stopped "
+          "LiteLLM (T034).")
 
 
 LAYERS = {"config": check_config, "gateway": check_gateway, "local": check_local_tier}

@@ -1,5 +1,18 @@
 # Deploy plan — who does what, and where
 
+> **Revision 2026-09-15 — read first.** The local tier no longer talks to oMLX
+> directly; it chains through the **Mac's own LiteLLM** on `:4000`, and the metered
+> tiers (OpenRouter, Anthropic) are dropped. oMLX returns to `127.0.0.1:8000`. Where
+> this file says "expose oMLX on `0.0.0.0:8000`", read "expose the Mac's LiteLLM on
+> `0.0.0.0:4000`, keep oMLX on `127.0.0.1`"; where it names `omlx_api_key`,
+> `openrouter_api_key` or `anthropic_api_key`, read the single `mac_litellm_key`; and
+> where it relies on SC-001 fallback ("every alias must still answer"), note SC-001 is
+> **withdrawn** — with no fallback the aliases now **fail clean**. Anchor:
+> [`amendment-drop-metered-tiers.md`](./amendment-drop-metered-tiers.md). The
+> machine-by-machine commands live in [`RUNBOOK.md`](./RUNBOOK.md), which is already
+> rewritten for this; the sections below are kept for the four-machine model and the
+> IPs.
+
 **Revised 2026-09-14.** Supersedes the "Deploying from the Linux laptop" section
 of [`HANDOFF.md`](./HANDOFF.md), which assumed the old Mac and an interactive
 Tailscale login that Zscaler now blocks.
@@ -122,10 +135,12 @@ ansible-vault edit ansible/group_vars/services/vault.yml
 | `litellm_master_key` | **must** start `sk-` |
 | `llm_router_client_hermes_key` | **must** start `sk-` |
 | `llm_router_canary_key` | **must** start `sk-` |
-| `omlx_api_key` | the local tier's key — **new**, replaces nothing |
-| `openrouter_api_key` | |
-| `anthropic_api_key` | API key, never a subscription credential (FR-007) |
+| `mac_litellm_key` | the local tier's key — a virtual key the Mac's LiteLLM mints for the LXC (§1). `sk-` prefix. **Replaces** `omlx_api_key`. |
 | `litellm_db_password` | |
+
+~~`omlx_api_key`, `openrouter_api_key`, `anthropic_api_key`~~ — **withdrawn 2026-09-15**.
+The gateway no longer talks to oMLX directly and the metered tiers are gone, so nothing
+consumes these. Drop them.
 
 ~~`tailscale_authkey`~~ — **withdrawn 2026-09-15** along with the sidecar it served.
 No consumer remains anywhere in the repo.
@@ -138,12 +153,13 @@ echo "sk-$(openssl rand -hex 24)"     # for the three sk- keys
 
 ```bash
 ./scripts/healthcheck/llm-router-doctor.py --layer config          # expect 5/5
-ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:8000/health"
+ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:4000/health/liveliness"
 ```
 
 The second is the one that matters: it proves `pve` resolves the Mac's mDNS name
-*and* reaches oMLX. If it fails, step A is not done or avahi is not resolving
-`.local` from the LXC subnet.
+*and* reaches the Mac's **LiteLLM** (oMLX stays on `127.0.0.1:8000` — do not probe
+it). If it fails, step A is not done or avahi is not resolving `.local` from the LXC
+subnet.
 
 **C3 — deploy.**
 
@@ -204,14 +220,17 @@ answer. That is the property most worth proving, and LAB proves it for free.
 
 | | |
 |---|---|
-| **not a blocker** | § A (oMLX on `0.0.0.0`) — LAB cannot reach it regardless |
+| **not a blocker** | § A (the Mac's LiteLLM on `0.0.0.0:4000`) — LAB cannot reach it regardless |
 | **not a blocker** | § B (`pve` tailnet auth) — the local tier is LAN-addressed; the tailnet carries no backend leg |
 | **still required** | § C1 (vault secrets) — the only hard prerequisite |
-| **expected red** | the doctor's two local-tier checks, `oMLX reachable` and `serves the declared context, resident` |
-| **must be green** | `every alias answers right now` — this is SC-001 and the whole point of the run |
+| **expected red** | the doctor's two local-tier checks, `Mac LiteLLM reachable` and `every alias maps onto a live Mac role alias` |
+| **expected red, and correct** | the gateway `alias answers` checks — SC-001 is withdrawn, there is no fallback, so from LAB each alias **fails clean** (an error naming the unreachable backend, never a hang) |
+| **must be green** | the whole **config** layer and the gateway's own `endpoint answers` liveness — these prove the deploy is sound independent of the Mac |
 
-A red local tier with green aliases is the **correct** LAB result. Read it as the
-fault-injection table's row 2 arriving for free rather than as a failed deploy.
+A red local tier — and red, fail-clean aliases — with a green config layer and green
+gateway liveness is the **correct** LAB result. The full alias-serving proof belongs to
+PROD, which shares the Mac's subnet. Read a *hang* on any alias, not a red, as the only
+real LAB failure.
 
 ### Still open for PROD
 

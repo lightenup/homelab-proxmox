@@ -49,58 +49,66 @@ llm_router_port: 4000
 # never a DHCP-assigned IP (FR-013). See specs/064-llm-router/amendment-local-tier-omlx.md.
 # See specs/064-llm-router/quickstart.md § 0b for the full observed environment state.
 llm_router_aliases:
+  # Re-chained 2026-09-15: the metered tiers are gone and every alias resolves to
+  # the Mac's own LiteLLM on :4000, not to oMLX on :8000. oMLX stays bound to
+  # 127.0.0.1 and is reached only by that LiteLLM, so exactly one process is
+  # exposed to the LAN and it is the one that enforces keys and access groups.
+  #
+  # This withdraws SC-001. With no remote tier there is nothing to fall back to,
+  # so the gateway FAILS CLEAN when the Mac is away rather than degrading to a
+  # paid backend. That is the trade the simplification buys.
+  #
+  # fallback_to is null throughout on purpose. Cross-alias fallback within one
+  # host is theatre: if the Mac is away every alias is away together, and if a
+  # model is merely evicted, silently serving hermes-fast from the 8-bit is
+  # SLOWER, which defeats the only reason a caller asked for fast.
+  #
+  # context_window_fallback_to is likewise null: the Mac's own router already
+  # escalates oversized input (its `reasoner` alias falls through to a 262k
+  # profile), so duplicating that here would second-guess the hop that can
+  # actually act on it. hermes-deep declares 262144 to expose that reach.
   - name: hermes-fast
-    fallback_to: hermes-balanced
-    context_window_fallback_to: hermes-deep
+    fallback_to: null
+    context_window_fallback_to: null
     deployments:
       - id: fast-local
         tier: local
-        # 4-bit sibling with in-checkpoint speculative decoding: ~59 tok/s
-        # against the 8-bit's ~34, at roughly half the memory.
-        provider_model: "openai/Qwen3.8-27B-oQ4e-mtp:oq-agent"
-        api_base: "http://xmjdvvw39y2t.local:8000/v1"
-        api_key_env: OMLX_API_KEY
+        # Mac alias `fast` -> 4-bit sibling, ~59 tok/s.
+        provider_model: "openai/fast"
+        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_key_env: MAC_LITELLM_KEY
         context_window: 131072
         health_checked: true
-      - id: fast-hosted
-        tier: aggregator
-        provider_model: "openrouter/meta-llama/llama-3.1-8b-instruct"
-        api_key_env: OPENROUTER_API_KEY
-        context_window: 32768
-        health_checked: false
   - name: hermes-balanced
-    fallback_to: hermes-deep
-    context_window_fallback_to: hermes-deep
+    fallback_to: null
+    context_window_fallback_to: null
     deployments:
       - id: balanced-local
         tier: local
-        # 8-bit quality tier. Pinned resident on the Mac so a swap away
-        # from the 4-bit sibling cannot stall the first request (FR-016).
-        provider_model: "openai/Qwen3.8-27B-8bit:qwen-code"
-        api_base: "http://xmjdvvw39y2t.local:8000/v1"
-        api_key_env: OMLX_API_KEY
+        # Mac alias `coder` -> 8-bit, thinking off, validated for code at N=1.
+        provider_model: "openai/coder"
+        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_key_env: MAC_LITELLM_KEY
         context_window: 131072
         health_checked: true
-      - id: balanced-hosted
-        tier: aggregator
-        provider_model: "openrouter/google/gemma-3-27b-it"
-        api_key_env: OPENROUTER_API_KEY
-        context_window: 32768
-        health_checked: false
   - name: hermes-deep
     fallback_to: null
     context_window_fallback_to: null
     deployments:
-      - id: deep-frontier
-        tier: frontier
-        provider_model: "anthropic/claude-sonnet-5"
-        api_key_env: ANTHROPIC_API_KEY
-        context_window: 1000000
-        health_checked: false
+      - id: deep-local
+        tier: local
+        # Mac alias `reasoner` -> 8-bit with thinking on and an 8k budget.
+        # Replaces the Anthropic frontier tier. 262144 because the Mac's router
+        # escalates this alias to a 262k profile above its own 131k window.
+        # Caveat: that escalation (Mac-side context_window_fallback to qwen-long)
+        # runs thinking OFF at temp 0.3, so crossing 131k trades reasoning depth
+        # for window. See amendment-drop-metered-tiers.md § The new mapping.
+        provider_model: "openai/reasoner"
+        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_key_env: MAC_LITELLM_KEY
+        context_window: 262144
+        health_checked: true
 
-# Per-client virtual keys (FR-015). Budgets set against Claude Sonnet 5 LIST pricing
-# ($3/$15 per 1M tokens) — NOT the introductory rate, which expires 2026-08-31
-# (research D-106). Add one entry per real consumer before first deploy.
 llm_router_clients:
   - alias: hermes
     key_env: LLM_ROUTER_CLIENT_HERMES_KEY
