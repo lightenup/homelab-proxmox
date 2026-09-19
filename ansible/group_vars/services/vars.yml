@@ -198,6 +198,27 @@ caddy_base_domain: "hus-sky.no"
 # Single declarative source for all services (routes, blackbox targets, landing page cards).
 # Fields: host (required), ip/port (required when enabled), title, desc, enabled, user_facing.
 # ip/port MUST reference existing central vars to keep IPs defined in exactly one place.
+# Landing-page entries that are deliberately NOT reverse-proxied (045-landing-page,
+# FR-008 of spec 064). An entry in caddy_services below gets BOTH a public vhost
+# ({host}.hus-sky.no, real cert, proxying to {ip}:{port}) AND — if user_facing — a tile.
+# The two are coupled: `user_facing: false` still creates the public route, it only hides
+# the tile, which is the wrong half for a service that must stay off the internet.
+#
+# These entries produce a tile and nothing else. No vhost, no DNS name, no route. Used for
+# services that should be VISIBLE on the front page while remaining unreachable from
+# outside the LAN — the link points somewhere already gated, not at the service.
+caddy_landing_links:
+  - title: "LLM Router"
+    desc: "Local LLM gateway — dashboards in Grafana"
+    # Grafana, not the gateway: hus-sky.no is public, and FR-008/SC-007 keep the gateway
+    # off the internet. The click-through is gated by Grafana's own auth. Precedent: the
+    # eurooffice card already links to Nextcloud rather than to itself.
+    link: "https://grafana.hus-sky.no/d/llm-router"
+    # Matches the `instance` label of the blackbox probe that llm-router's
+    # monitoring_contract.liveness_targets declares, which is what /api/status returns.
+    probe: "http://192.168.1.220:4000/health/readiness"
+    enabled: true
+
 caddy_services:
   - host: grafana
     ip: "{{ monitoring_ip }}"
