@@ -92,8 +92,42 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _parse_with_forwarded(argv: list[str] | None) -> argparse.Namespace:
+    """Parse, tolerating forwarded arguments that begin with a dash.
+
+    The forwarding subcommands collect trailing arguments with
+    `nargs=argparse.REMAINDER`, which only works when the first trailing token is a
+    positional. Give it an option first and argparse tries to match it against the
+    subparser and exits:
+
+        $ ops_cli healthcheck run --json --no-notify
+        error: unrecognized arguments: --json --no-notify
+
+    The intended form is `... run -- --json --no-notify`, which every handler already
+    accounts for by stripping a leading `--`. But the separator is easy to omit and its
+    absence fails a whole pipeline step: `lxc-lifecycle.yml` omitted it, so every PROD
+    lifecycle run reported failure after a successful apply, and the Taskfile's own
+    documented example (`task healthcheck:run -- --check-drift`) had the same bug.
+
+    So accept both forms. Anything argparse does not recognise is taken as the start of
+    the forwarded arguments, and they are sliced out of the ORIGINAL argv rather than
+    concatenated — concatenating `unknown` onto `args.args` would reorder
+    `run --flag value` into `value --flag`.
+    """
+    argv_list = list(sys.argv[1:] if argv is None else argv)
+    args, unknown = build_parser().parse_known_args(argv_list)
+    if unknown and hasattr(args, "args"):
+        start = argv_list.index(unknown[0])
+        args.args = argv_list[start:]
+    elif unknown:
+        # A subcommand that forwards nothing was given something it cannot use. Do not
+        # swallow it — that is a real usage error.
+        build_parser().error("unrecognized arguments: " + " ".join(unknown))
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    args = _parse_with_forwarded(argv)
 
     fake = _is_fake_mode()
     repo_root = _find_repo_root(Path.cwd())
