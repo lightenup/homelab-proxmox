@@ -237,16 +237,42 @@ def check_gateway(d: Doctor, aliases) -> None:
             return bool(txt), f"served, {len(txt)} chars"
         d.check("gateway", f"alias answers: {a['name']}", "obs", "FR-002", answers)
 
-    def only_aliases():
+    def only_aliases(aliases=aliases):
         # FR-002: a client must not need a provider model ID. If a raw provider
         # ID is also addressable, clients will drift onto it and FR-003's
         # remapping guarantee quietly stops holding.
-        try:
-            d.post({"model": "claude-sonnet-5", "max_tokens": 8,
-                    "messages": [{"role": "user", "content": "hi"}]}, timeout=45)
-            return False, "a raw provider model ID was ACCEPTED"
-        except urllib.error.HTTPError as e:
-            return e.code in (400, 401, 403, 404), f"refused with HTTP {e.code}"
+        #
+        # This probed the literal "claude-sonnet-5" until 2026-09-19 — a name that left
+        # the config with the frontier tier, so it was refused for not existing rather
+        # than for being a provider ID, and the check passed without testing anything.
+        # Fault injection found the real gap behind it: `openai/fast`, the provider_model
+        # the alias mapping actually declares, WAS addressable and returned a genuine
+        # completion. Probe what is declared, so the check tracks the mapping instead of
+        # a name frozen at the time it was written.
+        #
+        # Both forms matter: the declared "openai/fast" and the bare "fast". The bare form
+        # was already refused; the qualified one was not.
+        probes = []
+        for a in aliases:
+            for dep in a["deployments"]:
+                pm = dep.get("provider_model", "")
+                if pm:
+                    probes += [pm, pm.split("/", 1)[-1]]
+        probes = sorted(set(probes))
+        if not probes:
+            return False, "no provider_model declared — nothing to assert"
+        accepted = []
+        for m in probes:
+            try:
+                d.post({"model": m, "max_tokens": 8,
+                        "messages": [{"role": "user", "content": "hi"}]}, timeout=45)
+                accepted.append(m)
+            except urllib.error.HTTPError as e:
+                if e.code not in (400, 401, 403, 404):
+                    accepted.append(f"{m}(HTTP {e.code})")
+        return not accepted, (f"all {len(probes)} provider IDs refused"
+                              if not accepted else
+                              f"provider model ID ACCEPTED, bypassing the alias: {accepted}")
     d.check("gateway", "raw provider model IDs are not addressable", "obs",
             "FR-002", only_aliases)
 
