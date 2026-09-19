@@ -51,22 +51,37 @@
     llm_router_gateway_team_id: >-
       {{ llm_router_gateway_team_id if llm_router_gateway_team_id != '' else llm_router_team_created.json.team_id }}
 
-- name: Look up existing virtual keys by alias
+# LiteLLM's /key/info looks a key up by `key` ONLY. `?key_alias=hermes` returns
+# 404 "Key not found in database" for an alias that plainly exists — verified against the
+# pinned v1.83.3-stable on 2026-09-19. The previous implementation here sent key_alias as a
+# JSON body on a GET, which /key/info ignores outright, so every run concluded "not
+# provisioned" and the SECOND apply died with:
+#
+#   400 Key with alias 'hermes' already exists. Unique key aliases across all keys are
+#       required.
+#
+# So the role was applicable exactly once, against SC-004's idempotency requirement.
+# /key/list is the endpoint that can actually answer the question, and it answers it for
+# every client in one call rather than one call per client.
+- name: List existing virtual keys
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ llm_router_port }}/key/info"
+    url: "http://127.0.0.1:{{ llm_router_port }}/key/list?return_full_object=true&size={{ llm_router_key_list_page_size }}"
     method: GET
     headers:
       Authorization: "Bearer {{ litellm_master_key }}"
-    body_format: json
-    body:
-      key_alias: "{{ item.alias }}"
-    status_code: [200, 404]
-  register: llm_router_existing_key
-  loop: "{{ llm_router_clients }}"
-  loop_control:
-    label: "{{ item.alias }}"
+    status_code: 200
+  register: llm_router_key_list
   changed_when: false
-  failed_when: false
+  no_log: true
+
+# json['keys'], not json.keys — the latter resolves to the dict's own keys() method in
+# Jinja and silently yields a bound method instead of the key list. Keys minted outside
+# this role can carry a null alias, hence the select('string').
+- name: Collect the aliases already provisioned
+  ansible.builtin.set_fact:
+    llm_router_existing_key_aliases: >-
+      {{ llm_router_key_list.json['keys'] | default([]) | selectattr('key_alias', 'defined')
+         | map(attribute='key_alias') | select('string') | list }}
 
 - name: Generate a virtual key on the gateway-wide team for each client not already provisioned
   ansible.builtin.uri:
@@ -76,16 +91,16 @@
       Authorization: "Bearer {{ litellm_master_key }}"
     body_format: json
     body:
-      key: "{{ lookup('vars', item.item.key_env | lower) }}"
-      key_alias: "{{ item.item.alias }}"
+      key: "{{ lookup('vars', item.key_env | lower) }}"
+      key_alias: "{{ item.alias }}"
       team_id: "{{ llm_router_gateway_team_id }}"
-      max_budget: "{{ item.item.max_budget }}"
-      budget_duration: "{{ item.item.budget_duration }}"
-      rpm_limit: "{{ item.item.rpm_limit | default(omit) }}"
+      max_budget: "{{ item.max_budget }}"
+      budget_duration: "{{ item.budget_duration }}"
+      rpm_limit: "{{ item.rpm_limit | default(omit) }}"
     status_code: 200
-  loop: "{{ llm_router_existing_key.results }}"
+  loop: "{{ llm_router_clients }}"
   loop_control:
-    label: "{{ item.item.alias }}"
-  when: item.status == 404
+    label: "{{ item.alias }}"
+  when: item.alias not in llm_router_existing_key_aliases
   register: llm_router_key_created
   no_log: true

@@ -31,3 +31,8 @@ llm_router_canary_interval_minutes: 60
 # node_exporter's own default otherwise. The literal appears once, next to the name of the
 # role that owns it, rather than being silently duplicated.
 llm_router_canary_textfile_dir: "{{ node_exporter_textfile_directory | default('/var/lib/node_exporter/textfile_collector') }}"
+
+# Page size for the /key/list idempotency lookup in virtual_keys.yml. Two clients today,
+# so one page is ample; if the gateway ever holds more keys than this the lookup would
+# need real pagination rather than a larger number.
+llm_router_key_list_page_size: 100
