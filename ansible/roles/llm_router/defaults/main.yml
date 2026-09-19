@@ -36,3 +36,10 @@ llm_router_canary_textfile_dir: "{{ node_exporter_textfile_directory | default('
 # so one page is ample; if the gateway ever holds more keys than this the lookup would
 # need real pagination rather than a larger number.
 llm_router_key_list_page_size: 100
+
+# Total per-request timeout on every deployment, in seconds, and the retry count that
+# multiplies it. Both exist to bound the failure case: with neither set, a backend behind
+# a SYN-dropping firewall hangs the caller indefinitely and never trips the health check.
+# See the comment in templates/config.yaml.j2 for the measurements behind the value.
+llm_router_request_timeout: 180
+llm_router_num_retries: 0
