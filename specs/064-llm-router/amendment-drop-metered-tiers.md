@@ -196,9 +196,21 @@ Run on `XMJDVVW39Y2T` (192.168.1.177) itself, the oMLX host.
    `litellm-config.yaml`; the Job 1 recreate reloaded it, adding three
    `Flash-Next` trial models. They are wired to no role alias, so
    `fast`/`coder`/`reasoner`/`diagram` are unchanged and the homelab is unaffected.
-2. **Residency/pinning cannot be checked with `OMLX_API_KEY`.** RUNBOOK moved the
-   "aliased models pinned resident" check to the Mac side, but oMLX's
-   `/admin/api/models` returns `Admin authentication required` — a *separate*
-   admin credential not present in `proxy/.env`. `/health` exposes only
-   `loaded_count` (3 of 9 at check time), not per-model pinned state. Confirming
-   pinning needs the oMLX admin key; it is currently an unverified assumption.
+2. **Residency/pinning cannot be checked via the admin API — RESOLVED 2026-09-19 by not
+   using it.** oMLX's `/admin/api/models` returns `Admin authentication required` to *every*
+   credential on the machine: the 4-char `auth.api_key`, the 64-char `auth.secret_key`, and
+   no auth at all. The GUI does not use it over HTTP — it talks to the server through a unix
+   socket at `~/Library/Application Support/oMLX/control.sock`. So the endpoint is not
+   scriptable, and that is why the claim sat unverified from 2026-09-14.
+
+   It did not need to be. Pinning is **configured** in `~/.omlx/model_settings.json`
+   (`is_pinned`) — the same lever the amendment used to set it — and that file is readable.
+   `mac-checks/verify-omlx-residency.sh` asserts it, deriving the fallback targets from the
+   Mac's own `context_window_fallbacks`. **Verified 2026-09-19: all four pinned** —
+   `Qwen3.8-27B-oQ4e-mtp` (`fast`) and `Qwen3.8-27B-8bit` (`coder`, `reasoner`, and
+   `qwen-long`, hermes-deep's escalation target). Fault-injected both ways: it goes red on an
+   unpinned model and on oMLX being down.
+
+   The stated limit: this asserts configuration, not live engine state. `/health` exposes only
+   an aggregate `loaded_count` (4 of 11, 75.7 GB of a 115.4 GB ceiling at check time), so no
+   unprivileged caller can observe which models are resident *right now*.
