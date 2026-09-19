@@ -21,20 +21,21 @@
       - llm_router_postgres_version != "latest"
     fail_msg: "llm_router_postgres_version must be a pinned, non-latest tag."
 
-- name: Assert vault-sourced provider credentials are defined
+# Gateway-own credentials only. Per-deployment provider credentials are NOT listed here —
+# they are asserted generically further down, from the api_key_env values the alias mapping
+# actually declares. Naming them by hand here is what made this assertion demand
+# openrouter_api_key and anthropic_api_key after the metered tiers were removed
+# (amendment-drop-metered-tiers.md), which would have failed the deploy on vault variables
+# that no deployment consumes.
+- name: Assert the gateway's own vault-sourced credentials are defined
   ansible.builtin.assert:
     that:
-      - openrouter_api_key is defined
-      - openrouter_api_key | length > 0
-      - anthropic_api_key is defined
-      - anthropic_api_key | length > 0
       - litellm_master_key is defined
       - litellm_master_key | length > 0
       - litellm_db_password is defined
       - litellm_db_password | length > 0
     fail_msg: >-
-      Missing vault variables: openrouter_api_key, anthropic_api_key, litellm_master_key
-      and/or litellm_db_password — run
+      Missing vault variables: litellm_master_key and/or litellm_db_password — run
       'ansible-vault edit group_vars/services/vault.yml' to add them (FR-007, Constitution II).
 
 - name: Assert Docker daemon is running
