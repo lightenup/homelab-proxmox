@@ -325,12 +325,22 @@ jobs:
 
       - name: Healthcheck GAP/Zombie guard
         if: always()
+        env:
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
         run: |
           set -euo pipefail
           ssh_target="ci@${PROXMOX_HOST:-pve}"
           ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
 
-          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; task healthcheck:run -- --json --no-notify"
+          # The vault password has to be streamed here too, not just to the apply step.
+          # `task healthcheck:run` shells out to ansible-inventory to resolve hosts, and the
+          # repo's ansible.cfg points vault_password_file at ansible/.vault-pass.txt, which is
+          # gitignored and therefore absent on the runner's checkout. Without it this step
+          # died on "The vault password file ... was not found" and the whole job reported
+          # failure after a perfectly good apply. Same stdin pattern and same umask/cleanup as
+          # the apply step above.
+          printf '%s\n' "${ANSIBLE_VAULT_PASSWORD:-}" | \
+          ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; umask 077; read -r _vault_pw; if [ -n \"\${_vault_pw}\" ]; then pwfile=\"\$(mktemp -t ansible-vault.XXXXXX)\"; printf '%s' \"\${_vault_pw}\" >\"\${pwfile}\"; export ANSIBLE_VAULT_PASSWORD_FILE=\"\${pwfile}\"; fi; cd /home/ci/homelab-proxmox; task healthcheck:run -- --json --no-notify; rc=\$?; rm -f \"\${pwfile:-}\"; exit \$rc"
           ssh ${ssh_opts} "${ssh_target}" "set -euo pipefail; cd /home/ci/homelab-proxmox; python3 -c 'import json; from pathlib import Path; p=Path(\"artifacts/healthcheck/history/latest.json\"); p.exists() or (_ for _ in ()).throw(SystemExit(\"Missing latest healthcheck output\")); results=json.loads(p.read_text(encoding=\"utf-8\")); gaps=[r for r in results if r.get(\"status\")==\"GAP\"]; gaps and (_ for _ in ()).throw(SystemExit(\"GAP entries detected: \" + \",\".join(sorted({r.get(\"hostname\",\"unknown\") for r in gaps})))) ; print(\"No GAP entries detected.\")'"
 
       - name: Idempotency check (delete)
