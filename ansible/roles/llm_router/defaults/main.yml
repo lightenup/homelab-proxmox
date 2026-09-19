@@ -9,7 +9,28 @@ llm_router_postgres_image: "postgres"
 # Health checks (FR-005, research D-101) — background checks are scoped to local-tier
 # deployments only so probing never bills real tokens.
 llm_router_health_check_interval: 60
-llm_router_allowed_fails: 2
+# 0, not 2, and the reason is a trap in LiteLLM's own cooldown logic. Setting
+# allowed_fails at all takes the legacy path in router_utils/cooldown_handlers.py:
+#
+#     current_fails = failed_calls.get_cache(key=deployment) or 0   # TTL = cooldown_time
+#     updated_fails = current_fails + 1
+#     if updated_fails > allowed_fails: return True                 # cooldown
+#
+# The failure COUNTER is cached with a TTL of cooldown_time. So a threshold above 0 is
+# only reachable if failures arrive faster than cooldown_time apart. Against a blackholing
+# backend each failure takes a full request timeout (~135s measured) while cooldown_time is
+# 60s, so the counter expired between failures, never climbed past 1, and allowed_fails: 2
+# was unreachable — the deployment was never ejected and EVERY request paid the timeout.
+#
+# At 0 the first failure cools the deployment down immediately: one slow failure, then fast
+# clean errors for cooldown_time, then one probe. Recovery still bounded by cooldown_time,
+# which keeps SC-008's rejoin half intact.
+#
+# Dropping allowed_fails entirely is worse, not better: the v2 path only cools a
+# single-deployment model group at percent_fails == 1.0 AND >= 1000 requests/minute
+# (SINGLE_DEPLOYMENT_TRAFFIC_FAILURE_THRESHOLD), which a homelab never reaches. Every
+# hermes-* group has exactly one deployment since the metered tiers were dropped.
+llm_router_allowed_fails: 0
 llm_router_cooldown_time: 60
 
 # Synthetic canary (FR-018) — detects an all-backends-failing gateway independently of
