@@ -38,6 +38,27 @@
       Missing vault variables: litellm_master_key and/or litellm_db_password — run
       'ansible-vault edit group_vars/services/vault.yml' to add them (FR-007, Constitution II).
 
+# litellm_db_password is interpolated into DATABASE_URL, so it must survive URL parsing.
+# A base64 password is NOT safe here: `openssl rand -base64 30` can emit `/`, which ends the
+# authority component early — `postgresql://litellm:ab/cd@127.0.0.1:5432/litellm` parses as
+# host `litellm`, port `ab`, and Prisma fails with "P1013: invalid port number in database
+# URL", which reads like a config typo rather than a password character. Observed on the
+# first 064 apply, 2026-09-19.
+#
+# Asserted rather than escaped on purpose: Jinja's `urlencode` leaves `/` untouched
+# (safe="/"), so the obvious fix silently does nothing. Generate with `openssl rand -hex 24`.
+- name: Assert litellm_db_password is URL-safe (it is interpolated into DATABASE_URL)
+  ansible.builtin.assert:
+    that:
+      - litellm_db_password is not search('[/:@?#\[\]%\\\\ ]')
+    fail_msg: >-
+      litellm_db_password contains a character that breaks DATABASE_URL parsing (one of
+      / : @ ? # [ ] % \ or a space). Generate a URL-safe one with 'openssl rand -hex 24'
+      and update it in group_vars/services/vault.yml. NOTE: changing it also requires
+      wiping {{ llm_router_data_dir }}/postgres, since initdb only applies
+      POSTGRES_PASSWORD on the first start.
+    quiet: true
+
 - name: Assert Docker daemon is running
   ansible.builtin.systemd:
     name: docker
