@@ -216,7 +216,7 @@ caddy_landing_links:
     link: "https://grafana.hus-sky.no/d/llm-router"
     # Matches the `instance` label of the blackbox probe that llm-router's
     # monitoring_contract.liveness_targets declares, which is what /api/status returns.
-    probe: "http://192.168.1.220:4000/health/readiness"
+    probe: "llm-router-readiness"
     enabled: true
 
 caddy_services:

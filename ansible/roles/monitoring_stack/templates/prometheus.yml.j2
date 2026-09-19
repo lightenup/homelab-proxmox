@@ -130,6 +130,16 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox-exporter:9115
+{% if target.instance_label is defined %}
+      # Overrides the instance label set from __param_target above. Without this the raw
+      # probe URL becomes the instance, and /api/status on the apex is PUBLIC and
+      # unauthenticated — so an internal target URL is published to the internet. Observed
+      # 2026-09-19: llm-router's readiness probe put http://192.168.1.220:4000/health/readiness
+      # on hus-sky.no. Not reachable from outside, but it advertises the address, the port
+      # and whether the service is up, which is what FR-008 of spec 064 exists to prevent.
+      - target_label: instance
+        replacement: '{{ target.instance_label }}'
+{% endif %}
 {% endfor %}
 {% endif %}
 {% endfor %}

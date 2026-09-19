@@ -24,6 +24,10 @@ monitoring_contract:
     - job_name: "llm-router-readiness"
       url: "http://192.168.1.220:4000/health/readiness"
       module: http_2xx
+      # The apex /api/status endpoint is public and unauthenticated, and returns
+      # probe_success with its instance label. Without this override that label is the raw
+      # URL above, publishing an internal address and port to the internet (FR-008).
+      instance_label: "llm-router-readiness"
   dashboard_file: "grafana/dashboards/llm-router.json"
   alert_rules:
     - alert: LlmRouterDown
