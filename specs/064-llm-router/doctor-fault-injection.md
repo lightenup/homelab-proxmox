@@ -126,3 +126,114 @@ Append results to `specs/064-llm-router/HANDOFF.md` or a sibling note — which
 checks were injected, which went red, and which did not. A check that failed to
 fail is a finding, not a formality, and is worth more than the green run that
 preceded it.
+
+---
+
+# Executed 2026-09-19, against the deployed gateway
+
+Run against `192.168.1.220` after the deploy went green, with a 13/13 baseline before
+and after. Restored between rows. Two defects found, both fixed and re-verified; one
+requirement is still not fully met and is recorded as open rather than closed.
+
+**The table's environment column is obsolete.** It assigns rows to LAB or PROD on the
+assumption they are different networks. They are not — `lab.tfvars.template` and
+`prod.tfvars.template` are byte-identical for this service, so every row ran against the
+one gateway at `192.168.1.220`, which shares the Mac's subnet. See RUNBOOK.md's
+correction banner.
+
+| # | row | result |
+|---|---|---|
+| 1 | stop the Mac's LiteLLM | ✅ **red as designed** — both local-tier checks fail (`URLError`) |
+| 2 | …and call all three aliases | ❌ **FAILED: hung past 300s, returned nothing.** Fixed; now a bounded HTTP 500 naming the model group |
+| 3 | unpin an aliased model | ⚠️ **not injectable** — needs the oMLX admin credential, and the check no longer exists here |
+| 4 | serve below the declared `context_window` | ⚠️ **not injectable** — same check, same reason |
+| 5 | call the doctor with a budget-less key | ✅ **red as designed** — "calling key has NO max_budget — SC-010 cannot hold" |
+| 6 | make a raw provider model ID addressable | ❌ **FAILED: the check could not fail, and the gap it hid was real.** Both fixed |
+| 7 | revert `enable_pre_call_checks` to false | ✅ **red as designed** — 4/5, naming SC-009 |
+
+## Row 2 — the hang, and why the doc's premise was wrong
+
+With the Mac's LiteLLM stopped, every alias hung past 300s and returned **nothing**: no
+status, no error, no fallback. Not slow — silent.
+
+The cause is the Mac's MDM-enforced **stealth mode**, the same control behind the mDNS
+finding: it DROPS the SYN rather than refusing it.
+
+| from the LXC, nothing listening on :4000 | result |
+|---|---|
+| Mac (stealth mode on) | hung the full 25s test window |
+| `pve` (stealth mode off) | `Connection refused` in **0.001s** |
+
+So this document's premise — *"a stopped server refuses fast, a vanished LAN host can hang
+to timeout"* — **does not hold on this Mac. Both hang.** T034 and T035 are the same test
+here, and the hang is the only failure mode rather than the rare one. That also removes
+most of T035's distinct value: powering the Mac off exercises the same blackhole a stopped
+container already produces.
+
+**It silently defeated the health checking too.** A background check that blackholes never
+completes, so it never reports a failure, so `allowed_fails` never accrues and the
+deployment is never ejected. Eight minutes after the backend died, requests still hung.
+`background_health_checks: true` was configured and **inert** — the exact class of bug this
+doctor exists to catch, sitting underneath the doctor.
+
+Fixed with an explicit per-deployment `timeout` (180s, `llm_router_request_timeout`) and an
+explicit `num_retries: 0`, since the caller's wait is `timeout x (1 + num_retries)` and the
+upstream default is not 0. Re-verified by blackholing the container's path to the Mac with
+a `DOCKER-USER` DROP rule — the same failure mode without taking the Mac down:
+
+```
+call 1: http=500 total=136.4s
+call 2: http=500 total=135.1s
+call 3: http=500 total=135.1s
+  {"error":{"message":"litellm.InternalServerError: ... Connection error..
+             Received Model Group=hermes-fast\nAvailable Model Group Fallbacks=None"}}
+```
+
+### Still open: SC-008's interval clause, and pool ejection
+
+The hang is gone and the error is clear, but **two parts of SC-008 as rephrased are not
+met**, and no amount of restarting changes them:
+
+1. **~135s, not "within the health-check interval" (60s).**
+2. **The dead deployment is never ejected.** Calls 2, 3 and one taken 4+ minutes later all
+   cost the full ~135s, so *every* request pays it, not just the first. `/health/readiness`
+   still reports `healthy` throughout.
+
+Because ejection never happens, `timeout` is the only thing bounding the failure, so
+meeting the 60s clause means setting `llm_router_request_timeout` to roughly 45-55 — which
+trades directly against long generations (a 4k-token completion on a 27B model at 35-60
+tok/s lands near 70-115s). That is a latency-versus-robustness choice for the operator, not
+a bug to fix silently, so the value stays at 180 and this is recorded as open.
+
+## Row 6 — a check that could not fail, hiding a real bypass
+
+The check probed the literal `claude-sonnet-5`, a name that left the config when the
+frontier tier was dropped. It was refused for **not existing** rather than for being a
+provider ID, so it passed while testing nothing.
+
+Behind it was a genuine FR-002 bypass:
+
+| probed with a client key | before | after |
+|---|---|---|
+| `claude-sonnet-5` (what the check asked) | refused 400 | n/a — no longer probed |
+| `fast`, `coder`, `reasoner` | refused 400 | refused |
+| **`openai/fast`** (the declared `provider_model`) | **200, a real completion** | refused 401 |
+
+A client could address the provider model directly, bypassing the alias and with it the
+`context_window` and fallback behaviour the alias declares. Fixed by scoping client keys
+with LiteLLM's `models` parameter — the same mechanism the Mac already applies to the key
+it mints for this gateway — and the check now derives its probes from the declared
+`provider_model` values, in both qualified and bare form, so it tracks the mapping instead
+of a name frozen when it was written. Verified red before the fix, green after: "all 6
+provider IDs refused".
+
+## What still has not been exercised
+
+- **Rows 3 and 4** (residency and declared context on oMLX). `/admin/api/models` needs an
+  admin credential absent from `proxy/.env`, and the check it defended moved to the Mac
+  side of RUNBOOK § 1, where it is a manual UI check. Pinning remains an **unverified
+  assumption**.
+- **SC-013**, the silent-green case — needs the canary timer to fire with no client
+  traffic, which a doctor run cannot observe by definition.
+- **SC-011**, health-check spend under 1% of a week — needs a week, and is moot while every
+  tier is local and unpriced.
