@@ -232,12 +232,25 @@ gateway liveness is the **correct** LAB result. The full alias-serving proof bel
 PROD, which shares the Mac's subnet. Read a *hang* on any alias, not a red, as the only
 real LAB failure.
 
-### Still open for PROD
+### Still open for PROD — CLOSED 2026-09-19
 
-Resolving `.local` from inside the container is unsolved and blocks the local tier in PROD.
-The candidates are `network_mode: host` on the litellm container (the host's glibc NSS, and
-so `libnss-mdns`, then applies), or a real DNS record once a resolver exists. Decide before
-promoting; nothing in the LAB run depends on it.
+Resolving `.local` from inside the container was unsolved and blocking the local tier in
+PROD. Both halves are now fixed, and the first half was not the one this section expected:
+
+1. **The name did not resolve anywhere in the homelab, container or not.** The Mac
+   announces its mDNS records but never answers a query, so only a resolver that had
+   recently overheard an announcement could resolve it. Fixed on the Mac with a LaunchAgent
+   that re-announces every 45 s — no firewall or MDM change needed, because announcing is
+   the half that already worked. See
+   [`mac-mdns-announcer/README.md`](./mac-mdns-announcer/README.md).
+2. **The container half** took the first candidate listed here: `network_mode: host` on the
+   litellm container, plus `mdns_base` on the LXC so there is a host resolver to inherit.
+   Postgres stays on the bridge network and is published on `127.0.0.1:5432` only, since a
+   host-networked container cannot reach a compose service by name.
+
+Verified from `pve` against a flushed avahi cache: `getent hosts xmjdvvw39y2t.local` →
+`192.168.1.177`, and `curl http://xmjdvvw39y2t.local:4000/health/liveliness` → HTTP 200.
+LAB is unaffected either way — mDNS still does not cross subnets.
 
 ---
 

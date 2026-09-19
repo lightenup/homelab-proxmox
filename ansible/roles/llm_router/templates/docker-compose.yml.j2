@@ -25,6 +25,12 @@ services:
     volumes:
       - "{{ llm_router_data_dir }}/postgres:/var/lib/postgresql/data"
       - "/etc/localtime:/etc/localtime:ro"
+    # Published on loopback ONLY, and only because litellm runs network_mode: host and so
+    # cannot reach a bridge-network service by its compose name. 127.0.0.1 keeps Postgres
+    # off the LAN — binding 0.0.0.0 here, or giving this container host networking too,
+    # would expose the key and spend store to every host on 192.168.1.0/24.
+    ports:
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
@@ -36,37 +42,49 @@ services:
   litellm:
     container_name: llm_router_litellm
     image: {{ llm_router_image }}:{{ llm_router_version }}
-    ports:
-      - "{{ llm_router_port }}:4000"
+    # Host networking, not a published port, and the reason is name resolution. FR-013
+    # addresses the Mac by its mDNS .local name; a bridge-network container resolves through
+    # Docker's embedded DNS at 127.0.0.11, which never consults host NSS and therefore never
+    # reaches libnss-mdns. Installing avahi on the LXC (mdns_base, see the playbook) only
+    # helps a process that uses the host resolver, which is what this buys.
+    #
+    # Exposure is unchanged: litellm bound 0.0.0.0:{{ llm_router_port }} on this LXC through the old
+    # port mapping and binds the same address directly now. --port below carries the port
+    # that `ports:` used to.
+    network_mode: host
     volumes:
       - "{{ llm_router_install_dir }}/config.yaml:/app/config.yaml:ro"
       - "/etc/localtime:/etc/localtime:ro"
     environment:
       LITELLM_MASTER_KEY: "{{ litellm_master_key }}"
-      DATABASE_URL: "postgresql://litellm:{{ litellm_db_password }}@postgres:5432/litellm"
+      # 127.0.0.1, not the compose service name `postgres`: this container runs
+      # network_mode: host, so it shares the LXC network namespace and reaches Postgres
+      # through the loopback port that service publishes, not through Docker DNS.
+      DATABASE_URL: "postgresql://litellm:{{ litellm_db_password }}@127.0.0.1:5432/litellm"
       # Backend provider credentials, derived from every distinct api_key_env declared in
       # llm_router_aliases rather than listed by hand. config.yaml.j2 emits
       # `api_key: os.environ/<api_key_env>` for each deployment, so a hand-maintained list
       # here silently resolves to nothing the moment a deployment names a new variable —
-      # which is exactly what happened when the local tier moved to oMLX and gained
-      # OMLX_API_KEY. The vault variable name is always the lowercased api_key_env, the
-      # same convention llm_router_clients uses below.
+      # which is exactly what happened when the local tier re-chained through the Mac's
+      # LiteLLM and gained MAC_LITELLM_KEY. The vault variable name is always the lowercased
+      # api_key_env, the same convention llm_router_clients uses below.
 {% for env in llm_router_aliases | map(attribute='deployments') | flatten | selectattr('api_key_env', 'defined') | map(attribute='api_key_env') | unique | sort %}
       {{ env }}: "{{ lookup('vars', env | lower, default='') }}"
 {% endfor %}
 {% for c in llm_router_clients %}
       {{ c.key_env }}: "{{ lookup('vars', c.key_env | lower, default='') }}"
 {% endfor %}
-      # No HTTP_PROXY/HTTPS_PROXY. Every backend is reached directly: the local tier over
-      # the LAN by mDNS name (FR-013 amended), the metered tiers over the public internet.
-      # No leg crosses the tailnet, which is what removed the sidecar this once proxied to.
-    command: ["--config", "/app/config.yaml", "--port", "4000"]
+      # No HTTP_PROXY/HTTPS_PROXY. The one remaining backend — the Mac's own LiteLLM — is
+      # reached directly over the LAN by mDNS name (FR-013 amended). No leg crosses the
+      # tailnet, which is what removed the sidecar this once proxied to, and there are no
+      # metered tiers over the public internet any more (amendment-drop-metered-tiers.md).
+    command: ["--config", "/app/config.yaml", "--port", "{{ llm_router_port }}"]
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/readiness')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:{{ llm_router_port }}/health/readiness')"]
       interval: 30s
       timeout: 10s
       retries: 3

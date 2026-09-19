@@ -125,6 +125,35 @@ If `--layer config` is not 5/5, stop — the tree is wrong.
 >   -d '{"models":["local"],"key_alias":"homelab-lxc-064-llm-router-v2"}' | python3 -m json.tool
 > ```
 >
+> ### ✅ Job 3 — the `.local` name, done 2026-09-19
+>
+> FR-013 addresses the Mac by its mDNS name, and that name **did not resolve from anywhere
+> in the homelab**. The LAN path was always fine (`curl` to `192.168.1.177:4000` answered
+> from `pve` throughout); only the name was broken. Cause, measured rather than assumed:
+> **the Mac announces its mDNS records but never answers a query** — not multicast, not
+> unicast to its own `:5353`. A resolver that hears an announcement caches it and works; a
+> resolver with a cold cache can never learn the name. The app firewall already permits
+> `mDNSResponder` inbound, so the drop is MDM-enforced stealth mode
+> (`/Library/Managed Preferences/com.apple.security.firewall`) or the Zscaler filter —
+> corporate controls, not ours to change, and **not needing change**, because announcing is
+> the half that already works.
+>
+> Fixed by keeping the Mac announcing: a LaunchAgent re-registers the real `:4000` service
+> every 45 s, and each registration's announcement carries the host `A` record. Full
+> write-up, install and verify steps:
+> [`mac-mdns-announcer/README.md`](./mac-mdns-announcer/README.md).
+>
+> ```bash
+> launchctl list | grep hermes      # no.hus-sky.hermes-mdns-announce, last exit 0
+> ```
+>
+> Verified from `pve` against a **flushed** avahi cache (a warm cache proves nothing here —
+> that is what hid this for so long): resolves in under 2 s, stayed resolved across a 100 s
+> poll, and §4's gate returns HTTP 200 by name. Two role changes go with it, both landed:
+> `mdns_base` in `ansible/playbooks/llm-router.yml`, and `network_mode: host` on the litellm
+> container — Docker's embedded DNS never consults host NSS, so `libnss-mdns` on the LXC is
+> invisible to a bridge-network container.
+>
 > **What's left after this** is off-Mac: §3 (vault `mac_litellm_key`, drop the metered keys)
 > then §5 (LAB deploy). The rest of §1 below is the original brief, kept for provenance.
 
@@ -289,11 +318,17 @@ ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:4000/health/liveli
 #   HTTP 200 from the Mac's LiteLLM (oMLX stays on 127.0.0.1:8000, do not probe it)
 ```
 
-> **Wrong for LAB** (revision 2026-09-15). This tests **`pve`'s** resolver — a
-> different machine from the LXC, and a different resolver from the Docker container
-> that makes the actual call. It can pass while the real path fails. For LAB it is
-> moot entirely; treat it as a PROD check, and see `deploy-plan.md` for the
-> container-resolution problem it does not cover.
+> **Passes as of 2026-09-19** — `"I'm alive!"`, HTTP 200, by name, once the Mac's mDNS
+> announcer is running (§1 Job 3). It was failing before that, and the failure was the
+> name, not the path.
+>
+> **Still the wrong gate for LAB** (revision 2026-09-15). This tests **`pve`'s**
+> resolver — a different machine from the LXC, and a different resolver from the Docker
+> container that makes the actual call. For LAB it is moot entirely: mDNS does not cross
+> into `192.168.20.0/24`. Treat it as a PROD check. The container half of the problem is
+> now closed rather than open — `network_mode: host` plus `mdns_base` puts the container
+> on the LXC's own resolver, so on PROD this check and the real path finally test the
+> same thing.
 
 **That second command was written as the gate.** It proves `pve` resolves the Mac's
 mDNS name *and* reaches the Mac's **LiteLLM** on the LAN (not oMLX — that stays on

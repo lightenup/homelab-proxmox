@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>no.hus-sky.hermes-mdns-announce</string>
+
+  <!-- $HOME is expanded by bash, not by launchd, which keeps this plist portable
+       and checkable into the repo verbatim rather than carrying one user's path. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>exec "$HOME/.local/bin/hermes-mdns-announce.sh"</string>
+  </array>
+
+  <!-- 45s, against an observed resolver hold of several minutes: ample margin, and
+       ~300 bytes of multicast per cycle. Each run exits after ~6s, so there is no
+       overlap and launchd's 10s minimum throttle is not in play. -->
+  <key>StartInterval</key>
+  <integer>45</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <!-- A LaunchAgent, not a LaunchDaemon, on purpose: it needs no root, and its
+       login-session lifetime matches Docker Desktop's and oMLX's. When the Mac
+       cannot serve the local tier, the name stops resolving and the gateway fails
+       clean instead of resolving to a host that cannot answer. -->
+</dict>
+</plist>
