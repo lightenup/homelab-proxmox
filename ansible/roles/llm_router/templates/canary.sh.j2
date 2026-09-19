@@ -10,7 +10,7 @@
 # construction.
 set -euo pipefail
 
-METRICS_FILE="{{ node_exporter_textfile_directory }}/llm_router_canary.prom"
+METRICS_FILE="{{ llm_router_canary_textfile_dir }}/llm_router_canary.prom"
 TMP_FILE="${METRICS_FILE}.$$"
 
 http_code=$(curl -s -o /dev/null -w '%{http_code}' -m 30 \

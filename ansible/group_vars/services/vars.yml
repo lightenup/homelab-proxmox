@@ -22,7 +22,6 @@ market_model_version: "0.3.0"
 eurooffice_version: "v9.3.2"
 llm_router_version: "v1.83.3-stable"
 llm_router_postgres_version: "17.11-alpine3.24"
-llm_router_tailscale_version: "v1.102.3"
 
 # Euro-Office Configuration
 eurooffice_ip: "192.168.1.219"
@@ -34,62 +33,82 @@ market_model_api_port: 8000
 market_model_mcp_port: 8001
 
 # LLM Router Configuration (spec 064)
-# Tailnet-egress is provided by an in-container tailscaled sidecar (userspace networking,
-# no TUN device — see specs/064-llm-router/research.md D-102). No Redis: single worker, no
-# consumer for shared cross-worker state (FR-014, research D-104).
+# No tailscaled sidecar as of 2026-09-15: every backend leg is direct (local tier over the
+# LAN, metered tiers over the internet), and FR-008's tailnet reach to the gateway comes
+# from the PVE host's 192.168.1.0/24 subnet route. See FR-017 as amended. No Redis: single
+# worker, no consumer for shared cross-worker state (FR-014, research D-104).
 llm_router_ip: "192.168.1.220"
 llm_router_port: 4000
 
-# Alias -> ordered deployment mapping (FR-003). Local deployments MUST use the Mac's
-# MagicDNS name (*.ts.net), never a LAN IP (FR-013). Replace <mac-hostname>.<tailnet>.ts.net
-# and the model names below with the real values before first deploy.
+# Alias -> ordered deployment mapping (FR-003). Local deployments MUST address the Mac by
+# its stable mDNS .local name, never a DHCP-assigned IP (FR-013 as amended).
+#
+# Local tier amended 2026-09-14: oMLX on the LAN, not Ollama over the tailnet — the Mac
+# the original mapping targeted is being returned. Model IDs verified served by
+# `GET /v1/models` on the replacement Mac. Addressed by mDNS per docs/naming-and-mdns.md,
+# never a DHCP-assigned IP (FR-013). See specs/064-llm-router/amendment-local-tier-omlx.md.
+# See specs/064-llm-router/quickstart.md § 0b for the full observed environment state.
 llm_router_aliases:
+  # Re-chained 2026-09-15: the metered tiers are gone and every alias resolves to
+  # the Mac's own LiteLLM on :4000, not to oMLX on :8000. oMLX stays bound to
+  # 127.0.0.1 and is reached only by that LiteLLM, so exactly one process is
+  # exposed to the LAN and it is the one that enforces keys and access groups.
+  #
+  # This withdraws SC-001. With no remote tier there is nothing to fall back to,
+  # so the gateway FAILS CLEAN when the Mac is away rather than degrading to a
+  # paid backend. That is the trade the simplification buys.
+  #
+  # fallback_to is null throughout on purpose. Cross-alias fallback within one
+  # host is theatre: if the Mac is away every alias is away together, and if a
+  # model is merely evicted, silently serving hermes-fast from the 8-bit is
+  # SLOWER, which defeats the only reason a caller asked for fast.
+  #
+  # context_window_fallback_to is likewise null: the Mac's own router already
+  # escalates oversized input (its `reasoner` alias falls through to a 262k
+  # profile), so duplicating that here would second-guess the hop that can
+  # actually act on it. hermes-deep declares 262144 to expose that reach.
   - name: hermes-fast
-    fallback_to: hermes-balanced
-    context_window_fallback_to: hermes-deep
+    fallback_to: null
+    context_window_fallback_to: null
     deployments:
       - id: fast-local
         tier: local
-        provider_model: "ollama_chat/llama3.1:8b"
-        api_base: "http://<mac-hostname>.<tailnet>.ts.net:11434"
-        context_window: 32768
+        # Mac alias `fast` -> 4-bit sibling, ~59 tok/s.
+        provider_model: "openai/fast"
+        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_key_env: MAC_LITELLM_KEY
+        context_window: 131072
         health_checked: true
-      - id: fast-hosted
-        tier: aggregator
-        provider_model: "openrouter/meta-llama/llama-3.1-8b-instruct"
-        api_key_env: OPENROUTER_API_KEY
-        context_window: 32768
-        health_checked: false
   - name: hermes-balanced
-    fallback_to: hermes-deep
-    context_window_fallback_to: hermes-deep
+    fallback_to: null
+    context_window_fallback_to: null
     deployments:
       - id: balanced-local
         tier: local
-        provider_model: "ollama_chat/qwen2.5:32b"
-        api_base: "http://<mac-hostname>.<tailnet>.ts.net:11434"
-        context_window: 32768
+        # Mac alias `coder` -> 8-bit, thinking off, validated for code at N=1.
+        provider_model: "openai/coder"
+        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_key_env: MAC_LITELLM_KEY
+        context_window: 131072
         health_checked: true
-      - id: balanced-hosted
-        tier: aggregator
-        provider_model: "openrouter/qwen/qwen-2.5-32b-instruct"
-        api_key_env: OPENROUTER_API_KEY
-        context_window: 32768
-        health_checked: false
   - name: hermes-deep
     fallback_to: null
     context_window_fallback_to: null
     deployments:
-      - id: deep-frontier
-        tier: frontier
-        provider_model: "anthropic/claude-sonnet-5"
-        api_key_env: ANTHROPIC_API_KEY
-        context_window: 1000000
-        health_checked: false
+      - id: deep-local
+        tier: local
+        # Mac alias `reasoner` -> 8-bit with thinking on and an 8k budget.
+        # Replaces the Anthropic frontier tier. 262144 because the Mac's router
+        # escalates this alias to a 262k profile above its own 131k window.
+        # Caveat: that escalation (Mac-side context_window_fallback to qwen-long)
+        # runs thinking OFF at temp 0.3, so crossing 131k trades reasoning depth
+        # for window. See amendment-drop-metered-tiers.md § The new mapping.
+        provider_model: "openai/reasoner"
+        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_key_env: MAC_LITELLM_KEY
+        context_window: 262144
+        health_checked: true
 
-# Per-client virtual keys (FR-015). Budgets set against Claude Sonnet 5 LIST pricing
-# ($3/$15 per 1M tokens) — NOT the introductory rate, which expires 2026-08-31
-# (research D-106). Add one entry per real consumer before first deploy.
 llm_router_clients:
   - alias: hermes
     key_env: LLM_ROUTER_CLIENT_HERMES_KEY
@@ -179,6 +198,27 @@ caddy_base_domain: "hus-sky.no"
 # Single declarative source for all services (routes, blackbox targets, landing page cards).
 # Fields: host (required), ip/port (required when enabled), title, desc, enabled, user_facing.
 # ip/port MUST reference existing central vars to keep IPs defined in exactly one place.
+# Landing-page entries that are deliberately NOT reverse-proxied (045-landing-page,
+# FR-008 of spec 064). An entry in caddy_services below gets BOTH a public vhost
+# ({host}.hus-sky.no, real cert, proxying to {ip}:{port}) AND — if user_facing — a tile.
+# The two are coupled: `user_facing: false` still creates the public route, it only hides
+# the tile, which is the wrong half for a service that must stay off the internet.
+#
+# These entries produce a tile and nothing else. No vhost, no DNS name, no route. Used for
+# services that should be VISIBLE on the front page while remaining unreachable from
+# outside the LAN — the link points somewhere already gated, not at the service.
+caddy_landing_links:
+  - title: "LLM Router"
+    desc: "Local LLM gateway — dashboards in Grafana"
+    # Grafana, not the gateway: hus-sky.no is public, and FR-008/SC-007 keep the gateway
+    # off the internet. The click-through is gated by Grafana's own auth. Precedent: the
+    # eurooffice card already links to Nextcloud rather than to itself.
+    link: "https://grafana.hus-sky.no/d/llm-router"
+    # Matches the `instance` label of the blackbox probe that llm-router's
+    # monitoring_contract.liveness_targets declares, which is what /api/status returns.
+    probe: "llm-router-readiness"
+    enabled: true
+
 caddy_services:
   - host: grafana
     ip: "{{ monitoring_ip }}"

@@ -61,6 +61,19 @@
       <span class="health" data-state="unknown">unknown</span>
     </a>
 {% endfor %}
+{# Landing-only entries: a tile, but no vhost and no route. The loop above iterates
+   caddy_services, every enabled member of which is publicly reverse-proxied; these are
+   deliberately excluded from that list so nothing routes to them. See caddy_landing_links
+   in group_vars/services/vars.yml. #}
+{% for extra in caddy_landing_links | default([]) | selectattr('enabled') %}
+    <a class="card" href="{{ extra.link }}"{% if extra.probe is defined %} data-probe="{{ extra.probe }}"{% endif %}>
+      <h2>{{ extra.title }}</h2>
+      <p>{{ extra.desc | default('') }}</p>
+{% if extra.probe is defined %}
+      <span class="health" data-state="unknown">unknown</span>
+{% endif %}
+    </a>
+{% endfor %}
   </div>
   <script>
   (function () {

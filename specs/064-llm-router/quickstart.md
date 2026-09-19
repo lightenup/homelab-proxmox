@@ -6,6 +6,13 @@ Deploy, verify, and run the drills that make the acceptance criteria real rather
 
 ## 0. Prerequisites
 
+> **Stale as of 2026-09-15 — use [`RUNBOOK.md`](./RUNBOOK.md).** The three bullets below
+> describe Ollama-over-tailnet with a tailscaled sidecar. The local tier is now oMLX over
+> the LAN ([`amendment-local-tier-omlx.md`](./amendment-local-tier-omlx.md)) and the sidecar
+> has been removed (FR-017 withdrawn), so `tailscale_authkey` is **not** a vault key any
+> more and the stack is **two** containers. `omlx_api_key` replaces it in the vault. Kept
+> below for the PVE headroom figure and as a record of the original shape.
+
 - **On the Mac**: Ollama running headless and keeping models resident (FR-016) —
   `OLLAMA_HOST=0.0.0.0 OLLAMA_KEEP_ALIVE=-1`, with the `hermes-fast` and `hermes-balanced` models
   pulled. Tailscale up; note the MagicDNS name.
@@ -15,6 +22,62 @@ Deploy, verify, and run the drills that make the acceptance criteria real rather
 - **PVE headroom**: ~4 GB RAM, ~16 GB disk.
 - **Stack shape**: three containers — `litellm`, `postgres`, `tailscale` (userspace sidecar). No Redis
   (FR-014 requires it only above one worker).
+
+## 0b. Environment state as observed 2026-08-30 (read this first)
+
+Checked directly on the dev Mac and the `pve` host at handoff. **Three of these block the deploy
+until fixed** — they are not in `tasks.md` because they are environment state, not code.
+
+**Ollama on the Mac — running (0.33.1), but not reachable and not warm.**
+
+| Observed | Required (FR-016) |
+|---|---|
+| Listening on `127.0.0.1:11434` only | `0.0.0.0` — the LXC cannot reach it as-is |
+| `OLLAMA_KEEP_ALIVE` unset (unloads after ~5 min) | `-1`, or cold loads trip the timeout into false fallbacks |
+| `OLLAMA_CONTEXT_LENGTH` unset (serves 4096 default) | `32768`, to match `context_window` in `group_vars` |
+
+```bash
+launchctl setenv OLLAMA_HOST "0.0.0.0"
+launchctl setenv OLLAMA_KEEP_ALIVE "-1"
+launchctl setenv OLLAMA_CONTEXT_LENGTH "32768"
+# fully quit and reopen Ollama.app, then verify it binds *:11434 not 127.0.0.1:11434
+lsof -nP -iTCP:11434 -sTCP:LISTEN
+```
+
+The `OLLAMA_CONTEXT_LENGTH` line matters more than it looks: without it Ollama serves its 4096
+default while LiteLLM believes the deployment holds 32768, so oversized inputs get **silently
+truncated instead of escalating a tier** — defeating FR-006 / SC-009.
+
+**Models actually pulled on the Mac** (`ollama list`) — the `group_vars` mapping was reconciled
+against this:
+
+| Model | Size | Max context | Used for |
+|---|---|---|---|
+| `llama3.1:8b` | 4.9 GB | 131072 | `hermes-fast` |
+| `gemma4:26b` | 17 GB | 262144 | `hermes-balanced` |
+| `gemma4:e4b` | 9.6 GB | — | spare |
+| `nomic-embed-text` | 274 MB | — | not used here |
+
+`qwen2.5:32b` (the original placeholder) is **not** pulled — either `ollama pull` it or keep
+`gemma4:26b`.
+
+**Tailscale on `pve` is logged out** — `BackendState: NeedsLogin`. The subnet router advertising
+`192.168.1.0/24` is therefore down. This does *not* block the router (the LXC runs its own
+tailscaled sidecar with its own auth key — research D-102), but it does break tailnet admin access:
+
+```bash
+ssh root@192.168.1.112 "tailscale up --advertise-routes=192.168.1.0/24 --accept-routes"
+# then open the printed auth URL from a machine NOT behind Zscaler
+```
+
+**The Mac cannot reach Tailscale at all** — Zscaler 403s the whole `tailscale.com` domain, so the
+Mac's MagicDNS name cannot be read via CLI (`tailscale status` hangs) and the tailnet is
+unreachable from it. Read the name from the menu-bar icon or the admin console. Full detail in
+[AGENTS.md](../../AGENTS.md) § "Zscaler also blocks Tailscale".
+
+**Still a placeholder in `ansible/group_vars/services/vars.yml`:** the two `api_base` entries read
+`<mac-hostname>.<tailnet>.ts.net`. The role's preflight fails loudly on this by design (FR-013
+forbids an IP literal there), so it cannot be missed at deploy time.
 
 ## 1. Deploy
 

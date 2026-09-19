@@ -4,6 +4,13 @@
   become: true
   roles:
     - lxc_base
+    # mdns_base is not decoration here: the local tier addresses the Mac by its .local
+    # name (FR-013), and the litellm container resolves through the host's glibc NSS
+    # because it runs network_mode: host. Without avahi-daemon + libnss-mdns on this LXC
+    # that name does not resolve and every alias fails clean. naming.yml applies the same
+    # role across services, but the pipeline deploys one service by playbook, so the
+    # dependency belongs here too.
+    - mdns_base
 
 - name: Configure llm-router
   hosts: llm-router

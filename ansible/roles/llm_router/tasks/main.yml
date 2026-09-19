@@ -15,7 +15,6 @@
     mode: '0755'
   loop:
     - postgres
-    - tailscale-state
 
 - name: Deploy config.yaml
   ansible.builtin.template:
@@ -23,6 +22,68 @@
     dest: "{{ llm_router_install_dir }}/config.yaml"
     mode: '0640'
   notify: Restart llm-router
+
+# The local tier is addressed by mDNS name (FR-013), and the litellm CONTAINER cannot
+# resolve a .local name by any container-side configuration:
+#
+#   host  : getent hosts xmjdvvw39y2t.local -> 192.168.1.177     (avahi, via mdns_base)
+#   inside: hosts: files dns / nameserver 1.1.1.1 -> gaierror    (no libnss-mdns, and no
+#                                                                 public resolver knows .local)
+#
+# network_mode: host does NOT fix this — it shares the network namespace, not the
+# filesystem, so the container keeps its own nsswitch.conf and NSS libraries. Measured on
+# the LXC 2026-09-19: by IP the container reaches the Mac fine (HTTP 200); by name it
+# fails, which surfaced as HTTP 500 "Connection error" on every alias.
+#
+# Nor can a resolver fix it: this Mac never ANSWERS an mDNS query, it only announces
+# (see mac-mdns-announcer/README.md). Only avahi's cache on this host knows the mapping,
+# so the mapping has to come from here.
+#
+# So resolve the name HERE, where mDNS works, and hand the container the result as
+# extra_hosts. The api_base stays a name — no IP literal enters the repo — and the address
+# is rediscovered on every deploy rather than pinned in git. The residual risk is an IP
+# change between deploys; the gateway then fails clean against a stale address and the
+# doctor's local-tier check catches it. A DHCP reservation for the Mac removes it entirely.
+- name: Collect the local-tier backend hostnames from the alias mapping
+  ansible.builtin.set_fact:
+    llm_router_local_backend_hostnames: >-
+      {{ llm_router_aliases | map(attribute='deployments') | flatten
+         | selectattr('tier', 'equalto', 'local') | selectattr('api_base', 'defined')
+         | map(attribute='api_base') | map('urlsplit', 'hostname') | unique | list }}
+
+- name: Resolve each local-tier backend hostname on this host
+  ansible.builtin.command:
+    cmd: "getent hosts {{ item }}"
+  register: llm_router_backend_resolution
+  changed_when: false
+  failed_when: false
+  loop: "{{ llm_router_local_backend_hostnames }}"
+
+- name: Assert every local-tier backend hostname resolved
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - item.stdout | length > 0
+    fail_msg: >-
+      '{{ item.item }}' does not resolve on this host, so the container cannot be given a
+      mapping for it and every alias would fail with a connection error. Check avahi here
+      (`systemctl status avahi-daemon`, installed by mdns_base) and the Mac's announcer
+      (`launchctl list | grep hermes` on the Mac) — the Mac only announces, it never
+      answers queries, so a cold cache with a dead announcer resolves nothing. See
+      specs/064-llm-router/mac-mdns-announcer/README.md.
+    quiet: true
+  loop: "{{ llm_router_backend_resolution.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# getent prints "<ip>  <name> [aliases...]", so the first field is the address.
+- name: Build the container host mappings for the local tier
+  ansible.builtin.set_fact:
+    llm_router_extra_hosts: >-
+      {{ llm_router_backend_resolution.results | map(attribute='item')
+         | zip(llm_router_backend_resolution.results | map(attribute='stdout')
+               | map('split') | map('first'))
+         | map('join', ':') | list }}
 
 - name: Deploy docker-compose.yml
   ansible.builtin.template:

@@ -1,21 +1,36 @@
 ---
 # Pinned image repositories — tags come from ansible/group_vars/services/vars.yml
-# (llm_router_version, llm_router_postgres_version, llm_router_tailscale_version).
+# (llm_router_version, llm_router_postgres_version).
 llm_router_install_dir: "/opt/llm-router"
 llm_router_data_dir: "/opt/llm-router-data"
 llm_router_image: "ghcr.io/berriai/litellm"
 llm_router_postgres_image: "postgres"
-llm_router_tailscale_image: "tailscale/tailscale"
-
-# Tailscale sidecar (research D-102) — userspace networking, no TUN device, no privileged
-# container. LiteLLM reaches the Mac's MagicDNS name through this outbound HTTP proxy.
-llm_router_tailscale_proxy_port: 1055
-llm_router_tailscale_hostname: "llm-router"
 
 # Health checks (FR-005, research D-101) — background checks are scoped to local-tier
 # deployments only so probing never bills real tokens.
 llm_router_health_check_interval: 60
-llm_router_allowed_fails: 2
+# 0, not 2, and the reason is a trap in LiteLLM's own cooldown logic. Setting
+# allowed_fails at all takes the legacy path in router_utils/cooldown_handlers.py:
+#
+#     current_fails = failed_calls.get_cache(key=deployment) or 0   # TTL = cooldown_time
+#     updated_fails = current_fails + 1
+#     if updated_fails > allowed_fails: return True                 # cooldown
+#
+# The failure COUNTER is cached with a TTL of cooldown_time. So a threshold above 0 is
+# only reachable if failures arrive faster than cooldown_time apart. Against a blackholing
+# backend each failure takes a full request timeout (~135s measured) while cooldown_time is
+# 60s, so the counter expired between failures, never climbed past 1, and allowed_fails: 2
+# was unreachable — the deployment was never ejected and EVERY request paid the timeout.
+#
+# At 0 the first failure cools the deployment down immediately: one slow failure, then fast
+# clean errors for cooldown_time, then one probe. Recovery still bounded by cooldown_time,
+# which keeps SC-008's rejoin half intact.
+#
+# Dropping allowed_fails entirely is worse, not better: the v2 path only cools a
+# single-deployment model group at percent_fails == 1.0 AND >= 1000 requests/minute
+# (SINGLE_DEPLOYMENT_TRAFFIC_FAILURE_THRESHOLD), which a homelab never reaches. Every
+# hermes-* group has exactly one deployment since the metered tiers were dropped.
+llm_router_allowed_fails: 0
 llm_router_cooldown_time: 60
 
 # Synthetic canary (FR-018) — detects an all-backends-failing gateway independently of
@@ -23,3 +38,29 @@ llm_router_cooldown_time: 60
 # traffic, not a health probe, so it sits outside SC-011's probe budget.
 llm_router_canary_alias: hermes-fast
 llm_router_canary_interval_minutes: 60
+
+# Where the canary drops its .prom file for node_exporter's textfile collector.
+#
+# node_exporter_textfile_directory is owned by the node_exporter role, which lxc_base
+# pulls in with include_role — and include_role does not export a role's defaults to the
+# rest of the play, let alone to the SEPARATE play that runs this role. So the variable is
+# reliably undefined here even though node_exporter is installed and running on the host,
+# with exactly this directory. Referencing it directly failed the deploy at template time
+# with "'node_exporter_textfile_directory' is undefined" (2026-09-19).
+#
+# Prefer the shared variable when something does put it in scope; fall back to
+# node_exporter's own default otherwise. The literal appears once, next to the name of the
+# role that owns it, rather than being silently duplicated.
+llm_router_canary_textfile_dir: "{{ node_exporter_textfile_directory | default('/var/lib/node_exporter/textfile_collector') }}"
+
+# Page size for the /key/list idempotency lookup in virtual_keys.yml. Two clients today,
+# so one page is ample; if the gateway ever holds more keys than this the lookup would
+# need real pagination rather than a larger number.
+llm_router_key_list_page_size: 100
+
+# Total per-request timeout on every deployment, in seconds, and the retry count that
+# multiplies it. Both exist to bound the failure case: with neither set, a backend behind
+# a SYN-dropping firewall hangs the caller indefinitely and never trips the health check.
+# See the comment in templates/config.yaml.j2 for the measurements behind the value.
+llm_router_request_timeout: 180
+llm_router_num_retries: 0
