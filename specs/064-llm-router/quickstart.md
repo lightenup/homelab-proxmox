@@ -167,10 +167,17 @@ thinking OFF at temp 0.3, so crossing 131k buys window at the cost of reasoning 
 | gateway, cold, `stream: true` | connection error at ~433s, **zero SSE events** |
 | gateway, warm (same prompt again) | **200 in 3.8s** — oMLX caches the prefill |
 
-So a request never survives long enough to reach 131k, and `hermes-deep`'s declared 262144 window is
-unreachable cold. Backlog [069](../../docs/backlog/069-large-context-cross-host-ceiling.md) has the
-ruled-out causes; do not re-derive them. If you need a large context today, send it **from the Mac**,
-or send it twice and let the cache absorb the prefill.
+**Diagnosed 2026-09-20**: the Mac closes inbound LAN connections that carry no application-layer
+response data for ~300s (silent 300s alive, 360s dead, clean FIN). TCP keepalive does not defeat it —
+so it counts application data, not packets — and streaming does not either, because the Mac emits one
+chunk at 0.3s then nothing for 384s while prefilling. The homelab network, the Mac's own stack and
+Docker's forwarder all survived 480s, so it is specific to inbound LAN flows to the Mac.
+
+So the real cold ceiling is ~300s of prefill, about **80k tokens**, and `hermes-deep`'s declared
+262144 is reachable only warm. Backlog
+[069](../../docs/backlog/069-large-context-cross-host-ceiling.md) has every measurement and the two
+candidate fixes — **do not re-derive them**. Today: send a large cold context **from the Mac**, or
+send it twice and let oMLX's prefill cache absorb the first pass.
 
 ## 7. Budgets and rate limits (SC-010)
 
