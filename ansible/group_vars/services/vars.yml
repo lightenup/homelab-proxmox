@@ -145,11 +145,38 @@ llm_router_clients:
     budget_duration: "30d"
     rpm_limit: 10
 
-# Gateway-wide backstop cap (FR-010, SC-012). MUST stay above the sum of client budgets
-# with real headroom — the preflight fails the deploy otherwise (data-model.md § Gateway Budget).
+# Gateway-wide backstop (FR-010, SC-012). Two caps with OPPOSITE sizing rules — see below.
 llm_router_gateway_budget:
+  # Spend cap. MUST stay ABOVE the sum of client budgets with real headroom: a cap at or
+  # below the sum turns normal usage into a homelab-wide outage. Preflight enforces it.
+  # Currently inert — local tiers carry no pricing, so spend is 0.0 forever (SC-012 is
+  # marked not-verifiable). Kept declared so a priced tier re-arms it.
   max_budget: 50.00
   budget_duration: "30d"
+
+  # Rate cap — added 2026-09-20, backlog 071. This is the ONLY gateway-wide guard that
+  # actually bites, because the spend cap above cannot.
+  #
+  # THE SIZING RULE INVERTS HERE, and that is the whole trap. A gateway-wide rate cap
+  # ABOVE the sum of client rates can never bind, so it would be decoration. It has to sit
+  # inside this band, which the preflight asserts:
+  #
+  #     max(client rpm_limit)  <=  gateway rpm_limit  <  sum(client rpm_limit)
+  #            60              <=          65         <         70
+  #
+  # Lower bound: at least the largest single client, so one compliant client is never
+  # refused by the GATEWAY cap — its own limit should always bind first, otherwise the
+  # two levels are indistinguishable in practice and the error tells the operator nothing.
+  #
+  # Upper bound: strictly below the sum, so clients COMBINING can trip it. That is the
+  # scenario this exists for: `hermes` (60) and `canary` (10) are each well-behaved and
+  # together are 70 requests/minute of real inference against a single Mac.
+  #
+  # 65 rather than 60 deliberately: at exactly 60, a fully-loaded `hermes` would consume
+  # the entire gateway allowance and starve the synthetic canary (FR-018), blinding the
+  # monitoring that exists to notice outages. 5 rpm of headroom keeps the canary — which
+  # needs one request an hour — able to run while hermes is at full rate.
+  rpm_limit: 65
 
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.

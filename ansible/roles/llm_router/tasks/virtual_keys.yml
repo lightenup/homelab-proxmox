@@ -42,6 +42,7 @@
       team_alias: "llm-router-gateway-wide"
       max_budget: "{{ llm_router_gateway_budget.max_budget }}"
       budget_duration: "{{ llm_router_gateway_budget.budget_duration }}"
+      rpm_limit: "{{ llm_router_gateway_budget.rpm_limit | default(omit) }}"
     status_code: 200
   register: llm_router_team_created
   when: llm_router_gateway_team_id == ""
@@ -50,6 +51,66 @@
   ansible.builtin.set_fact:
     llm_router_gateway_team_id: >-
       {{ llm_router_gateway_team_id if llm_router_gateway_team_id != '' else llm_router_team_created.json.team_id }}
+
+# The team is created ONCE and then never touched again by the task above, because its
+# `when` guard is "does the alias exist". That made every gateway-wide setting write-once:
+# changing max_budget or rpm_limit in group_vars was a silent no-op on any gateway that had
+# already been deployed, which is exactly how the rate cap came to be missing for a month
+# (backlog 071 — the team carried rpm=None while group_vars looked correct).
+#
+# So reconcile explicitly, unconditionally, on every run. /team/update is an upsert on the
+# fields provided and leaves the rest alone, so this is safe to run against a fresh team
+# too — it just rewrites what /team/new already set.
+#
+# changed_when: false because this converges rather than mutates: LiteLLM has no way to
+# report "already equal", and flagging every run as changed would make the play permanently
+# noisy and hide the changes that are real.
+- name: Reconcile the gateway-wide team's caps with group_vars (FR-010)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ llm_router_port }}/team/update"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ litellm_master_key }}"
+    body_format: json
+    body:
+      team_id: "{{ llm_router_gateway_team_id }}"
+      max_budget: "{{ llm_router_gateway_budget.max_budget }}"
+      budget_duration: "{{ llm_router_gateway_budget.budget_duration }}"
+      rpm_limit: "{{ llm_router_gateway_budget.rpm_limit | default(omit) }}"
+    status_code: 200
+  changed_when: false
+
+# Verify the reconcile actually took, rather than trusting a 200. This is the assertion the
+# original code lacked: /team/update returning 200 while the field stayed null is precisely
+# the failure mode backlog 071 describes, and it is invisible without reading the team back.
+- name: Read the gateway-wide team back
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ llm_router_port }}/team/list"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ litellm_master_key }}"
+    status_code: 200
+  register: llm_router_team_verify
+  changed_when: false
+
+- name: Assert the gateway-wide caps are live on the team, not merely declared
+  ansible.builtin.assert:
+    that:
+      - live_team.max_budget | float == llm_router_gateway_budget.max_budget | float
+      - llm_router_gateway_budget.rpm_limit is not defined
+        or live_team.rpm_limit | default(None) | string == llm_router_gateway_budget.rpm_limit | string
+    fail_msg: >-
+      The gateway-wide team exists but its caps do not match group_vars — declared
+      max_budget={{ llm_router_gateway_budget.max_budget }}
+      rpm_limit={{ llm_router_gateway_budget.rpm_limit | default('(unset)') }}, live
+      max_budget={{ live_team.max_budget | default('(none)') }}
+      rpm_limit={{ live_team.rpm_limit | default('(none)') }}. A gateway-wide cap that is
+      declared but not live is FR-010's backstop silently absent (backlog 071).
+    quiet: true
+  vars:
+    live_team: >-
+      {{ (llm_router_team_verify.json | selectattr('team_alias', 'equalto', 'llm-router-gateway-wide')
+          | list | first | default({})) }}
 
 # LiteLLM's /key/info looks a key up by `key` ONLY. `?key_alias=hermes` returns
 # 404 "Key not found in database" for an alias that plainly exists — verified against the

@@ -189,3 +189,67 @@
       ({{ llm_router_clients | map(attribute='max_budget') | map('float') | sum }}) — a cap at or
       below the client sum turns normal usage into a homelab-wide outage
       (data-model.md § Entity: Gateway Budget). This fails rather than warns deliberately.
+
+# --- Gateway-wide RATE cap (FR-010's second level; added 2026-09-20, backlog 071) ---
+#
+# READ THE ASSERTION ABOVE, THEN THIS ONE. They point in opposite directions, and reusing
+# the budget rule here would enforce exactly the wrong inequality:
+#
+#   budget:  gateway cap  >  sum(clients)   — a low cap is a self-inflicted outage
+#   rate:    gateway cap  <  sum(clients)   — a high cap can never bind, so it is decoration
+#
+# The rate cap is the only gateway-wide guard that can actually fire (the spend cap is
+# inert while every tier is local and unpriced), so a decorative one is worse than none:
+# it reads as protection in group_vars and refuses nothing.
+
+- name: Collect the declared per-client rate limits
+  ansible.builtin.set_fact:
+    llm_router_client_rpms: >-
+      {{ llm_router_clients | selectattr('rpm_limit', 'defined') | map(attribute='rpm_limit') | map('int') | list }}
+    llm_router_clients_without_rpm: >-
+      {{ llm_router_clients | rejectattr('rpm_limit', 'defined') | map(attribute='alias') | list }}
+
+- name: Assert a gateway-wide rate cap is declared (FR-010 requires TWO levels)
+  ansible.builtin.assert:
+    that:
+      - llm_router_gateway_budget.rpm_limit is defined
+      - llm_router_gateway_budget.rpm_limit | int > 0
+    fail_msg: >-
+      llm_router_gateway_budget declares no rpm_limit. FR-010 requires rate limits at two
+      levels, and the gateway-wide SPEND cap cannot fire while every tier is local and
+      unpriced — so without this there is no working gateway-wide backstop at all, and
+      clients each inside their own limit can saturate the backend together (backlog 071).
+
+- name: Assert the gateway-wide rate cap is at least the largest single client's
+  ansible.builtin.assert:
+    that:
+      - llm_router_gateway_budget.rpm_limit | int >= (llm_router_client_rpms | max)
+    fail_msg: >-
+      llm_router_gateway_budget.rpm_limit ({{ llm_router_gateway_budget.rpm_limit }}) is below the
+      largest per-client rpm_limit ({{ llm_router_client_rpms | max }}). One well-behaved client
+      would then be refused by the GATEWAY cap before reaching its own, which makes FR-010's two
+      levels indistinguishable in practice and the refusal misleading to whoever reads it.
+  when: llm_router_client_rpms | length > 0
+
+- name: Assert the gateway-wide rate cap is strictly below the sum of client rate limits
+  ansible.builtin.assert:
+    that:
+      - llm_router_gateway_budget.rpm_limit | int < (llm_router_client_rpms | sum)
+    fail_msg: >-
+      llm_router_gateway_budget.rpm_limit ({{ llm_router_gateway_budget.rpm_limit }}) is at or above
+      the sum of per-client rpm_limits ({{ llm_router_client_rpms | sum }}), so it can never bind —
+      every client could run flat out without the gateway cap ever refusing anything. NOTE this is
+      the OPPOSITE of the budget rule a few lines up, deliberately: a budget cap below the client
+      sum is an outage, a rate cap above the client sum is decoration.
+  when:
+    - llm_router_client_rpms | length > 0
+    - llm_router_clients_without_rpm | length == 0
+
+- name: Warn when a client has no rate limit, which makes the gateway-wide band unenforceable
+  ansible.builtin.debug:
+    msg: >-
+      Client(s) {{ llm_router_clients_without_rpm | join(', ') }} declare no rpm_limit, so the
+      sum of client rates is unbounded and the "gateway cap < sum" check above is skipped. The
+      gateway-wide cap still applies to them, but an unlimited client will always be the one
+      that trips it — give every client an explicit rpm_limit if that is not intended.
+  when: llm_router_clients_without_rpm | length > 0
