@@ -51,6 +51,12 @@ inference host, and amending `064` to expose them as capability aliases the Herm
 layer and no new service beyond the one the feature is. Both Code Economy tensions were already
 declared before design and neither grew.
 
+**Post-decision re-evaluation (2026-09-20)**: the MCP scope decision narrows the feature and adds
+nothing, so no gate moves. Principle I is worth re-checking specifically, since shipping a
+requirement only partly exercised risks drifting from the spec: FR-012 is **not** being reduced —
+the credential path is still built and asserted in preflight — only its demonstration is deferred,
+and that is recorded against the acceptance scenario rather than left implicit.
+
 ## Project Structure
 
 ### Documentation (this feature)
@@ -126,4 +132,4 @@ acceptance criteria can pass:
 |---|---|---|
 | **A fifth near-identical backup role** (`hermes_backup`, joining four others of ~55 lines each with the same shape) | The feature needs backup, and the established pattern is one role per service | A single parameterised backup role is now clearly the right refactor — there would be five consumers, which passes Constitution IV's own ">1 concrete consumer" test. **Rejected for this feature only** because consolidating four working roles is a refactor of other services' code, outside this scope and a worse change to review. **Recommended as its own backlog item.** |
 | **An internet-facing service whose only access control is its own login** | The owner chose public reachability for mobile use, and the estate's proxy provides no authentication | An estate-wide `forward_auth` layer is the correct answer and would benefit every public service. Rejected here because it is a separate feature touching the proxy the whole estate depends on. Recorded as the spec's principal risk, not hidden. |
-| **`financial-scenario`'s MCP is unreachable** (research R-008) | FR-012 asks for the homelab's MCP servers; one of the two gates on a secret baked into a third-party image that this repo does not hold | Extracting the baked secret works but depends on an unmanaged image internal and breaks silently on the next bump. **Recommendation: ship with `market-model` only**; FR-013 already requires adding the second to be pure configuration once upstream makes it possible. **Needs the owner's decision before `tasks.md`.** |
+| **Shipping with one MCP server instead of two** (research R-008) — **DECIDED 2026-09-20: ship with `market-model` only** | `financial-scenario`'s gate uses a secret baked into a third-party image that this repo does not hold, and making it configurable needs an upstream change | Extracting the baked secret works today but depends on an unmanaged image internal and breaks silently on the next bump. **Consequence accepted**: FR-012's credentialed path is built and configured but **unexercised at launch**, so spec US-3 AS-2 is not-verifiable — recorded as such, not dropped. Adding the second server later is one list entry plus a vault variable, which is itself the test of FR-013. |

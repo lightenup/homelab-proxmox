@@ -127,9 +127,9 @@ the `financial-scenario` allocation and adjust against observed use.
 
 ---
 
-## R-008 — UNRESOLVED: the authenticated MCP server cannot currently be reached
+## R-008 — RESOLVED: ship with one MCP server; the authenticated one waits on upstream
 
-**Status**: **Blocked on an upstream change. Escalated to the plan.**
+**Decision (owner, 2026-09-20)**: **Ship with `market-model` only.**
 
 `financial-scenario`'s `/mcp` returns `401` with no `WWW-Authenticate` header, and this repo does
 not hold the credential. From `roles/financial_scenario/tasks/preflight.yml`:
@@ -149,8 +149,25 @@ So FR-012 is satisfiable for `market-model` today and **not** for `financial-sce
 | **Extract the baked secret from the image** | Works immediately, but depends on an image internal nobody manages and breaks silently on the next image bump. Not recommended |
 | **Make it configurable upstream first** | Correct, and blocks this feature on work in another repository |
 
-**Recommendation**: the first. It delivers the capability, proves the pattern end to end, and leaves
-the second server as a configuration change once upstream makes it possible.
+**Chosen**: the first. It delivers the capability, proves the pattern end to end, and leaves the
+second server as a configuration change once upstream makes it possible.
+
+### The consequence, stated rather than buried
+
+FR-012 requires the system to call tool services **"including those that require a credential"**.
+With only `market-model` — which requires none — **the credentialed path is configured but never
+exercised at launch**. Spec acceptance scenario US-3 AS-2 ("presents the credential and is not
+refused") therefore cannot be demonstrated.
+
+This is the same shape as `064`'s T056/T057: a mechanism that is correctly built and structurally
+untestable until something outside the feature changes. Handle it the same way — build the
+credential path, assert its configuration in preflight, and record the acceptance scenario as
+**not-verifiable at launch** with its re-arm condition, rather than quietly dropping the
+requirement or claiming a pass it did not earn.
+
+**Re-arm when**: the `personal-financial-scenarios` image makes its MCP secret configurable. At
+that point the work here is one list entry in `hermes_mcp_servers` plus a vault variable — which is
+precisely the cheapness FR-013 demands, and adding it will itself be the test of FR-013.
 
 ---
 

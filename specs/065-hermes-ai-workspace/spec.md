@@ -71,7 +71,12 @@ tool was used and the answer reflects its output.
 1. **Given** the configured tool services, **When** the owner asks something requiring one, **Then**
    Hermes calls it and the answer is derived from what it returned.
 2. **Given** a tool service that requires a credential, **When** Hermes calls it, **Then** it
-   presents the credential and is not refused.
+   presents the credential and is not refused. *(**Not verifiable at launch**, recorded 2026-09-20:
+   the estate's only credentialed tool service gates on a secret baked into a third-party image
+   that this repository does not hold, and making it configurable requires an upstream change. The
+   credential path is still built and validated in configuration — only its demonstration is
+   deferred. Re-arm when that image makes its secret configurable; adding the server is then one
+   configuration entry, which is itself the test of FR-013. See `research.md` R-008.)*
 3. **Given** a tool service that is unavailable, **When** a call is attempted, **Then** the
    conversation shows a readable error naming the service — never an indefinite wait, never a
    fabricated answer presented as tool output.

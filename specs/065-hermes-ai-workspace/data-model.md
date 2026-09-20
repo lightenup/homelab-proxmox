@@ -54,9 +54,14 @@ Lives in `ansible/group_vars/services/vars.yml`. The single artefact an operator
 
 **Validation**: `auth: bearer` ⇒ `credential_env` names a non-empty vault variable.
 
-**Initial population**: `market-model` (`auth: none`). `financial-scenario` is **omitted at launch**
-— its gate uses a secret baked into a third-party image that this repo does not hold (research
-R-008). Adding it later is a list entry, which is exactly what FR-013 requires.
+**Initial population**: `market-model` (`auth: none`) — **the only entry at launch**, decided
+2026-09-20. `financial-scenario` is omitted: its gate uses a secret baked into a third-party image
+that this repo does not hold (research R-008).
+
+The `auth: bearer` branch and its `credential_env` validation are **still built**, because the
+schema is what makes adding the second server a list entry rather than a code change. It is simply
+not populated yet — so preflight must validate the branch without any current consumer, and that is
+deliberate, not dead configuration.
 
 ---
 
