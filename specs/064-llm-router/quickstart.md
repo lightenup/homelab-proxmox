@@ -175,8 +175,13 @@ Prefill is superlinear, so plan in *time*, not tokens:
  48k tokens ->  73s     108k tokens -> 397-690s
 ```
 
-Still not exercised end to end: a prompt above 131k that actually triggers the Mac's
-escalation. It is now possible — it was not before.
+**Exercised 2026-09-20 and it works**: a 170,305-token prompt was served in 901.8s, so the
+escalation to `qwen-long` fires and `hermes-deep`'s declared 262144 is honest.
+
+**But avoid the band just above 131,072.** A 132,658-token prompt is *rejected* in under a
+second — LiteLLM's pre-call token estimate undercounts against oMLX's tokenizer, still
+picks `reasoner`, and oMLX refuses it. Stay clearly below 131k or clearly above ~140k until
+backlog 070 is resolved.
 
 ## 7. Budgets and rate limits (SC-010)
 
