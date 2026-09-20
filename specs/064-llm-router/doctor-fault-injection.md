@@ -318,3 +318,106 @@ changed and the TLS dependency should be re-examined rather than assumed permane
 ssh root@192.168.1.220 'curl -sk -m 1400 -o /dev/null -w "%{http_code} %{time_total}s\n" \
   https://192.168.1.177:4443/health/liveliness'
 ```
+
+---
+
+# Row 11 — the rate-limit breach (T054 / T055), run 2026-09-20
+
+FR-010's **spend** half is inert — local tiers carry no pricing, so `spend` reads 0.0
+against any cap forever. That makes `rpm_limit` the only runaway-client guard that can be
+exercised at all, and T054/T055 were reframed onto it. This is that run.
+
+Repeatable: `scripts/healthcheck/llm-router-rate-limit-drill.sh`, executed on the gateway
+LXC. It provisions one throwaway key as a second client and deletes it on exit.
+
+| # | where | do | expect |
+|---|---|---|---|
+| 11 | gateway LXC | fire 16 concurrent requests on the `canary` key (`rpm_limit: 10`) while a second client calls | ~10 × `200`, the rest `429`; the other client unaffected throughout |
+
+## What happened
+
+```
+burst start 15:16:51Z … burst end 15:16:54Z
+  HTTP 200: 10
+  HTTP 429: 6
+  bystander (mid-breach):  HTTP 200
+  bystander (post-breach): HTTP 200
+  canary after 62s:        HTTP 200
+```
+
+**Exactly ten passed.** Not approximately ten — the limiter is precise at one worker, which
+is the configuration deployed (`command: ["--config", …, "--port", "4000"]`, no
+`--num_workers`). FR-014's "Redis only if more than one worker" holds: there is no
+cross-worker state to share, so the in-process limiter is correct here. Adding a worker
+without adding Redis would silently multiply every client's effective limit by the worker
+count — worth knowing before anyone tunes for throughput.
+
+**AS-5.1 passes.** A different client served `200` *during* the breach and again after it.
+The clients share a team (`llm-router-gateway-wide`) but the team carries no rate limit, so
+the buckets are genuinely per-key.
+
+**The window rolls.** The refusal named its own reset time and the key served again at 62 s.
+
+## AS-5.2 — attribution, in two places and only one of them legible
+
+The 429 body attributes the refusal, but by **hash**:
+
+```json
+{"error":{"message":"Rate limit exceeded for api_key: 78876a67…a91. Limit type: requests.
+ Current limit: 10, Remaining: 0. Limit resets at: 2026-09-20 15:17:51 UTC","code":"429"}}
+```
+
+That hash is `sha256(<key token>)`, and `/key/list?return_full_object=true` returns the same
+value as `token` next to `key_alias` — both verified. So it *is* deterministic attribution,
+just not readable. One lookup closes it, and an operator holding a 429 should not have to
+work that out:
+
+```bash
+# which client was refused?
+ssh root@192.168.1.112 'pct exec 109 -- bash -c "
+  MK=\$(grep -oE \"LITELLM_MASTER_KEY: *\\\"[^\\\"]+\\\"\" /opt/llm-router/docker-compose.yml | sed -E \"s/.*\\\"(.*)\\\"/\\1/\")
+  curl -s -H \"Authorization: Bearer \$MK\" \
+    \"http://127.0.0.1:4000/key/list?return_full_object=true&size=100\" \
+  | python3 -c \"import json,sys
+for k in json.load(sys.stdin)[\\\"keys\\\"]:
+    print(k[\\\"token\\\"][:16], k[\\\"key_alias\\\"])\""'
+```
+
+**In metrics it is already legible**, which is what SC-010 actually asks for:
+
+```
+litellm_proxy_failed_requests_metric_total{
+  api_key_alias="canary", exception_status="429", exception_class="HTTPException",
+  requested_model="hermes-fast", team_alias="llm-router-gateway-wide", …} 6.0
+```
+
+Six, matching the six observed refusals, labelled by **alias**. SC-010 and AS-5.2 are
+satisfied on the dashboard; the raw error body is the weak surface, not the system.
+
+## Two findings the drill turned up
+
+**1. There is no gateway-wide rate limit at all.** FR-010 requires rate limits at *two*
+levels. The team object carries `rpm=None`:
+
+```
+team alias=llm-router-gateway-wide  rpm=None  tpm=None  max_budget=50.0  spend=0.0
+```
+
+`llm_router_gateway_budget` declares only `max_budget` and `budget_duration`, so the team
+is created without one. Combined with the inert spend cap, **the gateway-wide backstop
+does not currently exist in any working form** — two clients inside their own limits can
+together saturate the Mac and nothing refuses them. Raised as
+[`docs/backlog/071`](../../docs/backlog/071-gateway-wide-rate-limit-missing.md).
+
+**2. `litellm_remaining_api_key_requests_for_model` is useless as a signal.** It reports
+`9.223372036854776e+18` (int64 max) for *every* key, including `canary` with its
+`rpm_limit: 10`. A "requests remaining" panel built on it would read infinite while a key
+is actively being refused. Use `litellm_proxy_failed_requests_metric_total` filtered on
+`exception_status="429"` instead.
+
+## Still not exercised after this
+
+`T056`/`T057` — the gateway-wide **spend** cap and its alert. Unchanged: spend is
+structurally zero, so the cap cannot be reached. Note this is now a *second* reason the
+gateway-wide backstop is untested, distinct from finding 1 above — the spend cap exists and
+cannot fire; the rate cap does not exist.

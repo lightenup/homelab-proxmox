@@ -47,7 +47,17 @@ monitoring_contract:
 | **All backends failing, under traffic** | failure ratio across all deployments > 90% over 10m | **critical** | FR-018. The gateway is alive and the database is fine, but nothing can be served. |
 | **All backends failing, no traffic** | synthetic canary request fails | **critical** | FR-018, SC-013. The failure-rate signal is silent with no clients calling — which is exactly how this trap goes unnoticed until someone tries to use the gateway. |
 | Gateway-wide budget cap exhausted | `litellm_remaining_team_budget_metric` at/near zero | **critical** | SC-012. This refuses every client at once, so it is an availability event, not just a spend one. |
-| Per-client budget breach | spend metric per key alias | (dashboard only) | SC-010 — visible and attributable, but one client hitting its own cap is working as designed, not an incident. |
+| Per-client **rate-limit** breach | `litellm_proxy_failed_requests_metric_total{exception_status="429"}` by `api_key_alias` | (dashboard only) | SC-010 — visible and attributable, but one client hitting its own limit is working as designed, not an incident. **Verified 2026-09-20**, `doctor-fault-injection.md` § Row 11. |
+| ~~Per-client budget breach~~ | ~~spend metric per key alias~~ | — | **Cannot occur.** Local tiers carry no pricing, so `spend` is 0.0 forever. Superseded by the rate-limit row above, which is the guard that actually bites. |
+
+> **Do not build a "requests remaining" panel on `litellm_remaining_api_key_requests_for_model`.**
+> Measured 2026-09-20: it reports `9.223372036854776e+18` (int64 max) for *every* key,
+> including one with `rpm_limit: 10` that was actively being refused. It does not reflect
+> the configured limit. The `429`-filtered failure counter above is the working signal.
+>
+> **There is also no gateway-wide rate limit to alert on** — the team carries `rpm=None`,
+> so the two-level structure FR-010 describes has only one level deployed. Backlog
+> [`071`](../../../docs/backlog/071-gateway-wide-rate-limit-missing.md).
 
 The severity split is the substance of this contract. A downed Mac and a downed gateway look similar
 in a naive dashboard and could not be more different operationally.
