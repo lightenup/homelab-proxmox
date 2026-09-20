@@ -16,6 +16,18 @@
   loop:
     - postgres
 
+# The gateway addresses the Mac over TLS (FR-013 amended): plaintext inbound to the Mac is
+# closed after ~300s of application silence by a control that is not ours to change, while
+# the same request over TLS held 1800s of complete silence. Verification is against this
+# certificate rather than disabled, so the leg is authenticated as well as encrypted — it
+# carries mac_litellm_key, which used to cross the LAN in the clear.
+- name: Deploy the Mac's CA certificate for TLS verification
+  ansible.builtin.copy:
+    src: "{{ llm_router_mac_ca_src }}"
+    dest: "{{ llm_router_mac_ca_host_path }}"
+    mode: '0644'
+  notify: Restart llm-router
+
 - name: Deploy config.yaml
   ansible.builtin.template:
     src: config.yaml.j2

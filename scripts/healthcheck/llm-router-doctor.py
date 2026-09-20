@@ -52,6 +52,7 @@ import argparse
 import json
 import os
 import re
+import ssl
 import subprocess
 import sys
 import time
@@ -63,6 +64,22 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent.parent
 VARS = REPO / "ansible" / "group_vars" / "services" / "vars.yml"
 CONFIG_TPL = REPO / "ansible" / "roles" / "llm_router" / "templates" / "config.yaml.j2"
+MAC_CA = REPO / "ansible" / "roles" / "llm_router" / "files" / "mac-ca.pem"
+
+
+def mac_tls_context():
+    """Verify the Mac's certificate, the same way the gateway does.
+
+    The local tier is addressed over TLS because plaintext inbound to the Mac is closed
+    after ~300s of application silence (backlog 069). Verification is against the same
+    certificate the role deploys, so a doctor pass means the gateway's own trust path works
+    — not merely that something answered on the port.
+    """
+    if not MAC_CA.exists():
+        return None
+    ctx = ssl.create_default_context(cafile=str(MAC_CA))
+    return ctx
+
 
 # Which spec clause each check exists to defend. Printed on failure so a red
 # result points at the requirement rather than at the script.
@@ -315,8 +332,11 @@ def check_local_tier(d: Doctor, aliases) -> None:
         # liveness endpoint, not oMLX's /health. oMLX is not LAN-reachable at
         # all by design (FR-016) and cannot be probed from here.
         try:
-            with urllib.request.urlopen(f"{root}/health/liveliness", timeout=10) as r:
-                return r.status == 200, f"HTTP {r.status}"
+            ctx = mac_tls_context() if root.startswith("https") else None
+            if root.startswith("https") and ctx is None:
+                return False, f"cannot verify TLS: {MAC_CA.name} missing from the role"
+            with urllib.request.urlopen(f"{root}/health/liveliness", timeout=10, context=ctx) as r:
+                return r.status == 200, f"HTTP {r.status} (TLS verified)" if ctx else f"HTTP {r.status}"
         except Exception as e:
             # Not a gateway failure. SC-001 requires this to be survivable, and
             # the replacement Mac is a laptop that leaves the LAN by design.
@@ -353,7 +373,8 @@ def check_local_tier(d: Doctor, aliases) -> None:
         try:
             req = urllib.request.Request(f"{root}/v1/models",
                                          headers={"Authorization": f"Bearer {mac_key}"})
-            with urllib.request.urlopen(req, timeout=15) as r:
+            ctx = mac_tls_context() if root.startswith("https") else None
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
                 have = {m["id"] for m in json.loads(r.read()).get("data", [])}
         except Exception as e:
             return False, f"cannot list the Mac's models: {type(e).__name__}"

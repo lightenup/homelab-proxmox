@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>no.hus-sky.hermes-tls-terminator</string>
+
+  <!-- $HOME is expanded by bash, not launchd, so this plist stays portable. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>exec /usr/bin/python3 "$HOME/.local/bin/hermes-tls-terminator.py"</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- KeepAlive, unlike the announcer's StartInterval: this is a long-lived listener, and
+       if it dies the gateway loses its only path to the Mac. Restart it. -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/hermes-tls-terminator.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/hermes-tls-terminator.log</string>
+
+  <!-- A LaunchAgent, not a LaunchDaemon: it needs no root, and its login-session lifetime
+       matches Docker Desktop's and oMLX's. When the Mac cannot serve the local tier this
+       stops listening too, so the gateway fails clean instead of hanging. -->
+</dict>
+</plist>

@@ -55,6 +55,8 @@ services:
 {% endif %}
     volumes:
       - "{{ llm_router_install_dir }}/config.yaml:/app/config.yaml:ro"
+      # Read-only: litellm verifies the Mac's TLS certificate against this.
+      - "{{ llm_router_mac_ca_host_path }}:{{ llm_router_mac_ca_container_path }}:ro"
       - "/etc/localtime:/etc/localtime:ro"
     environment:
       LITELLM_MASTER_KEY: "{{ litellm_master_key }}"
