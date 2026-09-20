@@ -195,12 +195,33 @@ tier re-arms them, but the runaway-loop guard is now **rate limiting**:
 # expect: that client refused with a clear error; OTHER clients still served
 ```
 
-## 7b. Total-failure detection (SC-013) — still open
+## 7b. Total-failure detection (SC-013)
 
 The trap the spec names first: the gateway is alive, the database is fine, every backend is dead,
 `/health/readiness` still returns 200, and the failure-rate alert stays silent because nobody is
 calling. Break every backend, send **no** client traffic, and confirm `LlmRouterCanaryFailing` fires
-within one canary interval. A green dashboard here is the failure. **Not yet exercised.**
+within one canary interval. A green dashboard here is the failure.
+
+**Exercised, twice.** First 2026-09-20 (T051), then re-run the same day after the local-tier leg
+moved to TLS and after the `072` monitoring restore, because both changed the path this depends on:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/no.hus-sky.hermes-tls-terminator.plist   # kill the only path to the Mac
+#   /health/readiness -> 200          <- the trap, still green
+#   canary -> 0, no client traffic sent
+#   LlmRouterCanaryFailing -> firing
+launchctl load ~/Library/LaunchAgents/no.hus-sky.hermes-tls-terminator.plist
+#   canary -> 1, alert -> inactive, no operator action
+```
+
+Two things worth knowing before you run it:
+
+- **Query the rule, not just the expression.** `llm_router_canary_success == 0` returns a result as
+  soon as the metric is scraped, but the *rule* only transitions on its group interval (30s). Check
+  `/api/v1/rules` for `state: firing`, or you will conclude the alert is broken when it is merely
+  a few seconds behind.
+- **The canary's own failure cools the deployment down**, so recovery needs one run after the
+  cooldown lapses.
 
 ## 8. Blast radius (SC-006, SC-007, FR-008)
 
@@ -222,7 +243,18 @@ gated by per-client keys, not by network position (research D-108).
 
 Change one `deployments` entry in `ansible/group_vars/services/vars.yml`, redeploy, confirm the new
 deployment serves the alias — and that **no client changed**. If it needs a template edit,
-[contracts/alias-mapping.md](./contracts/alias-mapping.md) has been violated. **Not yet exercised.**
+[contracts/alias-mapping.md](./contracts/alias-mapping.md) has been violated.
+
+**Exercised 2026-09-20.** Repointed `hermes-fast` from `openai/fast` to `openai/coder`:
+
+```
+git diff --stat   ->  ansible/group_vars/services/vars.yml | 3 ++-      <- one file, no template
+on the LXC        ->  model_name: hermes-fast / model: openai/coder     <- the retier took
+canary            ->  llm_router_canary_success{alias="hermes-fast"} 1  <- unchanged client, still served
+```
+
+Then reverted and re-confirmed. The `git diff --stat` is the real assertion here — SC-003 is a claim
+about *where the change lands*, not about whether the alias still answers.
 
 ## 10. Monitoring
 
@@ -235,8 +267,20 @@ gh workflow run lxc-lifecycle.yml --ref <branch> \
   -f service=monitoring -f action=change -f environment=prod -f confirm_apply_prod=deploy-prod
 ```
 
-Expect on `192.168.1.214`: an `llm-router` scrape job, an `llm-router-readiness` blackbox job, five
-`LlmRouter*` alert rules, and `llm-router.json` in Grafana's dashboards.
+Expect on `192.168.1.214`: an `llm-router` scrape job, an `llm-router-readiness` blackbox job, **six**
+`LlmRouter*` alert rules (the sixth, `LlmRouterGatewayRateCapBinding`, arrived with backlog `071`),
+and `llm-router.json` in Grafana's dashboards.
+
+> **The warning above is now enforced in code, because writing it down was not enough.** On
+> 2026-09-20 a lab-path monitoring deploy did exactly what this section describes and wiped the live
+> config — 16 scrape jobs and 5 alert groups — despite the behaviour being documented here *and* in
+> `tasks.md` T051. Two guards now refuse it: `pve-service-deploy` enumerates the layered inventory
+> and stops unless the `services` group is populated, and the `monitoring_stack` role asserts at
+> least one host declares `monitoring_contract.enabled` before anything renders. See backlog
+> [`072`](../../docs/backlog/072-lab-monitoring-deploy-wipes-prod.md).
+
+Verified 2026-09-20 after the restore: 16 scrape jobs, 28 targets, 0 unhealthy, 8 rule groups, all
+six `LlmRouter*` rules `inactive`.
 
 ## Troubleshooting
 
