@@ -158,6 +158,25 @@ If `--layer config` is not 5/5, stop — the tree is wrong.
 >   -d '{"models":["local"],"key_alias":"homelab-lxc-064-llm-router-v2"}' | python3 -m json.tool
 > ```
 >
+> ### ✅ Job 4 — TLS on the LAN leg, done 2026-09-20
+>
+> The name resolved (Job 3) but the connection still could not be held: plaintext inbound to
+> this Mac is closed after ~300s with no application-layer response data, and unpredictably
+> after that even with keepalives. TLS held 1500s and 1800s of complete silence. The leg now
+> runs `https://xmjdvvw39y2t.local:4443`, terminated on the Mac and relayed to LiteLLM over
+> loopback, with the certificate **verified** by the gateway.
+>
+> ```bash
+> launchctl list | grep hermes-tls     # no.hus-sky.hermes-tls-terminator, last exit 0
+> lsof -nP -iTCP:4443 -sTCP:LISTEN     # terminator — the ONLY LAN listener
+> lsof -nP -iTCP:4000 -sTCP:LISTEN     # LiteLLM, 127.0.0.1 only
+> ```
+>
+> **LiteLLM is back on loopback**, reversing Job 1's `0.0.0.0` bind: the terminator is now the
+> single LAN-exposed process, and `mac_litellm_key` no longer crosses the LAN in plaintext.
+> Install, certificate lifecycle and the six rejected alternatives:
+> [`mac-tls-terminator/README.md`](./mac-tls-terminator/README.md).
+>
 > ### ✅ Job 3 — the `.local` name, done 2026-09-19
 >
 > FR-013 addresses the Mac by its mDNS name, and that name **did not resolve from anywhere

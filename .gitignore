@@ -36,6 +36,11 @@ ansible/playbooks/artifacts/
 **/tailscale_auth_key*
 **/*.key
 **/*.pem
+# Exception, by name rather than by loosening the rule above: the Mac's TLS certificate is
+# the PUBLIC half of a self-signed pair, and the gateway needs it in-tree to verify the
+# local-tier connection (FR-013, backlog 069). The private key is written to
+# ~/.config/hermes-tls/key.pem by mac-tls-terminator/make-cert.sh and never enters the repo.
+!ansible/roles/llm_router/files/mac-ca.pem
 ansible/.vault-pass.txt
 sec_pve
 

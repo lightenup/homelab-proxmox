@@ -291,3 +291,30 @@ the regression FR-016 cares about: an aliased model quietly losing its pin.
   traffic, which a doctor run cannot observe by definition.
 - **SC-011**, health-check spend under 1% of a week — needs a week, and is moot while every
   tier is local and unpriced.
+
+---
+
+# The 20-minute invariant (added 2026-09-20)
+
+The operating requirement is that **nothing in the value chain cuts a request for at least
+20 minutes**. Stated as an absence it cannot be asserted, so the drill states it positively:
+
+> A request that produces no model output for N minutes still completes, for N up to 20.
+
+This regressed silently once already — the ~300s plaintext ceiling went unnoticed until a
+large prompt hit it — so it belongs in the drill set rather than in anyone's memory.
+
+| # | where | do | expect |
+|---|---|---|---|
+| 8 | any LAN host | hold a silent HTTPS request to the Mac's terminator for 1200s+ | completes; **plaintext dies at ~300s**, which is the control |
+| 9 | laptop / pve | send a cold prompt whose prefill exceeds 300s through the gateway | completes; measured 395.6s for ~108k tokens |
+| 10 | Mac | stop the TLS terminator | every alias fails **clean** — the gateway has no other path, so this must be an error, never a hang |
+
+Row 8's control matters: if plaintext ever *stops* failing at ~300s, the corporate control
+changed and the TLS dependency should be re-examined rather than assumed permanent.
+
+```bash
+# row 8, the cheap one
+ssh root@192.168.1.220 'curl -sk -m 1400 -o /dev/null -w "%{http_code} %{time_total}s\n" \
+  https://192.168.1.177:4443/health/liveliness'
+```

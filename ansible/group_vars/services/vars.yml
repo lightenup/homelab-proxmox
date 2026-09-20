@@ -75,12 +75,14 @@ llm_router_aliases:
         tier: local
         # Mac alias `fast` -> 4-bit sibling, ~59 tok/s.
         provider_model: "openai/fast"
-        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_base: "https://xmjdvvw39y2t.local:4443/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 131072
-        # Fast is the alias whose whole point is latency — a caller asking for it wants an
-        # answer or an error, not a long wait. Keeps the role default.
-        timeout: 180
+        # 1200s on every alias, not just deep. The operating requirement is that nothing in
+        # the value chain cuts a request for at least 20 minutes, and a slower model behind
+        # `fast` would otherwise be cut by this gateway rather than by the network. The old
+        # 180s here existed to bound a dead backend, which cooldown now handles instead.
+        timeout: 1200
         health_checked: true
   - name: hermes-balanced
     fallback_to: null
@@ -90,10 +92,10 @@ llm_router_aliases:
         tier: local
         # Mac alias `coder` -> 8-bit, thinking off, validated for code at N=1.
         provider_model: "openai/coder"
-        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_base: "https://xmjdvvw39y2t.local:4443/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 131072
-        timeout: 300
+        timeout: 1200
         health_checked: true
   - name: hermes-deep
     fallback_to: null
@@ -108,7 +110,7 @@ llm_router_aliases:
         # runs thinking OFF at temp 0.3, so crossing 131k trades reasoning depth
         # for window. See amendment-drop-metered-tiers.md § The new mapping.
         provider_model: "openai/reasoner"
-        api_base: "http://xmjdvvw39y2t.local:4000/v1"
+        api_base: "https://xmjdvvw39y2t.local:4443/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 262144
         # 1200s, and the declared context_window above is why. Measured 2026-09-20: a COLD

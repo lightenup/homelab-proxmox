@@ -82,6 +82,10 @@ general_settings:
 {% endfor %}
 
 litellm_settings:
+  # Verify the Mac's certificate rather than trusting blindly: a path here becomes httpx's
+  # `verify=`, so ssl_verify: false is deliberately NOT used. If the certificate expires the
+  # gateway fails with a TLS error naming it, which is a legible failure rather than a hang.
+  ssl_verify: {{ llm_router_mac_ca_container_path }}
   callbacks: ["prometheus"]
   drop_params: true
   # Prompt/response bodies are not logged by default (FR-012).
