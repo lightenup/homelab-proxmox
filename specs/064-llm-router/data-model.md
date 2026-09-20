@@ -39,10 +39,11 @@ One concrete backend a request can be served by.
 |---|---|---|
 | `id` | string | Unique across all aliases. Used as the LiteLLM `model_name` suffix and as the Prometheus label that makes SC-002 checkable. |
 | `tier` | enum | `local` \| `aggregator` \| `frontier`. Drives health-check scoping (D-101) and cost expectations. |
-| `provider_model` | string | LiteLLM provider-qualified ID, e.g. `ollama_chat/<model>`, `openrouter/<model>`, `anthropic/claude-sonnet-5`. |
-| `api_base` | string \| null | Required for `local` (the Mac's MagicDNS name); null for hosted tiers. |
-| `api_key_env` | string \| null | Name of the environment variable holding the credential — **never the credential itself** (FR-007, Constitution II). Null for `local` (unauthenticated over the tailnet). |
+| `provider_model` | string | LiteLLM provider-qualified ID. Every current deployment is `openai/<alias>` — the backend is the Mac's own LiteLLM, which speaks the OpenAI protocol, so the name after the slash is *the Mac gateway's alias*, not a model file. |
+| `api_base` | string \| null | Required for `local`: the Mac's mDNS name over **HTTPS**, e.g. `https://xmjdvvw39y2t.local:4443/v1`. Null for hosted tiers. |
+| `api_key_env` | string \| null | Name of the environment variable holding the credential — **never the credential itself** (FR-007, Constitution II). Set for `local` too: the Mac's gateway authenticates, so the leg carries `MAC_LITELLM_KEY`. |
 | `context_window` | integer | Used to decide context-window escalation. |
+| `timeout` | integer \| null | Per-deployment request timeout in seconds; falls back to `llm_router_request_timeout` (180). Currently 1200 on all three — a cold 108k-token prefill on the Mac takes ~400 s, so the role default would time out a request well inside the alias's own advertised window. |
 | `health_checked` | bool | True only for `tier: local`. False for metered tiers so probes never bill (FR-005). |
 
 **State** (owned by LiteLLM at runtime, not by config): `healthy` → `cooling_down` (after
@@ -51,9 +52,14 @@ deployment in `cooling_down` is skipped without being attempted — Acceptance S
 
 **Validation** (preflight):
 - Exactly one deployment per alias has `tier: local` at most.
-- `tier: local` ⇒ `api_base` is set, is a MagicDNS name (`*.ts.net`), and is **not** an IP literal
-  (FR-013 — an IP here silently reintroduces the LAN dependency the feature exists to remove).
-- `tier != local` ⇒ `api_key_env` is set and the named variable is non-empty in the environment.
+- `tier: local` ⇒ `api_base` is set, is a `.local` mDNS name, and is **not** an IP literal
+  (FR-013 — the Mac's address comes from DHCP, so an IP literal here is correct until the
+  next lease and then silently wrong). Amended 2026-09-14: this said MagicDNS (`*.ts.net`)
+  while the local tier lived on the tailnet. The namespace moved to mDNS with the move to
+  the LAN; the invariant — a stable name, never a DHCP-assigned address — did not change.
+- `api_key_env` is set on **every** deployment, and the named variable is non-empty in the
+  environment. This once applied only to `tier != local`, when the local backend was an
+  unauthenticated Ollama; the Mac's gateway enforces keys, so the local tier names one too.
 - `provider_model` is non-empty and contains a `/`.
 
 ---
@@ -96,14 +102,20 @@ rather than warning, because the failure mode is a silent homelab-wide outage.
 The single artefact an operator edits to retier (FR-003, SC-003). Lives in
 `ansible/group_vars/services/vars.yml`; templated into `config.yaml` by the role.
 
+**The example below exercises the schema, not the live mapping.** It keeps a metered tier
+and a fallback chain so the shape of both is visible; the deployed configuration has
+neither — one local deployment per alias, `fallback_to: null` throughout. Read
+`ansible/group_vars/services/vars.yml` for what is actually running, and
+[`amendment-drop-metered-tiers.md`](./amendment-drop-metered-tiers.md) for why.
+
 ```yaml
 llm_router_aliases:
   - name: hermes-fast
     fallback_to: hermes-balanced
     context_window_fallback_to: hermes-deep
     deployments:
-      - {id: fast-local,  tier: local,      provider_model: "ollama_chat/<model>", api_base: "http://<mac>.<tailnet>.ts.net:11434", context_window: 32768, health_checked: true}
-      - {id: fast-hosted, tier: aggregator, provider_model: "openrouter/<model>",  api_key_env: OPENROUTER_API_KEY, context_window: 32768, health_checked: false}
+      - {id: fast-local,  tier: local,      provider_model: "openai/fast",       api_base: "https://xmjdvvw39y2t.local:4443/v1", api_key_env: MAC_LITELLM_KEY, context_window: 131072, timeout: 1200, health_checked: true}
+      - {id: fast-hosted, tier: aggregator, provider_model: "openrouter/<model>", api_key_env: OPENROUTER_API_KEY, context_window: 32768, health_checked: false}
   - name: hermes-balanced
     fallback_to: hermes-deep
     ...

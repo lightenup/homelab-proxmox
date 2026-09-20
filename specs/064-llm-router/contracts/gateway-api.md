@@ -30,11 +30,30 @@ embedding alias is added later), `/v1/models` (lists the aliases, not the deploy
 |---|---|---|
 | Preferred deployment healthy | Served by it; the serving deployment is identifiable in metrics | SC-002 |
 | Preferred deployment in cooldown | Served by the next deployment **without attempting the dead one** | FR-004, AS-1.3 |
-| All deployments for the alias in cooldown | Escalates to `fallback_to`'s alias | FR-004 |
-| Input exceeds the alias's context window | Escalates to `context_window_fallback_to` — **not** a 400 | FR-006, SC-009 |
+| All deployments for the alias in cooldown | Escalates to `fallback_to`'s alias — **dormant**, see below | FR-004 |
+| Input exceeds the alias's context window | Escalates to `context_window_fallback_to` — **not** a 400. **Delegated to the Mac**, see below | FR-006, SC-009 |
 | Every alias in the fallback chain exhausted | **Fails fast** with a clear error; no hang, no unbounded retry | Edge case, AS-1.5 |
 | Client over its own budget | `400`/`429` naming the per-client limit; **other clients unaffected** | FR-010, SC-010 |
 | Gateway-wide cap exhausted | Error **distinguishable** from a per-client breach; distinct alert fires | FR-010, SC-012 |
+
+### Two rows that describe machinery nothing currently triggers (2026-09-20)
+
+`fallback_to` and `context_window_fallback_to` are **null on every alias**, so neither
+escalation row fires today. The rendering and preflight support both, and the contract is
+unchanged — but a reader testing against this table will see no escalation and should not
+conclude it is broken.
+
+- **`fallback_to` is dormant** because there is nothing to fall back *to*. Every alias
+  resolves to the same Mac; cross-alias fallback within one host is theatre. Row three
+  therefore collapses into row five: all deployments in cooldown **fails fast**.
+- **`context_window_fallback_to` is delegated, not dropped.** The Mac's own router
+  escalates `reasoner` onto a 262k profile, which is why `hermes-deep` declares
+  `context_window: 262144`. FR-006 and SC-009 are satisfied one hop down, by the layer
+  that owns the models. Verified end to end in `tasks.md` T038: a 170,305-token prompt
+  completed in 901.8 s. The gateway declaring the escalation too would second-guess the
+  only hop that can act on it.
+
+Both are one `group_vars` line away from active if a second backend ever appears.
 
 The two budget errors being distinguishable is a contract requirement, not a nicety: an operator
 seeing a refusal must be able to tell "one agent looped" from "the homelab is out of budget" without

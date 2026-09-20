@@ -1,6 +1,19 @@
 # Deploy plan — who does what, and where
 
-> **Revision 2026-09-15 — read first.** The local tier no longer talks to oMLX
+> **Revision 2026-09-20 — read this one first.** Nothing on the Mac is exposed to the LAN
+> in plaintext any more. A **TLS terminator** on `0.0.0.0:4443` is the single LAN-facing
+> process; LiteLLM (`:4000`) and oMLX (`:8000`) are both back on `127.0.0.1`. Plaintext
+> inbound to this Mac is closed after ~300 s of application silence by a control that is
+> not ours to change, which capped every request at five minutes; the same request over
+> TLS held 1800 s of complete silence. So wherever this file says "expose the Mac's
+> LiteLLM on `0.0.0.0:4000`", read "run the terminator on `0.0.0.0:4443`, keep LiteLLM on
+> `127.0.0.1:4000`", and read every `http://xmjdvvw39y2t.local:4000/...` probe as
+> `https://xmjdvvw39y2t.local:4443/...`. Anchors:
+> [`mac-tls-terminator/README.md`](./mac-tls-terminator/README.md) and
+> [`docs/backlog/069-*`](../../docs/backlog). The current resting state of the Mac —
+> all four processes — is [`mac-side.md`](./mac-side.md).
+>
+> **Revision 2026-09-15.** The local tier no longer talks to oMLX
 > directly; it chains through the **Mac's own LiteLLM** on `:4000`, and the metered
 > tiers (OpenRouter, Anthropic) are dropped. oMLX returns to `127.0.0.1:8000`. Where
 > this file says "expose oMLX on `0.0.0.0:8000`", read "expose the Mac's LiteLLM on
@@ -33,16 +46,21 @@ laptop. Anything on the home LAN can happen from either.
 
 ---
 
-## A · New Mac — expose oMLX to the LAN
+## A · New Mac — expose the local tier to the LAN
 
-One blocker. oMLX binds `127.0.0.1:8000`, so the LXC cannot reach it.
+> **Superseded 2026-09-20.** Nothing binds `0.0.0.0` except the TLS terminator. The
+> current, correct version of this section is [`mac-side.md`](./mac-side.md); the
+> operational steps are `RUNBOOK.md` Jobs 1–4. Kept below for the reasoning about model
+> pinning, which is unchanged.
 
-```
-oMLX settings → server.host: 0.0.0.0 → restart the server
-```
+~~One blocker. oMLX binds `127.0.0.1:8000`, so the LXC cannot reach it.~~ oMLX **stays**
+on `127.0.0.1:8000`, and so does LiteLLM on `127.0.0.1:4000`. The terminator is the only
+process listening on the LAN:
 
 ```bash
-lsof -nP -iTCP:8000 -sTCP:LISTEN          # must be *:8000, NOT 127.0.0.1:8000
+lsof -nP -iTCP:4443 -sTCP:LISTEN          # *:4443           — the terminator
+lsof -nP -iTCP:4000 -sTCP:LISTEN          # 127.0.0.1:4000   — LiteLLM, loopback only
+lsof -nP -iTCP:8000 -sTCP:LISTEN          # 127.0.0.1:8000   — oMLX, loopback only
 ```
 
 Both aliased models must be **pinned resident** (FR-016) — already done
@@ -153,13 +171,17 @@ echo "sk-$(openssl rand -hex 24)"     # for the three sk- keys
 
 ```bash
 ./scripts/healthcheck/llm-router-doctor.py --layer config          # expect 5/5
-ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:4000/health/liveliness"
+ssh root@192.168.1.112 'systemctl restart avahi-daemon && sleep 5 && getent hosts xmjdvvw39y2t.local'
+ssh root@192.168.1.112 'CTID=$(pct list | awk "/llm-router/ {print \$1}"); \
+  pct exec $CTID -- curl -sS -m20 --cacert /opt/llm-router/mac-ca.pem \
+    https://xmjdvvw39y2t.local:4443/health/liveliness'
 ```
 
-The second is the one that matters: it proves `pve` resolves the Mac's mDNS name
-*and* reaches the Mac's **LiteLLM** (oMLX stays on `127.0.0.1:8000` — do not probe
-it). If it fails, step A is not done or avahi is not resolving `.local` from the LXC
-subnet.
+The last two are the ones that matter, and they are deliberately separate: the first
+proves the name resolves **from a cold cache** (this Mac announces but never answers, so a
+warm cache proves nothing), the second proves the terminator is up, its certificate
+verifies, and LiteLLM behind it answers. The second must run **on the LXC**, not on `pve`
+— that is where `mac-ca.pem` is deployed. `RUNBOOK.md` § 4 has the failure table.
 
 **C3 — deploy.**
 
@@ -221,7 +243,7 @@ answer. That is the property most worth proving, and LAB proves it for free.
 
 | | |
 |---|---|
-| **not a blocker** | § A (the Mac's LiteLLM on `0.0.0.0:4000`) — LAB cannot reach it regardless |
+| **not a blocker** | § A (the Mac's terminator on `0.0.0.0:4443`) — LAB cannot reach it regardless |
 | **not a blocker** | § B (`pve` tailnet auth) — the local tier is LAN-addressed; the tailnet carries no backend leg |
 | **still required** | § C1 (vault secrets) — the only hard prerequisite |
 | **expected red** | the doctor's two local-tier checks, `Mac LiteLLM reachable` and `every alias maps onto a live Mac role alias` |
@@ -261,7 +283,9 @@ PROD. Both halves are now fixed, and the first half was not the one this section
    published port, and Postgres is not published at all.
 
 Verified from `pve` against a flushed avahi cache: `getent hosts xmjdvvw39y2t.local` →
-`192.168.1.177`, and `curl http://xmjdvvw39y2t.local:4000/health/liveliness` → HTTP 200.
+`192.168.1.177`, and — from the LXC, where the CA lives —
+`curl --cacert /opt/llm-router/mac-ca.pem https://xmjdvvw39y2t.local:4443/health/liveliness`
+→ HTTP 200.
 LAB is unaffected either way — mDNS still does not cross subnets.
 
 ---
@@ -274,4 +298,6 @@ LAB is unaffected either way — mDNS still does not cross subnets.
 | MagicDNS placeholder, unreadable behind Zscaler | mDNS `.local`, resolved on the LAN |
 | `T026` — unproven `HTTP_PROXY` on `ollama_chat` | **dissolved** |
 | `OLLAMA_KEEP_ALIVE=-1` | `is_pinned` on both aliased models |
+| plaintext `:4000` on the Mac, LAN-exposed | TLS `:4443`, the only LAN-exposed process (2026-09-20) |
+| requests capped at ~300 s by the network | 20-minute requests, measured at 901.8 s |
 | deploy "from the Linux laptop" | **everything needing a browser or a push** is on the Linux laptop |
