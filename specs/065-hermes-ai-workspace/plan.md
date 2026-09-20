@@ -91,7 +91,9 @@ ansible/
     ├── hermes/                                 # compose stack, config, preflight
     │   ├── defaults/main.yml
     │   ├── tasks/{main,preflight}.yml
-    │   └── templates/docker-compose.yml.j2
+    │   └── templates/
+    │       ├── docker-compose.yml.j2
+    │       └── searxng-settings.yml.j2
     └── hermes_backup/                          # follows financial_scenario_backup
         ├── tasks/main.yml
         └── templates/backup_hermes.sh.j2

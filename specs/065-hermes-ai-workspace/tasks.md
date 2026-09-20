@@ -45,6 +45,7 @@ ones: `terraform/`, `ansible/`, `.github/workflows/`, `scripts/lab/`.
 - [ ] T008 [P] Create the service playbook at `ansible/playbooks/hermes.yml`, following `ansible/playbooks/llm-router.yml`
 - [ ] T009 Verify all eight registration points are present and consistent — grep for `hermes` across the paths in T001–T008 and confirm none is missing
 - [ ] T010 Run `act -l` to confirm the edited workflows still parse (Constitution § *Local Workflow Testing*); if `act` or Docker is unavailable, record why in the PR
+- [ ] T086 Verify Constitution V parity from a laptop, not only from CI: run `scripts/lab/pve-service-deploy plan --environment lab --service hermes` locally with the same arguments CI uses, and confirm the vault variables from T012 resolve from a local `ansible/group_vars/services/vault.yml` rather than only from the PVE vault store. Parity is currently *inherited* from the orchestrator rather than proven for this service — if either half fails, document the limitation and the local equivalent
 
 ---
 
@@ -98,6 +99,7 @@ the state change, restart, click through.
 
 - [ ] T029 [US2] Flip the `caddy_services` entry to `user_facing: true` in `ansible/group_vars/services/vars.yml` so the landing-page card appears alongside the route from T021
 - [ ] T030 [US2] Create `ansible/host_vars/hermes.yml` with the `monitoring_contract` from [contracts/monitoring.md](./contracts/monitoring.md) — a blackbox liveness probe on the public hostname
+- [ ] T087 [US2] Determine whether the application exposes a metrics endpoint, and if it does add it as a scrape target in `ansible/host_vars/hermes.yml`. FR-018 asks for one "if the application exposes one" — nobody has checked, so the clause is currently neither satisfied nor consciously waived. Record the answer either way
 - [ ] T031 [US2] Add the `LlmRouter`-style unreachable alert (**critical**) to `ansible/host_vars/hermes.yml`
 - [ ] T032 [US2] Deploy the monitoring change **through the prod path only**. A lab-path monitoring deploy renders an empty configuration over the live one — this removed 16 scrape jobs and 5 alert groups from production on 2026-09-20 (backlog `072`). Two guards now refuse it; do not test them by accident
 - [ ] T033 [US2] Confirm the card renders on `hus-sky.no`, its indicator tracks the real probe, and clicking it opens Hermes itself
@@ -124,6 +126,8 @@ tool was called and used.
 - [ ] T038 [US3] **Drill (SC-003)**: ask a question answerable only through `market-model`; confirm the tool was called and the answer derives from what it returned
 - [ ] T039 [US3] **Drill (US-3 AS-3)**: make the tool service unreachable and confirm the conversation shows a readable error naming it — never an indefinite wait, never a fabricated answer presented as tool output
 - [ ] T040 [US3] **Drill (SC-004)**: change a capability alias in `group_vars`, redeploy, and confirm via `git diff --stat` that only configuration changed — no template, no code. The diff is the assertion
+- [ ] T088 [US3] **Drill (SC-004, second half)**: add a tool-service entry to `hermes_mcp_servers` in `ansible/group_vars/services/vars.yml` — a disabled placeholder is sufficient — redeploy, and confirm via `git diff --stat` that only configuration changed. T040 proves the *capability alias* half; this proves the *tool service* half, which is the one FR-013 is actually about
+- [ ] T090 [US3] **Drill (edge case)**: exercise a tool call returning far more data than fits in a conversation, and one returning malformed output. Confirm both surface readably and neither is presented to the owner as a successful result (FR-014)
 
 **Checkpoint**: Hermes answers from the estate's own data.
 
@@ -158,6 +162,7 @@ tool was called and used.
 - [ ] T050 [US5] **Drill (SC-005)**: log the inference host out; send a prompt; time the error against the 10-second criterion; confirm it names the unavailable backend
 - [ ] T051 [US5] **Drill (US-5 AS-2)**: with the host still away, confirm the interface loads and previous conversations remain readable
 - [ ] T052 [US5] **Drill (US-5 AS-3)**: bring the host back and confirm the next prompt is served with no administrative action
+- [ ] T089 [US5] **Drill (edge case)**: start a long generation, then make the inference host unavailable *mid-stream*, and confirm the conversation surfaces a readable error rather than spinning or leaving a half-delivered response that looks complete. T050–T052 cover a host that is already away; this covers one that leaves during the request, which is a different failure and the more likely one in practice
 - [ ] T053 [US5] Record the measured failure times in [quickstart.md](./quickstart.md) — replacing the claims it currently makes with observations
 - [ ] T054 [US5] Record the Phase 7 results in `specs/065-hermes-ai-workspace/quickstart.md` § 3, and raise any drill that **hung rather than errored** as a defect before closing the phase. `064` has no fallback tier, so failure is unavoidable — the only question is whether it is legible and fast, and a hang is the one outcome that fails the story
 
@@ -216,7 +221,7 @@ independently deliverable after the MVP.
 ### Scheduled prompts (FR-025, SC-010, SC-015)
 
 - [ ] T075 [P] Enable automations in `ansible/roles/hermes/templates/docker-compose.yml.j2` via `ENABLE_AUTOMATIONS`, and set `AUTOMATION_MIN_INTERVAL` so a misconfigured schedule cannot exhaust the gateway allowance
-- [ ] T076 **Drill (SC-015)**: schedule a prompt, let it run unattended, confirm its output is waiting afterwards
+- [ ] T076 **Drill (SC-015)**: schedule a prompt that **requires a tool call**, let it run unattended, and confirm both that its output is waiting afterwards and that the tool was actually used. FR-025 requires scheduled runs to have "the same tools and knowledge available as in an interactive conversation" — a prompt that needs no tool would pass without testing that clause
 - [ ] T077 **Drill (SC-010)**: let a scheduled run fire while the inference host is away; confirm it is visibly recorded as failed and that "ran and failed" is distinguishable from "never ran"
 
 ---
@@ -310,9 +315,16 @@ rather than in priority order. If it fails there, later phases are building on a
   success criterion it proves.
 - **Constitution V is a hard gate.** All eight registration points in the same PR.
 - **Monitoring deploys go through the prod path only** (T032, backlog `072`).
-- **34 tasks name no file path, and that is deliberate.** The checklist format asks for a path on
-  every task. These are the 22 **drills** plus 12 deploy/verify actions — they act on a running
+- **36 tasks name no file path, and that is deliberate.** The checklist format asks for a path on
+  every task. These are 24 **drills** plus 12 deploy/verify actions — they act on a running
   system, not on a file, so each names the success criterion it proves or the thing it checks
   instead. Every task that *edits* something names the file it edits.
+- **IDs T086–T090 were added after `/speckit.analyze` and sit out of numeric order.** They are
+  placed in the phase where they execute, so **phase position gives execution order, not the
+  number**. Renumbering would have churned 85 tasks and broken the cross-references in these
+  notes and in the dependency section — a worse trade than a numbering gap. What they close:
+  T086 the only constitution finding (Constitution V laptop parity, which was inherited rather
+  than proven), T087 FR-018's unexamined scrape-target clause, T088 the half of SC-004 that
+  T040 does not reach, T089 and T090 the two edge cases with no coverage.
 - **`git diff --stat` is a real assertion** in T040 and T080 — SC-003 and SC-011 are claims about
   *where* a change lands, not just about behaviour.
