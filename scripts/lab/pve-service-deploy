@@ -1998,6 +1998,42 @@ sys.exit(3)
         if [[ -f "${committed_inventory}" ]]; then
             inventory_args=(-i "${committed_inventory}" -i "${inventory_file}")
         fi
+
+        # ...and then CHECK that the layering actually achieved the above, rather than
+        # assuming a readable file implies a useful one. It did not on 2026-09-20: this
+        # resolves inventories/${ENVIRONMENT}/hosts.yml, and inventories/lab/hosts.yml has
+        # no `services` group at all — only lab-pve-01. So a `--environment lab` monitoring
+        # deploy layered nothing, every template rendered with zero services, and because
+        # the generated inventory still pointed at the PROD monitoring host (192.168.1.214,
+        # see backlog 067) it wiped all 16 scrape jobs and 5 alert groups off production.
+        # The deploy reported success: verify.yml checks containers are Up and /-/ready
+        # answers, both true of a Prometheus monitoring nothing.
+        #
+        # Group membership is the signal, not monitoring_contract: `ansible-inventory` has
+        # no playbook context and will not resolve ansible/host_vars/, so a contract-based
+        # count here always reads zero. The role asserts on contracts, where hostvars are
+        # real; this asserts on what it can actually see.
+        # Note this runs AFTER the vault files are linked in (link_vault_file_if_needed,
+        # above) and after ANSIBLE_VAULT_* is exported — ansible-inventory has to decrypt
+        # group_vars to enumerate, and fails outright without them.
+        local inv_json="" inv_rc=0 inv_err
+        inv_err="$(mktemp -t ansible-inventory-err.XXXXXX)"
+        inv_json="$(ansible-inventory "${inventory_args[@]}" --list 2>"${inv_err}")" || inv_rc=$?
+        if [[ ${inv_rc} -ne 0 || -z "${inv_json}" ]]; then
+            local inv_err_head
+            inv_err_head="$(head -3 "${inv_err}" 2>/dev/null | tr '\n' ' ')"
+            rm -f "${inv_err}"
+            die "Refusing to deploy monitoring: could not enumerate the inventory to confirm the service hosts are visible, and deploying blind would overwrite the live Prometheus config with an empty one. ansible-inventory rc=${inv_rc}: ${inv_err_head}"
+        fi
+        rm -f "${inv_err}"
+
+        local service_host_count
+        service_host_count="$(printf '%s' "${inv_json}" | python3 -c 'import json,sys
+print(len(json.load(sys.stdin).get("services", {}).get("hosts", [])))')"
+        # Measured 2026-09-20: prod -> 8, lab -> 1 (the generated single host only).
+        if [[ "${service_host_count}" -lt 2 ]]; then
+            die "Refusing to deploy monitoring: the layered inventory exposes ${service_host_count} host(s) in the 'services' group, so every other service's scrape targets, alert rules and dashboards would render EMPTY over the live config. Committed inventory for this environment: ${committed_inventory} (ENVIRONMENT=${ENVIRONMENT}). Deploy monitoring with --environment prod, or add the service hosts to that inventory."
+        fi
     fi
     ansible-playbook "${inventory_args[@]}" "${playbook}" \
         --limit "${SERVICE}" \
