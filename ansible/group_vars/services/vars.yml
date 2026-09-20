@@ -74,7 +74,8 @@ llm_router_aliases:
       - id: fast-local
         tier: local
         # Mac alias `fast` -> 4-bit sibling, ~59 tok/s.
-        provider_model: "openai/fast"
+        # SC-003 retier drill in progress — temporarily repointed to `coder`. Reverted below.
+        provider_model: "openai/coder"
         api_base: "https://xmjdvvw39y2t.local:4443/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 131072
