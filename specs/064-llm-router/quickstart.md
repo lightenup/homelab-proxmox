@@ -153,11 +153,24 @@ ssh root@192.168.1.220 'iptables -D DOCKER-USER -d 192.168.1.177 -p tcp --dport 
 
 ## 6. Context escalation (SC-009)
 
-Send an input longer than 131k tokens against `hermes-deep`. **The escalation happens one hop down**,
-not here: both `fallback_to` and `context_window_fallback_to` are null on this gateway, and the Mac's
-own `context_window_fallbacks` escalate `reasoner → Qwen3.8-27B-8bit:qwen-long`. Note the trade — the
-fallback profile runs thinking OFF at temp 0.3, so crossing 131k buys window at the cost of reasoning
-depth. **Not yet exercised end to end.**
+**The escalation happens one hop down**, not here: both `fallback_to` and
+`context_window_fallback_to` are null on this gateway, and the Mac's own `context_window_fallbacks`
+escalate `reasoner → Qwen3.8-27B-8bit:qwen-long`. The trade is real — the fallback profile runs
+thinking OFF at temp 0.3, so crossing 131k buys window at the cost of reasoning depth.
+
+**It cannot currently be exercised.** Measured 2026-09-20, same ~108k-token prompt:
+
+| | |
+|---|---|
+| Mac direct, `reasoner` | 200 in **396.8s** (`prompt_tokens=108615`) |
+| gateway, cold | **connection error at ~420s** — not either end's timeout |
+| gateway, cold, `stream: true` | connection error at ~433s, **zero SSE events** |
+| gateway, warm (same prompt again) | **200 in 3.8s** — oMLX caches the prefill |
+
+So a request never survives long enough to reach 131k, and `hermes-deep`'s declared 262144 window is
+unreachable cold. Backlog [069](../../docs/backlog/069-large-context-cross-host-ceiling.md) has the
+ruled-out causes; do not re-derive them. If you need a large context today, send it **from the Mac**,
+or send it twice and let the cache absorb the prefill.
 
 ## 7. Budgets and rate limits (SC-010)
 
