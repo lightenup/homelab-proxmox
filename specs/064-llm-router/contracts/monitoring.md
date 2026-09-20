@@ -46,7 +46,8 @@ monitoring_contract:
 | Local tier (Mac) unavailable | `litellm_deployment_state` for the local deployments | **info** | FR-009 requires this to be informational, not critical. **The rationale has expired — see below.** |
 | **All backends failing, under traffic** | failure ratio across all deployments > 90% over 10m | **critical** | FR-018. The gateway is alive and the database is fine, but nothing can be served. |
 | **All backends failing, no traffic** | synthetic canary request fails | **critical** | FR-018, SC-013. The failure-rate signal is silent with no clients calling — which is exactly how this trap goes unnoticed until someone tries to use the gateway. |
-| Gateway-wide budget cap exhausted | `litellm_remaining_team_budget_metric` at/near zero | **critical** | SC-012. This refuses every client at once, so it is an availability event, not just a spend one. |
+| Gateway-wide budget cap exhausted | `litellm_remaining_team_budget_metric` at/near zero | **critical** | SC-012. This refuses every client at once, so it is an availability event, not just a spend one. **Cannot currently fire** — spend is structurally 0.0. |
+| **Gateway-wide rate cap binding** | 429s across ≥2 distinct `api_key_alias` on the gateway team | **warning** | FR-010's second level, live since 2026-09-20. Warning not critical: the window resets every minute and the backstop is doing its job — it means the homelab is at its ceiling. |
 | Per-client **rate-limit** breach | `litellm_proxy_failed_requests_metric_total{exception_status="429"}` by `api_key_alias` | (dashboard only) | SC-010 — visible and attributable, but one client hitting its own limit is working as designed, not an incident. **Verified 2026-09-20**, `doctor-fault-injection.md` § Row 11. |
 | ~~Per-client budget breach~~ | ~~spend metric per key alias~~ | — | **Cannot occur.** Local tiers carry no pricing, so `spend` is 0.0 forever. Superseded by the rate-limit row above, which is the guard that actually bites. |
 
@@ -54,10 +55,22 @@ monitoring_contract:
 > Measured 2026-09-20: it reports `9.223372036854776e+18` (int64 max) for *every* key,
 > including one with `rpm_limit: 10` that was actively being refused. It does not reflect
 > the configured limit. The `429`-filtered failure counter above is the working signal.
+
+> **Gateway-wide rate cap, added 2026-09-20** (backlog
+> [`071`](../../../docs/backlog/071-gateway-wide-rate-limit-missing.md), resolved). LiteLLM
+> emits the **same** metric and label set for a team-level refusal as for a key-level one —
+> only the error body differs (`for team:` vs `for api_key:`) — so there is no series that
+> means "the gateway cap bound". `LlmRouterGatewayRateCapBinding` uses blast radius instead:
+> 429s under **two or more** `api_key_alias` values at once. One client over its own limit
+> touches one alias and is deliberately not alerted.
 >
-> **There is also no gateway-wide rate limit to alert on** — the team carries `rpm=None`,
-> so the two-level structure FR-010 describes has only one level deployed. Backlog
-> [`071`](../../../docs/backlog/071-gateway-wide-rate-limit-missing.md).
+> Two clients independently breaching their own limits at the same moment give an identical
+> signal — known, documented on the alert, and not worth more machinery than that.
+>
+> **When testing it: `rate()` needs the counter to rise across scrapes.** A short burst from
+> a never-refused key is one flat sample and `rate() = 0`, so a 10-second test looks like a
+> broken alert. Sustain refusals across several 30 s scrapes. Validated both ways on the
+> live Prometheus: silent on one client, value 2 on two.
 
 The severity split is the substance of this contract. A downed Mac and a downed gateway look similar
 in a naive dashboard and could not be more different operationally.

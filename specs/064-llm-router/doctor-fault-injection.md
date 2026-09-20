@@ -396,18 +396,22 @@ satisfied on the dashboard; the raw error body is the weak surface, not the syst
 
 ## Two findings the drill turned up
 
-**1. There is no gateway-wide rate limit at all.** FR-010 requires rate limits at *two*
-levels. The team object carries `rpm=None`:
+**1. There was no gateway-wide rate limit at all — fixed the same day.** FR-010 requires
+rate limits at *two* levels. The team object carried `rpm=None`:
 
 ```
 team alias=llm-router-gateway-wide  rpm=None  tpm=None  max_budget=50.0  spend=0.0
 ```
 
-`llm_router_gateway_budget` declares only `max_budget` and `budget_duration`, so the team
-is created without one. Combined with the inert spend cap, **the gateway-wide backstop
-does not currently exist in any working form** — two clients inside their own limits can
-together saturate the Mac and nothing refuses them. Raised as
-[`docs/backlog/071`](../../docs/backlog/071-gateway-wide-rate-limit-missing.md).
+`llm_router_gateway_budget` declared only `max_budget` and `budget_duration`, so the team
+was created without one. Combined with the inert spend cap, **the gateway-wide backstop did
+not exist in any working form** — two clients inside their own limits could saturate the
+Mac together and nothing refused them.
+
+Resolved by [`docs/backlog/071`](../../docs/backlog/071-gateway-wide-rate-limit-missing.md):
+`rpm_limit: 65`, a preflight band whose inequality is the *opposite* of the budget rule, an
+unconditional `/team/update` reconcile (the team was write-once, which is how the gap
+survived), a read-back assertion, and a `warning` alert. Row 12 below is the verification.
 
 **2. `litellm_remaining_api_key_requests_for_model` is useless as a signal.** It reports
 `9.223372036854776e+18` (int64 max) for *every* key, including `canary` with its
@@ -421,3 +425,66 @@ is actively being refused. Use `litellm_proxy_failed_requests_metric_total` filt
 structurally zero, so the cap cannot be reached. Note this is now a *second* reason the
 gateway-wide backstop is untested, distinct from finding 1 above — the spend cap exists and
 cannot fire; the rate cap does not exist.
+
+
+---
+
+# Row 12 — the gateway-wide rate cap (FR-010 level 2), added and verified 2026-09-20
+
+Row 11 found this level missing. This is the drill for it, once it existed.
+
+| # | where | do | expect |
+|---|---|---|---|
+| 12 | gateway LXC | two keys, each **inside** its own `rpm_limit`, that together exceed the team's | the team cap refuses the excess, and the refusal names the **team**, not the key |
+
+Driven on a throwaway team rather than the real one: breaching the live cap of 65 means 65
+real inference requests, and the mechanism is identical at 4.
+
+```
+throwaway team rpm_limit=4, two keys at rpm_limit=3 each; each key sends 3.
+Neither key exceeds its own limit. Together they are 6 against a cap of 4.
+  HTTP 200: 4
+  HTTP 429: 2
+```
+
+## FR-010's "distinguishing which was hit", tested for the first time
+
+It could not be tested before — only one of the two levels existed. Side by side:
+
+```
+key-level  : Rate limit exceeded for api_key: 78876a67…a91. Limit type: requests.
+             Current limit: 10, Remaining: 0. Limit resets at: 15:36:07 UTC
+team-level : Rate limit exceeded for team: 8dc1cc02-…-1fd234c7eb81. Limit type: requests.
+             Current limit: 4,  Remaining: 0. Limit resets at: 15:36:11 UTC
+```
+
+**`for api_key:` versus `for team:`** — distinguishable, and the limit value names which
+cap. Same legibility caveat as Row 11: both identify by opaque id rather than alias.
+
+## The live cap is asserted, not assumed
+
+The drill's phase 1 reads the real team back and fails if `rpm` is null, and the Ansible
+role now does the same at deploy time. Both exist because the team was **write-once**:
+`/team/new` is guarded by "does the alias exist", so for a month `group_vars` and reality
+disagreed with nothing to notice. A `200` from `/team/update` with the field still null is
+the same bug wearing a success code.
+
+```
+Phase 1 — PASS  gateway-wide team carries rpm_limit=65
+```
+
+## The alert, and how NOT to test it
+
+`LlmRouterGatewayRateCapBinding` counts distinct `api_key_alias` values receiving 429s,
+because LiteLLM gives metrics no label for which limit was hit. Validated live, both ways:
+
+| condition | expression |
+|---|---|
+| one client over its own limit | **does not fire** — correct, that is working as designed |
+| sustained refusal across two aliases | **fires, value 2** |
+
+**The first validation attempt failed and the alert was fine.** A 5-second burst from two
+brand-new keys produced 429s that never showed as `rate() > 0`: a counter series that
+appears and stays flat has no increase to measure. Sustained refusal across several 30 s
+scrapes is what a `for: 5m` alert is aimed at, and testing it with a short burst will make
+a working alert look broken. Sustain it for three minutes.

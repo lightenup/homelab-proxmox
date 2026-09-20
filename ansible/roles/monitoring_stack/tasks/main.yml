@@ -36,6 +36,60 @@
   no_log: true
   tags: [compose, pushover]
 
+# Guard added 2026-09-20 after a monitoring deploy wiped the live Prometheus config.
+#
+# Three things downstream iterate groups['all'] and read hostvars[h].monitoring_contract:
+# templates/prometheus.yml.j2 (node-exporter, scrape and blackbox targets),
+# templates/service_alerts.yml.j2 (every service alert group), and
+# tasks/provision_dashboards.yml. The first two are TEMPLATES, so an empty iteration does
+# not render nothing — it renders an empty config OVER the working one. (Dashboards
+# survived precisely because that task only copies files.)
+#
+# So an inventory missing the service hosts does not fail, it silently un-monitors the
+# estate: 16 scrape jobs and 5 alert groups gone, with the deploy reporting success,
+# because verify.yml checks that containers are Up and /-/ready answers — both true of a
+# Prometheus watching nothing.
+#
+# This runs before compose_stack (which renders both templates) rather than after, so the
+# deploy stops while the live config is still intact.
+# Initialised separately because the loop below sets nothing when no host matches, and
+# `assert` resolves BOTH fail_msg and success_msg eagerly — so an undefined fact turns the
+# intended explanation into a Jinja error, which is the least useful moment to lose it.
+- name: Initialise the monitoring contract host list
+  ansible.builtin.set_fact:
+    monitoring_contract_hosts: []
+  tags: [compose, always]
+
+- name: Collect hosts that declare an enabled monitoring contract
+  ansible.builtin.set_fact:
+    monitoring_contract_hosts: "{{ monitoring_contract_hosts + [item] }}"
+  loop: "{{ groups['all'] | default([]) | difference([inventory_hostname]) | list }}"
+  loop_control:
+    label: "{{ item }}"
+  when: (hostvars[item].monitoring_contract | default({})).enabled | default(false) | bool
+  tags: [compose, always]
+
+- name: Assert the inventory carries service monitoring contracts
+  ansible.builtin.assert:
+    that:
+      - monitoring_contract_hosts | length > 0
+    fail_msg: >-
+      Refusing to render the monitoring config: no host besides {{ inventory_hostname }}
+      declares monitoring_contract.enabled, so every service's scrape targets and alert
+      rules would render EMPTY and overwrite the live configuration, leaving Prometheus
+      monitoring nothing. Inventory visible to this run:
+      {{ groups['all'] | default([]) | length }} host(s) —
+      {{ groups['all'] | default([]) | join(', ') }}. The usual cause is a per-service
+      deploy whose inventory does not include the other services; see the committed
+      inventory layering in scripts/lab/pve-service-deploy. Set
+      monitoring_allow_empty_contracts=true only if a monitoring stack that monitors
+      nothing is genuinely what you want.
+    success_msg: >-
+      {{ monitoring_contract_hosts | length }} service contract(s) visible:
+      {{ monitoring_contract_hosts | sort | join(', ') }}
+  when: not (monitoring_allow_empty_contracts | default(false) | bool)
+  tags: [compose, always]
+
 - name: Deploy Docker Compose stack
   ansible.builtin.include_tasks: compose_stack.yml
   tags: [compose]

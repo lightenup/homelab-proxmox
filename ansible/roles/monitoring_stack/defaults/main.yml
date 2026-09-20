@@ -68,3 +68,9 @@ pushover_enabled: false
 pushover_retry_interval: "1m"
 pushover_expire_duration: "1h"
 pushover_grafana_url: "{{ grafana_protocol | default('https') }}://{{ grafana_domain }}"
+
+# Escape hatch for the guard in tasks/main.yml. Rendering the monitoring config from an
+# inventory with no service contracts overwrites the live scrape targets and alert rules
+# with empty ones, so it is refused by default. Set true only for a genuinely standalone
+# monitoring stack that is meant to watch nothing but itself.
+monitoring_allow_empty_contracts: false

@@ -87,13 +87,23 @@ The backstop cap across all clients (FR-010, SC-012).
 
 | Field | Type | Rules |
 |---|---|---|
-| `max_budget` | decimal | Gateway-wide USD cap. |
+| `max_budget` | decimal | Gateway-wide USD cap. **Inert** while every tier is local and unpriced — spend is 0.0 forever. |
 | `budget_duration` | string | Reset window; MUST match the client budget window so the two are comparable. |
+| `rpm_limit` | integer | Gateway-wide requests/minute cap. Added 2026-09-20 (backlog 071). The only gateway-wide guard that can actually fire. |
 
-**Validation**: `max_budget` > `sum(client.max_budget)`. This is the check that keeps the cap from
-becoming a self-inflicted outage — if the cap is below the sum of what clients are individually
-permitted, normal usage trips it and every client is refused at once. The preflight fails on this
-rather than warning, because the failure mode is a silent homelab-wide outage.
+**Validation — the two caps size in OPPOSITE directions, and this is the easiest thing here to
+get backwards:**
+
+| cap | rule | why |
+|---|---|---|
+| `max_budget` | **>** `sum(client.max_budget)` | a cap below the sum turns normal usage into a homelab-wide outage |
+| `rpm_limit` | **<** `sum(client.rpm_limit)` | a cap above the sum can never bind, so it is decoration |
+| `rpm_limit` | **≥** `max(client.rpm_limit)` | so one compliant client always trips its own limit first, keeping the two levels distinguishable |
+
+The preflight fails on all three rather than warning. For the budget the failure mode is a silent
+homelab-wide outage; for the rate cap it is a backstop that reads as protection in `group_vars` and
+refuses nothing — which is what backlog 071 found, and is worse than having no cap at all because
+it stops anyone looking.
 
 ---
 
