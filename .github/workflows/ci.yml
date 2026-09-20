@@ -1,7 +1,11 @@
 name: CI
 
 "on":
+  # `labeled`/`unlabeled` are here on purpose: the protected-path guardrail below tells you
+  # to add a label, and the default trigger set (opened, synchronize, reopened) means doing
+  # so re-runs nothing. Observed on PR #210, 2026-09-20 — the printed remedy did not work.
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 permissions:
@@ -29,7 +33,15 @@ jobs:
             const protectedGlobs = cfg.protectedPathGlobs || [];
             const allowLabel = cfg.allowLabel || 'allow-protected-path-changes';
 
-            const labels = (context.payload.pull_request.labels || []).map(l => l.name);
+            // Read labels from the API, not context.payload: a re-run replays the
+            // ORIGINAL event payload, so a label added in response to this guardrail's own
+            // error message would be invisible and the job could never pass. The changed
+            // file list below is already fetched live; this keeps the two consistent.
+            const prNumber = context.payload.pull_request.number;
+            const { data: prData } = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber,
+            });
+            const labels = (prData.labels || []).map(l => l.name);
             if (labels.includes(allowLabel)) {
               core.info(`PR has label '${allowLabel}'; skipping protected-path guardrail.`);
               return;
@@ -44,11 +56,10 @@ jobs:
               });
             }
 
-            const pr = context.payload.pull_request;
             const changed = [];
             for await (const resp of github.paginate.iterator(
               github.rest.pulls.listFiles,
-              { owner: context.repo.owner, repo: context.repo.repo, pull_number: pr.number, per_page: 100 }
+              { owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber, per_page: 100 }
             )) {
               for (const f of resp.data) {
                 if (matchesProtected(f.filename)) changed.push(f.filename);
