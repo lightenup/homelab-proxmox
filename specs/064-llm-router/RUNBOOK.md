@@ -6,6 +6,10 @@ Execute from the **Linux laptop** unless a step says otherwise. Branch
 Two steps run elsewhere and are called out explicitly: **§1 on the new Mac** — written as a
 self-contained brief to hand to an agent there — and **§2 on `pve` over SSH**.
 
+**This file is a procedure, not a description.** For what the Mac looks like when it is
+working — the four processes, their bindings, the certificate, and which symptom means
+which one is down — read [`mac-side.md`](./mac-side.md) first.
+
 Verified before writing: none of this branch's changed files touch a protected
 path (`.specify/**`, `adapter/**`, `scripts/lab/**`, `mkdir/**`), so **no
 `allow-protected-path-changes` label is needed** on the PR.
@@ -369,34 +373,57 @@ git push                                   # plain push works here, no Zscaler
 
 ```bash
 ./scripts/healthcheck/llm-router-doctor.py --layer config    # 5/5
-
-ssh root@192.168.1.112 "curl -s -m5 http://xmjdvvw39y2t.local:4000/health/liveliness"
-#   HTTP 200 from the Mac's LiteLLM (oMLX stays on 127.0.0.1:8000, do not probe it)
 ```
 
-> **Passes as of 2026-09-19** — `"I'm alive!"`, HTTP 200, by name, once the Mac's mDNS
-> announcer is running (§1 Job 3). It was failing before that, and the failure was the
-> name, not the path.
->
-> **Still the wrong gate for LAB** (revision 2026-09-15). This tests **`pve`'s**
-> resolver — a different machine from the LXC, and a different resolver from the Docker
-> container that makes the actual call. For LAB it is moot entirely: mDNS does not cross
-> into `192.168.20.0/24`. Treat it as a PROD check. The container half of the problem is
-> now closed rather than open — `network_mode: host` plus `mdns_base` puts the container
-> on the LXC's own resolver, so on PROD this check and the real path finally test the
-> same thing.
+Then the gate that matters, in **two halves — they test different things and they run on
+different machines.** Half one is name resolution, from `pve`, against a *cold* cache:
 
-**That second command was written as the gate.** It proves `pve` resolves the Mac's
-mDNS name *and* reaches the Mac's **LiteLLM** on the LAN (not oMLX — that stays on
-`127.0.0.1`). If it fails:
+```bash
+ssh root@192.168.1.112 'systemctl restart avahi-daemon && sleep 5 \
+    && getent hosts xmjdvvw39y2t.local'
+#   192.168.1.177   xmjdvvw39y2t.local      — within one 45s announce cycle
+```
+
+The flush is not optional. This Mac announces but never answers, so querying a warm cache
+proves only that something overheard an announcement at some point — which is exactly what
+made this hard to see the first time. Measured 2026-09-20: resolved 20 s after the flush.
+
+Half two is the TLS path, and it must run **on the gateway LXC**, because that is where
+the Mac's CA certificate is deployed:
+
+```bash
+ssh root@192.168.1.112 'CTID=$(pct list | awk "/llm-router/ {print \$1}"); \
+  pct exec $CTID -- curl -sS -m20 --cacert /opt/llm-router/mac-ca.pem \
+    https://xmjdvvw39y2t.local:4443/health/liveliness'
+#   "I'm alive!"
+```
+
+> **Corrected 2026-09-20.** This step used to be a single plaintext
+> `curl http://xmjdvvw39y2t.local:4000/...` run on `pve`, and it was wrong twice over:
+> the Mac's LiteLLM is now loopback-only behind the TLS terminator on `:4443`, and
+> `/opt/llm-router/mac-ca.pem` exists on the **LXC**, not on `pve` — running it there
+> fails with `curl: (77) error setting certificate file`, which reads like a TLS problem
+> and is actually a wrong-host problem. Both halves above were executed as written.
+>
+> It also claimed `network_mode: host` puts the container on the LXC's resolver. **It does
+> not** — it shares the network namespace, not the filesystem, so the container keeps its
+> own `nsswitch.conf` and NSS libraries. The role uses `extra_hosts` built from a
+> host-side `getent` instead. See `mac-side.md` and `docs/naming-and-mdns.md`.
+>
+> **Moot for LAB either way**: mDNS does not cross into `192.168.20.0/24`. Treat both
+> halves as PROD checks.
+
+What each failure means:
 
 | symptom | cause |
 |---|---|
-| connection refused | §1 not done — the Mac's LiteLLM still on `127.0.0.1:4000` |
-| name not resolved | avahi not resolving `.local` from `pve` — try the Mac's IP to isolate |
+| `getent` returns nothing | announcer down — `launchctl list \| grep hermes` on the Mac (§1 Job 3) |
+| connection refused on `:4443` | terminator down (§1 Job 4), or the Mac logged out |
+| `curl: (60)` certificate verify failed | cert regenerated without redeploying `ansible/roles/llm_router/files/mac-ca.pem` |
+| `curl: (77)` | you ran it on `pve`, not on the LXC |
 | timeout | Mac asleep, or off the LAN |
 
-Do not deploy until this returns healthy.
+Do not deploy until both return healthy.
 
 ---
 

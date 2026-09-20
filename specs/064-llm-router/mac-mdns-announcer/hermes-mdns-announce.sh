@@ -20,9 +20,14 @@
 # needs. Re-register on a cadence shorter than the resolver holds the record and
 # the mapping stays live.
 #
-# The service registered is the real one — the LiteLLM endpoint on :4000 that the
+# The service registered is the real one — the TLS terminator on :4443 that the
 # gateway actually calls — not a dummy. It is accurate, self-documenting on the
 # LAN, and its announcement carries the A record either way.
+#
+# Corrected 2026-09-20: this advertised _http._tcp :4000 until the local tier moved
+# behind TLS. Nothing consumed the SRV record, so nothing broke — only the A record
+# in the announcement is load-bearing — but an inaccurate service record on the LAN
+# is a trap for the next reader.
 #
 # Lifetime is deliberately tied to the login session (this runs as a LaunchAgent,
 # not a daemon). Docker Desktop and oMLX are session-scoped too, so when the Mac
@@ -32,15 +37,16 @@
 
 set -u
 
-PORT="${HERMES_MDNS_PORT:-4000}"
+PORT="${HERMES_MDNS_PORT:-4443}"
 HOLD="${HERMES_MDNS_HOLD:-6}"
 NAME="Mac LiteLLM (homelab local tier)"
+SVC="${HERMES_MDNS_SVC:-_https._tcp}"
 
 # RFC 6762 §8.3: a responder sends at least two announcements one second apart.
 # Holding the registration ~6s covers the burst with margin, then we exit so
 # launchd can start a fresh cycle — a long-lived registration would announce once
 # and then go quiet, waiting for queries that never arrive.
-/usr/bin/dns-sd -R "$NAME" _http._tcp local "$PORT" >/dev/null 2>&1 &
+/usr/bin/dns-sd -R "$NAME" "$SVC" local "$PORT" >/dev/null 2>&1 &
 pid=$!
 sleep "$HOLD"
 kill "$pid" 2>/dev/null || true

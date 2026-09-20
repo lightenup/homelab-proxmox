@@ -1,7 +1,17 @@
 # Handoff — `064-llm-router`, 2026-08-30
 
+> **Historical. Do not start here — superseded 2026-09-20.** This was written before the
+> feature was deployed and before three amendments changed its shape (local tier moved
+> from Ollama-over-tailnet to oMLX-over-LAN, the metered tiers were dropped, and the Mac
+> leg moved to TLS). It says "nothing is deployed"; the gateway has been running on
+> `192.168.1.220` since 2026-09-19. Kept as a dated record of the handoff, not as guidance.
+>
+> **Start instead with:** [`mac-side.md`](./mac-side.md) for the Mac,
+> [`docs/architecture/two-llm-gateways.md`](../../docs/architecture/two-llm-gateways.md)
+> for the shape, [`quickstart.md`](./quickstart.md) to run it, and
+> [`RUNBOOK.md`](./RUNBOOK.md) for command-by-command.
+
 Written when work moved off the dev Mac (Zscaler blocks Tailscale there) to a Linux laptop.
-Start here, then use [`tasks.md`](./tasks.md) and [`quickstart.md`](./quickstart.md).
 
 ## Where it stands
 

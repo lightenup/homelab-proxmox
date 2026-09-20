@@ -12,17 +12,18 @@ Deploy, verify, and run the drills that make the acceptance criteria real rather
 
 ## 0. Prerequisites
 
-**On the Mac** (`XMJDVVW39Y2T`, `192.168.1.177`) — three things, all session-scoped:
+**On the Mac** (`XMJDVVW39Y2T`, `192.168.1.177`) — four processes, all session-scoped.
+The whole arrangement, and what breaks how, is [`mac-side.md`](./mac-side.md):
 
 | | |
 |---|---|
 | **oMLX** | running, bound to `127.0.0.1:8000`. **Do not expose it** — only the Mac's LiteLLM talks to it (FR-016) |
-| **The Mac's LiteLLM** | `docker compose` at `~/Development/private/local-llm/proxy`, bound to `0.0.0.0:4000` |
+| **The Mac's LiteLLM** | `docker compose` at `~/Development/private/local-llm/proxy`, bound to `127.0.0.1:4000` — loopback only; the terminator is what faces the LAN |
 | **The mDNS announcer** | `launchctl list \| grep hermes-mdns` — without it the gateway cannot resolve the Mac at all ([`mac-mdns-announcer/`](./mac-mdns-announcer/)) |
 | **The TLS terminator** | `launchctl list \| grep hermes-tls` — the gateway reaches the Mac over TLS on `:4443`; without it there is no path at all ([`mac-tls-terminator/`](./mac-tls-terminator/)) |
 
 None of these auto-start. Docker Desktop is not a login item, oMLX is a GUI app, and the announcer
-is a LaunchAgent — so all three die with the login session. That is deliberate: when the Mac cannot
+and terminator are LaunchAgents — so all four die with the login session. That is deliberate: when the Mac cannot
 serve, the name stops resolving and the gateway fails clean rather than pointing at a dead host.
 
 ```bash

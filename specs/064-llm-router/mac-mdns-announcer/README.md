@@ -1,5 +1,10 @@
 # Mac mDNS announcer — making `xmjdvvw39y2t.local` resolvable from the homelab
 
+> One of four cooperating processes on this Mac; see [`../mac-side.md`](../mac-side.md)
+> for the whole picture. The announce-only behaviour diagnosed below is also recorded in
+> [`docs/naming-and-mdns.md`](../../../docs/naming-and-mdns.md), because it will catch the
+> next service that has to reach this Mac.
+
 FR-013 requires the gateway to address the Mac by its stable mDNS `.local` name,
 never a DHCP-assigned IP. On 2026-09-19 that name did not resolve from anywhere in
 the homelab, and this is what was wrong and what fixes it.
@@ -51,8 +56,12 @@ service makes `mDNSResponder` emit an announcement burst that carries the host `
 record as an additional record — precisely what a cold resolver needs. Re-register
 on a cadence shorter than the resolver's hold time and the mapping stays live.
 
-- `hermes-mdns-announce.sh` — registers the **real** service (the LiteLLM endpoint
-  on `:4000`), holds it ~6 s to cover RFC 6762 §8.3's two announcements, then exits
+- `hermes-mdns-announce.sh` — registers the **real** service (`_https._tcp` on
+  `:4443`, the TLS terminator the gateway actually calls; corrected 2026-09-20 from
+  `_http._tcp` on `:4000`, which stopped being LAN-facing when the local tier moved
+  behind TLS — only the A record in the announcement is load-bearing, so nothing
+  broke, but an inaccurate service record is a trap),
+  holds it ~6 s to cover RFC 6762 §8.3's two announcements, then exits
   so the next cycle produces a fresh announcement. A long-lived registration would
   announce once and then go quiet, waiting for queries that never arrive.
 - `no.hus-sky.hermes-mdns-announce.plist` — a **LaunchAgent** (no root) with
@@ -79,8 +88,11 @@ nothing, which is what made this hard to see in the first place.
 ```bash
 ssh root@192.168.1.112 'systemctl restart avahi-daemon'     # cold cache
 ssh root@192.168.1.112 'getent hosts xmjdvvw39y2t.local'    # 192.168.1.177, within one cycle
-ssh root@192.168.1.112 'curl -s -m5 http://xmjdvvw39y2t.local:4000/health/liveliness'
-#   "I'm alive!"  ← the RUNBOOK § 4 gate, by name
+# the TLS gate runs on the LXC — that is where mac-ca.pem is deployed, not on pve
+ssh root@192.168.1.112 'CTID=$(pct list | awk "/llm-router/ {print \$1}"); \
+  pct exec $CTID -- curl -sS -m20 --cacert /opt/llm-router/mac-ca.pem \
+    https://xmjdvvw39y2t.local:4443/health/liveliness'
+#   "I'm alive!"  ← the RUNBOOK § 4 gate, by name and over TLS
 ```
 
 Recorded result 2026-09-19: resolves from a cold cache in under 2 s and stayed

@@ -43,7 +43,7 @@ monitoring_contract:
 | Signal | Source | Severity | Why |
 |---|---|---|---|
 | Gateway down or database unreachable | blackbox on `/health/readiness` | **critical** | Every client is refused. FR-009 requires the gateway being down to alert. |
-| Local tier (Mac) unavailable | `litellm_deployment_state` for the Ollama deployment | **info** | FR-009 requires this to be informational, not critical — the Mac is a discount, not a dependency. Alerting critically on an intermittent-by-design backend would train the operator to ignore the channel. |
+| Local tier (Mac) unavailable | `litellm_deployment_state` for the local deployments | **info** | FR-009 requires this to be informational, not critical. **The rationale has expired — see below.** |
 | **All backends failing, under traffic** | failure ratio across all deployments > 90% over 10m | **critical** | FR-018. The gateway is alive and the database is fine, but nothing can be served. |
 | **All backends failing, no traffic** | synthetic canary request fails | **critical** | FR-018, SC-013. The failure-rate signal is silent with no clients calling — which is exactly how this trap goes unnoticed until someone tries to use the gateway. |
 | Gateway-wide budget cap exhausted | `litellm_remaining_team_budget_metric` at/near zero | **critical** | SC-012. This refuses every client at once, so it is an availability event, not just a spend one. |
@@ -51,6 +51,30 @@ monitoring_contract:
 
 The severity split is the substance of this contract. A downed Mac and a downed gateway look similar
 in a naive dashboard and could not be more different operationally.
+
+### The local-tier severity, revisited 2026-09-20
+
+That row used to read "the Mac is a discount, not a dependency" — SC-001. **SC-001 is
+withdrawn.** The metered tiers are gone, every alias resolves to the same Mac, so *the Mac
+being unavailable and every backend failing are now the same event.*
+
+The behaviour is still right, and it is worth being explicit about why rather than leaving
+a stale justification in place:
+
+- The **`litellm_deployment_state` signal stays `info`**. Its value now is the timeline —
+  the Mac's duty cycle, visible on the dashboard — not the alert.
+- The **critical alert comes from the canary** (`LlmRouterCanaryFailing`), which fires on
+  exactly this condition and fires whether or not clients are calling.
+
+So the operator does get paged when the Mac is down; the page just arrives from the signal
+that is *about* total unavailability rather than from the one that is about a backend.
+Promoting the local-tier signal to critical would double-alert the same event.
+
+**This leaves FR-009 stating a rationale that no longer holds** ("the Mac being down MUST
+be informational, not critical" — written when the Mac was optional). The requirement's
+*effect* is still what we want; its *reason* changed. Flagged rather than silently
+rewritten, because it is the account owner's call whether an unavailable Mac should now be
+a first-class critical in its own right.
 
 **Why two all-backends signals rather than one.** `/health/readiness` returns 200 while every
 deployment is dead — it only checks the database. The failure-rate signal closes that, but only while

@@ -1,5 +1,9 @@
 # Mac TLS terminator — how the gateway holds a 20-minute request
 
+> One of four cooperating processes on this Mac. For the whole picture — what binds
+> where, and which symptom means which process is down — see
+> [`../mac-side.md`](../mac-side.md).
+
 FR-013 has the gateway address the Mac over the LAN. Until 2026-09-20 that leg was
 plaintext HTTP and could not hold a request for more than ~300 seconds. This is what was
 wrong, why TLS fixes it, and what else was tried first.
