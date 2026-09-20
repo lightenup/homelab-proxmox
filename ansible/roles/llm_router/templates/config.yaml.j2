@@ -38,7 +38,7 @@ model_list:
       # lands near 70-115s. {{ llm_router_request_timeout }}s leaves headroom over that while
       # capping the failure case. Raise llm_router_request_timeout if long generations are
       # cut off; lowering it makes a dead backend fail sooner.
-      timeout: {{ llm_router_request_timeout }}
+      timeout: {{ d.timeout | default(llm_router_request_timeout) }}
     model_info:
       id: {{ d.id }}
       # Metered deployments are never probed — background health checks are scoped to the
