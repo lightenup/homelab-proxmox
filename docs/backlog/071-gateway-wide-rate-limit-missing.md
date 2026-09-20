@@ -1,6 +1,102 @@
-# Backlog: FR-010's gateway-wide half has no working guard
+# ~~FR-010's gateway-wide half has no working guard~~ — RESOLVED
 
-**Status**: Backlog — found 2026-09-20 running `064`'s T054/T055 rate-limit breach drill.
+**Status**: **RESOLVED 2026-09-20**, same day it was found. Deployed and verified live.
+**Was**: clients each stayed inside their own `rpm_limit` and could still saturate the Mac
+together; nothing at the gateway refused them and nothing alerted.
+
+## Resolution
+
+`llm_router_gateway_budget.rpm_limit: 65`, passed to `/team/new`, reconciled onto the
+existing team, asserted live, alerted on, and exercised at both levels.
+
+Verified on the live gateway after deploy:
+
+```
+team  alias=llm-router-gateway-wide  rpm=65  max_budget=50.0
+```
+
+| level | test | result |
+|---|---|---|
+| per-client | `canary` (rpm 10), 16 concurrent | 10 × `200`, 6 × `429`; other clients unaffected |
+| **gateway-wide** | two keys at rpm 3 on a team at rpm 4, three requests each — **neither key over its own limit** | 4 × `200`, 2 × `429` |
+| distinguishable? | compare the two refusal bodies | **yes**: `for api_key: <hash>` vs `for team: <id>` |
+
+That third row is FR-010's "an error distinguishing which was hit", tested for the first
+time — it could not be tested before, because only one of the two levels existed.
+
+The three things it needed are below, and two of them were the traps this note predicted.
+
+### 1. The value, and why 65
+
+```yaml
+llm_router_gateway_budget:
+  max_budget: 50.00
+  budget_duration: "30d"
+  rpm_limit: 65
+```
+
+65 rather than 60 (the `max(client)` floor) because at exactly 60 a fully-loaded `hermes`
+would consume the entire gateway allowance and starve the synthetic canary — blinding the
+monitoring that exists to notice outages. The canary needs one request an hour; 5 rpm of
+headroom is plenty.
+
+### 2. The preflight inequality inverts — as predicted
+
+```
+budget:  gateway  >  sum(clients)     a low cap is a self-inflicted outage
+rate:    gateway  <  sum(clients)     a high cap can never bind
+rate:    gateway  >= max(client)      so one compliant client trips its OWN limit first
+```
+
+All three are asserted. `65 >= 60` and `65 < 70` both hold. There is also a `debug` warning
+for the case where a client declares no `rpm_limit` at all, which makes the sum unbounded
+and the upper-bound check meaningless — it is skipped rather than silently passing.
+
+### 3. The team was write-once — as predicted
+
+`/team/new` is guarded by "does the alias already exist", so **every** gateway-wide setting
+was write-once: changing `max_budget` or `rpm_limit` in `group_vars` was a silent no-op on
+an already-deployed gateway. That is how this bug survived — the declaration and the
+reality diverged with nothing to notice.
+
+Fixed with an unconditional `/team/update` reconcile on every run, and then — the part that
+matters more — **an assertion that reads the team back and compares**. A `200` from
+`/team/update` with the field still `null` is exactly this bug, and it is invisible without
+checking. The deploy now fails rather than drifting.
+
+### Alerting
+
+`LlmRouterGatewayRateCapBinding` (**warning**, `for: 5m`). LiteLLM emits the *same* metric
+and label set for a team-level refusal as for a key-level one — only the error body
+differs — so there is no series meaning "the gateway cap bound". What separates them is
+blast radius: one client over its own limit produces 429s under exactly one
+`api_key_alias`; the shared cap starves everyone calling.
+
+```promql
+count(count by (api_key_alias) (rate(litellm_proxy_failed_requests_metric_total{
+  exception_status="429", team_alias="llm-router-gateway-wide"}[5m]) > 0)) > 1
+```
+
+Validated against live Prometheus in both directions: **does not fire** on a single
+client's breach, **fires with value 2** under sustained refusal across two aliases.
+
+Two caveats recorded rather than papered over:
+
+- **Known ambiguity.** Two clients independently breaching their *own* limits at the same
+  moment produce an identical signal. Read a refusal body to tell them apart. The
+  operational response is similar either way, and the case worth excluding — one client
+  misbehaving alone — *is* excluded.
+- **`rate()` needs the counter to increase across scrapes.** A brief burst from a
+  never-before-refused key gives one flat sample and `rate() = 0`, so the alert stays
+  silent. That is correct for a `for: 5m` alert aimed at sustained saturation, but it does
+  mean a 10-second test will look like a broken alert. Sustain the refusals across several
+  30 s scrapes when testing. (Learned the hard way; the first validation attempt failed for
+  exactly this reason.)
+
+---
+
+## Original note
+
 **Impact**: clients each stay inside their own `rpm_limit` and can still saturate the Mac
 together. Nothing at the gateway refuses them, and nothing alerts.
 

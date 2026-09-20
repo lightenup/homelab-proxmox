@@ -78,3 +78,33 @@ monitoring_contract:
         The gateway-wide backstop budget is exhausted — every client is now refused, not just
         one (FR-010, SC-012). Distinguish this from a per-client budget breach, which is
         expected behaviour and not alerted.
+    # FR-010's OTHER gateway-wide cap. Added 2026-09-20 with the rate limit itself
+    # (backlog 071) — until then the team carried rpm=None and there was nothing to alert on.
+    #
+    # Why it counts DISTINCT clients rather than reading a limit directly: LiteLLM emits the
+    # same metric and the same label set for a team-level refusal as for a key-level one
+    # (verified 2026-09-20 — only the error BODY distinguishes them, saying "for team:"
+    # instead of "for api_key:"). So there is no series that means "the gateway cap bound".
+    #
+    # What does separate them is blast radius: one client hitting its OWN limit produces 429s
+    # under exactly one api_key_alias, which is working as designed and deliberately not
+    # alerted. The shared cap binding starves whoever else is calling, so 429s appear under
+    # two or more aliases at once. That is the signal.
+    #
+    # warning, not critical: the window resets every minute and the backstop is doing its job.
+    # It means the homelab is running at its ceiling — worth knowing, not an outage.
+    - alert: LlmRouterGatewayRateCapBinding
+      expr: |
+        count(count by (api_key_alias) (rate(litellm_proxy_failed_requests_metric_total{exception_status="429", team_alias="llm-router-gateway-wide"}[5m]) > 0)) > 1
+      for: "5m"
+      severity: warning
+      summary: !unsafe "llm-router: the gateway-wide rate cap is refusing multiple clients"
+      description: !unsafe >-
+        More than one client is being refused with 429 at the same time. The usual cause is
+        the shared gateway-wide rate cap binding (FR-010) — the homelab is at its ceiling, or
+        one client's rpm_limit is too generous relative to
+        llm_router_gateway_budget.rpm_limit. KNOWN AMBIGUITY, because LiteLLM gives metrics no
+        label for which limit was hit: two clients independently breaching their OWN limits at
+        the same moment produce the identical signal. To tell them apart, read a refusal body
+        — it says "for team:" or "for api_key:". A single client over its own limit affects
+        one api_key_alias only and does not fire this, which is the case worth excluding.
