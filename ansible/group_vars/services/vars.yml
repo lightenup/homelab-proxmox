@@ -78,6 +78,9 @@ llm_router_aliases:
         api_base: "http://xmjdvvw39y2t.local:4000/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 131072
+        # Fast is the alias whose whole point is latency — a caller asking for it wants an
+        # answer or an error, not a long wait. Keeps the role default.
+        timeout: 180
         health_checked: true
   - name: hermes-balanced
     fallback_to: null
@@ -90,6 +93,7 @@ llm_router_aliases:
         api_base: "http://xmjdvvw39y2t.local:4000/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 131072
+        timeout: 300
         health_checked: true
   - name: hermes-deep
     fallback_to: null
@@ -107,6 +111,20 @@ llm_router_aliases:
         api_base: "http://xmjdvvw39y2t.local:4000/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 262144
+        # 1200s, and the declared context_window above is why. Measured 2026-09-20: a COLD
+        # 108k-token prefill on the 8-bit 27B takes ~397s, so at the role's 180s default this
+        # alias returned 408 Timeout on a request well inside its own advertised window —
+        # the capability was advertised and unreachable. Extrapolating to the full 262k lands
+        # near 950s; 1200 leaves margin.
+        #
+        # The cost is bounded by the cooldown fix: with allowed_fails: 0 a dead backend cools
+        # down on the FIRST failure, so exactly one request pays this timeout and everything
+        # after it fails in ~0.03s until the cooldown lapses. Before that fix a long timeout
+        # here would have been charged to every request.
+        #
+        # A repeat of an identical prompt is far cheaper — oMLX caches the prefill (3.8s for
+        # the same 108k prompt). Size this for the cold path; the warm path is free.
+        timeout: 1200
         health_checked: true
 
 llm_router_clients:

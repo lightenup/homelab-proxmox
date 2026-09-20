@@ -145,8 +145,8 @@ correction banner.
 |---|---|---|
 | 1 | stop the Mac's LiteLLM | ✅ **red as designed** — both local-tier checks fail (`URLError`) |
 | 2 | …and call all three aliases | ❌ **FAILED: hung past 300s, returned nothing.** Fixed; now a bounded HTTP 500 naming the model group |
-| 3 | unpin an aliased model | ⚠️ **not injectable** — needs the oMLX admin credential, and the check no longer exists here |
-| 4 | serve below the declared `context_window` | ⚠️ **not injectable** — same check, same reason |
+| 3 | unpin an aliased model | ✅ **injectable after all**, Mac-side — see below |
+| 4 | serve below the declared `context_window` | ⚠️ **not injectable** — needs per-model live state, which no unprivileged caller can read |
 | 5 | call the doctor with a budget-less key | ✅ **red as designed** — "calling key has NO max_budget — SC-010 cannot hold" |
 | 6 | make a raw provider model ID addressable | ❌ **FAILED: the check could not fail, and the gap it hid was real.** Both fixed |
 | 7 | revert `enable_pre_call_checks` to false | ✅ **red as designed** — 4/5, naming SC-009 |
@@ -263,12 +263,30 @@ it mints for this gateway — and the check now derives its probes from the decl
 of a name frozen when it was written. Verified red before the fix, green after: "all 6
 provider IDs refused".
 
+## Row 3 — resolved 2026-09-19, by abandoning the endpoint
+
+Pinning was recorded as an unverified assumption because oMLX's `/admin/api/models` answers
+`401 Admin authentication required` to every credential on the machine — the 4-char
+`auth.api_key`, the 64-char `auth.secret_key`, and no auth at all. The GUI never uses it over
+HTTP; it talks to the server through `~/Library/Application Support/oMLX/control.sock`.
+
+The check did not need that endpoint. Pinning is configured in `~/.omlx/model_settings.json`
+(`is_pinned`), the same lever that sets it, and that file is readable.
+`mac-checks/verify-omlx-residency.sh` asserts it and derives the escalation targets from the
+Mac's own `context_window_fallbacks`, so a change there is picked up rather than skipped.
+
+**Verified: all four pinned** — `Qwen3.8-27B-oQ4e-mtp` (`fast`) and `Qwen3.8-27B-8bit`
+(`coder`, `reasoner`, `qwen-long`). **Fault-injected both ways**: red on an unpinned model,
+red on oMLX being down.
+
+It asserts configuration, not live residency — stated rather than glossed. That still catches
+the regression FR-016 cares about: an aliased model quietly losing its pin.
+
 ## What still has not been exercised
 
-- **Rows 3 and 4** (residency and declared context on oMLX). `/admin/api/models` needs an
-  admin credential absent from `proxy/.env`, and the check it defended moved to the Mac
-  side of RUNBOOK § 1, where it is a manual UI check. Pinning remains an **unverified
-  assumption**.
+- **Row 4** (declared context on oMLX) — still not injectable. It needs per-model live state,
+  and no unprivileged caller can read it: `/health` reports an aggregate `loaded_count` only.
+  *(Row 3 was resolved 2026-09-19 — see below.)*
 - **SC-013**, the silent-green case — needs the canary timer to fire with no client
   traffic, which a doctor run cannot observe by definition.
 - **SC-011**, health-check spend under 1% of a week — needs a week, and is moot while every

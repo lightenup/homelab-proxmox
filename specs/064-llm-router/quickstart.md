@@ -1,122 +1,96 @@
 # Quickstart — LLM Router
 
-**Feature**: `064-llm-router` | **Date**: 2026-08-29
+**Feature**: `064-llm-router` | **Written**: 2026-08-29 | **Rewritten against the live deploy**: 2026-09-19
 
 Deploy, verify, and run the drills that make the acceptance criteria real rather than assumed.
 
+> **This file was rewritten, not annotated.** Unlike [`tasks.md`](./tasks.md), which is a ledger and
+> keeps its history, this is a procedure people *run* — and it described Ollama on `:11434`, a
+> tailscaled sidecar, MagicDNS names and metered fallbacks, none of which exist. A stale ledger
+> misleads a reader; a stale procedure wastes an afternoon. Every command below was executed against
+> the live gateway on 2026-09-19 and the outputs are the ones observed.
+
 ## 0. Prerequisites
 
-> **Stale as of 2026-09-15 — use [`RUNBOOK.md`](./RUNBOOK.md).** The three bullets below
-> describe Ollama-over-tailnet with a tailscaled sidecar. The local tier is now oMLX over
-> the LAN ([`amendment-local-tier-omlx.md`](./amendment-local-tier-omlx.md)) and the sidecar
-> has been removed (FR-017 withdrawn), so `tailscale_authkey` is **not** a vault key any
-> more and the stack is **two** containers. `omlx_api_key` replaces it in the vault. Kept
-> below for the PVE headroom figure and as a record of the original shape.
+**On the Mac** (`XMJDVVW39Y2T`, `192.168.1.177`) — three things, all session-scoped:
 
-- **On the Mac**: Ollama running headless and keeping models resident (FR-016) —
-  `OLLAMA_HOST=0.0.0.0 OLLAMA_KEEP_ALIVE=-1`, with the `hermes-fast` and `hermes-balanced` models
-  pulled. Tailscale up; note the MagicDNS name.
-- **In `ansible/group_vars/services/vault.yml`** (`ansible-vault edit`): `openrouter_api_key`,
-  `anthropic_api_key`, `litellm_master_key`, `litellm_db_password`, `tailscale_authkey` (ephemeral +
-  tagged), and one key per client consumer.
-- **PVE headroom**: ~4 GB RAM, ~16 GB disk.
-- **Stack shape**: three containers — `litellm`, `postgres`, `tailscale` (userspace sidecar). No Redis
-  (FR-014 requires it only above one worker).
-
-## 0b. Environment state as observed 2026-08-30 (read this first)
-
-Checked directly on the dev Mac and the `pve` host at handoff. **Three of these block the deploy
-until fixed** — they are not in `tasks.md` because they are environment state, not code.
-
-**Ollama on the Mac — running (0.33.1), but not reachable and not warm.**
-
-| Observed | Required (FR-016) |
+| | |
 |---|---|
-| Listening on `127.0.0.1:11434` only | `0.0.0.0` — the LXC cannot reach it as-is |
-| `OLLAMA_KEEP_ALIVE` unset (unloads after ~5 min) | `-1`, or cold loads trip the timeout into false fallbacks |
-| `OLLAMA_CONTEXT_LENGTH` unset (serves 4096 default) | `32768`, to match `context_window` in `group_vars` |
+| **oMLX** | running, bound to `127.0.0.1:8000`. **Do not expose it** — only the Mac's LiteLLM talks to it (FR-016) |
+| **The Mac's LiteLLM** | `docker compose` at `~/Development/private/local-llm/proxy`, bound to `0.0.0.0:4000` |
+| **The mDNS announcer** | `launchctl list \| grep hermes` — without it the gateway cannot resolve the Mac at all ([`mac-mdns-announcer/`](./mac-mdns-announcer/)) |
+
+None of these auto-start. Docker Desktop is not a login item, oMLX is a GUI app, and the announcer
+is a LaunchAgent — so all three die with the login session. That is deliberate: when the Mac cannot
+serve, the name stops resolving and the gateway fails clean rather than pointing at a dead host.
 
 ```bash
-launchctl setenv OLLAMA_HOST "0.0.0.0"
-launchctl setenv OLLAMA_KEEP_ALIVE "-1"
-launchctl setenv OLLAMA_CONTEXT_LENGTH "32768"
-# fully quit and reopen Ollama.app, then verify it binds *:11434 not 127.0.0.1:11434
-lsof -nP -iTCP:11434 -sTCP:LISTEN
+# on the Mac, after any restart
+open -a Docker && open -a oMLX
+./specs/064-llm-router/mac-checks/verify-omlx-residency.sh   # PASS — every aliased model is pinned
 ```
 
-The `OLLAMA_CONTEXT_LENGTH` line matters more than it looks: without it Ollama serves its 4096
-default while LiteLLM believes the deployment holds 32768, so oversized inputs get **silently
-truncated instead of escalating a tier** — defeating FR-006 / SC-009.
+**In the vault** (`ansible-vault edit ansible/group_vars/services/vault.yml`) — five keys:
+`litellm_master_key`, `llm_router_client_hermes_key`, `llm_router_canary_key`, `mac_litellm_key`,
+`litellm_db_password`. The first four need an `sk-` prefix (LiteLLM rejects keys without it);
+`litellm_db_password` must be **URL-safe** — generate it with `openssl rand -hex 24`, never
+`base64`, which emits `/` and breaks `DATABASE_URL` parsing. Preflight asserts both.
 
-**Models actually pulled on the Mac** (`ollama list`) — the `group_vars` mapping was reconciled
-against this:
+There is no `openrouter_api_key`, `anthropic_api_key`, `omlx_api_key` or `tailscale_authkey` — the
+metered tiers and the sidecar are gone.
 
-| Model | Size | Max context | Used for |
-|---|---|---|---|
-| `llama3.1:8b` | 4.9 GB | 131072 | `hermes-fast` |
-| `gemma4:26b` | 17 GB | 262144 | `hermes-balanced` |
-| `gemma4:e4b` | 9.6 GB | — | spare |
-| `nomic-embed-text` | 274 MB | — | not used here |
+**PVE headroom**: ~4 GB RAM, ~16 GB disk. **Stack shape**: two containers, `litellm` and `postgres`.
+No Redis (FR-014 requires it only above one worker).
 
-`qwen2.5:32b` (the original placeholder) is **not** pulled — either `ollama pull` it or keep
-`gemma4:26b`.
+## 0b. Two things about the environment that will otherwise confuse you
 
-**Tailscale on `pve` is logged out** — `BackendState: NeedsLogin`. The subnet router advertising
-`192.168.1.0/24` is therefore down. This does *not* block the router (the LXC runs its own
-tailscaled sidecar with its own auth key — research D-102), but it does break tailnet admin access:
+**LAB and PROD are the same address space.** `lab.tfvars.template` and `prod.tfvars.template` are
+byte-identical for this service, so `lxc-deploy-lab` builds the real LXC at `192.168.1.220` on
+`pve`/`vmbr0`. "lab" is a gating stage, not an environment. The *inventories* differ completely,
+which matters only for the monitoring deploy (§10).
 
-```bash
-ssh root@192.168.1.112 "tailscale up --advertise-routes=192.168.1.0/24 --accept-routes"
-# then open the printed auth URL from a machine NOT behind Zscaler
-```
-
-**The Mac cannot reach Tailscale at all** — Zscaler 403s the whole `tailscale.com` domain, so the
-Mac's MagicDNS name cannot be read via CLI (`tailscale status` hangs) and the tailnet is
-unreachable from it. Read the name from the menu-bar icon or the admin console. Full detail in
-[AGENTS.md](../../AGENTS.md) § "Zscaler also blocks Tailscale".
-
-**Still a placeholder in `ansible/group_vars/services/vars.yml`:** the two `api_base` entries read
-`<mac-hostname>.<tailnet>.ts.net`. The role's preflight fails loudly on this by design (FR-013
-forbids an IP literal there), so it cannot be missed at deploy time.
+**The Mac announces mDNS but never answers a query.** Stealth mode is MDM-enforced. A resolver that
+overhears an announcement caches it and works; a cold resolver never learns the name. Hence the
+announcer, and hence the role resolving the name on the LXC and passing it to the container as
+`extra_hosts` — the container cannot resolve `.local` by any container-side setting, and
+`network_mode: host` does not help (it shares the network namespace, not the filesystem).
 
 ## 1. Deploy
 
-Identical from CI and laptop (Constitution V):
-
 ```bash
-# laptop
-scripts/lab/pve-service-deploy plan  --service llm-router --env prod
-scripts/lab/pve-service-deploy apply --service llm-router --env prod
+gh workflow run lxc-deploy-lab.yml --ref <branch> -f service=llm-router -f apply=false   # plan
+gh workflow run lxc-deploy-lab.yml --ref <branch> -f service=llm-router -f apply=true    # apply
 ```
 
-or the `lxc-deploy-lab` → `lxc-promote-lab` → `lxc-promote-prod` workflow chain with
-`service: llm-router`.
+**Pass `--ref`.** Without it `gh` dispatches against the default branch and silently deploys
+something other than what you are testing.
 
-Expect: LXC created at `192.168.1.220`, `litellm`/`postgres`/`tailscale` containers `Up (healthy)`,
-post-apply healthcheck green with evidence.
+Expect: LXC at `192.168.1.220`, `litellm` and `postgres` both `Up (healthy)`, ansible
+`failed=0`, post-apply healthcheck PASS, evidence pack verified.
 
 ## 2. Verify the deploy (US-2 / SC-004)
 
 ```bash
-curl -s http://192.168.1.220:4000/health/readiness          # {"status":"healthy","db":"connected"}
-scripts/healthcheck/llm-router.sh --profile lan
-scripts/lab/pve-service-deploy apply --service llm-router --env prod   # re-run: idempotent, pin unchanged
+curl -s http://192.168.1.220:4000/health/readiness    # {"status":"healthy","db":"connected",...}
 ```
 
-## 3. Confirm the metric surface (research D-105 — resolved, but confirm the live path)
+Re-run the apply to confirm idempotency. This is worth doing rather than assuming: it is what caught
+the virtual-key provisioning bug, where the second apply died on duplicate key aliases because the
+idempotency lookup could never work.
 
-The licensing question is resolved: the metrics are free-tier, confirmed by running the exact pinned
-image locally during implementation. `/metrics` is also open (no bearer token) by design — see
-D-105 for why. This step just confirms the real deploy behaves the same as the local test:
+The `llm-router.sh` healthcheck **cannot be run ad hoc off-box** — it resolves hosts from
+`inventories/generated/hosts.yml`, which only exists on `pve`. The pipeline runs it as the
+post-apply gate; read its result there.
+
+## 3. Confirm the metric surface (research D-105)
 
 ```bash
-curl -s http://192.168.1.220:4000/metrics/ \
-  | grep -E 'litellm_spend_metric_total|litellm_deployment_state'
+curl -s http://192.168.1.220:4000/metrics/ | grep -E 'litellm_spend_metric_total|litellm_deployment_state'
 ```
 
-Non-empty output is the expected, already-verified outcome. Empty output here would mean something
-about the LAB deploy differs from the tested config — check that `litellm_settings.callbacks:
-[prometheus]` rendered into `config.yaml` (T017/T044 in tasks.md).
+Free-tier and open by design — `require_auth_for_metrics_endpoint: true` **hangs indefinitely**
+against this pinned version, so the endpoint is left at LiteLLM's own default. Empty output means
+`litellm_settings.callbacks: [prometheus]` did not render.
 
 ## 4. Happy path (US-1 / SC-002)
 
@@ -128,99 +102,140 @@ for alias in hermes-fast hermes-balanced hermes-deep; do
 done
 ```
 
-Then confirm in metrics that `hermes-fast` was served by the **local** deployment id — SC-002 is
-about attribution, not just about getting an answer.
+Observed 2026-09-19: `hermes-fast` 2.0s, `hermes-balanced` 1.3s, `hermes-deep` 2.6s.
+
+Provider model IDs must be **refused**, not served — client keys are scoped to the alias names:
+
+```bash
+curl -s ... -d '{"model":"openai/fast",...}'    # expect 401, not a completion
+```
+
+That is not hypothetical: `openai/fast` returned a real completion until the keys were scoped,
+bypassing the alias and the context window and fallback behaviour it declares.
 
 ## 5. The downed-backend drill (SC-008) — the acceptance that matters
 
-Do not skip this and do not infer it from config review. It is the drill that exercises the reported
-LiteLLM routing-pool defect against the exact pinned version.
+**The expectation is inverted from what this file used to say.** SC-001 is withdrawn: there is no
+standby, so the pass criterion is a *clean failure*, not a completion.
 
 ```bash
 # on the Mac
-pkill ollama
+cd ~/Development/private/local-llm/proxy && docker compose stop litellm
 
-# from a client — expect a valid completion, no error, no long hang
+# from a client — expect a prompt, legible error; NEVER a hang
 time curl -s http://192.168.1.220:4000/v1/chat/completions \
   -H "Authorization: Bearer $CLIENT_KEY" -H 'Content-Type: application/json' \
   -d '{"model":"hermes-fast","messages":[{"role":"user","content":"say hi"}]}'
 ```
 
-Pass criteria:
-- A valid completion returns, served by the standby (check the deployment id in metrics).
-- Latency shows **no** full timeout on the dead deployment — it was skipped, not attempted (AS-1.3).
-- `LlmRouterLocalTierDown` fires as **info**, not critical.
+Pass criteria, all measured on 2026-09-19:
 
-Repeat for `hermes-balanced` and `hermes-deep` — SC-001 covers every alias, not just the first.
+| | observed |
+|---|---|
+| first request after the backend dies | HTTP 500 in ~135s, naming the model group |
+| every request after that, for `cooldown_time` | **HTTP 429 in ~0.03s**, "No deployments available… Try again in 60 seconds" |
+| recovery once the Mac returns | **51s**, no operator action |
+| a hang | **the only real failure** |
 
-Then restart Ollama, wait one health interval (≤60 s), repeat: served locally again, **no operator
-action**.
+That first ~135s is the cost of discovering a blackhole and is irreducible without capping
+`llm_router_request_timeout` below a legitimate generation.
 
-### 5b. Power the Mac off (SC-001) — a different failure mode
+**Stopping the server and powering the Mac off are the same test here**, contrary to what this file
+used to claim. Stealth mode DROPs the SYN rather than refusing it, so a stopped container blackholes
+exactly like an absent host — `pve` refuses in 0.001s, the Mac hangs the full window. To reproduce
+without touching the Mac, blackhole the path from the LXC instead:
 
-Stopping the daemon and removing the machine are not the same test. A stopped daemon refuses the
-connection immediately; a Mac that has left the tailnet has no peer to refuse, so the request can hang
-until the timeout — the false-fallback risk research D-102 raises. Power the Mac off (or `tailscale
-down`) and repeat all three aliases. Pass criteria: every alias answers, and none exceeds the request
-timeout.
+```bash
+ssh root@192.168.1.220 'iptables -I DOCKER-USER -d 192.168.1.177 -p tcp --dport 4000 -j DROP'
+# ... run the drill ...
+ssh root@192.168.1.220 'iptables -D DOCKER-USER -d 192.168.1.177 -p tcp --dport 4000 -j DROP'
+```
 
 ## 6. Context escalation (SC-009)
 
-Send an input longer than `hermes-fast`'s context window. Expect an answer from a larger tier — not a
-400 context-length error.
+**The escalation happens one hop down**, not here: both `fallback_to` and
+`context_window_fallback_to` are null on this gateway, and the Mac's own `context_window_fallbacks`
+escalate `reasoner → Qwen3.8-27B-8bit:qwen-long`. The trade is real — the fallback profile runs
+thinking OFF at temp 0.3, so crossing 131k buys window at the cost of reasoning depth.
 
-## 7. Budgets (SC-010, SC-012)
+**It cannot currently be exercised.** Measured 2026-09-20, same ~108k-token prompt:
+
+| | |
+|---|---|
+| Mac direct, `reasoner` | 200 in **396.8s** (`prompt_tokens=108615`) |
+| gateway, cold | **connection error at ~420s** — not either end's timeout |
+| gateway, cold, `stream: true` | connection error at ~433s, **zero SSE events** |
+| gateway, warm (same prompt again) | **200 in 3.8s** — oMLX caches the prefill |
+
+So a request never survives long enough to reach 131k, and `hermes-deep`'s declared 262144 window is
+unreachable cold. Backlog [069](../../docs/backlog/069-large-context-cross-host-ceiling.md) has the
+ruled-out causes; do not re-derive them. If you need a large context today, send it **from the Mac**,
+or send it twice and let the cache absorb the prefill.
+
+## 7. Budgets and rate limits (SC-010)
+
+**The spend half is inert.** Local deployments carry no per-token pricing, so `max_budget` reads 0.0
+against any cap regardless of traffic and SC-012 is not verifiable. Budgets stay declared so a priced
+tier re-arms them, but the runaway-loop guard is now **rate limiting**:
 
 ```bash
-# drive one client past its own cap
+# drive one client past its rpm_limit
 # expect: that client refused with a clear error; OTHER clients still served
 ```
 
-Confirm the per-client refusal is distinguishable from a gateway-cap refusal, and that the breach is
-attributed to the right key in monitoring.
+## 7b. Total-failure detection (SC-013) — still open
 
-## 7b. Total-failure detection (SC-013)
-
-The trap the spec names first: the gateway is alive, the database is fine, and every backend is dead.
+The trap the spec names first: the gateway is alive, the database is fine, every backend is dead,
 `/health/readiness` still returns 200, and the failure-rate alert stays silent because nobody is
-calling.
+calling. Break every backend, send **no** client traffic, and confirm `LlmRouterCanaryFailing` fires
+within one canary interval. A green dashboard here is the failure. **Not yet exercised.**
 
-```bash
-# break every backend (revoke keys or block egress), send NO client traffic, then wait
-# expect: LlmRouterCanaryFailing fires within one canary interval
-```
-
-Pass criteria: an alert fires with no client traffic flowing. A green dashboard here is the failure.
-
-## 8. Blast radius (SC-006, SC-007)
+## 8. Blast radius (SC-006, SC-007, FR-008)
 
 ```bash
 git grep -nE 'sk-|OPENROUTER_API_KEY=|ANTHROPIC_API_KEY=' -- ':!specs' ':!docs'   # expect no hits
-curl --max-time 5 http://192.168.1.220:4000/health/readiness   # from off-LAN/off-tailnet: fails
-                                                               # from a LAN host: SUCCEEDS, by design
+curl -sk --max-time 5 https://llm-router.hus-sky.no/    # expect no such host — there is no route
 ```
 
-Confirm no Caddy route exists, no public DNS name, no landing-page tile, and that the rendered
-`config.yaml` on the LXC contains only `os.environ/...` indirection — no literal keys. Confirm no
-Anthropic subscription or OAuth credential is present anywhere (FR-007).
+Confirm the rendered `config.yaml` on the LXC contains only `os.environ/…` indirection.
 
-**LAN reachability is expected**, not a finding — FR-008 requires no *public* reachability, and any
-LAN host can reach the gateway. Access is gated by per-client keys, not by network position (research
-D-108).
+**There IS a landing-page tile now, and that is deliberate** — FR-008 was amended. The card on
+`hus-sky.no` links to the Grafana dashboard, not to the gateway; it creates no vhost, no DNS name and
+no route. Verify by checking the page contains no `llm-router.hus-sky.no` and no internal IP.
+
+**LAN reachability is expected**, not a finding — FR-008 forbids *public* reachability. Access is
+gated by per-client keys, not by network position (research D-108).
 
 ## 9. Retier drill (SC-003)
 
 Change one `deployments` entry in `ansible/group_vars/services/vars.yml`, redeploy, confirm the new
-deployment serves the alias — and confirm **no client changed**. This is the rehearsal for the Mac's
-32 GB → 128 GB upgrade; if it needs a template edit, [contracts/alias-mapping.md](./contracts/alias-mapping.md)
-has been violated.
+deployment serves the alias — and that **no client changed**. If it needs a template edit,
+[contracts/alias-mapping.md](./contracts/alias-mapping.md) has been violated. **Not yet exercised.**
+
+## 10. Monitoring
+
+Contracts render **only on the prod path**. `pve-service-deploy` layers
+`inventories/${ENVIRONMENT}/hosts.yml` for the monitoring service, and the lab inventory holds one
+host and no services — so a lab-path monitoring deploy silently renders nothing:
+
+```bash
+gh workflow run lxc-lifecycle.yml --ref <branch> \
+  -f service=monitoring -f action=change -f environment=prod -f confirm_apply_prod=deploy-prod
+```
+
+Expect on `192.168.1.214`: an `llm-router` scrape job, an `llm-router-readiness` blackbox job, five
+`LlmRouter*` alert rules, and `llm-router.json` in Grafana's dashboards.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
+| Every alias returns HTTP 500 "Connection error" | The container cannot resolve the Mac. Check `extra_hosts` in `/opt/llm-router/docker-compose.yml`, then `getent hosts xmjdvvw39y2t.local` on the LXC, then the announcer on the Mac |
+| `getent` works on the LXC but not from a cold resolver | Expected — the Mac only announces. If it fails after 45s, the announcer is dead |
+| Every alias hangs rather than erroring | `timeout` missing from the rendered `config.yaml`, or `num_retries` multiplying it |
+| A dead backend costs full latency on *every* request | The deployment is not being ejected — check `allowed_fails: 0`; any higher value is unreachable when a failure takes longer than `cooldown_time` |
+| Prisma `P1013: invalid port number` | `litellm_db_password` contains a `/`. Rotate to hex **and** wipe `/opt/llm-router-data/postgres`, since initdb only applies the password on first start |
+| Second apply fails on duplicate key aliases | The `/key/list` idempotency lookup regressed — `/key/info?key_alias=` cannot answer this |
 | Every client gets an auth failure | Postgres down or unmigrated — `/health/readiness` should be 503 (D-103) |
-| `hermes-fast` silently metered while the Mac is up | Cold-load timeout, or the tailnet proxy path is broken (D-102). Check `OLLAMA_KEEP_ALIVE` first, then `HTTP_PROXY` reachability from the litellm container |
-| Mac unreachable from the LXC | Tailscale sidecar not authenticated, or `NO_PROXY` misconfigured so proxy traffic loops |
-| Scrape 401s | `/metrics` bearer token — see the scrape-config caveat in [contracts/monitoring.md](./contracts/monitoring.md) |
-| Contract present but no Grafana data | Host missing from `ansible/inventories/prod/hosts.yml` (D-107) |
+| Contract present but no Grafana data | The monitoring deploy ran on the lab path, or the host is missing from `ansible/inventories/prod/hosts.yml` (D-107) |
+| A PROD lifecycle run reports failure after a clean apply | Was the `ops_cli` forwarded-args bug; if it recurs, check the post-apply verification steps rather than the apply |

@@ -130,10 +130,24 @@ If `--layer config` is not 5/5, stop — the tree is wrong.
 >   -o /dev/null -w "$a %{http_code}\n"; done                        # each 200
 > ```
 >
-> Check oMLX re-pinned the aliased models (residency, FR-016) after the cold boot — it drives
-> `~/.omlx/model_settings.json`. Confirm `Qwen3.8-27B-8bit` and `Qwen3.8-27B-oQ4e-mtp` are
-> loaded in the oMLX UI. *(Note: this cannot be scripted with `OMLX_API_KEY` — `/admin/api/models`
-> needs a separate admin credential not in `proxy/.env`; see the amendment's findings.)*
+> Check oMLX re-pinned the aliased models (residency, FR-016) after the cold boot. **This is
+> scripted as of 2026-09-19** — run it after any oMLX restart:
+>
+> ```bash
+> ./specs/064-llm-router/mac-checks/verify-omlx-residency.sh
+> #   fast      -> Qwen3.8-27B-oQ4e-mtp  is_pinned=True  [ok]
+> #   coder     -> Qwen3.8-27B-8bit      is_pinned=True  [ok]
+> #   reasoner  -> Qwen3.8-27B-8bit      is_pinned=True  [ok]
+> #   Qwen3.8-27B-8bit:qwen-long -> ...  is_pinned=True  [ok]
+> #   PASS — every aliased model is pinned
+> ```
+>
+> It reads `is_pinned` from `~/.omlx/model_settings.json` — the same lever that sets it — and
+> derives the fallback targets from the Mac's own `context_window_fallbacks`, so a change to the
+> escalation path is picked up rather than silently unchecked. It asserts *configuration*, not live
+> engine state: `/health` reports only an aggregate `loaded_count`, and `/admin/api/models` refuses
+> every credential on the machine (see the amendment's findings). What it does prove is that nothing
+> has un-pinned an aliased model, which is the regression FR-016 is worried about.
 >
 > **If the minted key was lost**, re-mint an identical one and re-vault it:
 >
