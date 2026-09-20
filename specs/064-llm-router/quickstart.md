@@ -18,7 +18,8 @@ Deploy, verify, and run the drills that make the acceptance criteria real rather
 |---|---|
 | **oMLX** | running, bound to `127.0.0.1:8000`. **Do not expose it** — only the Mac's LiteLLM talks to it (FR-016) |
 | **The Mac's LiteLLM** | `docker compose` at `~/Development/private/local-llm/proxy`, bound to `0.0.0.0:4000` |
-| **The mDNS announcer** | `launchctl list \| grep hermes` — without it the gateway cannot resolve the Mac at all ([`mac-mdns-announcer/`](./mac-mdns-announcer/)) |
+| **The mDNS announcer** | `launchctl list \| grep hermes-mdns` — without it the gateway cannot resolve the Mac at all ([`mac-mdns-announcer/`](./mac-mdns-announcer/)) |
+| **The TLS terminator** | `launchctl list \| grep hermes-tls` — the gateway reaches the Mac over TLS on `:4443`; without it there is no path at all ([`mac-tls-terminator/`](./mac-tls-terminator/)) |
 
 None of these auto-start. Docker Desktop is not a login item, oMLX is a GUI app, and the announcer
 is a LaunchAgent — so all three die with the login session. That is deliberate: when the Mac cannot
@@ -28,6 +29,9 @@ serve, the name stops resolving and the gateway fails clean rather than pointing
 # on the Mac, after any restart
 open -a Docker && open -a oMLX
 ./specs/064-llm-router/mac-checks/verify-omlx-residency.sh   # PASS — every aliased model is pinned
+lsof -nP -iTCP:4443 -sTCP:LISTEN     # terminator, *:4443 — the only LAN listener
+lsof -nP -iTCP:4000 -sTCP:LISTEN     # LiteLLM, 127.0.0.1 ONLY
+lsof -nP -iTCP:8000 -sTCP:LISTEN     # oMLX,    127.0.0.1 ONLY
 ```
 
 **In the vault** (`ansible-vault edit ansible/group_vars/services/vault.yml`) — five keys:
@@ -154,30 +158,25 @@ ssh root@192.168.1.220 'iptables -D DOCKER-USER -d 192.168.1.177 -p tcp --dport 
 ## 6. Context escalation (SC-009)
 
 **The escalation happens one hop down**, not here: both `fallback_to` and
-`context_window_fallback_to` are null on this gateway, and the Mac's own `context_window_fallbacks`
-escalate `reasoner → Qwen3.8-27B-8bit:qwen-long`. The trade is real — the fallback profile runs
-thinking OFF at temp 0.3, so crossing 131k buys window at the cost of reasoning depth.
+`context_window_fallback_to` are null on this gateway, and the Mac's own
+`context_window_fallbacks` escalate `reasoner → Qwen3.8-27B-8bit:qwen-long`. The trade is
+real — the fallback profile runs thinking OFF at temp 0.3, so crossing 131k buys window at
+the cost of reasoning depth.
 
-**It cannot currently be exercised.** Measured 2026-09-20, same ~108k-token prompt:
+**The ~300s ceiling that used to block this is gone** (2026-09-20). The local-tier leg runs
+over TLS, which holds 1500s and 1800s of complete silence; a cold 108k-token prompt that
+died at 417s over plaintext now completes in ~396s. Per-deployment timeouts are 1200s, so
+the operating budget is 20 minutes.
 
-| | |
-|---|---|
-| Mac direct, `reasoner` | 200 in **396.8s** (`prompt_tokens=108615`) |
-| gateway, cold | **connection error at ~420s** — not either end's timeout |
-| gateway, cold, `stream: true` | connection error at ~433s, **zero SSE events** |
-| gateway, warm (same prompt again) | **200 in 3.8s** — oMLX caches the prefill |
+Prefill is superlinear, so plan in *time*, not tokens:
 
-**Diagnosed 2026-09-20**: the Mac closes inbound LAN connections that carry no application-layer
-response data for ~300s (silent 300s alive, 360s dead, clean FIN). TCP keepalive does not defeat it —
-so it counts application data, not packets — and streaming does not either, because the Mac emits one
-chunk at 0.3s then nothing for 384s while prefilling. The homelab network, the Mac's own stack and
-Docker's forwarder all survived 480s, so it is specific to inbound LAN flows to the Mac.
+```
+ 24k tokens ->  41s      73k tokens -> 105s
+ 48k tokens ->  73s     108k tokens -> 397-690s
+```
 
-So the real cold ceiling is ~300s of prefill, about **80k tokens**, and `hermes-deep`'s declared
-262144 is reachable only warm. Backlog
-[069](../../docs/backlog/069-large-context-cross-host-ceiling.md) has every measurement and the two
-candidate fixes — **do not re-derive them**. Today: send a large cold context **from the Mac**, or
-send it twice and let oMLX's prefill cache absorb the first pass.
+Still not exercised end to end: a prompt above 131k that actually triggers the Mac's
+escalation. It is now possible — it was not before.
 
 ## 7. Budgets and rate limits (SC-010)
 
@@ -245,4 +244,5 @@ Expect on `192.168.1.214`: an `llm-router` scrape job, an `llm-router-readiness`
 | Second apply fails on duplicate key aliases | The `/key/list` idempotency lookup regressed — `/key/info?key_alias=` cannot answer this |
 | Every client gets an auth failure | Postgres down or unmigrated — `/health/readiness` should be 503 (D-103) |
 | Contract present but no Grafana data | The monitoring deploy ran on the lab path, or the host is missing from `ansible/inventories/prod/hosts.yml` (D-107) |
+| A long request from a client **on the Mac** fails around 400s | Expected — the Mac's own outbound plaintext is subject to the same closer. Tooling on the Mac uses `http://localhost:4000` (loopback, unaffected); only a harness pointed at the gateway over the LAN hits this. Homelab-internal clients are fine |
 | A PROD lifecycle run reports failure after a clean apply | Was the `ops_cli` forwarded-args bug; if it recurs, check the post-apply verification steps rather than the apply |

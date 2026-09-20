@@ -1,10 +1,15 @@
 # The Mac closes inbound LAN connections that go application-silent for ~300s
 
-**Status**: **Diagnosed 2026-09-20.** Cause localised; no fix applied, because the two
-viable fixes are a Mac-side setting and a declared-capability change — see *Decision needed*.
-**Consequence**: `hermes-deep` advertises a 262,144-token context window that cannot be
-reached with a **cold** prompt through the gateway. The practical cold ceiling is ~300s of
-prefill, which is roughly **80k tokens**.
+**Status**: **RESOLVED 2026-09-20 — the local-tier leg now runs over TLS.**
+Encrypting the payload removes what the closer acts on. Measured twice at 1500s and 1800s of
+complete silence, and proven end to end: a cold 108k-token prompt that returned `408` at 180s
+and a connection error at 417s over plaintext **completed in 395.6s over TLS**.
+Implementation and install: [`specs/064-llm-router/mac-tls-terminator/`](../../specs/064-llm-router/mac-tls-terminator/README.md).
+
+The investigation below is kept because six other approaches were measured and rejected, and
+re-deriving them is expensive.
+
+---
 
 ## The original symptom
 
@@ -87,24 +92,46 @@ One chunk immediately, then **384 seconds of silence**, then the tokens. oMLX's
 during prefill. The stream is application-silent for longer than the ceiling, so it is closed
 just like a non-streaming request.
 
-## Decision needed
+## What was rejected, and why
 
-Two fixes, and both are someone's judgement call rather than a code change:
+Each was measured, not argued. Recorded so nobody re-derives them.
 
-1. **Make the Mac emit something during prefill.** If oMLX can be made to send periodic SSE
-   keepalives while prefilling — or if `scheduler.chunked_prefill: true` (currently `false`)
-   causes output to begin earlier — the ceiling stops mattering and the full window becomes
-   usable. This is the fix worth having, and it is entirely Mac-side. Start by asking whether
-   `sse_keepalive_mode` has an interval, and what `chunked_prefill` changes about
-   time-to-first-token.
-2. **Declare a truthful `context_window`.** At ~397s for 108,615 tokens, 300s of prefill is
-   roughly **80k tokens**. `enable_pre_call_checks` uses the declared window to decide whether
-   to escalate, so declaring 262144 means the gateway accepts cold requests it cannot serve —
-   the "configured and inert" failure mode inverted into "configured and unservable".
+| approach | why it failed |
+|---|---|
+| **reverse SSH tunnel** | the tunnel process dies on its own; requests failed at 417s and 711s. `autossh` reconnects but **cannot resume an in-flight HTTP request**, and raising `ServerAliveCountMax` only delays when ssh notices an already-dead flow |
+| **mosh** | survives disconnects by design, but has **no port forwarding** |
+| **LiteLLM SSE keepalive pings** | raises the floor but does not bound the drop (658s with pings every 20s), and the code gates it on `stream is True`, so non-streaming gets nothing |
+| **LiteLLM response cache + retry** | `_cancel_llm_call_on_client_disconnect` actively cancels the upstream call on `http.disconnect` and raises 499. One call site, **unconditional — no setting gates it**. The work never completes, so nothing is cached |
+| **retry alone** | an aborted prefill is **discarded**: abort at 120s, re-send took 689.7s, fully cold. A completed prefill re-sends in 13.2s, so caching works — it just never gets populated |
+| **chunked prefix warming** | oMLX gives only 10–15 % on an extending prompt: 48k tokens cost 73s against 82s cold, 73k cost 105s against 124s. No usable prefix reuse |
+| **TCP keepalive** | no help — the closer counts application data, not packets |
 
-They are not exclusive; (2) is honest until (1) lands. The current configuration does neither,
-deliberately, because the **warm** path genuinely serves the large window (3.8s for a cached
-108k prompt) and reducing the declaration would misdescribe that.
+## The fix
+
+TLS on the LAN leg, terminated on the Mac, relayed to LiteLLM over loopback.
+
+```
+gateway  --https, cert-verified-->  terminator :4443  --loopback-->  LiteLLM :4000  -->  oMLX
+```
+
+LiteLLM and oMLX both return to `127.0.0.1`, so the terminator is the only LAN-exposed
+process — tighter than before — and `mac_litellm_key` stops crossing the LAN in plaintext.
+Per-deployment timeouts went to 1200s on all three aliases, since the transport can now hold
+them and the operating requirement is 20 minutes.
+
+## A measurement worth keeping: prefill is superlinear
+
+Gathered while testing prefix reuse, and it corrects an earlier estimate in this file:
+
+```
+ 24k tokens ->  41s   (587 tok/s)
+ 48k tokens ->  73s
+ 73k tokens -> 105s
+108k tokens -> 397s and 690s
+```
+
+Rate is strongly size-dependent, so "tokens per second" is the wrong unit for capacity
+planning and a constant-rate extrapolation understates the usable context badly.
 
 ## Consequences already recorded elsewhere
 
@@ -117,3 +144,18 @@ deliberately, because the **warm** path genuinely serves the large window (3.8s 
   cache.
 - The per-deployment timeouts (`tasks.md` T079) came out of this investigation and stand on
   their own: the single 180s default made `hermes-deep` fail inside its own declared window.
+
+## One caveat: a client running ON the Mac is still subject to the closer
+
+The TLS fix covers the **gateway → Mac** leg. It does not change what happens when something
+on the Mac makes a long, silent, plaintext request *outbound* to the homelab — measured
+failing at ~407s against the gateway, while the identical request from `pve` completed in
+449s.
+
+In practice this does not affect normal use: tooling on the Mac talks to the Mac's own
+LiteLLM over loopback (`http://localhost:4000`), which is unaffected. It matters only if you
+point something on the Mac at the gateway over the LAN — a test harness, for instance. It
+cost two misattributed test results here before being recognised.
+
+Homelab-internal clients (Hermes and anything else on an LXC) are unaffected: LXC → pve held
+1500s of complete silence.
