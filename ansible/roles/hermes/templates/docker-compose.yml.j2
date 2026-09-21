@@ -10,26 +10,22 @@
 # never a provider model ID or the inference host directly (contracts/gateway-usage.md).
 #
 # TOOL_SERVER_CONNECTIONS (FR-012, FR-013) — Open WebUI's env-seeded tool-server list.
-# Verified against backend/open_webui/config.py and utils/tools.py, 2026-09-20: a JSON array,
-# `type: mcp` for Streamable HTTP, `auth_type` none|bearer|..., `key` the bearer token. Not
-# documented on docs.openwebui.com, which describes only the admin-UI path — confirm against
-# the live app once deployed (T038-T040). Built with a plain loop, not a one-line filter
-# pipeline, so the bearer branch's credential lookup stays readable and correct: it only
-# ever fires for a `hermes_mcp_servers` entry with auth: bearer, and there is none at launch
-# (research R-008) — every alias mapping's api_key_env is fetched the same indirect way, so a
-# consumer resolving a name that doesn't yet exist would fail preflight, not here.
-{% set hermes_tool_connections = [] %}
-{% for server in hermes_mcp_servers if server.enabled %}
-{% set _ = hermes_tool_connections.append({
-  'id': server.name | lower | regex_replace('[^a-z0-9]+', '-'),
-  'name': server.name,
-  'url': server.url,
-  'type': 'mcp',
-  'auth_type': server.auth,
-  'key': (lookup('vars', server.credential_env | lower) if server.auth == 'bearer' else ''),
-  'enabled': server.enabled,
-}) %}
-{% endfor %}
+#
+# The list is built as a fact in tasks/main.yml, NOT here, because the same value has a second
+# consumer: the reconcile task that rewrites the persisted copy. Rendering it twice would let
+# the two drift.
+#
+# This env var only ever seeds the FIRST boot. The key is a PersistentConfig, so after that
+# the database wins and edits here are inert — see the reconcile task for the other half.
+#
+# Shape corrected 2026-09-21 after the original was silently ignored. Upstream gates listing
+# on `config.enable` (routers/tools.py) and matches execution on `info.id`
+# (utils/middleware.py); the first version used `enabled`/`id`/`name` at the top level and was
+# dropped by both paths without an error.
+#
+# Note for whoever reads the logs: `Initialized 0 tool server(s)` at startup is EXPECTED and
+# is not a fault. get_tool_servers_data handles `type: openapi` only, so it reports 0 even
+# when MCP servers are registered correctly.
 
 services:
   open-webui:
@@ -93,8 +89,8 @@ services:
       RAG_EXTERNAL_RERANKER_URL: "{{ hermes_gateway_base_url }}/rerank"
       RAG_EXTERNAL_RERANKER_API_KEY: "{{ llm_router_client_hermes_key }}"
 
-      # --- MCP tool servers (FR-012, FR-013) — see the note above this stanza.
-      TOOL_SERVER_CONNECTIONS: '{{ hermes_tool_connections | to_json }}'
+      # --- MCP tool servers (FR-012, FR-013) — see the note at the top of this file.
+      TOOL_SERVER_CONNECTIONS: '{{ hermes_tool_server_connections | default([]) | to_json }}'
 
       # --- Web search (FR-022, research R-005) — the SearXNG sidecar, never a commercial API ---
       ENABLE_WEB_SEARCH: "true"

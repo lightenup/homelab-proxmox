@@ -31,6 +31,34 @@
     mode: '0640'
   notify: Restart hermes
 
+# Built once here, consumed BOTH by docker-compose.yml.j2 (which seeds Open WebUI on a first
+# boot) and by the reconcile task at the end of this file (which is what makes a LATER edit
+# take effect). Two renderings of the same intent would drift; one fact cannot.
+#
+# The shape is upstream's, not ours, and it is unforgiving: listing gates on
+# `config.enable` (routers/tools.py) and execution matches on `info.id`
+# (utils/middleware.py). An entry with `enabled`/`id`/`name` at the top level is silently
+# dropped by both — no error, no log line. That was the original bug.
+- name: Build the MCP tool-server connection list
+  ansible.builtin.set_fact:
+    hermes_tool_server_connections: >-
+      {{ hermes_tool_server_connections | default([]) + [{
+        'type': 'mcp',
+        'url': item.url,
+        'auth_type': item.auth,
+        'key': (lookup('vars', item.credential_env | lower) if item.auth == 'bearer' else ''),
+        'config': {'enable': item.enabled},
+        'info': {
+          'id': item.name | lower | regex_replace('[^a-z0-9]+', '-'),
+          'name': item.name
+        }
+      }] }}
+  loop: "{{ hermes_mcp_servers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  # Facts land in hostvars, and a future auth: bearer entry puts a real token in this one.
+  no_log: true
+
 - name: Deploy docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -63,3 +91,96 @@
   delay: 10
   until: hermes_health.status == 200
   changed_when: false
+
+# TOOL_SERVER_CONNECTIONS is a PersistentConfig: seed_defaults() inserts a key "only if the
+# key is absent" — "Existing DB values take precedence over defaults." So the env var seeds
+# the FIRST boot and is inert forever after, which would make every later edit to
+# hermes_mcp_servers a silent no-op and break FR-013's promise that adding a tool service is
+# a pure configuration change. This task is what keeps that promise.
+#
+# Runs after the readiness check on purpose: the database must exist and the app must have
+# seeded before there is anything to compare against.
+#
+# Ansible OWNS this list, reconciled by info.id: declared servers have their managed fields
+# merged in (unknown keys on an entry are preserved, so the task does not flap if the app or
+# the admin UI adds one), and undeclared entries are removed — otherwise deleting a server
+# from group_vars would do nothing. Consequence, accepted: a tool server added by hand in the
+# admin UI is removed on the next deploy.
+#
+# The desired value goes in on STDIN, never argv: `docker exec … python3 -c "<json>"` would
+# expose a bearer token to `ps` on the LXC. The script itself holds no secret.
+#
+# No `-u`: this container runs as root (uid=0) and the db/-wal/-shm files are root-owned, so
+# root matches the app's UID. The opposite is the usual trap — a root-created -wal beside a
+# non-root app silently breaks the app's writes, which is why roles/nextcloud uses
+# `docker exec -u www-data`.
+- name: Reconcile the persisted MCP tool-server registrations
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "-i"
+      - hermes_open_webui
+      - python3
+      - "-c"
+      - |
+        import json, sqlite3, sys, time
+
+        KEY = 'tool_server.connections'
+        MANAGED = ('type', 'url', 'auth_type', 'key')
+        desired = json.loads(sys.stdin.read())
+
+        con = sqlite3.connect('/app/backend/data/webui.db', timeout=5)
+        con.execute('PRAGMA busy_timeout=5000')
+
+        cols = [r[1] for r in con.execute('PRAGMA table_info(config)')]
+        if 'key' not in cols or 'value' not in cols:
+            sys.exit('SCHEMA DRIFT: config table has columns %s; expected key/value. '
+                     'Refusing to write.' % cols)
+
+        row = con.execute('SELECT value FROM config WHERE key=?', (KEY,)).fetchone()
+        try:
+            current = json.loads(row[0]) if row and row[0] else []
+        except (TypeError, ValueError):
+            current = []
+        if not isinstance(current, list):
+            current = []
+
+        by_id = {}
+        for entry in current:
+            eid = (entry.get('info') or {}).get('id')
+            if eid:
+                by_id[eid] = entry
+
+        result = []
+        for want in desired:
+            wid = want['info']['id']
+            merged = dict(by_id.get(wid, {}))
+            for field in MANAGED:
+                merged[field] = want[field]
+            info = dict(merged.get('info') or {})
+            info.update(want['info'])
+            merged['info'] = info
+            cfg = dict(merged.get('config') or {})
+            cfg['enable'] = want['config']['enable']
+            merged['config'] = cfg
+            result.append(merged)
+
+        changed = json.dumps(current, sort_keys=True) != json.dumps(result, sort_keys=True)
+        if changed:
+            con.execute(
+                'INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?) '
+                'ON CONFLICT(key) DO UPDATE SET value=excluded.value, '
+                'updated_at=excluded.updated_at',
+                (KEY, json.dumps(result), int(time.time())),
+            )
+            con.commit()
+        con.close()
+        print('CHANGED' if changed else 'UNCHANGED')
+    stdin: "{{ hermes_tool_server_connections | default([]) | to_json }}"
+  register: hermes_mcp_reconcile
+  changed_when: "'CHANGED' in hermes_mcp_reconcile.stdout"
+  notify: Restart hermes
+  # stdin carries the token for any auth: bearer entry, and Ansible echoes module args on
+  # failure at higher verbosity. Debuggability is traded for not leaking it into CI logs.
+  no_log: true
