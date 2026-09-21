@@ -1,0 +1,138 @@
+---
+# Hermes restore drill — proves the latest backup reconstitutes a WORKING instance, without
+# touching the live one. Follows the immich pattern (playbooks/restore-drill.yml).
+#
+#   ansible-playbook playbooks/hermes-restore-drill.yml -i inventories/prod/hosts.yml
+#
+# Non-destructive by construction: a second container on {{ hermes_restore_test_port }}
+# against an extracted copy, torn down in `always:` whether the drill passes or fails.
+#
+# This answers "is the archive good". It does NOT prove the rebuild-from-code path — for
+# that the LXC has to actually be destroyed and rebuilt (spec 065, T048/SC-006).
+- name: Hermes Restore Drill
+  hosts: hermes
+  become: true
+  vars:
+    hermes_restore_dir: "/tmp/hermes-restore-drill"
+
+  tasks:
+    - name: Find the latest backup
+      ansible.builtin.shell: "ls -t {{ hermes_backup_path }}/hermes-backup-*.tar.gz | head -n 1"
+      register: hermes_latest_backup_cmd
+      changed_when: false
+      failed_when: hermes_latest_backup_cmd.stdout == ""
+
+    - name: Record the archive under test
+      ansible.builtin.set_fact:
+        hermes_latest_backup: "{{ hermes_latest_backup_cmd.stdout }}"
+        hermes_restore_basename: "{{ hermes_latest_backup_cmd.stdout | basename | regex_replace('\\.tar\\.gz$', '') }}"
+
+    - name: Show which archive is being drilled
+      ansible.builtin.debug:
+        msg: "Drilling {{ hermes_latest_backup }}"
+
+    - name: Clean any previous drill directory
+      ansible.builtin.file:
+        path: "{{ hermes_restore_dir }}"
+        state: absent
+
+    - name: Create the drill directory
+      ansible.builtin.file:
+        path: "{{ hermes_restore_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Extract the archive
+      ansible.builtin.unarchive:
+        src: "{{ hermes_latest_backup }}"
+        dest: "{{ hermes_restore_dir }}"
+        remote_src: true
+
+    - name: Assert the archive actually contains a database
+      ansible.builtin.stat:
+        path: "{{ hermes_restore_dir }}/{{ hermes_restore_basename }}/open-webui/webui.db"
+      register: hermes_restored_db
+      failed_when: not hermes_restored_db.stat.exists
+
+    - name: Deploy the restore-drill compose file
+      ansible.builtin.template:
+        src: ../roles/hermes_backup/templates/docker-compose.restore.yml.j2
+        dest: "{{ hermes_restore_dir }}/docker-compose.restore.yml"
+        mode: '0640'
+
+    - name: Restore drill
+      block:
+        - name: Start the restored instance
+          community.docker.docker_compose_v2:
+            project_src: "{{ hermes_restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            state: present
+
+        - name: Wait for the restored instance to answer
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ hermes_restore_test_port }}/health"
+            status_code: 200
+          register: hermes_restore_health
+          until: hermes_restore_health.status == 200
+          retries: 30
+          delay: 5
+
+        # Health alone only proves the app booted. SC-006 asks whether conversations,
+        # accounts, settings and knowledge came BACK, so read them out of the restored
+        # instance itself rather than trusting the archive listing.
+        - name: Read the restored state back out of the running instance
+          ansible.builtin.command:
+            argv:
+              - docker
+              - exec
+              - hermes_open_webui_restore
+              - python3
+              - "-c"
+              - |
+                import sqlite3, json
+                con = sqlite3.connect('/app/backend/data/webui.db')
+                out = {'integrity': con.execute('pragma integrity_check').fetchone()[0]}
+                for table in ('user', 'chat', 'memory', 'config'):
+                    try:
+                        out[table] = con.execute('select count(*) from ' + table).fetchone()[0]
+                    except Exception:
+                        out[table] = None
+                out['titles'] = [r[0] for r in con.execute('select title from chat limit 10')]
+                print(json.dumps(out))
+          register: hermes_restore_state
+          changed_when: false
+
+        - name: Show what came back
+          ansible.builtin.debug:
+            msg: "{{ hermes_restore_state.stdout | from_json }}"
+
+        - name: Assert the restored workspace is intact and populated
+          ansible.builtin.assert:
+            that:
+              - (hermes_restore_state.stdout | from_json).integrity == 'ok'
+              - (hermes_restore_state.stdout | from_json).user | int > 0
+              - (hermes_restore_state.stdout | from_json).config | int > 0
+            fail_msg: >-
+              The archive restored to a running instance, but its contents are not sound:
+              {{ hermes_restore_state.stdout }}. A backup that boots but comes back empty is
+              the failure this drill exists to catch.
+            success_msg: >-
+              Restored instance is healthy and populated —
+              {{ (hermes_restore_state.stdout | from_json).user }} account(s),
+              {{ (hermes_restore_state.stdout | from_json).chat }} conversation(s),
+              {{ (hermes_restore_state.stdout | from_json).config }} config rows.
+
+      always:
+        - name: Tear down the restored instance
+          community.docker.docker_compose_v2:
+            project_src: "{{ hermes_restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            state: absent
+            remove_volumes: true
+
+        - name: Remove the drill directory
+          ansible.builtin.file:
+            path: "{{ hermes_restore_dir }}"
+            state: absent
