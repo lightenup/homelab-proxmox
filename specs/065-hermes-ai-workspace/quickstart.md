@@ -93,6 +93,27 @@ It is the difference between a service that degrades honestly and one that hangs
 fallback tier, so the failure is unavoidable — the only question is whether it is **legible and
 fast**. Read a hang as the failure, not the error.
 
+**Run 2026-09-21. It hung. SC-005 fails** — see
+[backlog `075`](../../docs/backlog/075-first-request-hangs-when-inference-host-away.md).
+Measured against the gateway with the real Hermes client key, host taken away by stopping the
+TLS terminator (port closed, so the Mac's stealth mode drops the SYN exactly as when asleep):
+
+| condition | observed |
+|---|---|
+| baseline, host present | **200 in 0.91s** |
+| first request, host away | **no response at 90.01s** (client aborted) |
+| second request, host away | **no response at 30.00s** |
+| later requests | **429 in 0.03s**, `cooldown_list=['fast-local']` |
+| host restored | **200**, no administrative action |
+
+The 10-second criterion is missed by at least an order of magnitude on the first request.
+Everything after the first failure is correct and fast. Root cause: one per-deployment
+`timeout` (1200s, needed so FR-021's 20-minute generation is not truncated) also governs
+connect, and the cooldown cannot engage until that first failure completes.
+
+The other half of the story passed: the **interface stayed up** (200 in 0.06s with the backend
+gone) and **recovery needed no administrative action**.
+
 ### Drill 8 needs a definition before it is run
 
 "Representative use" must be agreed in advance or the measurement means nothing. Decide what an
