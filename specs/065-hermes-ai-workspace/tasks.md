@@ -15,14 +15,18 @@ checks** (`pve-service-deploy plan`, Ansible preflight assertions, `act -l`) plu
 **Organization**: Grouped by user story so each can be implemented, tested and delivered
 independently.
 
-**Progress (2026-09-20)**: 48/90 tasks landed — every task that is a file edit (Terraform,
-Ansible, docs) across all 10 phases. Verified by rendering every template locally with
-representative vars via `ansible-playbook` (not by inspection alone) and by
-`ansible-playbook --syntax-check` on the new playbook. **Not done**: `ansible-vault edit`
-(needs the vault password), `terraform apply`/pipeline deploys, and every drill that needs a
-live deployment, a phone, or physical access to the inference host. See
-[quickstart.md § Status](./quickstart.md#status-2026-09-20--config-landed-nothing-deployed-or-drilled-yet)
-for exactly what a human needs to do next.
+**Progress (2026-09-21)**: **deployed and serving.** The LXC exists at `192.168.1.221`, both
+containers are up, and `https://hermes.hus-sky.no` answers behind a valid certificate with every
+surface gated. SC-002 is verified behaviourally — chat, model list, knowledge, files, users and
+the programmatic endpoint all return 401 unauthenticated, and a real registration attempt was
+refused with 403 (no account created).
+
+**Still outstanding**: monitoring is not deployed (prod path only, backlog `072`), so the
+front-page card has no probe behind it yet. Retrieval (US6) is blocked on the oMLX
+embedding/reranker work on the inference host. The phone drills (SC-001, FR-005, SC-012), the
+long-generation drill (SC-009), the fail-fast drills (Phase 7), the restore drill (SC-006) and
+the measurement tasks (T078/T082) all need a human. See
+[quickstart.md § Status](./quickstart.md).
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -80,13 +84,13 @@ ones: `terraform/`, `ansible/`, `.github/workflows/`, `scripts/lab/`.
 **⚠️ CRITICAL**: No user story work can begin until this phase completes.
 
 - [X] T011 Define `hermes_*` settings in `ansible/group_vars/services/vars.yml` per [data-model.md](./data-model.md) § *Service configuration* — pinned non-`latest` image tags for both containers, `hermes_data_dir` on local disk, gateway base URL, capability aliases
-- [ ] T012 Add the vault variables (gateway client key, admin bootstrap credential) to `ansible/group_vars/services/vault.yml` via `ansible-vault edit`. **Never commit a value** (Constitution II)
+- [X] T012 Add the vault variables (gateway client key, admin bootstrap credential) to `ansible/group_vars/services/vault.yml` via `ansible-vault edit`. **Never commit a value** (Constitution II)
 - [X] T013 Create `ansible/roles/hermes/defaults/main.yml` with the role's own defaults
 - [X] T014 Create `ansible/roles/hermes/tasks/preflight.yml` implementing every validation in [data-model.md](./data-model.md) — image tags pinned, `hermes_data_dir` not on NFS, aliases exist and are within the client key's scope, credentials resolve, `ENABLE_SIGNUP` false, **and both `RAG_OPENAI_*` variables explicitly set** (see T015)
 - [X] T015 [P] In `ansible/roles/hermes/tasks/preflight.yml`, assert `RAG_OPENAI_API_BASE_URL` and `RAG_OPENAI_API_KEY` are set explicitly. They do **not** reliably inherit from `OPENAI_API_*` (upstream open-webui#22084); unset, retrieval silently reaches `api.openai.com` — broken *and* an FR-008 breach. This assertion is the only thing standing between the two
 - [X] T016 Create `ansible/roles/hermes/templates/docker-compose.yml.j2` with the application and the SearXNG sidecar (research R-005), SearXNG **not published** to the LAN
 - [X] T017 Create `ansible/roles/hermes/tasks/main.yml` — preflight, directories, render compose, bring the stack up, wait for readiness
-- [ ] T018 Deploy through the pipeline (plan, then apply) and confirm the stack is up and answering on the LXC's published port
+- [X] T018 Deploy through the pipeline (plan, then apply) and confirm the stack is up and answering on the LXC's published port
 
 **Checkpoint**: The service runs and is reachable on the LAN. User stories can now proceed.
 
@@ -104,8 +108,8 @@ model, add the site to the home screen.
 - [X] T021 [US1] Add the `caddy_services` entry for `hermes` in `ansible/group_vars/services/vars.yml` with **`user_facing: false`** — this creates the public route without the landing-page card, which User Story 2 adds separately
 - [X] T022 [US1] Set `proxy_timeout` on that `ansible/group_vars/services/vars.yml` entry long enough to clear FR-021's twenty-minute ceiling. The default truncates a long generation and the symptom looks like a model fault, not a proxy one
 - [X] T023 [US1] Point `TASK_MODEL_EXTERNAL` at the cheapest capability alias and set `ENABLE_TITLE_GENERATION` deliberately, in `ansible/roles/hermes/templates/docker-compose.yml.j2` (FR-011, research R-004)
-- [ ] T024 [US1] Redeploy and confirm the public hostname resolves, serves a valid certificate, and presents a login before any other surface
-- [ ] T025 [US1] **Drill (SC-002)**: request every surface unauthenticated — chat, model list, documents — and confirm each is refused. Attempt to register and confirm it is refused
+- [X] T024 [US1] Redeploy and confirm the public hostname resolves, serves a valid certificate, and presents a login before any other surface
+- [X] T025 [US1] **Drill (SC-002)**: request every surface unauthenticated — chat, model list, documents — and confirm each is refused. Attempt to register and confirm it is refused
 - [ ] T026 [US1] **Drill (SC-001)**: from a phone on mobile data, sign in and receive an answer; record the elapsed time against the 60-second criterion
 - [ ] T027 [US1] **Drill (FR-005)**: add the site to a phone home screen and confirm it launches standalone; check every primary action is reachable at phone width without horizontal scrolling
 - [ ] T028 [US1] **Drill (SC-009)**: send a prompt whose response takes ~15 minutes and confirm it is delivered complete
@@ -165,6 +169,16 @@ tool was called and used.
 
 - [X] T041 [US4] Ensure `terraform/services/hermes/` injects `ssh_public_keys` into the LXC (FR-006, Constitution § *Access Control*)
 - [ ] T042 [US4] Confirm SSH works by key from the LAN, that password authentication is refused, and that no public route to SSH exists
+  - **Two of three verified 2026-09-21.** Key-based SSH works (`BatchMode=yes`, so no password
+    fallback was possible). No public SSH route: `caddy_services` has no port-22 entry.
+  - **The third does not hold, and it is estate-wide, not ours.** `sshd -T` on hermes reports
+    `passwordauthentication yes`. So do `llm-router` (`.220`) and `financial-scenario` (`.217`) —
+    identical. In practice nothing can log in by password, because `permitrootlogin
+    without-password` and root is the only account; but the literal claim "password
+    authentication is refused" is false at the sshd level on every service LXC.
+  - Left unchecked deliberately rather than quietly redefined. Hardening `sshd` fleet-wide is a
+    change to every other service's access posture and belongs in its own feature — the same
+    argument plan.md makes for `forward_auth`.
 - [X] T043 [P] [US4] Create `ansible/roles/hermes_backup/tasks/main.yml`, following `ansible/roles/financial_scenario_backup/`
 - [X] T044 [P] [US4] Create `ansible/roles/hermes_backup/templates/backup_hermes.sh.j2` covering everything under `hermes_data_dir` — SQLite, uploaded documents and the vector index ([data-model.md](./data-model.md) § *Workspace state*)
 - [X] T045 [US4] Add the backup schedule and retention settings to `ansible/group_vars/services/vars.yml`, and wire the role into `ansible/playbooks/hermes.yml`
@@ -240,7 +254,7 @@ independently deliverable after the MVP.
 
 - [X] T072 Enable the application's own OpenAI-compatible endpoint in `ansible/roles/hermes/templates/docker-compose.yml.j2` and confirm it is subject to the same authentication as every other surface (FR-002, FR-004)
 - [ ] T073 **Drill (SC-014)**: call it from another homelab service and confirm the answer reflects the configured tools and knowledge — demonstrably more than the bare gateway would return for the same prompt
-- [ ] T074 Confirm this endpoint was covered by T025's unauthenticated sweep; if it was added afterwards, re-run that drill against it
+- [X] T074 Confirm this endpoint was covered by T025's unauthenticated sweep; if it was added afterwards, re-run that drill against it
 
 ### Scheduled prompts (FR-025, SC-010, SC-015)
 
