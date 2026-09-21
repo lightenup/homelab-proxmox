@@ -179,7 +179,10 @@
         print('CHANGED' if changed else 'UNCHANGED')
     stdin: "{{ hermes_tool_server_connections | default([]) | to_json }}"
   register: hermes_mcp_reconcile
-  changed_when: "'CHANGED' in hermes_mcp_reconcile.stdout"
+  # Exact match, NOT `'CHANGED' in stdout` — 'CHANGED' is a substring of 'UNCHANGED', so the
+  # `in` form is always true and the task reported changed (and restarted the stack) on every
+  # run. Caught by the idempotency check; the script itself was correct all along.
+  changed_when: hermes_mcp_reconcile.stdout | trim == 'CHANGED'
   notify: Restart hermes
   # stdin carries the token for any auth: bearer entry, and Ansible echoes module args on
   # failure at higher verbosity. Debuggability is traded for not leaking it into CI logs.
