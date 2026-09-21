@@ -304,8 +304,23 @@ tool was called and used.
 > **This phase depends on work outside the new machine.** T055–T058 are prerequisites and are not
 > deployments of this LXC.
 
-- [ ] T055 [US6] On the inference host, load an embedding model into oMLX and expose it in the Mac's `~/Development/private/local-llm/proxy/litellm-config.yaml` (research R-002)
-- [ ] T056 [US6] On the inference host, load a reranker model and expose it the same way in `~/Development/private/local-llm/proxy/litellm-config.yaml`
+- [X] T055 [US6] On the inference host, load an embedding model into oMLX and expose it in the Mac's `~/Development/private/local-llm/proxy/litellm-config.yaml` (research R-002)
+  - **Done 2026-09-21.** `Qwen3-Embedding-0.6B-8bit` (1024 dims, 0.62GB), downloaded through
+    oMLX's own admin API via local-llm's client (`hf_download` — the convention
+    `quant_compare.py` uses), exposed as the `embed` role alias with
+    `access_groups: ["local"]`. Verified 200 through the homelab gateway.
+  - 0.6B and multilingual on purpose: it stays pinned beside the 27Bs without triggering
+    oMLX's LRU eviction, and it embedded a Norwegian query correctly.
+  - R-002 vindicated: the installed build does carry `scheduler.embedding_batch_size` (32),
+    and oMLX classified the model as `engine: embedding` by itself.
+- [X] T056 [US6] On the inference host, load a reranker model and expose it the same way in `~/Development/private/local-llm/proxy/litellm-config.yaml`
+  - **Done 2026-09-21.** `Qwen3-Reranker-0.6B-mxfp8` as the `rerank` role alias. Verified
+    through the gateway: relevant passage 1.0, irrelevant 5e-06.
+  - **Three provider traps, all failing at CALL time rather than load** — recorded in both
+    configs so they are not re-derived: `openai/` is unsupported for rerank;
+    `litellm_proxy/` has no rerank handler and 404s; `hosted_vllm/` rewrites `/v1/rerank`
+    and misses. Only `infinity/` builds the right URL. Plus `return_documents: false`,
+    because oMLX returns `document` as an object and infinity's handler double-wraps it.
 - [X] T057 [US6] Amend `064`: add the embedding and reranking capability aliases to `ansible/group_vars/services/vars.yml`, extend the Hermes client key's permitted `models` scope to include them, and update `064`'s preflight and doctor ([contracts/gateway-usage.md](./contracts/gateway-usage.md))
 - [X] T058 [US6] Record the amendment in `specs/064-llm-router/` — it is a change to a closed feature and belongs in its records, not only in this one (Constitution I)
 - [X] T059 [US6] Configure retrieval in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `RAG_EMBEDDING_ENGINE=openai`, `RAG_EMBEDDING_MODEL`, and **both** `RAG_OPENAI_API_BASE_URL` and `RAG_OPENAI_API_KEY` explicitly (T015 asserts this)
