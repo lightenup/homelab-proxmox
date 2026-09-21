@@ -130,12 +130,19 @@ llm_router_aliases:
         # the same 108k prompt). Size this for the cold path; the warm path is free.
         timeout: 1200
         health_checked: true
-  # Added for spec 065 (Hermes retrieval, FR-015/016, research R-002). Sequenced behind
-  # Mac-side work this repo does not own: T055/T056 load an embedding model and a reranker
-  # into oMLX and expose them as new role aliases in the Mac's own
-  # ~/Development/private/local-llm/proxy/litellm-config.yaml. `provider_model` below MUST
-  # match whatever alias name that config gives them — verify with `GET /v1/models` against
-  # the Mac's router before relying on these (contracts/gateway-usage.md).
+  # Added for spec 065 (Hermes retrieval, FR-015/016, research R-002).
+  #
+  # LANDED 2026-09-21. The Mac-side work (T055/T056) is done: oMLX serves
+  # Qwen3-Embedding-0.6B-8bit (1024 dims) and Qwen3-Reranker-0.6B-mxfp8, exposed as the
+  # `embed` and `rerank` role aliases in ~/Development/private/local-llm/proxy/litellm-config.yaml,
+  # both carrying access_groups: ["local"] so this gateway's key may call them.
+  #
+  # NOTE the two different providers below, which is not a style inconsistency:
+  # LiteLLM's rerank API accepts only a fixed provider set and `openai` is NOT in it —
+  # `openai/rerank` fails at CALL time with "Unsupported provider: openai", not at load.
+  # `litellm_proxy/` is the correct prefix for chaining to another LiteLLM proxy, which is
+  # exactly what the Mac's router is. Embeddings have no such restriction, so `openai/`
+  # stays there and matches every chat alias above.
   #
   # No per-client scope change needed: virtual_keys.yml scopes every client key to ALL
   # `llm_router_aliases` names uniformly, so adding these two here IS "extending the Hermes
@@ -164,7 +171,7 @@ llm_router_aliases:
     deployments:
       - id: rerank-local
         tier: local
-        provider_model: "openai/rerank"
+        provider_model: "litellm_proxy/rerank"
         api_base: "https://xmjdvvw39y2t.local:4443/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 8192
