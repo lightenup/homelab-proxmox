@@ -114,6 +114,66 @@
 # root matches the app's UID. The opposite is the usual trap — a root-created -wal beside a
 # non-root app silently breaks the app's writes, which is why roles/nextcloud uses
 # `docker exec -u www-data`.
+# The same PersistentConfig problem as the tool servers below, for scalar keys: Open WebUI
+# seeds these from the environment on FIRST boot only, then its database wins, so editing the
+# compose and redeploying is silently a no-op. Drill T040 proved it (compose said
+# hermes-balanced, running system said hermes-fast) and it bit for real on the first PDF
+# upload, where rag.embedding_batch_size was stuck at its default of 1 and one request per
+# chunk exhausted the gateway allowance.
+#
+# Only the keys in hermes_managed_config are touched. Anything the operator changes in the
+# admin UI that we do not declare keeps working and is never overwritten — that is the trade
+# that kept persistence enabled instead of switching it off wholesale.
+- name: Reconcile the persisted Open WebUI configuration we own
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "-i"
+      - hermes_open_webui
+      - python3
+      - "-c"
+      - |
+        import json, sqlite3, sys, time
+
+        desired = json.loads(sys.stdin.read())
+        con = sqlite3.connect('/app/backend/data/webui.db', timeout=5)
+        con.execute('PRAGMA busy_timeout=5000')
+
+        cols = [r[1] for r in con.execute('PRAGMA table_info(config)')]
+        if 'key' not in cols or 'value' not in cols:
+            sys.exit('SCHEMA DRIFT: config table has columns %s; expected key/value. '
+                     'Refusing to write.' % cols)
+
+        changed = []
+        now = int(time.time())
+        for key, want in sorted(desired.items()):
+            row = con.execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()
+            current = None
+            if row and row[0] is not None:
+                try:
+                    current = json.loads(row[0])
+                except (TypeError, ValueError):
+                    current = row[0]
+            if current == want:
+                continue
+            con.execute(
+                'INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?) '
+                'ON CONFLICT(key) DO UPDATE SET value=excluded.value, '
+                'updated_at=excluded.updated_at',
+                (key, json.dumps(want), now),
+            )
+            changed.append(key)
+        if changed:
+            con.commit()
+        con.close()
+        print('CHANGED ' + ','.join(changed) if changed else 'UNCHANGED')
+    stdin: "{{ hermes_managed_config | to_json }}"
+  register: hermes_config_reconcile
+  # Exact prefix, not `in`: 'CHANGED' is a substring of 'UNCHANGED'.
+  changed_when: hermes_config_reconcile.stdout is match('^CHANGED')
+  notify: Restart hermes
+
 - name: Reconcile the persisted MCP tool-server registrations
   ansible.builtin.command:
     argv:

@@ -78,6 +78,10 @@ services:
       # unset, retrieval silently reaches api.openai.com. preflight.yml asserts this pair.
       RAG_EMBEDDING_ENGINE: "openai"
       RAG_EMBEDDING_MODEL: "{{ hermes_embedding_alias }}"
+      # Upstream defaults to 1 — one gateway request per chunk, which exhausted the client's
+      # 60 rpm allowance on a single 2.5MB PDF. See hermes_embedding_batch_size in group_vars
+      # for the measurements. Seeds a fresh deploy; the reconcile task fixes existing ones.
+      RAG_EMBEDDING_BATCH_SIZE: "{{ hermes_embedding_batch_size }}"
       RAG_OPENAI_API_BASE_URL: "{{ hermes_gateway_base_url }}"
       RAG_OPENAI_API_KEY: "{{ llm_router_client_hermes_key }}"
       ENABLE_RAG_HYBRID_SEARCH: "true"
