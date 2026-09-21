@@ -194,6 +194,20 @@ tool was called and used.
     That caveat is the tell that the answer derives from tool output rather than being
     plausibly reconstructed.
 - [ ] T039 [US3] **Drill (US-3 AS-3)**: make the tool service unreachable and confirm the conversation shows a readable error naming it — never an indefinite wait, never a fabricated answer presented as tool output
+  - **Run 2026-09-21 by stopping `market_model_mcp` (its REST API left up). The two clauses
+    this task rules out both PASSED; the clause it requires did not.**
+  - **No indefinite wait** — the conversation completed normally. The host refuses in 0.15ms,
+    so unlike the Mac there is no dropped-SYN hang to inherit.
+  - **No fabricated answer presented as tool output**, and impressively so: the model said
+    *"its tools aren't in my toolset in this session, so this is from that recorded data"*,
+    naming the earlier chat it took the scenarios from, and reproduced them correctly.
+  - **But there was no error, readable or otherwise.** The tool was silently dropped from the
+    toolset and `docker logs` shows not one line about the server being unreachable. Omission
+    is indistinguishable from never having been configured.
+  - Left unchecked because the good outcome was the **model's** doing, not the system's: it
+    happened to have a prior conversation to cite and happened to disclose it. Raised as
+    backlog `078`, where option 2 — a `monitoring_contract` liveness probe per MCP URL — is
+    something this estate can do today without waiting on upstream.
 - [ ] T040 [US3] **Drill (SC-004)**: change a capability alias in `group_vars`, redeploy, and confirm via `git diff --stat` that only configuration changed — no template, no code. The diff is the assertion
   - **Run 2026-09-21. The diff half passes; the effect half does not.** Changed
     `hermes_task_alias` to `hermes-balanced`: `git diff --stat` showed exactly one file,
@@ -380,8 +394,9 @@ independently deliverable after the MVP.
 
 - [X] T066 [P] Configure `SEARXNG_QUERY_URL` against the sidecar in `ansible/roles/hermes/templates/docker-compose.yml.j2`
 - [X] T067 [P] Configure the SearXNG instance itself in `ansible/roles/hermes/templates/searxng-settings.yml.j2` — enabled engines, JSON output format, no external API keys
-- [ ] T068 **Drill (SC-013)**: ask something requiring current information; confirm citations to sources fetched at the time of asking, and that no query reached a commercial search provider
-  - **First attempt 2026-09-21 did not search at all** — the model answered "I don't have
+- [X] T068 **Drill (SC-013)**: ask something requiring current information; confirm citations to sources fetched at the time of asking, and that no query reached a commercial search provider
+  - **Passes 2026-09-21 with Web Search enabled for the message.**
+  - **First attempt did not search at all** — the model answered "I don't have
     access to live market data" with no citations. **Not an infrastructure fault**: SearXNG
     was verified from inside the Hermes container returning **HTTP 200 and 38 real results**
     for that exact query, and `web.search.enable`/`engine`/`searxng_query_url` are all

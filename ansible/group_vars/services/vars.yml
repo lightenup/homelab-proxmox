@@ -294,6 +294,9 @@ hermes_managed_config:
   rag.enable_hybrid_search: true
   # The one that cost a drill.
   rag.embedding_batch_size: "{{ hermes_embedding_batch_size | int }}"
+  # An integration we do not use and that cannot work here. Persisted, so the env var alone
+  # would not turn it off on an existing deploy.
+  ollama.enable: false
   # Web search: engine choice must not silently revert to a commercial provider (FR-022).
   web.search.enable: true
   web.search.engine: "searxng"
