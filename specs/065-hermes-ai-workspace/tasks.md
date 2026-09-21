@@ -182,7 +182,13 @@ tool was called and used.
     fail T088. The reconcile task at the end of `roles/hermes/tasks/main.yml` is what keeps
     that promise; the list is built once as a fact so the template and the reconcile step
     cannot drift.
-- [ ] T038 [US3] **Drill (SC-003)**: ask a question answerable only through `market-model`; confirm the tool was called and the answer derives from what it returned
+- [X] T038 [US3] **Drill (SC-003)**: ask a question answerable only through `market-model`; confirm the tool was called and the answer derives from what it returned
+  - **Passes 2026-09-21.** `hermes-deep` called `market-model_list_stress_scenarios` and
+    `market-model_list_calibrations` and answered from what they returned — including
+    relaying the calibration's own "placeholder … do not use in production without empirical
+    validation" caveat, which matches verbatim what that server returns when called directly.
+    That caveat is the tell that the answer derives from tool output rather than being
+    plausibly reconstructed.
 - [ ] T039 [US3] **Drill (US-3 AS-3)**: make the tool service unreachable and confirm the conversation shows a readable error naming it — never an indefinite wait, never a fabricated answer presented as tool output
 - [ ] T040 [US3] **Drill (SC-004)**: change a capability alias in `group_vars`, redeploy, and confirm via `git diff --stat` that only configuration changed — no template, no code. The diff is the assertion
   - **Run 2026-09-21. The diff half passes; the effect half does not.** Changed
