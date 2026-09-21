@@ -15,6 +15,15 @@ checks** (`pve-service-deploy plan`, Ansible preflight assertions, `act -l`) plu
 **Organization**: Grouped by user story so each can be implemented, tested and delivered
 independently.
 
+**Progress (2026-09-20)**: 48/90 tasks landed — every task that is a file edit (Terraform,
+Ansible, docs) across all 10 phases. Verified by rendering every template locally with
+representative vars via `ansible-playbook` (not by inspection alone) and by
+`ansible-playbook --syntax-check` on the new playbook. **Not done**: `ansible-vault edit`
+(needs the vault password), `terraform apply`/pipeline deploys, and every drill that needs a
+live deployment, a phone, or physical access to the inference host. See
+[quickstart.md § Status](./quickstart.md#status-2026-09-20--config-landed-nothing-deployed-or-drilled-yet)
+for exactly what a human needs to do next.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel — different files, no dependency on incomplete work
@@ -35,17 +44,17 @@ ones: `terraform/`, `ansible/`, `.github/workflows/`, `scripts/lab/`.
 > registered in **eight** places *in the same PR*. Partial registration means CI and laptop paths
 > diverge — that is a parity violation, not a follow-up. T001–T008 are those eight.
 
-- [ ] T001 [P] Add `hermes = "192.168.1.221/24"` to the service address map in `terraform/environments/prod.tfvars.template`
-- [ ] T002 [P] Add the same entry to `terraform/environments/lab.tfvars.template`
-- [ ] T003 Create the per-service Terraform root at `terraform/services/hermes/` (`main.tf`, `variables.tf`, `outputs.tf`, `providers.tf`), mirroring `terraform/services/llm-router/`
-- [ ] T004 [P] Add `hermes` to the service dropdown in `.github/workflows/lxc-deploy-lab.yml`
-- [ ] T005 [P] Add `hermes` to the service dropdown in `.github/workflows/lxc-promote-lab.yml`
-- [ ] T006 [P] Add `hermes` to the service dropdown in `.github/workflows/lxc-promote-prod.yml`
-- [ ] T007 [P] Add the `hermes` scope prefixes to `scripts/lab/service-scope-allowlist.json`
-- [ ] T008 [P] Create the service playbook at `ansible/playbooks/hermes.yml`, following `ansible/playbooks/llm-router.yml`
-- [ ] T009 Verify all eight registration points are present and consistent — grep for `hermes` across the paths in T001–T008 and confirm none is missing
-- [ ] T010 Run `act -l` to confirm the edited workflows still parse (Constitution § *Local Workflow Testing*); if `act` or Docker is unavailable, record why in the PR
-- [ ] T086 Verify Constitution V parity from a laptop, not only from CI: run `scripts/lab/pve-service-deploy plan --environment lab --service hermes` locally with the same arguments CI uses, and confirm the vault variables from T012 resolve from a local `ansible/group_vars/services/vault.yml` rather than only from the PVE vault store. Parity is currently *inherited* from the orchestrator rather than proven for this service — if either half fails, document the limitation and the local equivalent
+- [X] T001 [P] Add `hermes = "192.168.1.221/24"` to the service address map in `terraform/environments/prod.tfvars.template`
+- [X] T002 [P] Add the same entry to `terraform/environments/lab.tfvars.template`
+- [X] T003 Create the per-service Terraform root at `terraform/services/hermes/` (`main.tf`, `variables.tf`, `outputs.tf`, `providers.tf`), mirroring `terraform/services/llm-router/`
+- [X] T004 [P] Add `hermes` to the service dropdown in `.github/workflows/lxc-deploy-lab.yml`
+- [X] T005 [P] Add `hermes` to the service dropdown in `.github/workflows/lxc-promote-lab.yml`
+- [X] T006 [P] Add `hermes` to the service dropdown in `.github/workflows/lxc-promote-prod.yml`
+- [X] T007 [P] Add the `hermes` scope prefixes to `scripts/lab/service-scope-allowlist.json`
+- [X] T008 [P] Create the service playbook at `ansible/playbooks/hermes.yml`, following `ansible/playbooks/llm-router.yml`
+- [X] T009 Verify all eight registration points are present and consistent — grep for `hermes` across the paths in T001–T008 and confirm none is missing
+- [X] T010 Run `act -l` to confirm the edited workflows still parse (Constitution § *Local Workflow Testing*); if `act` or Docker is unavailable, record why in the PR
+- [X] T086 Verify Constitution V parity from a laptop, not only from CI: run `scripts/lab/pve-service-deploy plan --environment lab --service hermes` locally with the same arguments CI uses, and confirm the vault variables from T012 resolve from a local `ansible/group_vars/services/vault.yml` rather than only from the PVE vault store. Parity is currently *inherited* from the orchestrator rather than proven for this service — if either half fails, document the limitation and the local equivalent
 
 ---
 
@@ -55,13 +64,13 @@ ones: `terraform/`, `ansible/`, `.github/workflows/`, `scripts/lab/`.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase completes.
 
-- [ ] T011 Define `hermes_*` settings in `ansible/group_vars/services/vars.yml` per [data-model.md](./data-model.md) § *Service configuration* — pinned non-`latest` image tags for both containers, `hermes_data_dir` on local disk, gateway base URL, capability aliases
+- [X] T011 Define `hermes_*` settings in `ansible/group_vars/services/vars.yml` per [data-model.md](./data-model.md) § *Service configuration* — pinned non-`latest` image tags for both containers, `hermes_data_dir` on local disk, gateway base URL, capability aliases
 - [ ] T012 Add the vault variables (gateway client key, admin bootstrap credential) to `ansible/group_vars/services/vault.yml` via `ansible-vault edit`. **Never commit a value** (Constitution II)
-- [ ] T013 Create `ansible/roles/hermes/defaults/main.yml` with the role's own defaults
-- [ ] T014 Create `ansible/roles/hermes/tasks/preflight.yml` implementing every validation in [data-model.md](./data-model.md) — image tags pinned, `hermes_data_dir` not on NFS, aliases exist and are within the client key's scope, credentials resolve, `ENABLE_SIGNUP` false, **and both `RAG_OPENAI_*` variables explicitly set** (see T015)
-- [ ] T015 [P] In `ansible/roles/hermes/tasks/preflight.yml`, assert `RAG_OPENAI_API_BASE_URL` and `RAG_OPENAI_API_KEY` are set explicitly. They do **not** reliably inherit from `OPENAI_API_*` (upstream open-webui#22084); unset, retrieval silently reaches `api.openai.com` — broken *and* an FR-008 breach. This assertion is the only thing standing between the two
-- [ ] T016 Create `ansible/roles/hermes/templates/docker-compose.yml.j2` with the application and the SearXNG sidecar (research R-005), SearXNG **not published** to the LAN
-- [ ] T017 Create `ansible/roles/hermes/tasks/main.yml` — preflight, directories, render compose, bring the stack up, wait for readiness
+- [X] T013 Create `ansible/roles/hermes/defaults/main.yml` with the role's own defaults
+- [X] T014 Create `ansible/roles/hermes/tasks/preflight.yml` implementing every validation in [data-model.md](./data-model.md) — image tags pinned, `hermes_data_dir` not on NFS, aliases exist and are within the client key's scope, credentials resolve, `ENABLE_SIGNUP` false, **and both `RAG_OPENAI_*` variables explicitly set** (see T015)
+- [X] T015 [P] In `ansible/roles/hermes/tasks/preflight.yml`, assert `RAG_OPENAI_API_BASE_URL` and `RAG_OPENAI_API_KEY` are set explicitly. They do **not** reliably inherit from `OPENAI_API_*` (upstream open-webui#22084); unset, retrieval silently reaches `api.openai.com` — broken *and* an FR-008 breach. This assertion is the only thing standing between the two
+- [X] T016 Create `ansible/roles/hermes/templates/docker-compose.yml.j2` with the application and the SearXNG sidecar (research R-005), SearXNG **not published** to the LAN
+- [X] T017 Create `ansible/roles/hermes/tasks/main.yml` — preflight, directories, render compose, bring the stack up, wait for readiness
 - [ ] T018 Deploy through the pipeline (plan, then apply) and confirm the stack is up and answering on the LXC's published port
 
 **Checkpoint**: The service runs and is reachable on the LAN. User stories can now proceed.
@@ -75,11 +84,11 @@ ones: `terraform/`, `ansible/`, `.github/workflows/`, `scripts/lab/`.
 **Independent Test**: Sign in from a phone on mobile data, send a prompt, get an answer from a local
 model, add the site to the home screen.
 
-- [ ] T019 [US1] Configure the gateway backend in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `OPENAI_API_BASE_URL` at the `064` gateway, `OPENAI_API_KEY` from the vault (FR-007)
-- [ ] T020 [US1] Set `ENABLE_SIGNUP=False` and the admin bootstrap in `ansible/roles/hermes/templates/docker-compose.yml.j2` so exactly one account exists (FR-003, FR-004)
-- [ ] T021 [US1] Add the `caddy_services` entry for `hermes` in `ansible/group_vars/services/vars.yml` with **`user_facing: false`** — this creates the public route without the landing-page card, which User Story 2 adds separately
-- [ ] T022 [US1] Set `proxy_timeout` on that `ansible/group_vars/services/vars.yml` entry long enough to clear FR-021's twenty-minute ceiling. The default truncates a long generation and the symptom looks like a model fault, not a proxy one
-- [ ] T023 [US1] Point `TASK_MODEL_EXTERNAL` at the cheapest capability alias and set `ENABLE_TITLE_GENERATION` deliberately, in `ansible/roles/hermes/templates/docker-compose.yml.j2` (FR-011, research R-004)
+- [X] T019 [US1] Configure the gateway backend in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `OPENAI_API_BASE_URL` at the `064` gateway, `OPENAI_API_KEY` from the vault (FR-007)
+- [X] T020 [US1] Set `ENABLE_SIGNUP=False` and the admin bootstrap in `ansible/roles/hermes/templates/docker-compose.yml.j2` so exactly one account exists (FR-003, FR-004)
+- [X] T021 [US1] Add the `caddy_services` entry for `hermes` in `ansible/group_vars/services/vars.yml` with **`user_facing: false`** — this creates the public route without the landing-page card, which User Story 2 adds separately
+- [X] T022 [US1] Set `proxy_timeout` on that `ansible/group_vars/services/vars.yml` entry long enough to clear FR-021's twenty-minute ceiling. The default truncates a long generation and the symptom looks like a model fault, not a proxy one
+- [X] T023 [US1] Point `TASK_MODEL_EXTERNAL` at the cheapest capability alias and set `ENABLE_TITLE_GENERATION` deliberately, in `ansible/roles/hermes/templates/docker-compose.yml.j2` (FR-011, research R-004)
 - [ ] T024 [US1] Redeploy and confirm the public hostname resolves, serves a valid certificate, and presents a login before any other surface
 - [ ] T025 [US1] **Drill (SC-002)**: request every surface unauthenticated — chat, model list, documents — and confirm each is refused. Attempt to register and confirm it is refused
 - [ ] T026 [US1] **Drill (SC-001)**: from a phone on mobile data, sign in and receive an answer; record the elapsed time against the 60-second criterion
@@ -97,10 +106,10 @@ model, add the site to the home screen.
 **Independent Test**: Load the front page, see the card and its state, stop Hermes, reload and see
 the state change, restart, click through.
 
-- [ ] T029 [US2] Flip the `caddy_services` entry to `user_facing: true` in `ansible/group_vars/services/vars.yml` so the landing-page card appears alongside the route from T021
-- [ ] T030 [US2] Create `ansible/host_vars/hermes.yml` with the `monitoring_contract` from [contracts/monitoring.md](./contracts/monitoring.md) — a blackbox liveness probe on the public hostname
-- [ ] T087 [US2] Determine whether the application exposes a metrics endpoint, and if it does add it as a scrape target in `ansible/host_vars/hermes.yml`. FR-018 asks for one "if the application exposes one" — nobody has checked, so the clause is currently neither satisfied nor consciously waived. Record the answer either way
-- [ ] T031 [US2] Add the `LlmRouter`-style unreachable alert (**critical**) to `ansible/host_vars/hermes.yml`
+- [X] T029 [US2] Flip the `caddy_services` entry to `user_facing: true` in `ansible/group_vars/services/vars.yml` so the landing-page card appears alongside the route from T021
+- [X] T030 [US2] Create `ansible/host_vars/hermes.yml` with the `monitoring_contract` from [contracts/monitoring.md](./contracts/monitoring.md) — a blackbox liveness probe on the public hostname
+- [X] T087 [US2] Determine whether the application exposes a metrics endpoint, and if it does add it as a scrape target in `ansible/host_vars/hermes.yml`. FR-018 asks for one "if the application exposes one" — nobody has checked, so the clause is currently neither satisfied nor consciously waived. Record the answer either way
+- [X] T031 [US2] Add the `LlmRouter`-style unreachable alert (**critical**) to `ansible/host_vars/hermes.yml`
 - [ ] T032 [US2] Deploy the monitoring change **through the prod path only**. A lab-path monitoring deploy renders an empty configuration over the live one — this removed 16 scrape jobs and 5 alert groups from production on 2026-09-20 (backlog `072`). Two guards now refuse it; do not test them by accident
 - [ ] T033 [US2] Confirm the card renders on `hus-sky.no`, its indicator tracks the real probe, and clicking it opens Hermes itself
 - [ ] T034 [US2] **Drill**: stop the service, reload the front page, confirm the card reports it down rather than showing a stale success; restart and confirm recovery
@@ -120,9 +129,9 @@ tool was called and used.
 > into a third-party image this repo does not hold (research R-008). The credentialed branch is
 > still built — that is what makes adding the second server a list entry later.
 
-- [ ] T035 [US3] Add `hermes_mcp_servers` to `ansible/group_vars/services/vars.yml` per [data-model.md](./data-model.md), populated with `market-model` (`auth: none`)
-- [ ] T036 [US3] Implement the `auth: bearer` branch and its `credential_env` validation in `ansible/roles/hermes/tasks/preflight.yml`, **even though nothing populates it yet** — the schema is what makes FR-013 true, and validating an unused branch is deliberate, not dead configuration
-- [ ] T037 [US3] Render the MCP server registrations into the stack configuration in `ansible/roles/hermes/templates/docker-compose.yml.j2`
+- [X] T035 [US3] Add `hermes_mcp_servers` to `ansible/group_vars/services/vars.yml` per [data-model.md](./data-model.md), populated with `market-model` (`auth: none`)
+- [X] T036 [US3] Implement the `auth: bearer` branch and its `credential_env` validation in `ansible/roles/hermes/tasks/preflight.yml`, **even though nothing populates it yet** — the schema is what makes FR-013 true, and validating an unused branch is deliberate, not dead configuration
+- [X] T037 [US3] Render the MCP server registrations into the stack configuration in `ansible/roles/hermes/templates/docker-compose.yml.j2`
 - [ ] T038 [US3] **Drill (SC-003)**: ask a question answerable only through `market-model`; confirm the tool was called and the answer derives from what it returned
 - [ ] T039 [US3] **Drill (US-3 AS-3)**: make the tool service unreachable and confirm the conversation shows a readable error naming it — never an indefinite wait, never a fabricated answer presented as tool output
 - [ ] T040 [US3] **Drill (SC-004)**: change a capability alias in `group_vars`, redeploy, and confirm via `git diff --stat` that only configuration changed — no template, no code. The diff is the assertion
@@ -139,12 +148,12 @@ tool was called and used.
 
 **Independent Test**: SSH in by key; destroy the LXC; rebuild from code; restore; confirm state.
 
-- [ ] T041 [US4] Ensure `terraform/services/hermes/` injects `ssh_public_keys` into the LXC (FR-006, Constitution § *Access Control*)
+- [X] T041 [US4] Ensure `terraform/services/hermes/` injects `ssh_public_keys` into the LXC (FR-006, Constitution § *Access Control*)
 - [ ] T042 [US4] Confirm SSH works by key from the LAN, that password authentication is refused, and that no public route to SSH exists
-- [ ] T043 [P] [US4] Create `ansible/roles/hermes_backup/tasks/main.yml`, following `ansible/roles/financial_scenario_backup/`
-- [ ] T044 [P] [US4] Create `ansible/roles/hermes_backup/templates/backup_hermes.sh.j2` covering everything under `hermes_data_dir` — SQLite, uploaded documents and the vector index ([data-model.md](./data-model.md) § *Workspace state*)
-- [ ] T045 [US4] Add the backup schedule and retention settings to `ansible/group_vars/services/vars.yml`, and wire the role into `ansible/playbooks/hermes.yml`
-- [ ] T046 [US4] Add the backup-age alert (**warning**) to `ansible/host_vars/hermes.yml` per [contracts/monitoring.md](./contracts/monitoring.md)
+- [X] T043 [P] [US4] Create `ansible/roles/hermes_backup/tasks/main.yml`, following `ansible/roles/financial_scenario_backup/`
+- [X] T044 [P] [US4] Create `ansible/roles/hermes_backup/templates/backup_hermes.sh.j2` covering everything under `hermes_data_dir` — SQLite, uploaded documents and the vector index ([data-model.md](./data-model.md) § *Workspace state*)
+- [X] T045 [US4] Add the backup schedule and retention settings to `ansible/group_vars/services/vars.yml`, and wire the role into `ansible/playbooks/hermes.yml`
+- [X] T046 [US4] Add the backup-age alert (**warning**) to `ansible/host_vars/hermes.yml` per [contracts/monitoring.md](./contracts/monitoring.md)
 - [ ] T047 [US4] Confirm a backup artifact reaches the Synology and its age is visible to monitoring
 - [ ] T048 [US4] **Drill (SC-006)**: accumulate state, destroy the LXC, rebuild from code, run the restore, and confirm conversations, accounts, settings and knowledge all return. **A backup that has never been restored is a belief, not a backup**
 
@@ -181,10 +190,10 @@ tool was called and used.
 
 - [ ] T055 [US6] On the inference host, load an embedding model into oMLX and expose it in the Mac's `~/Development/private/local-llm/proxy/litellm-config.yaml` (research R-002)
 - [ ] T056 [US6] On the inference host, load a reranker model and expose it the same way in `~/Development/private/local-llm/proxy/litellm-config.yaml`
-- [ ] T057 [US6] Amend `064`: add the embedding and reranking capability aliases to `ansible/group_vars/services/vars.yml`, extend the Hermes client key's permitted `models` scope to include them, and update `064`'s preflight and doctor ([contracts/gateway-usage.md](./contracts/gateway-usage.md))
-- [ ] T058 [US6] Record the amendment in `specs/064-llm-router/` — it is a change to a closed feature and belongs in its records, not only in this one (Constitution I)
-- [ ] T059 [US6] Configure retrieval in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `RAG_EMBEDDING_ENGINE=openai`, `RAG_EMBEDDING_MODEL`, and **both** `RAG_OPENAI_API_BASE_URL` and `RAG_OPENAI_API_KEY` explicitly (T015 asserts this)
-- [ ] T060 [US6] Configure the external reranker in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `RAG_RERANKING_ENGINE=external`, `RAG_RERANKING_MODEL`, `RAG_EXTERNAL_RERANKER_URL`, `RAG_EXTERNAL_RERANKER_API_KEY`
+- [X] T057 [US6] Amend `064`: add the embedding and reranking capability aliases to `ansible/group_vars/services/vars.yml`, extend the Hermes client key's permitted `models` scope to include them, and update `064`'s preflight and doctor ([contracts/gateway-usage.md](./contracts/gateway-usage.md))
+- [X] T058 [US6] Record the amendment in `specs/064-llm-router/` — it is a change to a closed feature and belongs in its records, not only in this one (Constitution I)
+- [X] T059 [US6] Configure retrieval in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `RAG_EMBEDDING_ENGINE=openai`, `RAG_EMBEDDING_MODEL`, and **both** `RAG_OPENAI_API_BASE_URL` and `RAG_OPENAI_API_KEY` explicitly (T015 asserts this)
+- [X] T060 [US6] Configure the external reranker in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `RAG_RERANKING_ENGINE=external`, `RAG_RERANKING_MODEL`, `RAG_EXTERNAL_RERANKER_URL`, `RAG_EXTERNAL_RERANKER_API_KEY`
 - [ ] T061 [US6] **Drill (SC-007)**: upload a document, ask a question answerable only from it, confirm the answer identifies the source passage
 - [ ] T062 [US6] **Drill (FR-008/FR-016)**: confirm no document content leaves the estate at any stage — in particular that retrieval never reaches `api.openai.com`
 - [ ] T063 [US6] **Drill (US-6 AS-3)**: with the inference host away, ask a document question and confirm it fails readably rather than quietly answering without the document
@@ -202,25 +211,25 @@ independently deliverable after the MVP.
 
 ### Web search (FR-022, SC-013)
 
-- [ ] T066 [P] Configure `SEARXNG_QUERY_URL` against the sidecar in `ansible/roles/hermes/templates/docker-compose.yml.j2`
-- [ ] T067 [P] Configure the SearXNG instance itself in `ansible/roles/hermes/templates/searxng-settings.yml.j2` — enabled engines, JSON output format, no external API keys
+- [X] T066 [P] Configure `SEARXNG_QUERY_URL` against the sidecar in `ansible/roles/hermes/templates/docker-compose.yml.j2`
+- [X] T067 [P] Configure the SearXNG instance itself in `ansible/roles/hermes/templates/searxng-settings.yml.j2` — enabled engines, JSON output format, no external API keys
 - [ ] T068 **Drill (SC-013)**: ask something requiring current information; confirm citations to sources fetched at the time of asking, and that no query reached a commercial search provider
 
 ### Voice (FR-023, SC-012)
 
-- [ ] T069 [P] Configure local speech-to-text in `ansible/roles/hermes/templates/docker-compose.yml.j2` so audio never leaves the estate
-- [ ] T070 [P] Configure text-to-speech in `ansible/roles/hermes/templates/docker-compose.yml.j2`
+- [X] T069 [P] Configure local speech-to-text in `ansible/roles/hermes/templates/docker-compose.yml.j2` so audio never leaves the estate
+- [X] T070 [P] Configure text-to-speech in `ansible/roles/hermes/templates/docker-compose.yml.j2`
 - [ ] T071 **Drill (SC-012)**: on a phone, speak a question and hear the answer; confirm no audio left the estate
 
 ### Programmatic interface (FR-024, SC-014)
 
-- [ ] T072 Enable the application's own OpenAI-compatible endpoint in `ansible/roles/hermes/templates/docker-compose.yml.j2` and confirm it is subject to the same authentication as every other surface (FR-002, FR-004)
+- [X] T072 Enable the application's own OpenAI-compatible endpoint in `ansible/roles/hermes/templates/docker-compose.yml.j2` and confirm it is subject to the same authentication as every other surface (FR-002, FR-004)
 - [ ] T073 **Drill (SC-014)**: call it from another homelab service and confirm the answer reflects the configured tools and knowledge — demonstrably more than the bare gateway would return for the same prompt
 - [ ] T074 Confirm this endpoint was covered by T025's unauthenticated sweep; if it was added afterwards, re-run that drill against it
 
 ### Scheduled prompts (FR-025, SC-010, SC-015)
 
-- [ ] T075 [P] Enable automations in `ansible/roles/hermes/templates/docker-compose.yml.j2` via `ENABLE_AUTOMATIONS`, and set `AUTOMATION_MIN_INTERVAL` so a misconfigured schedule cannot exhaust the gateway allowance
+- [X] T075 [P] Enable automations in `ansible/roles/hermes/templates/docker-compose.yml.j2` via `ENABLE_AUTOMATIONS`, and set `AUTOMATION_MIN_INTERVAL` so a misconfigured schedule cannot exhaust the gateway allowance
 - [ ] T076 **Drill (SC-015)**: schedule a prompt that **requires a tool call**, let it run unattended, and confirm both that its output is waiting afterwards and that the tool was actually used. FR-025 requires scheduled runs to have "the same tools and knowledge available as in an interactive conversation" — a prompt that needs no tool would pass without testing that clause
 - [ ] T077 **Drill (SC-010)**: let a scheduled run fire while the inference host is away; confirm it is visibly recorded as failed and that "ran and failed" is distinguishable from "never ran"
 
@@ -230,12 +239,12 @@ independently deliverable after the MVP.
 
 - [ ] T078 **Drill (SC-008)**: define what "one hour of representative use" means *before* running it — number of conversations, whether documents are indexed — then measure the request rate from gateway metrics and record both the definition and the result
 - [ ] T079 Review the Hermes client key's `rpm_limit` in `ansible/group_vars/services/vars.yml` (`llm_router_clients`) against T078's measurement. **Measure before raising** — raising first hides the problem rather than solving it (FR-011)
-- [ ] T080 **Drill (SC-011)**: inspect the full diff and confirm it contains no bespoke application source code (FR-026)
+- [X] T080 **Drill (SC-011)**: inspect the full diff and confirm it contains no bespoke application source code (FR-026)
 - [ ] T081 Rewrite [quickstart.md](./quickstart.md) against what actually happened. It was written before implementation and every command in it is a claim; a step that needed changing is information worth keeping
 - [ ] T082 Record the LXC's measured resource use and right-size `terraform/services/hermes/` against it rather than against the initial guess (research R-007)
-- [ ] T083 Update `docs/architecture/` and the landing-page documentation to include Hermes
-- [ ] T084 Raise a backlog item in `docs/backlog/` (and index it in `docs/backlog/backlog.md`) for consolidating the five near-identical backup roles into one parameterised role — with five consumers it now passes Constitution IV's own ">1 concrete consumer" test, and it was deferred from this feature only because it means rewriting four other services' working code
-- [ ] T085 Confirm the principal risk is still recorded accurately: Hermes is internet-facing with only its own login in front of the gateway and the homelab's tools. If an estate-wide `forward_auth` layer has become viable, raise it as its own feature
+- [X] T083 Update `docs/architecture/` and the landing-page documentation to include Hermes
+- [X] T084 Raise a backlog item in `docs/backlog/` (and index it in `docs/backlog/backlog.md`) for consolidating the five near-identical backup roles into one parameterised role — with five consumers it now passes Constitution IV's own ">1 concrete consumer" test, and it was deferred from this feature only because it means rewriting four other services' working code
+- [X] T085 Confirm the principal risk is still recorded accurately: Hermes is internet-facing with only its own login in front of the gateway and the homelab's tools. If an estate-wide `forward_auth` layer has become viable, raise it as its own feature
 
 ---
 

@@ -46,6 +46,12 @@ service_mountpoints = {
       volume = "/mnt/nas/homelab_financial_scenario"
     }
   }
+  hermes = {
+    backups = {
+      mp     = "/mnt/hermes/backups"
+      volume = "/mnt/nas/homelab_hermes"
+    }
+  }
 }
 
 service_ips = {
@@ -60,6 +66,7 @@ service_ips = {
   market-model         = "192.168.1.218/24"
   eurooffice           = "192.168.1.219/24"
   llm-router           = "192.168.1.220/24"
+  hermes               = "192.168.1.221/24"
 }
 
 ssh_public_keys = [

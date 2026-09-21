@@ -1,0 +1,149 @@
+---
+# Preflight validation for Hermes (spec 065-hermes-ai-workspace, data-model.md § Validation).
+# Rendering docker-compose.yml.j2 is not attempted until all of these pass.
+
+- name: Assert image versions are pinned
+  ansible.builtin.assert:
+    that:
+      - hermes_version is defined
+      - hermes_version != ""
+      - hermes_version != "latest"
+      - hermes_searxng_version is defined
+      - hermes_searxng_version != ""
+      - hermes_searxng_version != "latest"
+    fail_msg: >-
+      hermes_version and hermes_searxng_version must both be pinned tags, not empty or
+      "latest" (data-model.md rule 1).
+
+- name: Assert Docker daemon is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+  check_mode: true
+  register: hermes_docker_status
+  failed_when: hermes_docker_status.failed
+
+# hermes_data_dir does not exist yet on a first deploy (this task runs before "Ensure data
+# directories exist" in main.yml), so findmnt can't target it directly. Walk up to the
+# nearest existing ancestor instead — its filesystem is what hermes_data_dir will inherit.
+- name: Determine the filesystem type backing hermes_data_dir
+  ansible.builtin.shell: |
+    set -euo pipefail
+    path="{{ hermes_data_dir }}"
+    while [ ! -d "$path" ]; do path="$(dirname "$path")"; done
+    findmnt --noheadings --output FSTYPE --target "$path"
+  register: hermes_data_dir_fstype
+  changed_when: false
+
+- name: Assert hermes_data_dir is not backed by NFS (FR-019, data-model.md rule 2)
+  ansible.builtin.assert:
+    that:
+      - hermes_data_dir_fstype.stdout | trim | lower not in ['nfs', 'nfs4']
+    fail_msg: >-
+      hermes_data_dir ({{ hermes_data_dir }}) resolves onto an NFS-backed mount
+      ({{ hermes_data_dir_fstype.stdout | trim }}). SQLite and the vector index must live on
+      local disk — NFS invites locking failures and corruption, the same reason
+      financial-scenario's state is split the same way.
+    quiet: true
+
+# --- Capability aliases (data-model.md rule 3) ---
+#
+# "Within the Hermes client key's permitted model scope" is automatically true once an
+# alias exists here: ansible/roles/llm_router/tasks/virtual_keys.yml scopes EVERY client key
+# to ALL llm_router_aliases names uniformly (there is no separate per-client allowlist), so
+# existence in the mapping IS the scope check. This assertion is what remains to verify.
+- name: Build the set of defined 064 alias names
+  ansible.builtin.set_fact:
+    hermes_gateway_alias_names: "{{ llm_router_aliases | map(attribute='name') | list }}"
+
+- name: Assert every Hermes capability alias exists in 064's alias mapping
+  ansible.builtin.assert:
+    that:
+      - item in hermes_gateway_alias_names
+    fail_msg: >-
+      '{{ item }}' is not a name defined in llm_router_aliases
+      (ansible/group_vars/services/vars.yml). An alias Hermes calls but 064 does not define
+      fails at first use, not at deploy, which is the worse failure (data-model.md rule 3).
+    quiet: true
+  loop:
+    - "{{ hermes_task_alias }}"
+    - "{{ hermes_embedding_alias }}"
+    - "{{ hermes_reranking_alias }}"
+
+# --- Credentials (data-model.md rule 4, Constitution II) ---
+
+- name: Assert the gateway client credential is defined
+  ansible.builtin.assert:
+    that:
+      - llm_router_client_hermes_key is defined
+      - llm_router_client_hermes_key | length > 0
+    fail_msg: >-
+      Missing vault variable llm_router_client_hermes_key — the Hermes client's virtual key
+      on the 064 gateway (llm_router_clients: alias hermes), provisioned by that role's
+      virtual_keys.yml. Presenting exactly this one credential is what
+      contracts/gateway-usage.md requires (FR-007).
+
+- name: Assert Hermes' own vault-sourced credentials are defined
+  ansible.builtin.assert:
+    that:
+      - hermes_webui_secret_key is defined
+      - hermes_webui_secret_key | length > 0
+      - hermes_admin_email is defined
+      - hermes_admin_email | length > 0
+      - hermes_admin_password_bootstrap is defined
+      - hermes_admin_password_bootstrap | length > 0
+      - hermes_searxng_secret is defined
+      - hermes_searxng_secret | length > 0
+    fail_msg: >-
+      Missing one or more vault variables: hermes_webui_secret_key, hermes_admin_email,
+      hermes_admin_password_bootstrap, hermes_searxng_secret — run 'ansible-vault edit
+      group_vars/services/vault.yml' to add them (FR-003, FR-004, Constitution II). Never
+      commit a value.
+  no_log: true
+
+# --- The RAG_OPENAI_* trap (data-model.md rule 5, research R-003, upstream open-webui#22084) ---
+
+- name: Assert the retrieval backend is explicit and never api.openai.com
+  ansible.builtin.assert:
+    that:
+      - hermes_gateway_base_url is defined
+      - hermes_gateway_base_url | length > 0
+      - "'api.openai.com' not in hermes_gateway_base_url"
+      - llm_router_client_hermes_key | length > 0
+    fail_msg: >-
+      hermes_gateway_base_url must be explicitly set to the 064 gateway and must never be (or
+      resolve through) api.openai.com. RAG_OPENAI_API_BASE_URL and RAG_OPENAI_API_KEY do NOT
+      reliably inherit from OPENAI_API_BASE_URL/OPENAI_API_KEY (research R-003, upstream
+      open-webui#22084) — left unset, retrieval silently reaches api.openai.com, which is
+      both a broken feature and an FR-008 breach. This assertion is the difference between
+      the two.
+    quiet: true
+
+# --- Self-registration (data-model.md rule 6, FR-003) ---
+
+- name: Assert self-registration stays disabled
+  ansible.builtin.assert:
+    that:
+      - hermes_enable_signup == false
+    fail_msg: >-
+      hermes_enable_signup must be false (FR-003) — exactly one account, the admin bootstrap,
+      may exist. Asserted rather than assumed: Open WebUI's own upstream default is True, and
+      a version bump (or an errant override) could reintroduce it silently.
+
+# --- MCP server registrations (data-model.md § Entity: MCP server registration, FR-013) ---
+
+- name: Assert every bearer-auth MCP server names a non-empty vault variable
+  ansible.builtin.assert:
+    that:
+      - item.credential_env is defined and item.credential_env
+      - lookup('vars', item.credential_env | lower, default='') | length > 0
+    fail_msg: >-
+      MCP server '{{ item.name }}' declares auth: bearer but its credential_env
+      ('{{ item.credential_env | default('unset') }}') does not name a defined, non-empty
+      vault variable. This branch is deliberately validated even with no current consumer
+      (research R-008) — it is what keeps adding a credentialed server a configuration
+      change, not a code change (FR-013).
+  loop: "{{ hermes_mcp_servers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.auth == 'bearer'

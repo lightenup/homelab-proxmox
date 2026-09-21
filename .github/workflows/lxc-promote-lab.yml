@@ -11,6 +11,7 @@ on:
           - adguard
           - financial-scenario
           - eurooffice
+          - hermes
           - market-model
           - homeassistant
           - immich

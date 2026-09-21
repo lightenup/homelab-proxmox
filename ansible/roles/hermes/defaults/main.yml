@@ -1,0 +1,32 @@
+---
+# Pinned image repositories — tags come from ansible/group_vars/services/vars.yml
+# (hermes_version, hermes_searxng_version).
+hermes_image: "openwebui/open-webui"
+hermes_searxng_image: "searxng/searxng"
+
+# Local speech-to-text (FR-023). Left at Open WebUI's own default engine (AUDIO_STT_ENGINE
+# unset -> faster-whisper, fully in-container) rather than an external one, so audio never
+# leaves the estate (research.md, SC-012). "base" trades accuracy for latency on a 4-core
+# LXC with no GPU; raise to "small" if quality is the bottleneck rather than speed.
+hermes_whisper_model: "base"
+
+# Local text-to-speech (FR-023). "transformers" is Open WebUI's own in-container HuggingFace
+# SpeechT5 pipeline — verified against backend/open_webui/routers/audio.py, 2026-09-20: the
+# empty-string default answers /speech with 404 rather than running anything locally, so this
+# must be set explicitly for FR-023 to hold.
+hermes_tts_engine: "transformers"
+
+# Automations (FR-025). The minimum recurrence interval a scheduled prompt may declare, in
+# seconds — a misconfigured schedule must not be able to exhaust the gateway's request
+# allowance by itself (contracts/gateway-usage.md § Rate discipline).
+hermes_automation_min_interval: 300
+
+# Reverse-proxy origin. Used for WEBUI_URL (PWA manifest, email links) — never localhost or
+# an internal IP, since the owner reaches this exclusively through hermes.hus-sky.no.
+hermes_public_url: "https://hermes.{{ caddy_base_domain }}"
+
+# FR-003: exactly one account may exist. A variable rather than a template literal so
+# preflight has something to assert against — the upstream default is True, and a version
+# bump (or an errant override somewhere) could otherwise reintroduce self-registration
+# silently. Not meant to be overridden.
+hermes_enable_signup: false

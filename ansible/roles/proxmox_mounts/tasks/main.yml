@@ -33,6 +33,10 @@
         src: 192.168.1.109:/volume1/homelab_financial_scenario
         opts: rw,nofail
         purpose: "Financial-scenario saved-scenario backups"
+      - path: /mnt/nas/homelab_hermes
+        src: 192.168.1.109:/volume1/homelab_hermes
+        opts: rw,nofail
+        purpose: "Hermes workspace backups (spec 065)"
 
 - name: Mount NAS NFS shares
   ansible.posix.mount:

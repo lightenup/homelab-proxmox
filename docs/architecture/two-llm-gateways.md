@@ -9,9 +9,10 @@ does each layer own?".
 ## The path
 
 ```
-Hermes, and any other homelab client
+Hermes (spec 065, 192.168.1.221), and any other homelab client
    │
    │  sk-… virtual key, alias hermes-fast | hermes-balanced | hermes-deep
+   │       | hermes-embed | hermes-rerank (retrieval, amendment-hermes-retrieval-aliases.md)
    ▼
 gateway LXC  192.168.1.220:4000          ← owns WHO may call, and HOW MUCH
    │                                        virtual keys, budgets, RPM, spend logs
