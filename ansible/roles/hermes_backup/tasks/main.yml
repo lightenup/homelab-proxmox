@@ -18,6 +18,17 @@
     owner: root
     group: root
 
+# Deployed alongside the backup, not left as a runbook paragraph: the moment a restore is
+# needed is the worst moment to be reconstructing the procedure from prose. There is no
+# timer for it — it is run by hand, and it replaces the live workspace.
+- name: Deploy restore script
+  ansible.builtin.template:
+    src: restore_hermes.sh.j2
+    dest: /usr/local/bin/restore_hermes.sh
+    mode: '0755'
+    owner: root
+    group: root
+
 - name: Create systemd service for hermes backup
   ansible.builtin.copy:
     dest: /etc/systemd/system/hermes-backup.service

@@ -281,6 +281,10 @@ hermes_backup_retention_days: 7
 hermes_backup_retention_weeks: 4
 hermes_backup_retention_months: 6
 hermes_backup_schedule: "*-*-* 04:45:00"
+# Port for the non-destructive restore drill's throwaway instance
+# (playbooks/hermes-restore-drill.yml), mirroring immich_restore_test_port. Never published
+# through the reverse proxy — it exists only for the duration of a drill.
+hermes_restore_test_port: 8081
 
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.

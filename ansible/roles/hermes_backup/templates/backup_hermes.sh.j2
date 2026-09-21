@@ -96,11 +96,30 @@ src.close()
 # Archive everything ELSE under the data dir directly from the host (it's a bind mount, so
 # host and container see identical content) — uploaded documents and the vector index need
 # no special consistency handling, only the live SQLite file does. Substitute the snapshot
-# for the live db so the archive never contains a copy taken mid-write. Plain `cp -a`
-# rather than rsync, which is not in service_base_packages and not worth adding for this.
+# for the live db so the archive never contains a copy taken mid-write.
+#
+# A tar-pipe rather than `cp -a`, because of what the excludes below skip: copying it first
+# and deleting it after would move over a gigabyte for nothing.
+#
+#   cache/          Hugging Face model weights the app downloads at runtime —
+#                   AUDIO_TTS_ENGINE=transformers alone pulls ~1.2GB of SpeechT5 + HiFiGAN.
+#                   Measured 2026-09-21: the archive was 755MB, of which 99.8% was this, and
+#                   the irreplaceable state was ~2MB. It is re-downloadable by definition and
+#                   is NOT part of data-model.md's "Workspace state" (conversations,
+#                   accounts, settings, uploaded documents, vector index).
+#   webui.db-wal    The LIVE write-ahead log and shared-memory index. They belong to the
+#   webui.db-shm    running database, NOT to the point-in-time snapshot placed beside them,
+#                   so shipping them pairs a consistent db with a WAL from a different
+#                   moment. sqlite3.Connection.backup() output is self-contained; these add
+#                   only the chance of confusing a restore.
 mkdir -p "$WORK_DIR/open-webui"
-cp -a "$DATA_DIR/." "$WORK_DIR/open-webui/"
-rm -f "$WORK_DIR/open-webui/webui.db" "$WORK_DIR/open-webui/.backup-snapshot.db"
+tar -cf - -C "$DATA_DIR" \
+    --exclude='./cache' \
+    --exclude='./webui.db' \
+    --exclude='./webui.db-wal' \
+    --exclude='./webui.db-shm' \
+    --exclude='./.backup-snapshot.db' \
+    . | tar -xf - -C "$WORK_DIR/open-webui"
 cp "$DATA_DIR/.backup-snapshot.db" "$WORK_DIR/open-webui/webui.db"
 docker exec "$CONTAINER" rm -f /app/backend/data/.backup-snapshot.db
 
