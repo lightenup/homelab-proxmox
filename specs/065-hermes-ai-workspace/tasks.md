@@ -185,7 +185,26 @@ tool was called and used.
 - [ ] T038 [US3] **Drill (SC-003)**: ask a question answerable only through `market-model`; confirm the tool was called and the answer derives from what it returned
 - [ ] T039 [US3] **Drill (US-3 AS-3)**: make the tool service unreachable and confirm the conversation shows a readable error naming it — never an indefinite wait, never a fabricated answer presented as tool output
 - [ ] T040 [US3] **Drill (SC-004)**: change a capability alias in `group_vars`, redeploy, and confirm via `git diff --stat` that only configuration changed — no template, no code. The diff is the assertion
-- [ ] T088 [US3] **Drill (SC-004, second half)**: add a tool-service entry to `hermes_mcp_servers` in `ansible/group_vars/services/vars.yml` — a disabled placeholder is sufficient — redeploy, and confirm via `git diff --stat` that only configuration changed. T040 proves the *capability alias* half; this proves the *tool service* half, which is the one FR-013 is actually about
+  - **Run 2026-09-21. The diff half passes; the effect half does not.** Changed
+    `hermes_task_alias` to `hermes-balanced`: `git diff --stat` showed exactly one file,
+    `ansible/group_vars/services/vars.yml` — no template, no code, so the literal assertion
+    holds.
+  - **But the change is inert.** After deploying, the compose file says `hermes-balanced`
+    while the running system still says `hermes-fast`: `task.model.external` is an Open WebUI
+    PersistentConfig, seeded on first boot, and the database wins thereafter. SC-004's
+    *intent* — that changing a capability alias is a configuration change — therefore does
+    **not** hold for this key.
+  - Left unchecked: ticking it on the diff alone would certify a promise the system does not
+    keep. Only `tool_server.connections` has a reconcile step today (see T088, which does
+    pass). The same trap applies to `rag.embedding_model`, so pointing
+    `hermes_embedding_alias` at a real model later will need the same treatment.
+- [X] T088 [US3] **Drill (SC-004, second half)**: add a tool-service entry to `hermes_mcp_servers` in `ansible/group_vars/services/vars.yml` — a disabled placeholder is sufficient — redeploy, and confirm via `git diff --stat` that only configuration changed. T040 proves the *capability alias* half; this proves the *tool service* half, which is the one FR-013 is actually about
+  - **Passes, 2026-09-21.** Added a disabled placeholder to `hermes_mcp_servers`;
+    `git diff --stat` showed only `vars.yml`, and after deploying the persisted config read
+    `[('market-model', True), ('drill-placeholder', False)]`. Removing the entry removed it
+    again — so add, disable and delete all work as pure configuration.
+  - Worth noting this would have silently failed before the reconcile task landed the same
+    day: the env var only seeds the first boot. The drill is only meaningful now.
 - [ ] T090 [US3] **Drill (edge case)**: exercise a tool call returning far more data than fits in a conversation, and one returning malformed output. Confirm both surface readably and neither is presented to the owner as a successful result (FR-014)
 
 **Checkpoint**: Hermes answers from the estate's own data.
@@ -295,7 +314,7 @@ tool was called and used.
 - [ ] T062 [US6] **Drill (FR-008/FR-016)**: confirm no document content leaves the estate at any stage — in particular that retrieval never reaches `api.openai.com`
 - [ ] T063 [US6] **Drill (US-6 AS-3)**: with the inference host away, ask a document question and confirm it fails readably rather than quietly answering without the document
 - [ ] T064 [US6] Measure the cost of indexing a representative document set against the gateway request allowance; bulk indexing is not an interactive operation and must not be treated as one
-- [ ] T065 [US6] Record in [quickstart.md](./quickstart.md) that retrieval is unavailable while the inference host sleeps — the accepted cost of research R-002's decision
+- [X] T065 [US6] Record in [quickstart.md](./quickstart.md) that retrieval is unavailable while the inference host sleeps — the accepted cost of research R-002's decision
 
 **Checkpoint**: Document Q&A works, entirely locally, and fails honestly.
 
@@ -337,8 +356,15 @@ independently deliverable after the MVP.
 - [ ] T078 **Drill (SC-008)**: define what "one hour of representative use" means *before* running it — number of conversations, whether documents are indexed — then measure the request rate from gateway metrics and record both the definition and the result
 - [ ] T079 Review the Hermes client key's `rpm_limit` in `ansible/group_vars/services/vars.yml` (`llm_router_clients`) against T078's measurement. **Measure before raising** — raising first hides the problem rather than solving it (FR-011)
 - [X] T080 **Drill (SC-011)**: inspect the full diff and confirm it contains no bespoke application source code (FR-026)
-- [ ] T081 Rewrite [quickstart.md](./quickstart.md) against what actually happened. It was written before implementation and every command in it is a claim; a step that needed changing is information worth keeping
-- [ ] T082 Record the LXC's measured resource use and right-size `terraform/services/hermes/` against it rather than against the initial guess (research R-007)
+- [X] T081 Rewrite [quickstart.md](./quickstart.md) against what actually happened. It was written before implementation and every command in it is a claim; a step that needed changing is information worth keeping
+- [X] T082 Record the LXC's measured resource use and right-size `terraform/services/hermes/` against it rather than against the initial guess (research R-007)
+  - **Measured 2026-09-21, and deliberately NOT resized.** Idle: 818MB of 6144MB (open-webui
+    647MiB, searxng 93MiB), 8.4GB of 32GB disk (nearly all Docker images — the data dir is
+    1.2MB), load 0.17 on 4 cores. No host pressure: `local-lvm` 12.7% used, 746GB free.
+  - Resizing on idle numbers would repeat the original guess with extra steps: the two
+    heaviest features, in-container Whisper and SpeechT5, have never run. Hermes is the
+    largest allocation in the fleet (6GB vs immich's 4GB) while among the lightest users, so
+    **re-measure after the voice drill (T071) and resize then**. Recorded in quickstart.
 - [X] T083 Update `docs/architecture/` and the landing-page documentation to include Hermes
 - [X] T084 Raise a backlog item in `docs/backlog/` (and index it in `docs/backlog/backlog.md`) for consolidating the five near-identical backup roles into one parameterised role — with five consumers it now passes Constitution IV's own ">1 concrete consumer" test, and it was deferred from this feature only because it means rewriting four other services' working code
 - [X] T085 Confirm the principal risk is still recorded accurately: Hermes is internet-facing with only its own login in front of the gateway and the homelab's tools. If an estate-wide `forward_auth` layer has become viable, raise it as its own feature
