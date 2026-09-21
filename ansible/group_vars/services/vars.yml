@@ -140,9 +140,13 @@ llm_router_aliases:
   # NOTE the two different providers below, which is not a style inconsistency:
   # LiteLLM's rerank API accepts only a fixed provider set and `openai` is NOT in it —
   # `openai/rerank` fails at CALL time with "Unsupported provider: openai", not at load.
-  # `litellm_proxy/` is the correct prefix for chaining to another LiteLLM proxy, which is
-  # exactly what the Mac's router is. Embeddings have no such restriction, so `openai/`
-  # stays there and matches every chat alias above.
+  # `infinity/` is the one that works, for a URL-construction reason: it appends `/rerank`
+  # to api_base, and api_base already ends in `/v1`, giving `/v1/rerank` — exactly the route
+  # the Mac's LiteLLM serves. `litellm_proxy/` looks like the obvious choice for chaining to
+  # another LiteLLM proxy and is WRONG: there is no litellm_proxy.rerank module, so it falls
+  # through to a generic path and the Mac answers 404. Verified both, 2026-09-21.
+  # Embeddings have no such restriction, so `openai/` stays there and matches every chat
+  # alias above.
   #
   # No per-client scope change needed: virtual_keys.yml scopes every client key to ALL
   # `llm_router_aliases` names uniformly, so adding these two here IS "extending the Hermes
@@ -171,7 +175,7 @@ llm_router_aliases:
     deployments:
       - id: rerank-local
         tier: local
-        provider_model: "litellm_proxy/rerank"
+        provider_model: "infinity/rerank"
         api_base: "https://xmjdvvw39y2t.local:4443/v1"
         api_key_env: MAC_LITELLM_KEY
         context_window: 8192
