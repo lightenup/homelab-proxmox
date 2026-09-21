@@ -40,6 +40,9 @@ Goals:
   - `adguard-lxc` – AdGuard DNS.
   - `homeassistant-lxc` – Home Assistant.
   - `reverse-proxy-lxc` – Caddy/Traefik or similar.
+  - `hermes-lxc` – Open WebUI + SearXNG, a self-hosted AI workspace on local models only,
+    reached through the `llm-router-lxc` gateway. State (SQLite, documents, vector index) on
+    local disk, backed up to Synology (spec 065).
 
 ## Tooling
 

@@ -22,6 +22,8 @@ market_model_version: "0.3.0"
 eurooffice_version: "v9.3.2"
 llm_router_version: "v1.83.3-stable"
 llm_router_postgres_version: "17.11-alpine3.24"
+hermes_version: "0.11.3"
+hermes_searxng_version: "2026.9.19-c0014f015"
 
 # Euro-Office Configuration
 eurooffice_ip: "192.168.1.219"
@@ -128,6 +130,46 @@ llm_router_aliases:
         # the same 108k prompt). Size this for the cold path; the warm path is free.
         timeout: 1200
         health_checked: true
+  # Added for spec 065 (Hermes retrieval, FR-015/016, research R-002). Sequenced behind
+  # Mac-side work this repo does not own: T055/T056 load an embedding model and a reranker
+  # into oMLX and expose them as new role aliases in the Mac's own
+  # ~/Development/private/local-llm/proxy/litellm-config.yaml. `provider_model` below MUST
+  # match whatever alias name that config gives them — verify with `GET /v1/models` against
+  # the Mac's router before relying on these (contracts/gateway-usage.md).
+  #
+  # No per-client scope change needed: virtual_keys.yml scopes every client key to ALL
+  # `llm_router_aliases` names uniformly, so adding these two here IS "extending the Hermes
+  # client key's permitted model scope" (data-model.md's rule 3) — nothing else to edit.
+  #
+  # health_checked: false, deliberately unlike every chat alias above. The background health
+  # check (config.yaml.j2's background_health_check_model_groups) probes with a chat-style
+  # call; sending that against an embeddings/rerank-only deployment is untested against this
+  # pinned LiteLLM version and risks a noisy, meaningless failure rather than a real signal.
+  # Absence is still caught at first real use (FR-009), which is the behaviour that matters.
+  - name: hermes-embed
+    fallback_to: null
+    context_window_fallback_to: null
+    deployments:
+      - id: embed-local
+        tier: local
+        provider_model: "openai/embed"
+        api_base: "https://xmjdvvw39y2t.local:4443/v1"
+        api_key_env: MAC_LITELLM_KEY
+        context_window: 8192
+        timeout: 300
+        health_checked: false
+  - name: hermes-rerank
+    fallback_to: null
+    context_window_fallback_to: null
+    deployments:
+      - id: rerank-local
+        tier: local
+        provider_model: "openai/rerank"
+        api_base: "https://xmjdvvw39y2t.local:4443/v1"
+        api_key_env: MAC_LITELLM_KEY
+        context_window: 8192
+        timeout: 300
+        health_checked: false
 
 llm_router_clients:
   - alias: hermes
@@ -177,6 +219,68 @@ llm_router_gateway_budget:
   # monitoring that exists to notice outages. 5 rpm of headroom keeps the canary — which
   # needs one request an hour — able to run while hermes is at full rate.
   rpm_limit: 65
+
+# Hermes Configuration (spec 065) — a self-hosted AI workspace (Open WebUI + a SearXNG
+# sidecar) reaching models only through the 064 gateway (contracts/gateway-usage.md).
+# hermes_version / hermes_searxng_version live in the versions block above, next to every
+# other service's pin (047's consolidation).
+hermes_ip: "192.168.1.221"
+hermes_port: 8080
+hermes_install_dir: "/opt/hermes"
+# Local disk only — never NFS (FR-019, data-model.md). SQLite, uploaded documents and the
+# vector index all live under here; the financial-scenario split, for the same reason
+# (locking failures / corruption over NFS for a single-writer SQLite store).
+hermes_data_dir: "/opt/hermes-data"
+
+# Capability aliases, never provider model IDs or the inference host directly
+# (contracts/gateway-usage.md § What Hermes may do). All three MUST exist in
+# llm_router_aliases above — preflight asserts it.
+hermes_gateway_base_url: "http://{{ llm_router_ip }}:{{ llm_router_port }}/v1"
+hermes_task_alias: "hermes-fast"        # cheapest alias — housekeeping calls (FR-011, R-004)
+hermes_embedding_alias: "hermes-embed"
+hermes_reranking_alias: "hermes-rerank"
+
+# Title generation stays ON: pointing TASK_MODEL_EXTERNAL at the cheapest alias already
+# bounds its cost (R-004); disabling it as well would drop a real feature to solve a problem
+# the alias redirection already solves. Revisit downward if T078's measurement says otherwise.
+hermes_enable_title_generation: true
+
+# MCP server registrations (data-model.md § Entity: MCP server registration). Rendered into
+# TOOL_SERVER_CONNECTIONS (Open WebUI's env-seeded tool-server list — verified against
+# backend/open_webui/config.py and utils/tools.py, 2026-09-20; not documented on
+# docs.openwebui.com, which describes only the admin-UI path). `market-model` is the only
+# entry at launch (research R-008, decided 2026-09-20) — `financial-scenario` is omitted
+# because its MCP secret is baked into a third-party image this repo does not hold.
+#
+# The `auth: bearer` branch is exercised by NO entry below on purpose. It is still validated
+# in preflight (T036) so the schema — not a code change — is what adding a credentialed
+# server later costs (FR-013).
+hermes_mcp_servers:
+  - name: "market-model"
+    url: "http://{{ market_model_ip }}:{{ market_model_mcp_port }}/mcp"
+    auth: none
+    credential_env: null
+    enabled: true
+  # Re-arm when the personal-financial-scenarios image makes its MCP secret configurable
+  # (research R-008). At that point this is the one list entry FR-013 promises:
+  # - name: "financial-scenario"
+  #   url: "http://{{ financial_scenario_ip }}:{{ financial_scenario_gui_port }}/mcp"
+  #   auth: bearer
+  #   credential_env: HERMES_MCP_FINANCIAL_SCENARIO_KEY
+  #   enabled: true
+
+# Web search (FR-022) — SearXNG as a sidecar in the same compose stack (research R-005), not
+# published to the LAN. Reached by Hermes over the compose network only.
+hermes_searxng_install_dir: "{{ hermes_install_dir }}/searxng"
+
+# Backup (US-4, data-model.md § Workspace state). Destination is the in-container path of
+# the host-NFS bind-mount, the same pattern as financial-scenario (see
+# service_mountpoints.hermes in the environment tfvars and proxmox_mounts).
+hermes_backup_path: "/mnt/hermes/backups"
+hermes_backup_retention_days: 7
+hermes_backup_retention_weeks: 4
+hermes_backup_retention_months: 6
+hermes_backup_schedule: "*-*-* 04:45:00"
 
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.
@@ -319,6 +423,20 @@ caddy_services:
     user_facing: true
     proxy_timeout: "300s"
     link: "https://nextcloud.hus-sky.no/apps/files"
+  - host: hermes
+    ip: "{{ hermes_ip }}"
+    port: "{{ hermes_port }}"
+    title: "Hermes"
+    desc: "AI workspace on local models"
+    enabled: true
+    # user_facing: true creates BOTH the public route and the landing-page card (US1 + US2).
+    # Correct here — Hermes is meant to be clicked through to, unlike llm-router's Grafana
+    # link-only card (contracts/monitoring.md § The front-page indicator).
+    user_facing: true
+    # MUST clear FR-021's 20-minute ceiling (SC-009) — the default truncates a long local
+    # generation and the symptom looks like a model fault, not a proxy one. 1260s leaves the
+    # same margin over 1200s that llm_router_aliases' own per-deployment timeout does.
+    proxy_timeout: "1260s"
   - host: adguard
     ip: "{{ adguard_ip }}"
     port: "{{ adguard_web_port }}"

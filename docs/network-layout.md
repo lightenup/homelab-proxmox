@@ -15,6 +15,7 @@ As of **Iteration 1 (Bootstrap)**, the network is flat to simplify initial adopt
   - Monitoring (Grafana): `192.168.1.214` (`grafana.hus-sky.no`)
   - Jellyfin: `192.168.1.215` (`jellyfin.hus-sky.no`)
   - Nextcloud: `192.168.1.216` (`nextcloud.hus-sky.no`)
+  - Hermes: `192.168.1.221` (`hermes.hus-sky.no`) — self-hosted AI workspace, spec 065
 
 ### Remote Access
 

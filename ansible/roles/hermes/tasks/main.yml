@@ -1,0 +1,65 @@
+---
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Ensure install directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_install_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Ensure SearXNG config directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_searxng_install_dir }}"
+    state: directory
+    mode: '0755'
+
+# Single bind-mounted volume, matching the upstream image's expectation of one DATA_DIR
+# (/app/backend/data): SQLite, uploaded documents and the vector index all live under it
+# (data-model.md § Workspace state), which is what makes hermes_backup's one bind-mount
+# sufficient for all three.
+- name: Ensure data directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_data_dir }}/open-webui"
+    state: directory
+    mode: '0755'
+
+- name: Deploy SearXNG settings
+  ansible.builtin.template:
+    src: searxng-settings.yml.j2
+    dest: "{{ hermes_searxng_install_dir }}/settings.yml"
+    mode: '0640'
+  notify: Restart hermes
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ hermes_install_dir }}/docker-compose.yml"
+    mode: '0640'
+  notify: Restart hermes
+  no_log: true
+
+- name: Ensure hermes stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ hermes_install_dir }}"
+    state: present
+    remove_orphans: true
+    pull: always
+
+- name: Wait for the workspace to be reachable
+  ansible.builtin.wait_for:
+    port: "{{ hermes_port }}"
+    host: "127.0.0.1"
+    delay: 5
+    timeout: 180
+
+- name: Verify the workspace is healthy
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ hermes_port }}/health"
+    method: GET
+    status_code: 200
+  register: hermes_health
+  retries: 12
+  delay: 10
+  until: hermes_health.status == 200
+  changed_when: false

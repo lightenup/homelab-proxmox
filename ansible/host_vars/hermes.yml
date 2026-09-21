@@ -1,0 +1,50 @@
+healthcheck_url:
+  scheme: http
+  port: 8080
+  path: /health
+healthcheck_profile: lan
+healthcheck_expect_status: 200
+
+# monitoring_contract (spec 065, contracts/monitoring.md § Signals).
+#
+# scrape_targets: [] — Open WebUI ships no Prometheus /metrics endpoint. Verified against
+# upstream source, 2026-09-20: no prometheus/instrumentator dependency in
+# backend/requirements.txt and no "metrics"/"prometheus" reference anywhere in
+# backend/open_webui/main.py. FR-018's "if the application exposes one" clause is therefore
+# answered — it does not, so there is nothing to add here (T087).
+monitoring_contract:
+  enabled: true
+  scrape_targets: []
+  liveness_targets:
+    - job_name: "hermes"
+      url: "https://hermes.{{ caddy_base_domain }}/"
+      module: http_2xx
+      # No instance_label override needed, unlike llm-router's internal-port probe: this URL
+      # is already the public hostname, so relabeling the __param_target as `instance` here
+      # publishes nothing that isn't already public (financial-scenario's own pattern).
+  alert_rules:
+    - alert: HermesDown
+      expr: |
+        probe_success{job="hermes"} == 0
+      for: "5m"
+      severity: critical
+      summary: !unsafe "hermes is down on {{ $labels.instance }}"
+      description: !unsafe >-
+        Hermes has been unreachable for more than 5 minutes. This is also the signal the
+        front-page card reads (FR-017) — the owner's only route in is gone.
+    # Backup staleness (US-4, data-model.md § Workspace state). The metric comes from
+    # backup_hermes.sh via node_exporter's textfile collector, the same mechanism
+    # llm-router's canary uses — no scrape_targets entry needed, it rides the existing
+    # node-exporter job. 129600s = 36h: 1.5x the daily schedule, enough slack for one missed
+    # run's retry window without also missing a genuinely stopped timer.
+    - alert: HermesBackupStale
+      expr: |
+        time() - hermes_backup_last_success_timestamp_seconds > 129600
+      for: "0m"
+      severity: warning
+      summary: !unsafe "hermes: backup has not succeeded in over 36 hours"
+      description: !unsafe >-
+        A backup that stopped is invisible until a restore is attempted, which is the worst
+        moment to discover it (contracts/monitoring.md). Check
+        `systemctl status hermes-backup.timer` and `journalctl -u hermes-backup.service` on
+        the hermes host.

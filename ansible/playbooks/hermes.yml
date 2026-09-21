@@ -1,0 +1,14 @@
+---
+- name: Configure base for hermes
+  hosts: hermes
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure hermes
+  hosts: hermes
+  become: true
+  roles:
+    - geerlingguy.docker
+    - hermes
+    - hermes_backup

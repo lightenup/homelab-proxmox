@@ -1,0 +1,164 @@
+#!/bin/bash
+set -euo pipefail
+
+# Configuration
+BACKUP_DIR="{{ hermes_backup_path }}"
+DATA_DIR="{{ hermes_data_dir }}/open-webui"
+CONTAINER="hermes_open_webui"
+RETENTION_DAYS={{ hermes_backup_retention_days }}
+RETENTION_WEEKS={{ hermes_backup_retention_weeks }}
+RETENTION_MONTHS={{ hermes_backup_retention_months }}
+# Same fallback chain as llm_router_canary_textfile_dir: node_exporter is installed by
+# lxc_base via include_role, which does not export that role's defaults to this SEPARATE
+# play, so the variable is reliably undefined here even though the directory exists.
+METRICS_DIR="{{ node_exporter_textfile_directory | default('/var/lib/node_exporter/textfile_collector') }}"
+METRICS_FILE="${METRICS_DIR}/hermes_backup.prom"
+
+TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+BACKUP_NAME="hermes-backup-$TIMESTAMP"
+ARCHIVE_NAME="$BACKUP_NAME.tar.gz"
+
+report_metric() {
+    local success="$1"
+    if [ ! -d "$METRICS_DIR" ]; then
+        return 0
+    fi
+    local tmp_file="${METRICS_FILE}.$$"
+    cat > "$tmp_file" <<METRICS
+# HELP hermes_backup_success Whether the last hermes backup run succeeded (1) or not (0).
+# TYPE hermes_backup_success gauge
+hermes_backup_success ${success}
+# HELP hermes_backup_last_success_timestamp_seconds Unix timestamp of the last SUCCESSFUL hermes backup.
+# TYPE hermes_backup_last_success_timestamp_seconds gauge
+hermes_backup_last_success_timestamp_seconds $(date +%s)
+METRICS
+    # Atomic rename so node_exporter never reads a half-written file.
+    mv "$tmp_file" "$METRICS_FILE"
+}
+
+# Only overwrite the last-success timestamp metric on success — a failed run must leave the
+# previous success time in place, which is what makes the backup-age alert
+# (contracts/monitoring.md) fire on a run that stopped happening, not just one that failed once.
+report_failure_if_no_prior_success() {
+    if [ ! -f "$METRICS_FILE" ]; then
+        cat > "$METRICS_FILE" <<METRICS
+# HELP hermes_backup_success Whether the last hermes backup run succeeded (1) or not (0).
+# TYPE hermes_backup_success gauge
+hermes_backup_success 0
+METRICS
+    else
+        sed -i 's/^hermes_backup_success .*/hermes_backup_success 0/' "$METRICS_FILE" 2>/dev/null || true
+    fi
+}
+
+if [ ! -d "$BACKUP_DIR" ]; then
+    echo "Error: Backup directory $BACKUP_DIR does not exist."
+    report_failure_if_no_prior_success
+    exit 1
+fi
+
+if [ ! -w "$BACKUP_DIR" ]; then
+    echo "Error: Backup directory $BACKUP_DIR is not writable."
+    report_failure_if_no_prior_success
+    exit 1
+fi
+
+if [ ! -f "$DATA_DIR/webui.db" ]; then
+    echo "No webui.db found (fresh deploy, no accounts/conversations yet). Nothing to back up."
+    exit 0
+fi
+
+TEMP_DIR=$(mktemp -d)
+WORK_DIR="$TEMP_DIR/$BACKUP_NAME"
+mkdir -p "$WORK_DIR"
+
+cleanup() {
+    rm -rf "$TEMP_DIR"
+    docker exec "$CONTAINER" rm -f /app/backend/data/.backup-snapshot.db 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# Consistent online backup — NOT a raw cp (WAL-mode SQLite can be torn mid-copy). Uses
+# sqlite3.Connection.backup(), which is atomic regardless of concurrent writes. Run inside
+# the container (guaranteed Python + sqlite3) rather than assume a host-side sqlite3 binary
+# — the same reasoning financial_scenario_backup uses, even though this data dir is a host
+# bind mount and technically visible on the host too.
+echo "Taking consistent online backup of webui.db..."
+docker exec "$CONTAINER" python3 -c "
+import sqlite3
+src = sqlite3.connect('file:/app/backend/data/webui.db?mode=ro', uri=True)
+dst = sqlite3.connect('/app/backend/data/.backup-snapshot.db')
+src.backup(dst)
+dst.close()
+src.close()
+"
+
+# Archive everything ELSE under the data dir directly from the host (it's a bind mount, so
+# host and container see identical content) — uploaded documents and the vector index need
+# no special consistency handling, only the live SQLite file does. Substitute the snapshot
+# for the live db so the archive never contains a copy taken mid-write. Plain `cp -a`
+# rather than rsync, which is not in service_base_packages and not worth adding for this.
+mkdir -p "$WORK_DIR/open-webui"
+cp -a "$DATA_DIR/." "$WORK_DIR/open-webui/"
+rm -f "$WORK_DIR/open-webui/webui.db" "$WORK_DIR/open-webui/.backup-snapshot.db"
+cp "$DATA_DIR/.backup-snapshot.db" "$WORK_DIR/open-webui/webui.db"
+docker exec "$CONTAINER" rm -f /app/backend/data/.backup-snapshot.db
+
+# Include the rendered compose file for reference.
+if [ -f "{{ hermes_install_dir }}/docker-compose.yml" ]; then
+    cp "{{ hermes_install_dir }}/docker-compose.yml" "$WORK_DIR/"
+fi
+
+echo "Compressing backup..."
+tar -czf "$BACKUP_DIR/$ARCHIVE_NAME" -C "$TEMP_DIR" "$BACKUP_NAME"
+
+echo "Backup created successfully: $BACKUP_DIR/$ARCHIVE_NAME"
+report_metric 1
+
+# Prune old backups (GFS retention).
+echo "Pruning old backups..."
+
+get_date() {
+    echo "$1" | grep -oE '[0-9]{8}' | sed 's/\(....\)\(..\)\(..\)/\1-\2-\3/'
+}
+
+FILES=$(ls "$BACKUP_DIR"/hermes-backup-*.tar.gz 2>/dev/null || true)
+
+for file in $FILES; do
+    FILENAME=$(basename "$file")
+    FILE_DATE_STR=$(get_date "$FILENAME")
+
+    if [ -z "$FILE_DATE_STR" ]; then
+        continue
+    fi
+
+    FILE_TIMESTAMP=$(date -d "$FILE_DATE_STR" +%s)
+    CURRENT_TIMESTAMP=$(date +%s)
+    AGE_DAYS=$(( (CURRENT_TIMESTAMP - FILE_TIMESTAMP) / 86400 ))
+
+    DAY_OF_WEEK=$(date -d "$FILE_DATE_STR" +%u)   # 1=Mon, 7=Sun
+    DAY_OF_MONTH=$(date -d "$FILE_DATE_STR" +%d)
+
+    DELETE=true
+
+    if [ "$AGE_DAYS" -lt "$RETENTION_DAYS" ]; then
+        DELETE=false
+    fi
+
+    if [ "$DELETE" = true ] && [ "$DAY_OF_WEEK" -eq 7 ] && [ "$AGE_DAYS" -lt $((RETENTION_WEEKS * 7)) ]; then
+        DELETE=false
+    fi
+
+    if [ "$DELETE" = true ] && [ "$DAY_OF_MONTH" -eq 01 ] && [ "$AGE_DAYS" -lt $((RETENTION_MONTHS * 30)) ]; then
+        DELETE=false
+    fi
+
+    if [ "$DELETE" = true ]; then
+        echo "Deleting old backup: $FILENAME (Age: $AGE_DAYS days)"
+        rm "$file"
+    else
+        echo "Keeping backup: $FILENAME (Age: $AGE_DAYS days)"
+    fi
+done
+
+echo "Backup process completed."

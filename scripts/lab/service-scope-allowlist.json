@@ -8,6 +8,9 @@
   "financial-scenario": [
     "module.financial_scenario_lxc"
   ],
+  "hermes": [
+    "module.hermes_lxc"
+  ],
   "homeassistant": [
     "module.homeassistant_lxc"
   ],
