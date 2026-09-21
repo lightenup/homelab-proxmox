@@ -44,6 +44,19 @@ services:
       # --- Identity and origin ---
       WEBUI_SECRET_KEY: "{{ hermes_webui_secret_key }}"
       WEBUI_URL: "{{ hermes_public_url }}"
+      # Drives the page title AND the PWA manifest's name/short_name (main.py builds the
+      # manifest from app.state.WEBUI_NAME), which is what labels the phone home-screen icon.
+      #
+      # This renders as "Hermes (Open WebUI)", NOT "Hermes". Upstream appends the suffix
+      # unconditionally to any custom value (env.py: `if WEBUI_NAME != 'Open WebUI':
+      # WEBUI_NAME += ' (Open WebUI)'`). Removing it would mean patching the image, which
+      # would ship bespoke code and breach FR-026 — so the suffix stays.
+      #
+      # Altering the branding at all is permitted here: their LICENSE restricts it only
+      # above fifty users in a rolling period, and this deployment has exactly one account
+      # (FR-003). Read from env.py on every boot rather than seeded into the database, so
+      # this takes effect on redeploy instead of being silently overridden.
+      WEBUI_NAME: "Hermes"
 
       # --- Auth (FR-002, FR-003, FR-004) — exactly one account, no self-registration.
       # WEBUI_ADMIN_EMAIL/PASSWORD create the admin from env on first boot (verified against
