@@ -43,6 +43,21 @@ ones: `terraform/`, `ansible/`, `.github/workflows/`, `scripts/lab/`.
 > **Constitution V (Dual-Provisioning Parity) is a hard gate here.** A new service must be
 > registered in **eight** places *in the same PR*. Partial registration means CI and laptop paths
 > diverge — that is a parity violation, not a follow-up. T001–T008 are those eight.
+>
+> **Correction, 2026-09-21 — it is ten, not eight.** The first real deploy failed twice on
+> registration points the list does not mention, both of which fail *after* a green Terraform
+> apply rather than at validation time:
+>
+> 9. **`ansible/inventories/prod/hosts.yml`** — without it the service is invisible to
+>    `playbooks/monitoring.yml`, so its `monitoring_contract` never renders: no probe, no alerts,
+>    and a front-page card with nothing behind it. This is exactly backlog `066`, which records
+>    `market-model` and `eurooffice` as already missing.
+> 10. **`scripts/healthcheck/<service>.sh`** — `pve-service-deploy` hard-fails the apply with
+>     `missing healthcheck script for service=<name>` *after* Ansible has completed successfully.
+>     The file is an 11th copy of a template differing by one word.
+>
+> Neither is caught by `act -l`, by preflight, or by a plan. Worth folding into the constitution's
+> own list rather than rediscovering per service.
 
 - [X] T001 [P] Add `hermes = "192.168.1.221/24"` to the service address map in `terraform/environments/prod.tfvars.template`
 - [X] T002 [P] Add the same entry to `terraform/environments/lab.tfvars.template`
