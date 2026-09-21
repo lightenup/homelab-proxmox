@@ -118,8 +118,12 @@ model, add the site to the home screen.
 - [X] T023 [US1] Point `TASK_MODEL_EXTERNAL` at the cheapest capability alias and set `ENABLE_TITLE_GENERATION` deliberately, in `ansible/roles/hermes/templates/docker-compose.yml.j2` (FR-011, research R-004)
 - [X] T024 [US1] Redeploy and confirm the public hostname resolves, serves a valid certificate, and presents a login before any other surface
 - [X] T025 [US1] **Drill (SC-002)**: request every surface unauthenticated — chat, model list, documents — and confirm each is refused. Attempt to register and confirm it is refused
-- [ ] T026 [US1] **Drill (SC-001)**: from a phone on mobile data, sign in and receive an answer; record the elapsed time against the 60-second criterion
-- [ ] T027 [US1] **Drill (FR-005)**: add the site to a phone home screen and confirm it launches standalone; check every primary action is reachable at phone width without horizontal scrolling
+- [X] T026 [US1] **Drill (SC-001)**: from a phone on mobile data, sign in and receive an answer; record the elapsed time against the 60-second criterion
+  - **Passes 2026-09-21**, confirmed by the owner on a phone over mobile data.
+- [X] T027 [US1] **Drill (FR-005)**: add the site to a phone home screen and confirm it launches standalone; check every primary action is reachable at phone width without horizontal scrolling
+  - **Passes 2026-09-21.** Installed from the home screen and launches standalone. The
+    manifest was verified serving `display: standalone` beforehand, and `WEBUI_NAME` was set
+    so the icon leads with "Hermes" rather than "Open WebUI".
 - [ ] T028 [US1] **Drill (SC-009)**: send a prompt whose response takes ~15 minutes and confirm it is delivered complete
 
 **Checkpoint**: MVP. A private, authenticated assistant on local models, usable from a phone.
@@ -377,12 +381,28 @@ independently deliverable after the MVP.
 - [X] T066 [P] Configure `SEARXNG_QUERY_URL` against the sidecar in `ansible/roles/hermes/templates/docker-compose.yml.j2`
 - [X] T067 [P] Configure the SearXNG instance itself in `ansible/roles/hermes/templates/searxng-settings.yml.j2` — enabled engines, JSON output format, no external API keys
 - [ ] T068 **Drill (SC-013)**: ask something requiring current information; confirm citations to sources fetched at the time of asking, and that no query reached a commercial search provider
+  - **First attempt 2026-09-21 did not search at all** — the model answered "I don't have
+    access to live market data" with no citations. **Not an infrastructure fault**: SearXNG
+    was verified from inside the Hermes container returning **HTTP 200 and 38 real results**
+    for that exact query, and `web.search.enable`/`engine`/`searxng_query_url` are all
+    correctly persisted.
+  - Cause established from upstream source (`middleware.py:2669`): search is gated on a
+    **per-request `features.web_search` flag set by the UI toggle**. It is not a tool the
+    model can invoke, so no question is "current enough" to trigger it by itself.
+    `ENABLE_WEB_SEARCH` makes the capability available, not automatic.
+  - Re-run with Web Search enabled for the message. Worth noting the model's refusal was
+    *honest* — it declined rather than inventing a price, which is the behaviour backlog
+    `076` exists to demand elsewhere.
 
 ### Voice (FR-023, SC-012)
 
 - [X] T069 [P] Configure local speech-to-text in `ansible/roles/hermes/templates/docker-compose.yml.j2` so audio never leaves the estate
 - [X] T070 [P] Configure text-to-speech in `ansible/roles/hermes/templates/docker-compose.yml.j2`
-- [ ] T071 **Drill (SC-012)**: on a phone, speak a question and hear the answer; confirm no audio left the estate
+- [X] T071 **Drill (SC-012)**: on a phone, speak a question and hear the answer; confirm no audio left the estate
+  - **Passes 2026-09-21.** Both directions run in-container: STT is Open WebUI's own
+    faster-whisper (`AUDIO_STT_ENGINE` deliberately unset, which is the local default) and
+    TTS is the `transformers` SpeechT5 pipeline — the same weights whose 1.2GB cache the
+    backup now excludes.
 
 ### Programmatic interface (FR-024, SC-014)
 
