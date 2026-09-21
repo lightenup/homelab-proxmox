@@ -213,12 +213,21 @@ tool was called and used.
 **Independent Test**: Make the inference host unavailable, use Hermes, time the failure.
 
 - [ ] T049 [US5] Confirm request timeouts in the stack configuration surface a backend failure in seconds rather than waiting on the twenty-minute ceiling meant for *successful* long generations (FR-009 vs FR-021 — these pull in opposite directions and the split must be deliberate)
+  - **FAILS, 2026-09-21.** The split was never actually made: there is one knob. LiteLLM's
+    per-deployment `timeout` is a *total request* timeout, so the 1200s needed for FR-021
+    governs connect too. Backlog `075`.
 - [ ] T050 [US5] **Drill (SC-005)**: log the inference host out; send a prompt; time the error against the 10-second criterion; confirm it names the unavailable backend
-- [ ] T051 [US5] **Drill (US-5 AS-2)**: with the host still away, confirm the interface loads and previous conversations remain readable
-- [ ] T052 [US5] **Drill (US-5 AS-3)**: bring the host back and confirm the next prompt is served with no administrative action
+  - **FAILS, measured 2026-09-21.** Baseline 0.91s. Host away: first request **no response at
+    90.01s**, second **no response at 30.00s**. Later requests are correct and fast — 429 in
+    0.03s naming `cooldown_list=['fast-local']` — but the cooldown cannot engage until the
+    first failure completes, and on this Mac the SYN is dropped rather than refused, so it
+    never does. Raised as backlog `075` per T054. **Left unchecked deliberately: a hang is the
+    one outcome that fails this story.**
+- [X] T051 [US5] **Drill (US-5 AS-2)**: with the host still away, confirm the interface loads and previous conversations remain readable
+- [X] T052 [US5] **Drill (US-5 AS-3)**: bring the host back and confirm the next prompt is served with no administrative action
 - [ ] T089 [US5] **Drill (edge case)**: start a long generation, then make the inference host unavailable *mid-stream*, and confirm the conversation surfaces a readable error rather than spinning or leaving a half-delivered response that looks complete. T050–T052 cover a host that is already away; this covers one that leaves during the request, which is a different failure and the more likely one in practice
-- [ ] T053 [US5] Record the measured failure times in [quickstart.md](./quickstart.md) — replacing the claims it currently makes with observations
-- [ ] T054 [US5] Record the Phase 7 results in `specs/065-hermes-ai-workspace/quickstart.md` § 3, and raise any drill that **hung rather than errored** as a defect before closing the phase. `064` has no fallback tier, so failure is unavoidable — the only question is whether it is legible and fast, and a hang is the one outcome that fails the story
+- [X] T053 [US5] Record the measured failure times in [quickstart.md](./quickstart.md) — replacing the claims it currently makes with observations
+- [X] T054 [US5] Record the Phase 7 results in `specs/065-hermes-ai-workspace/quickstart.md` § 3, and raise any drill that **hung rather than errored** as a defect before closing the phase. `064` has no fallback tier, so failure is unavoidable — the only question is whether it is legible and fast, and a hang is the one outcome that fails the story
 
 **Checkpoint**: Absence of the inference host is handled honestly.
 
