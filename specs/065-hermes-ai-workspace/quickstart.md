@@ -114,6 +114,25 @@ connect, and the cooldown cannot engage until that first failure completes.
 The other half of the story passed: the **interface stayed up** (200 in 0.06s with the backend
 gone) and **recovery needed no administrative action**.
 
+### And the mid-stream case is worse (T089, backlog `076`)
+
+Pulling the host away **during** a streaming answer is the more likely event in practice, and
+it fails differently — not by hanging, but by lying:
+
+| | |
+|---|---|
+| stream ended | **0.1s** after the host vanished |
+| curl exit / terminal chunk | **0** / `finish_reason: "stop"` / `data: [DONE]` |
+| error chunks | **0** |
+| delivered | **322 words of ~1200 (27%)**, cut mid-sentence |
+
+Open WebUI receives a well-formed *successful* stream, so it has nothing to detect: the
+truncated answer is rendered and **saved to the conversation** as an ordinary turn. Weeks
+later nothing distinguishes it from a complete one.
+
+**If you see an answer that stops oddly mid-thought, suspect this before suspecting the
+model.** Re-ask rather than trusting it.
+
 ### Drill 8 needs a definition before it is run
 
 "Representative use" must be agreed in advance or the measurement means nothing. Decide what an
