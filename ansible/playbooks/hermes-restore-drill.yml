@@ -14,6 +14,12 @@
   become: true
   vars:
     hermes_restore_dir: "/tmp/hermes-restore-drill"
+  # The restore compose renders hermes_image, which lives in the hermes ROLE's defaults — and
+  # this play does not include that role, so they are not otherwise in scope. Loaded rather
+  # than copied: a duplicated image name here would drift from the one actually deployed,
+  # and the drill would then prove the wrong image can restore the archive.
+  vars_files:
+    - ../roles/hermes/defaults/main.yml
 
   tasks:
     - name: Find the latest backup
