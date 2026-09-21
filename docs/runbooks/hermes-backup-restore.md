@@ -96,6 +96,25 @@ to bring the workspace back. Prerequisites that live outside the LXC and must al
 the vault variables, the `homelab_hermes` NFS share on the Synology, and the host mount on
 `pve` (`proxmox_mounts`).
 
+## What a real rebuild is actually like
+
+Measured 2026-09-21 by destroying the LXC and rebuilding it (spec `065`, T048/SC-006). The
+cycle works — conversations, memory, account, settings and the MCP registration all returned,
+`integrity_check ok` — but two things will surprise you:
+
+- **The first deploy after a destroy may fail on the network check**, with
+  `192.168.1.221 is unreachable`. The container was created correctly; the check is a
+  single un-retried `ping` racing a booting container. **Just run the deploy again** — see
+  [backlog `077`](../backlog/077-cold-create-network-check-race.md).
+- **The SSH host key changes**, because it is a new machine. Ansible is unaffected (the
+  inventory sets `StrictHostKeyChecking=no`), but your own `ssh` will refuse with
+  `REMOTE HOST IDENTIFICATION HAS CHANGED`. Clear the stale entry:
+  `ssh-keygen -R 192.168.1.221`.
+
+Order matters: **rebuild first, restore second.** The rebuild recreates the admin account
+from the vault bootstrap and leaves an empty workspace; `restore_hermes.sh` then replaces it
+wholesale with the backed-up one.
+
 ## Gotchas
 
 - **The model cache is not in the backup** (by design). The first voice request after a
