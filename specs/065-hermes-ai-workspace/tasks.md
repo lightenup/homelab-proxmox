@@ -331,10 +331,36 @@ tool was called and used.
 - [X] T058 [US6] Record the amendment in `specs/064-llm-router/` — it is a change to a closed feature and belongs in its records, not only in this one (Constitution I)
 - [X] T059 [US6] Configure retrieval in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `RAG_EMBEDDING_ENGINE=openai`, `RAG_EMBEDDING_MODEL`, and **both** `RAG_OPENAI_API_BASE_URL` and `RAG_OPENAI_API_KEY` explicitly (T015 asserts this)
 - [X] T060 [US6] Configure the external reranker in `ansible/roles/hermes/templates/docker-compose.yml.j2` — `RAG_RERANKING_ENGINE=external`, `RAG_RERANKING_MODEL`, `RAG_EXTERNAL_RERANKER_URL`, `RAG_EXTERNAL_RERANKER_API_KEY`
-- [ ] T061 [US6] **Drill (SC-007)**: upload a document, ask a question answerable only from it, confirm the answer identifies the source passage
-- [ ] T062 [US6] **Drill (FR-008/FR-016)**: confirm no document content leaves the estate at any stage — in particular that retrieval never reaches `api.openai.com`
+- [X] T061 [US6] **Drill (SC-007)**: upload a document, ask a question answerable only from it, confirm the answer identifies the source passage
+  - **Passes 2026-09-21** on a 2.5MB PDF, with sources shown. Required three fixes first,
+    each a separate defect: the gateway alias scope (401), no embedding model on the
+    inference host (T055/T056), and `RAG_EMBEDDING_BATCH_SIZE` defaulting to 1.
+  - The first attempt returned "No sources found" with the allowance exhausted — see T064.
+- [X] T062 [US6] **Drill (FR-008/FR-016)**: confirm no document content leaves the estate at any stage — in particular that retrieval never reaches `api.openai.com`
+  - **Verified 2026-09-21, on positive evidence rather than absence.** The gateway logged
+    **250 `POST /v1/embeddings` calls, all 200, all sourced from 192.168.1.221** — so
+    retrieval demonstrably went to the gateway and on to the Mac. Hermes' own logs mention
+    `api.openai.com` **zero** times. Persisted config points at
+    `http://192.168.1.220:4000/v1` for both embeddings and the reranker, and preflight
+    refuses a deploy where it does not.
+  - **Stated precisely, because the distinction matters:** the guarantee is configuration
+    plus a preflight assertion, **not** network-level enforcement. The container resolves
+    `api.openai.com` perfectly well (it has general DNS and egress), so a future
+    misconfiguration could reach it. What prevents that today is the preflight check, not a
+    firewall. An egress restriction would be the stronger guarantee and does not exist.
 - [ ] T063 [US6] **Drill (US-6 AS-3)**: with the inference host away, ask a document question and confirm it fails readably rather than quietly answering without the document
-- [ ] T064 [US6] Measure the cost of indexing a representative document set against the gateway request allowance; bulk indexing is not an interactive operation and must not be treated as one
+- [X] T064 [US6] Measure the cost of indexing a representative document set against the gateway request allowance; bulk indexing is not an interactive operation and must not be treated as one
+  - **Measured 2026-09-21 on the same 2.5MB PDF, before and after the batching fix.** Read
+    off the gateway's own access log, per minute:
+    - **batch 1: 136 requests inside a single minute**, allowance exhausted, indexing failed
+      with "No sources found"
+    - **batch 128: 10 requests total** across ~4 minutes, indexing succeeded
+  - So one representative document costs about **10 of 60 requests per minute** — roughly a
+    sixth of a minute's budget, leaving interactive chat unaffected. Per-chunk cost measured
+    through the full chain: 739ms at batch 1, 23ms at 32, 13ms at 128. Request overhead was
+    ~98% of the cost, which is why the answer was batching rather than a larger allowance.
+  - The task's premise held exactly: treating bulk indexing as an interactive operation is
+    what broke it.
 - [X] T065 [US6] Record in [quickstart.md](./quickstart.md) that retrieval is unavailable while the inference host sleeps — the accepted cost of research R-002's decision
 
 **Checkpoint**: Document Q&A works, entirely locally, and fails honestly.
@@ -375,7 +401,17 @@ independently deliverable after the MVP.
 ## Phase 10: Polish & Cross-Cutting Concerns
 
 - [ ] T078 **Drill (SC-008)**: define what "one hour of representative use" means *before* running it — number of conversations, whether documents are indexed — then measure the request rate from gateway metrics and record both the definition and the result
-- [ ] T079 Review the Hermes client key's `rpm_limit` in `ansible/group_vars/services/vars.yml` (`llm_router_clients`) against T078's measurement. **Measure before raising** — raising first hides the problem rather than solving it (FR-011)
+- [X] T079 Review the Hermes client key's `rpm_limit` in `ansible/group_vars/services/vars.yml` (`llm_router_clients`) against T078's measurement. **Measure before raising** — raising first hides the problem rather than solving it (FR-011)
+  - **Reviewed 2026-09-21. Conclusion: do NOT raise it. Left at 60.**
+  - The one event that exhausted the allowance was a PDF upload issuing 136 requests in a
+    minute, and the cause was one request per chunk, not an insufficient budget. After
+    batching, the same document costs 10 requests. Raising the limit would have made the
+    symptom disappear while leaving a 2,800-request indexing pattern in place — precisely
+    what contracts/gateway-usage.md means by "raising the limit before measuring hides the
+    problem rather than solving it".
+  - Also worth keeping at 60 for the reason the gateway-wide band exists: at 60 the client
+    limit binds before the gateway's 65, so a runaway Hermes is refused by its own limit and
+    the canary keeps running (backlog 071's sizing argument).
 - [X] T080 **Drill (SC-011)**: inspect the full diff and confirm it contains no bespoke application source code (FR-026)
 - [X] T081 Rewrite [quickstart.md](./quickstart.md) against what actually happened. It was written before implementation and every command in it is a claim; a step that needed changing is information worth keeping
 - [X] T082 Record the LXC's measured resource use and right-size `terraform/services/hermes/` against it rather than against the initial guess (research R-007)
