@@ -139,7 +139,15 @@ the state change, restart, click through.
 - [X] T031 [US2] Add the `LlmRouter`-style unreachable alert (**critical**) to `ansible/host_vars/hermes.yml`
 - [X] T032 [US2] Deploy the monitoring change **through the prod path only**. A lab-path monitoring deploy renders an empty configuration over the live one — this removed 16 scrape jobs and 5 alert groups from production on 2026-09-20 (backlog `072`). Two guards now refuse it; do not test them by accident
 - [X] T033 [US2] Confirm the card renders on `hus-sky.no`, its indicator tracks the real probe, and clicking it opens Hermes itself
-- [ ] T034 [US2] **Drill**: stop the service, reload the front page, confirm the card reports it down rather than showing a stale success; restart and confirm recovery
+- [X] T034 [US2] **Drill**: stop the service, reload the front page, confirm the card reports it down rather than showing a stale success; restart and confirm recovery
+  - **Run 2026-09-21, measured.** Stopped `hermes_open_webui` at 07:06:07Z. The card's probe
+    (`blackbox-https`, instance `https://hermes.hus-sky.no`) went to 0 in **10s**; the contract's
+    own probe (`job="hermes"`) followed at **30s**. `/api/status` on the apex returned 0 for both
+    — **down, not a stale success**, which is the thing this drill exists to catch.
+  - Restarted: card probe back to 1 within **20s**, container `Up (healthy)`, public URL 200.
+  - `HermesDown` went `pending` and returned to `inactive` **without firing** — the `for: 5m`
+    damping correctly absorbed a 30-second blip, so the card tells the truth in seconds while the
+    pager stays quiet. That split is the design working, not a gap.
 
 **Checkpoint**: Hermes is discoverable and its state on the front page is honest.
 
