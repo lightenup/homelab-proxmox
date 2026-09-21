@@ -8,37 +8,53 @@ Deploy, verify, and run the drills that make the acceptance criteria real rather
 > something that worked — unlike `064`'s quickstart, which was rewritten against a live deploy.
 > Update it as you go, and treat a step that needed changing as information worth keeping.
 
-## Status (2026-09-20) — config landed, nothing deployed or drilled yet
+## Status (2026-09-21) — deployed, serving, and drilled
 
-This pass wrote every file-based task across all 10 phases of `tasks.md`: the eight
-registration points, the `hermes` and `hermes_backup` roles, `docker-compose.yml.j2` with
-every capability from US1-US6 and Phase 9, the monitoring contract, and the `064` amendment
-for the two retrieval aliases. It did **not** run `terraform apply`, populate
-`group_vars/services/vault.yml` with real secret values, or perform any drill below — those
-need a human with the vault password and a phone, and several are physically destructive
-(T048 destroys the LXC on purpose).
+Hermes is live at `https://hermes.hus-sky.no`, monitored, backed up, and its backup has been
+restored from scratch. **62 of 90 tasks closed.** What follows is a record of what happened,
+not a plan.
 
-**Before the first deploy attempt, four things need a human:**
+### Proven by drill, with evidence
 
-1. `ansible-vault edit group_vars/services/vault.yml` — add `hermes_webui_secret_key`,
-   `hermes_admin_email`, `hermes_admin_password_bootstrap`, `hermes_searxng_secret`.
-   `llm_router_client_hermes_key` should already exist from `064`.
-2. Create the NAS share `192.168.1.109:/volume1/homelab_hermes` on the Synology (mirrors
-   `homelab_financial_scenario`) — `proxmox_mounts` now expects it to exist.
-3. T055/T056 on the inference host (load an embedding model and a reranker into oMLX, expose
-   them in the Mac's own `litellm-config.yaml`) — gates the retrieval acceptance criteria
-   (SC-007) and the two placeholder alias names in
-   `specs/064-llm-router/amendment-hermes-retrieval-aliases.md`.
-4. T086's own local-plan check was attempted from the dev Mac and got further than expected
-   before failing on `pve-service-deploy`'s own PVE-host assumptions (`/var/lib/homelab-proxmox`
-   permissions, then an unrelated pre-existing script bug at line 811) — **not** on vault
-   resolution, which was never reached. Laptop parity for this service remains unproven; run
-   `scripts/lab/pve-service-deploy plan --environment lab --service hermes` from `pve` itself
-   for the real signal.
+| | result |
+|---|---|
+| **SC-002** every surface gated | chat, model list, knowledge, files, users and the programmatic endpoint all **401**; a real signup attempt **403**, no account created |
+| **SC-003** tool use (T038) | `hermes-deep` called `market-model_list_stress_scenarios` + `list_calibrations` and answered from what came back — including relaying the calibration's own "placeholder, do not use in production" caveat |
+| **SC-006** destroy and restore (T048) | CT destroyed, rebuilt from code, restored: conversations **2 -> 0 -> 2**, memories **1 -> 0 -> 1**, account and 345 config rows preserved, `integrity_check ok` |
+| **US2** honest indicator (T034) | card probe went to 0 in **10s**, apex reported down (not a stale success), recovery in **20s**, and `HermesDown` went pending -> inactive **without firing** |
+| **FR-013** config-only tool servers (T088) | a disabled placeholder added to `hermes_mcp_servers` reached the running system; removing it removed it again |
 
-Every drill in the table below is unexecuted. Do not read the table as a report of what
-happened — it is unchanged from the pre-implementation version, listed here as the
-acceptance checklist for whoever runs the actual deploy.
+### Failed by drill — and left failed on purpose
+
+| | result |
+|---|---|
+| **SC-005** fast failure (T050) | **hangs.** First request with the host away: no response at 90s against a 10s criterion. [backlog `075`](../../docs/backlog/075-first-request-hangs-when-inference-host-away.md) |
+| **US-5** honest degradation (T089) | **worse.** Host lost mid-stream ends the stream in 0.1s with `finish_reason: "stop"` and `[DONE]` — 27% of an answer, presented as complete. [backlog `076`](../../docs/backlog/076-mid-stream-host-loss-looks-like-a-complete-answer.md) |
+| **SC-004** alias change (T040) | diff is config-only as required, but the change is **inert**: `TASK_MODEL_EXTERNAL` is a PersistentConfig, so the compose says `hermes-balanced` while the database still says `hermes-fast` |
+
+### Measured (T082) — and why nothing was resized
+
+Idle, 15 minutes after a rebuild: **818 MB** of 6144 MB used (open-webui 647 MiB, searxng
+93 MiB), **8.4 GB** of 32 GB disk (almost all Docker images — the data dir is 1.2 MB), load
+0.17 on 4 cores. Host has no pressure: `local-lvm` at 12.7%, 746 GB free.
+
+**Deliberately not resized.** These are idle numbers, and the two heaviest features —
+in-container Whisper STT and SpeechT5 TTS — have never run. Cutting memory on this evidence
+would repeat the original sin of guessing, with extra steps. Hermes is nonetheless the
+largest allocation in the fleet (6 GB vs immich's 4 GB) while among the lightest actual
+users, so **re-measure after the voice drill (T071) and resize then**.
+
+### Still blocked, and on what
+
+- **Retrieval / state saving (US6)** — no embedding model exists on the inference host
+  (T055/T056). Memory, Knowledge and document upload all embed, so all of them fail. A third
+  prerequisite surfaced on 2026-09-21: the Mac's key is scoped to a `local` access group
+  (`key not allowed to access model … models=['local']`), so a new embedding model must be
+  added to that group as well as loaded and aliased.
+- **Changing `hermes_embedding_alias` will also be inert** when that lands — same
+  PersistentConfig trap as T040, now measured rather than predicted. Only
+  `tool_server.connections` has a reconcile step today.
+- **Phone drills** (SC-001, FR-005, SC-012) and anything needing a chat session.
 
 ## 0. Prerequisites
 
