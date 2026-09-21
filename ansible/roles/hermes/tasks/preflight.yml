@@ -28,7 +28,7 @@
 # nearest existing ancestor instead — its filesystem is what hermes_data_dir will inherit.
 - name: Determine the filesystem type backing hermes_data_dir
   ansible.builtin.shell: |
-    set -euo pipefail
+    set -eu
     path="{{ hermes_data_dir }}"
     while [ ! -d "$path" ]; do path="$(dirname "$path")"; done
     findmnt --noheadings --output FSTYPE --target "$path"
