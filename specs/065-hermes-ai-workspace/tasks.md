@@ -226,6 +226,17 @@ tool was called and used.
 - [X] T051 [US5] **Drill (US-5 AS-2)**: with the host still away, confirm the interface loads and previous conversations remain readable
 - [X] T052 [US5] **Drill (US-5 AS-3)**: bring the host back and confirm the next prompt is served with no administrative action
 - [ ] T089 [US5] **Drill (edge case)**: start a long generation, then make the inference host unavailable *mid-stream*, and confirm the conversation surfaces a readable error rather than spinning or leaving a half-delivered response that looks complete. T050–T052 cover a host that is already away; this covers one that leaves during the request, which is a different failure and the more likely one in practice
+  - **FAILS, measured 2026-09-21 — and worse than T050.** Host pulled away 9s into a
+    streaming answer. The stream ended **0.1s later, cleanly**: `finish_reason: "stop"`,
+    `data: [DONE]`, curl exit 0, **zero error chunks**. Delivered **322 words of ~1200 (27%)**,
+    cut mid-sentence at "…attributed to the 13th century. While".
+  - This is the exact outcome the task was written to catch — "a half-delivered response that
+    looks complete" — and it is the one failure US-5's title rules out. Open WebUI receives a
+    well-formed successful stream, so it has nothing to detect: the truncated answer is
+    rendered and **persisted to the conversation store** as a normal turn.
+  - Raised as backlog `076`. Left unchecked deliberately. Note it wants the OPPOSITE of
+    `075`'s fix: `075` is about how long the stream takes to end, this is about what the
+    stream *says* when it ends.
 - [X] T053 [US5] Record the measured failure times in [quickstart.md](./quickstart.md) — replacing the claims it currently makes with observations
 - [X] T054 [US5] Record the Phase 7 results in `specs/065-hermes-ai-workspace/quickstart.md` § 3, and raise any drill that **hung rather than errored** as a defect before closing the phase. `064` has no fallback tier, so failure is unavoidable — the only question is whether it is legible and fast, and a hang is the one outcome that fails the story
 
