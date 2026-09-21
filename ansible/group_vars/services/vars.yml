@@ -251,6 +251,53 @@ hermes_task_alias: "hermes-fast"        # cheapest alias — housekeeping calls 
 hermes_embedding_alias: "hermes-embed"
 hermes_reranking_alias: "hermes-rerank"
 
+# Embedding batch size. Open WebUI's default is 1 — one gateway request PER CHUNK — which
+# measured out as ~2,800 requests for a single 2.5MB PDF and exhausted the client's 60 rpm
+# allowance outright, returning "No sources found" (observed 2026-09-21). Measured through the
+# full chain the same day: batch 1 = 739ms/chunk, batch 32 = 23ms, batch 128 = 13ms. Request
+# overhead dominates entirely, so this is a 57x improvement per chunk AND turns that PDF into
+# ~22 requests.
+#
+# 128 rather than higher: oMLX batches internally at scheduler.embedding_batch_size = 32, so
+# this is four internal batches per request — large enough that overhead is gone, small enough
+# that one request stays well inside the gateway's per-deployment timeout.
+#
+# NOTE this is the fix for the rate-limit exhaustion, NOT a bigger allowance.
+# contracts/gateway-usage.md is explicit that raising the limit before measuring hides the
+# problem; the measurement says the allowance was never the problem.
+hermes_embedding_batch_size: 128
+
+# Open WebUI config keys this deployment OWNS, reconciled into its database on every deploy.
+#
+# Why this exists: these are PersistentConfig keys. Open WebUI seeds them from the environment
+# on FIRST boot only and the database wins ever after, so editing the compose and redeploying
+# is silently a no-op. Proven by drill T040 — the compose said `hermes-balanced` while the
+# running system still said `hermes-fast` — and it bit for real the first time a PDF was
+# uploaded, because rag.embedding_batch_size could not be changed from its default of 1.
+#
+# Deliberately a CURATED list, not everything in the compose file. Each entry is a key whose
+# value we have actually needed to change, or whose silent reversion would matter. Adding a
+# key here is a small ongoing obligation, so the bar is "would inertness hurt".
+#
+# Secrets are deliberately ABSENT. rag.openai.api_key and the reranker key were seeded
+# correctly on first boot and have never needed changing; managing them here would mean
+# putting credentials through another code path for a case that has not occurred.
+hermes_managed_config:
+  # Security posture — a silent reversion here is the one that actually matters (FR-003).
+  ui.enable_signup: "{{ hermes_enable_signup }}"
+  # Capability aliases: the whole point of FR-013/SC-004 is that these are config changes.
+  task.model.external: "{{ hermes_task_alias }}"
+  rag.embedding_engine: "openai"
+  rag.embedding_model: "{{ hermes_embedding_alias }}"
+  rag.reranking_engine: "external"
+  rag.reranking_model: "{{ hermes_reranking_alias }}"
+  rag.enable_hybrid_search: true
+  # The one that cost a drill.
+  rag.embedding_batch_size: "{{ hermes_embedding_batch_size | int }}"
+  # Web search: engine choice must not silently revert to a commercial provider (FR-022).
+  web.search.enable: true
+  web.search.engine: "searxng"
+
 # Title generation stays ON: pointing TASK_MODEL_EXTERNAL at the cheapest alias already
 # bounds its cost (R-004); disabling it as well would drop a real feature to solve a problem
 # the alias redirection already solves. Revisit downward if T078's measurement says otherwise.
