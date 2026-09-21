@@ -21,8 +21,16 @@ surface gated. SC-002 is verified behaviourally — chat, model list, knowledge,
 the programmatic endpoint all return 401 unauthenticated, and a real registration attempt was
 refused with 403 (no account created).
 
-**Still outstanding**: monitoring is not deployed (prod path only, backlog `072`), so the
-front-page card has no probe behind it yet. Retrieval (US6) is blocked on the oMLX
+**Monitoring deployed 2026-09-21 through the prod path.** Verified against a before/after
+baseline: 28 -> 31 active targets, 8 -> 9 rule groups, 0 unhealthy, and **every pre-existing job
+and alert group intact** — the `072` failure mode did not recur. The LAB half of the promote
+chain failed exactly as designed (`Refusing to deploy monitoring: the layered inventory exposes
+1 host(s)`), which is the guard working, and `allow_override_failed_lab_gate=true` carried the
+chain to the prod apply. `hermes_alerts` holds HermesDown (critical) and HermesBackupStale
+(warning); `probe_success{job="hermes"}` is 1 and the landing-page card's `data-probe` matches
+its instance label, so the indicator tracks rather than reading "unknown".
+
+**Still outstanding**: Retrieval (US6) is blocked on the oMLX
 embedding/reranker work on the inference host. The phone drills (SC-001, FR-005, SC-012), the
 long-generation drill (SC-009), the fail-fast drills (Phase 7), the restore drill (SC-006) and
 the measurement tasks (T078/T082) all need a human. See
@@ -129,8 +137,8 @@ the state change, restart, click through.
 - [X] T030 [US2] Create `ansible/host_vars/hermes.yml` with the `monitoring_contract` from [contracts/monitoring.md](./contracts/monitoring.md) — a blackbox liveness probe on the public hostname
 - [X] T087 [US2] Determine whether the application exposes a metrics endpoint, and if it does add it as a scrape target in `ansible/host_vars/hermes.yml`. FR-018 asks for one "if the application exposes one" — nobody has checked, so the clause is currently neither satisfied nor consciously waived. Record the answer either way
 - [X] T031 [US2] Add the `LlmRouter`-style unreachable alert (**critical**) to `ansible/host_vars/hermes.yml`
-- [ ] T032 [US2] Deploy the monitoring change **through the prod path only**. A lab-path monitoring deploy renders an empty configuration over the live one — this removed 16 scrape jobs and 5 alert groups from production on 2026-09-20 (backlog `072`). Two guards now refuse it; do not test them by accident
-- [ ] T033 [US2] Confirm the card renders on `hus-sky.no`, its indicator tracks the real probe, and clicking it opens Hermes itself
+- [X] T032 [US2] Deploy the monitoring change **through the prod path only**. A lab-path monitoring deploy renders an empty configuration over the live one — this removed 16 scrape jobs and 5 alert groups from production on 2026-09-20 (backlog `072`). Two guards now refuse it; do not test them by accident
+- [X] T033 [US2] Confirm the card renders on `hus-sky.no`, its indicator tracks the real probe, and clicking it opens Hermes itself
 - [ ] T034 [US2] **Drill**: stop the service, reload the front page, confirm the card reports it down rather than showing a stale success; restart and confirm recovery
 
 **Checkpoint**: Hermes is discoverable and its state on the front page is honest.
