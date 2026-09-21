@@ -214,8 +214,25 @@ tool was called and used.
 - [X] T044 [P] [US4] Create `ansible/roles/hermes_backup/templates/backup_hermes.sh.j2` covering everything under `hermes_data_dir` — SQLite, uploaded documents and the vector index ([data-model.md](./data-model.md) § *Workspace state*)
 - [X] T045 [US4] Add the backup schedule and retention settings to `ansible/group_vars/services/vars.yml`, and wire the role into `ansible/playbooks/hermes.yml`
 - [X] T046 [US4] Add the backup-age alert (**warning**) to `ansible/host_vars/hermes.yml` per [contracts/monitoring.md](./contracts/monitoring.md)
-- [ ] T047 [US4] Confirm a backup artifact reaches the Synology and its age is visible to monitoring
-- [ ] T048 [US4] **Drill (SC-006)**: accumulate state, destroy the LXC, rebuild from code, run the restore, and confirm conversations, accounts, settings and knowledge all return. **A backup that has never been restored is a belief, not a backup**
+- [X] T047 [US4] Confirm a backup artifact reaches the Synology and its age is visible to monitoring
+  - Verified 2026-09-21. Artifact lands on `192.168.1.109:/volume1/homelab_hermes` (NFS),
+    outside the container — confirmed by destroying the container and finding the archives
+    untouched. `HermesBackupStale` reads the script's textfile-collector metric.
+  - **Found and fixed two backup defects doing this**: the archive was 755MB of which 99.8%
+    was re-downloadable model cache (now 70KB), and it shipped a stale `-wal` beside a
+    point-in-time snapshot. See the commit and `docs/runbooks/hermes-backup-restore.md`.
+- [X] T048 [US4] **Drill (SC-006)**: accumulate state, destroy the LXC, rebuild from code, run the restore, and confirm conversations, accounts, settings and knowledge all return. **A backup that has never been restored is a belief, not a backup**
+  - **Run for real 2026-09-21.** CT 110 stopped, `pct destroy`ed (logical volume removed),
+    Terraform state moved aside, rebuilt from `main`, restored with `restore_hermes.sh`.
+  - Before -> after rebuild -> after restore: conversations **2 -> 0 -> 2** (`Casual
+    Greeting`, `MCP Availability Check`), memories **1 -> 0 -> 1**, account preserved, 345
+    config rows, `integrity_check ok`, MCP registration intact, public URL 200, probe green.
+    The loss between the middle and right columns is real, not simulated.
+  - **It did not pass first time, which is the point.** The rebuild failed on a cold-create
+    network-check race (backlog `077`) and needed a second run; the SSH host key changed and
+    broke `ssh` until `ssh-keygen -R`. Both are recorded in the runbook.
+  - Prerequisites this drill exposed, all built first: there was **no restore procedure at
+    all**, and no backup had ever been taken (the timer had not yet fired).
 
 **Checkpoint**: Hermes is administrable and survives a rebuild.
 
