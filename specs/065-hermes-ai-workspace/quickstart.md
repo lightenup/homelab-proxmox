@@ -169,6 +169,23 @@ Collected from the research and from `064`'s scars.
   one — [backlog `072`](../../docs/backlog/072-lab-monitoring-deploy-wipes-prod.md). Prod path only.
 - **The inference host being asleep** during almost any drill, producing a failure that looks like a
   bug in Hermes. Check the host first.
+- **Qwen answers in Chinese when the prompt gives it no language to follow.** Observed
+  2026-09-21: an image plus the three words "Describe the picture" came back entirely in
+  Chinese. Every alias is backed by Qwen3.8, so this is the model's native default asserting
+  itself when the prompt carries almost no language signal — not a fault, and not specific
+  to images.
+  **Fix**: set a personal system prompt (Settings -> General -> System Prompt), e.g.
+  *"Reply in the same language as my message. If the language is unclear, reply in English."*
+  Phrased that way it still answers Norwegian in Norwegian.
+  **This one cannot be managed as code.** Open WebUI has no env var for the chat system
+  prompt (only task-specific templates), and oMLX profiles carry sampling and context fields
+  only — no system prompt. So it is a UI setting, stored in `webui.db`, and it survives a
+  rebuild only because the restore path works. Worth re-checking after any restore.
+- **Vision works, and was never specified.** The same test showed `hermes-deep` describing a
+  TOGAF diagram's structure and colours accurately. No FR asked for it and nothing was
+  configured for it — it is a property of the Qwen3.8 checkpoints behind the aliases. Free
+  capability, but do not build on it without checking it survives a model swap: the alias
+  contract promises a capability tier, not a modality.
 - **Retrieval is unavailable whenever the inference host sleeps, by design** (research R-002's
   accepted cost). A document question with no embedding model reachable must fail readably
   (US-6 AS-3, T063) — this is not a bug to chase, it is FR-009 extended to retrieval. An
