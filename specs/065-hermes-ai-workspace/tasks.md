@@ -167,6 +167,21 @@ tool was called and used.
 - [X] T035 [US3] Add `hermes_mcp_servers` to `ansible/group_vars/services/vars.yml` per [data-model.md](./data-model.md), populated with `market-model` (`auth: none`)
 - [X] T036 [US3] Implement the `auth: bearer` branch and its `credential_env` validation in `ansible/roles/hermes/tasks/preflight.yml`, **even though nothing populates it yet** — the schema is what makes FR-013 true, and validating an unused branch is deliberate, not dead configuration
 - [X] T037 [US3] Render the MCP server registrations into the stack configuration in `ansible/roles/hermes/templates/docker-compose.yml.j2`
+  - **Reworked 2026-09-21 — the first version was silently ignored.** Two things to know before
+    touching this again:
+  - **The shape is unforgiving.** Upstream gates listing on `config.enable`
+    (`routers/tools.py`) and matches execution on `info.id` (`utils/middleware.py`). The
+    original entries used `enabled`/`id`/`name` at the *top level* and were dropped by both
+    paths with no error and no log line. Correct shape:
+    `{"type":"mcp","url":…,"auth_type":…,"key":…,"config":{"enable":true},"info":{"id":…,"name":…}}`
+  - **`Initialized 0 tool server(s)` in the logs is EXPECTED**, not a fault —
+    `get_tool_servers_data` handles `type: openapi` only. Do not chase it.
+  - **The env var only seeds the first boot.** `TOOL_SERVER_CONNECTIONS` is a PersistentConfig;
+    `seed_defaults()` inserts a key only if absent, so the database wins ever after. Editing
+    `hermes_mcp_servers` and redeploying would be a silent no-op — which would break FR-013 and
+    fail T088. The reconcile task at the end of `roles/hermes/tasks/main.yml` is what keeps
+    that promise; the list is built once as a fact so the template and the reconcile step
+    cannot drift.
 - [ ] T038 [US3] **Drill (SC-003)**: ask a question answerable only through `market-model`; confirm the tool was called and the answer derives from what it returned
 - [ ] T039 [US3] **Drill (US-3 AS-3)**: make the tool service unreachable and confirm the conversation shows a readable error naming it — never an indefinite wait, never a fabricated answer presented as tool output
 - [ ] T040 [US3] **Drill (SC-004)**: change a capability alias in `group_vars`, redeploy, and confirm via `git diff --stat` that only configuration changed — no template, no code. The diff is the assertion
