@@ -66,6 +66,12 @@ services:
       # --- Gateway backend (FR-007) — the 064 gateway, one credential, never a raw model ID ---
       OPENAI_API_BASE_URL: "{{ hermes_gateway_base_url }}"
       OPENAI_API_KEY: "{{ llm_router_client_hermes_key }}"
+      # Upstream enables an Ollama integration by default, pointed at
+      # host.docker.internal:11434. Nothing here runs Ollama — every model arrives through the
+      # 064 gateway (FR-007) — so it polled a host that does not exist and logged a connection
+      # error every few minutes (10 since start, observed 2026-09-21). Noise that would mask a
+      # real error, and an outbound integration enabled for no reason.
+      ENABLE_OLLAMA_API: "False"
 
       # --- Housekeeping request volume (FR-011, research R-004) ---
       TASK_MODEL_EXTERNAL: "{{ hermes_task_alias }}"
