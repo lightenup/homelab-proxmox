@@ -121,3 +121,62 @@ Pushover credential assertion.
 the **inputs** before rendering; a post-deploy check on active target count and loaded rule
 groups would check the **outcome**, and would catch any future cause rather than this one.
 Not built — the two guards close the known path, and this is the belt to their braces.
+
+## Also open — the PROD promote pipeline trips its own guard, and reports success
+
+Found 2026-09-22 deploying `080`, and **measured** rather than predicted — the first
+reading of this was wrong in the direction that matters, so the evidence is below.
+
+`.github/workflows/lxc-promote-prod.yml:196` runs the LAB stage with no per-service
+branching:
+
+```
+./pve-service-deploy apply --environment lab --service '${service}'
+```
+
+For `service=monitoring` that is precisely the invocation Layer 1 refuses. Run
+[35739864863](https://github.com/lightenup/homelab-proxmox/actions/runs/35739864863),
+`Apply (LAB)` step, in order:
+
+```
+module.monitoring_lxc.proxmox_lxc.this: Refreshing state... [id=pve/lxc/103]
+    "monitoring" = "192.168.1.214/24"
+PLAY [Bootstrap Ansible User]  ...  monitoring : ok=5 changed=0 ... failed=0
+ERROR: Refusing to deploy monitoring: the layered inventory exposes 1 host(s) in
+the 'services' group, so every other service's scrape targets, alert rules and
+dashboards would render EMPTY over the live config.
+##[error]Process completed with exit code 1.
+##[error]LAB apply failed. See evidence pack for details (RUN_ID=lab-monitoring-...)
+```
+
+The guard works. `monitoring.yml` never ran — only a Terraform refresh and the bootstrap
+play (5 tasks, `changed=0`) got that far. Production was verified intact afterwards: 31
+active targets across 17 jobs, 9 rule groups, 26 rules.
+
+**The problem is the reporting, not the guard.** `continue-on-error: true` at line 181
+means that failed step, its job `Apply (LAB)`, and the **entire promote run** all report
+`success`. Every one of the job's 13 steps shows `success` in the API. The failure survives
+only in two places an operator has to go looking for: the step summary (`## LAB apply
+failed`) and the job's `ok` output, which is what `Prod 2 - LXC Apply` actually gates on —
+it refuses without `allow_override_failed_lab_gate: true`.
+
+So the trap is a **green promote run that certifies nothing**. Read at a glance it says
+"LAB verified, safe to promote"; in fact the LAB stage deployed nothing at all for this
+service and never can. The override flag then has to be set on every single monitoring
+deploy, which makes it indistinguishable in the run history from overriding a gate that
+failed for a real reason — the failure mode `074` already demonstrated for a different
+always-on condition.
+
+Note the second sighting of [`067`](./067-lab-prod-same-address-space.md) in the log above:
+the *LAB* stage refreshed the LXC holding **192.168.1.214**, the production monitoring host.
+Nothing was written, because the guard stopped the play — but the address the lab path
+resolves to is still the production one.
+
+Three ways out, cheapest first:
+
+1. Skip the LAB stage for `monitoring` (`if: inputs.service != 'monitoring'`), so the run
+   is honestly green and the override flag keeps meaning what it says.
+2. Substitute a LAB **plan** for the LAB apply on this service — exercises rendering
+   without writing.
+3. Give the lab inventory the service hosts, which is really `067`'s problem and the only
+   option that removes the special case rather than encoding it.

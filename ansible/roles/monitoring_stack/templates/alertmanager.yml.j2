@@ -11,8 +11,10 @@ global:
 
 route:
 {% if pushover_enabled | default(false) | bool %}
-  # Pushover-only: every alert is delivered via Pushover. The root receiver is the
-  # catch-all for alerts without a matching severity. Email is intentionally NOT wired
+  # Pushover-only: every alert is delivered via Pushover. All three severities in use
+  # (critical/warning/info) have an explicit child route below; the root receiver remains
+  # the catch-all for an alert added later with no severity label, which would otherwise
+  # be dropped silently. Email is intentionally NOT wired
   # in — a permanently-failing email receiver (unconfigured SMTP) previously stalled
   # notification dispatch and blocked Pushover delivery.
   receiver: 'pushover-warning'
@@ -31,6 +33,15 @@ route:
     - receiver: 'pushover-warning'
       matchers:
         - severity = "warning"
+    # FR-016 of 043, deferred at the time as "not currently used by any alert rule" and
+    # delivered now that one is: 064's LlmRouterLocalTierDown. Without this route `info`
+    # fell through to the root receiver and arrived on the phone titled [WARNING] — the
+    # exact opposite of what the rule's own description asks for ("informational only,
+    # not an incident"). Ordering is cosmetic: the three matchers are disjoint and none
+    # sets `continue`.
+    - receiver: 'pushover-info'
+      matchers:
+        - severity = "info"
 {% endif %}
 
 receivers:
@@ -73,6 +84,26 @@ receivers:
         send_resolved: true
         priority: '0'
         title: '{{"{{ if eq .Status \"firing\" }}"}}[WARNING] {{"{{ .GroupLabels.alertname }}"}}{{"{{ else }}"}}[RESOLVED] {{"{{ .GroupLabels.alertname }}"}}{{"{{ end }}"}}'
+        message: |
+          {{"{{ range .Alerts }}"}}
+          {{"{{ .Annotations.summary }}"}}
+          {{"{{ end }}"}}
+        url: '{{ pushover_grafana_url }}'
+
+  # Pushover priority -1: DELIVERED but silent — no sound, no vibration — which is what
+  # FR-016 asks for. Not -2 (which suppresses the notification entirely) so the event
+  # still lands somewhere the operator can find it after the fact.
+  #
+  # No retry/expire, for the same reason pushover-warning omits them: Pushover honours
+  # those only at priority 2, and an informational alert that demanded acknowledgement
+  # would defeat the point.
+  - name: 'pushover-info'
+    pushover_configs:
+      - user_key: '{{ pushover_user_key }}'
+        token: '{{ pushover_api_token }}'
+        send_resolved: true
+        priority: '-1'
+        title: '{{"{{ if eq .Status \"firing\" }}"}}[INFO] {{"{{ .GroupLabels.alertname }}"}}{{"{{ else }}"}}[RESOLVED] {{"{{ .GroupLabels.alertname }}"}}{{"{{ end }}"}}'
         message: |
           {{"{{ range .Alerts }}"}}
           {{"{{ .Annotations.summary }}"}}

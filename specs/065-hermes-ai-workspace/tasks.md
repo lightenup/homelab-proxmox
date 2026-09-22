@@ -242,7 +242,20 @@ tool was called and used.
 **Independent Test**: SSH in by key; destroy the LXC; rebuild from code; restore; confirm state.
 
 - [X] T041 [US4] Ensure `terraform/services/hermes/` injects `ssh_public_keys` into the LXC (FR-006, Constitution § *Access Control*)
-- [ ] T042 [US4] Confirm SSH works by key from the LAN, that password authentication is refused, and that no public route to SSH exists
+- [X] T042 [US4] Confirm SSH works by key from the LAN, that password authentication is refused, and that no public route to SSH exists
+  - **Passes on behaviour, with one configuration finding, 2026-09-21.**
+  - *Key auth from the LAN*: works (`ssh -o BatchMode=yes root@192.168.1.221` → `uname=hermes`).
+  - *No public route to SSH*: the only public ingress is Caddy on `192.168.1.211`, whose
+    `conf.d/hermes.caddy` proxies `hermes.hus-sky.no` → `192.168.1.221:8080` over HTTP and
+    nothing else; `grep -rnE ':22|ssh|layer4|stream' /etc/caddy/` returns nothing. **Not
+    verified from here**: whether the router NATs :22 inbound — that is outside the repo and
+    was assumed, not measured.
+  - *Password authentication refused*: **true in effect, not in configuration.** `sshd -T`
+    reports `passwordauthentication yes`; root is saved by `permitrootlogin without-password`,
+    and nothing else is loggable because no account has a usable password hash (`/etc/shadow`
+    is all `*`/`!`). So the clause holds today only by an accident of state. Recorded as
+    backlog `079` — a Proxmox template default and therefore estate-wide, not a Hermes defect,
+    which is why it is a backlog item rather than a fix inside this feature.
   - **Two of three verified 2026-09-21.** Key-based SSH works (`BatchMode=yes`, so no password
     fallback was possible). No public SSH route: `caddy_services` has no port-22 entry.
   - **The third does not hold, and it is estate-wide, not ours.** `sshd -T` on hermes reports
