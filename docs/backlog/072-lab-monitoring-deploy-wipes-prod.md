@@ -121,3 +121,43 @@ Pushover credential assertion.
 the **inputs** before rendering; a post-deploy check on active target count and loaded rule
 groups would check the **outcome**, and would catch any future cause rather than this one.
 Not built — the two guards close the known path, and this is the belt to their braces.
+
+## Also open — the PROD promote pipeline trips its own guard
+
+Found 2026-09-22 deploying `080`. Layer 2's guard is correct, but nothing taught the
+**gated PROD pipeline** about it, so `monitoring` cannot be promoted the normal way.
+
+`.github/workflows/lxc-promote-prod.yml:196` runs the LAB stage with no per-service
+branching:
+
+```
+./pve-service-deploy apply --environment lab --service '${service}'
+```
+
+For `service=monitoring` that is precisely the invocation Layer 1 refuses, so **`Prod 1 -
+LXC Promote` always fails for this service**, with:
+
+```
+Refusing to deploy monitoring: the layered inventory exposes 1 host(s) in the
+'services' group, so every other service's scrape targets, alert rules and
+dashboards would render EMPTY over the live config.
+```
+
+The run is not useless — `plan_prod` declares `needs: [setup]` and `if: always()`, so the
+PROD plan and the summary still run and can be reviewed. But landing the change then
+requires `Prod 2 - LXC Apply` with `allow_override_failed_lab_gate: true`, which is
+indistinguishable, in the run history, from overriding a gate that failed for a *real*
+reason. That is the part worth fixing: the signal is being spent on a condition that is
+known, permanent and by design.
+
+Three ways out, cheapest first:
+
+1. Skip the LAB stage for `monitoring` (`if: inputs.service != 'monitoring'`), so the
+   promote run is green and the override flag keeps meaning what it says.
+2. Substitute a LAB **plan** for the LAB apply on this service — still exercises rendering
+   without writing anything.
+3. Give the lab inventory the service hosts, which is really [`067`](./067-lab-prod-same-address-space.md)'s
+   problem and the only option that removes the special case rather than encoding it.
+
+Until then the override is the documented route, and this section is the documentation —
+`080` hit it cold, which is the evidence that 072's existing text does not cover it.
