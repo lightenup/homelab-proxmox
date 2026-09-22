@@ -43,9 +43,9 @@ monitoring_contract:
 | Signal | Source | Severity | Why |
 |---|---|---|---|
 | Gateway down or database unreachable | blackbox on `/health/readiness` | **critical** | Every client is refused. FR-009 requires the gateway being down to alert. |
-| Local tier (Mac) unavailable | `litellm_deployment_state` for the local deployments | **info** | FR-009 requires this to be informational, not critical. **The rationale has expired — see below.** |
+| Local tier (Mac) unavailable | `litellm_deployment_state` for the local deployments | **info** | FR-009 requires this to be informational, not critical. Routed to Pushover at priority `-1` since 2026-09-22 (043 FR-016), i.e. delivered silently. **The rationale was revisited — see below.** |
 | **All backends failing, under traffic** | failure ratio across all deployments > 90% over 10m | **critical** | FR-018. The gateway is alive and the database is fine, but nothing can be served. |
-| **All backends failing, no traffic** | synthetic canary request fails | **critical** | FR-018, SC-013. The failure-rate signal is silent with no clients calling — which is exactly how this trap goes unnoticed until someone tries to use the gateway. |
+| **All backends failing, no traffic** | synthetic canary request fails (every attempt) | **warning** | FR-018, SC-013. The failure-rate signal is silent with no clients calling — which is exactly how this trap goes unnoticed until someone tries to use the gateway. **Was `critical` until 2026-09-22** — see below. |
 | Gateway-wide budget cap exhausted | `litellm_remaining_team_budget_metric` at/near zero | **critical** | SC-012. This refuses every client at once, so it is an availability event, not just a spend one. **Cannot currently fire** — spend is structurally 0.0. |
 | **Gateway-wide rate cap binding** | 429s across ≥2 distinct `api_key_alias` on the gateway team | **warning** | FR-010's second level, live since 2026-09-20. Warning not critical: the window resets every minute and the backstop is doing its job — it means the homelab is at its ceiling. |
 | Per-client **rate-limit** breach | `litellm_proxy_failed_requests_metric_total{exception_status="429"}` by `api_key_alias` | (dashboard only) | SC-010 — visible and attributable, but one client hitting its own limit is working as designed, not an incident. **Verified 2026-09-20**, `doctor-fault-injection.md` § Row 11. |
@@ -98,6 +98,49 @@ be informational, not critical" — written when the Mac was optional). The requ
 *effect* is still what we want; its *reason* changed. Flagged rather than silently
 rewritten, because it is the account owner's call whether an unavailable Mac should now be
 a first-class critical in its own right.
+
+### Answered 2026-09-22: no, and the canary steps down with it
+
+The owner's call, recorded: **an unavailable Mac is not a page.** Both halves of the
+argument above are now settled in the same direction, which changes the second bullet.
+
+- `litellm_deployment_state` **stays `info`**, unchanged — but `info` finally has a route.
+  It had none, so it fell through to Alertmanager's root receiver and arrived on the phone
+  titled `[WARNING]`, the exact opposite of what this row asks for. It now resolves to
+  `pushover-info` at priority `-1`: delivered, silent (043 FR-016).
+- `LlmRouterCanaryFailing` **drops from `critical` to `warning`**, so the sentence "the
+  critical alert comes from the canary" no longer holds and nothing above it replaces the
+  page. That is deliberate, not an oversight.
+
+Why the premise collapsed. The canary was a sound proxy for "the Mac is gone" only while a
+failed canary meant something rare. It does not. oMLX returns `400 prefill memory guard
+rejected this prompt` whenever the Mac is under memory pressure, and the guard projects
+peak usage from resident memory plus a 20–37 GB KV/SDPA transient rather than from prompt
+size — so the canary's own 14-token `max_tokens:1` request is refused while the gateway is
+healthy and every other alias is serving. Measured 2026-09-22: **244 such 400s in 24 h, 488
+of 503 against model group `fast`**, which is precisely what the canary calls. The alert was
+firing on ordinary laptop memory pressure, at Pushover priority 2 — re-alerting every 60 s
+for an hour, per firing.
+
+What replaces it, and what does not:
+
+- **Nothing pages for "Mac away, no traffic."** Accepted. The Mac is a laptop that sleeps;
+  the condition is routine. The owner gets one normal-priority push from the canary warning.
+- `LlmRouterAllBackendsFailing` **still raises a critical** whenever real traffic is broadly
+  failing — the case that actually costs something, because someone is waiting on it.
+- The canary's meaning is tightened at the source rather than in the alert: `canary.sh`
+  retries `llm_router_canary_attempts` times before writing a `0`, so a firing now denotes
+  three consecutive failures. `for:` stays `0m` — the metric is a level refreshed hourly, so
+  any `for:` would only add to an already up-to-60-minute sampling gap without suppressing
+  anything, and SC-013 ("an alert fires within one canary interval") still holds because the
+  retries complete inside one run.
+
+**Known residue, not fixed here.** A sleeping Mac still fires both rules: the canary warning
+(audible, priority 0) and the local-tier info (silent). An Alertmanager inhibit rule keyed on
+`LlmRouterCanaryFailing` suppressing `LlmRouterLocalTierDown` would collapse them, and needs
+no `equal:` clause because the two carry different `instance` labels. Left out deliberately —
+it is a second change to the same surface and the audible half is one push per four hours at
+`repeat_interval`, which the owner accepted.
 
 **Why two all-backends signals rather than one.** `/health/readiness` returns 200 while every
 deployment is dead — it only checks the database. The failure-rate signal closes that, but only while

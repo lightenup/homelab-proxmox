@@ -8,7 +8,23 @@ llm_router_postgres_image: "postgres"
 
 # Health checks (FR-005, research D-101) — background checks are scoped to local-tier
 # deployments only so probing never bills real tokens.
-llm_router_health_check_interval: 60
+#
+# 300, raised from 60 on 2026-09-22. FR-005 said "60 s or less"; that bound is AMENDED, not
+# ignored — see specs/064-llm-router/spec.md FR-005 and docs/backlog/080.
+#
+# Why: at 60s across three health_checked aliases this was ~4,300 real generations/day
+# against the Mac, measured as 96% of ALL traffic reaching it (1,044 of 1,090 gateway
+# requests over 6h on 2026-09-22; real Hermes traffic was 40). That load is a direct
+# contributor to the memory pressure that makes oMLX's prefill guard return 400, which in
+# turn flipped litellm_deployment_state and fired LlmRouterLocalTierDown — monitoring
+# generating the condition it was monitoring for. 300 cuts it to ~860/day.
+#
+# What it costs, stated plainly: every alias carries timeout 1200, so a first request landing
+# on an absent Mac can hang for up to one health-check period before the deployment is ejected.
+# That window widens from <=60s to <=300s. backlog 075 already records that the health check
+# "does not fix the first request, only narrows the window", so this trades a wider window for
+# a Mac that is less likely to be in the failing state at all. 300 is LiteLLM's own default.
+llm_router_health_check_interval: 300
 # 0, not 2, and the reason is a trap in LiteLLM's own cooldown logic. Setting
 # allowed_fails at all takes the legacy path in router_utils/cooldown_handlers.py:
 #
@@ -38,6 +54,28 @@ llm_router_cooldown_time: 60
 # traffic, not a health probe, so it sits outside SC-011's probe budget.
 llm_router_canary_alias: hermes-fast
 llm_router_canary_interval_minutes: 60
+
+# Retry budget for one canary run (added 2026-09-22). A single attempt made the canary a
+# noise generator rather than a signal: oMLX's prefill memory guard returns 400 whenever the
+# Mac is under memory pressure, and its projection is dominated by a 20-37 GB KV/SDPA
+# transient rather than by prompt size — so even this canary's 14-token max_tokens:1 request
+# gets refused while the gateway is otherwise perfectly healthy. Retrying means
+# llm_router_canary_success == 0 denotes THREE consecutive failures, which is worth alerting
+# on, instead of one blip, which is not.
+#
+# Sizing is bounded on both ends and neither bound is arbitrary:
+#   - UPPER, by the gateway-wide rate cap. llm_router_gateway_budget.rpm_limit is 65 and
+#     hermes alone may use 60, leaving 5. Three attempts fit (63 of 65). Raising attempts
+#     past 3 would make the canary trip LlmRouterGatewayRateCapBinding — the retry logic
+#     manufacturing the alert it exists to avoid. Raise rpm_limit first if you need more.
+#   - LOWER, by the delay having to outlast a real prefill. 30s, not a few seconds: the guard
+#     clears when whatever is holding memory finishes, and retrying immediately just collects
+#     the same 400 three times.
+#
+# Worst case per run = attempts * curl timeout (30s) + (attempts - 1) * delay = 150s, which is
+# why llm-router-canary.service.j2 sets TimeoutStartSec. Keep the two in step.
+llm_router_canary_attempts: 3
+llm_router_canary_retry_delay_seconds: 30
 
 # Where the canary drops its .prom file for node_exporter's textfile collector.
 #

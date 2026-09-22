@@ -60,7 +60,7 @@ router_settings:
 
 general_settings:
   background_health_checks: true
-  health_check_interval: 60
+  health_check_interval: 300   # 60 until 2026-09-22; FR-005's bound was amended, see spec.md
   background_health_check_model_groups: [ ... aliases having a health_checked deployment ... ]
 
 litellm_settings:

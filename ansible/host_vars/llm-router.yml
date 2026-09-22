@@ -40,13 +40,19 @@ monitoring_contract:
     - alert: LlmRouterLocalTierDown
       expr: |
         litellm_deployment_state{model_id=~".*-local"} != 0
-      for: "5m"
+      # 11m, raised from 5m on 2026-09-22 alongside llm_router_health_check_interval going
+      # 60s -> 300s. The gauge only refreshes when a health check runs, so at the new cadence
+      # ONE failed check holds it at 1 for a full 300s — which met the old `for: 5m` exactly
+      # and would have made this rule strictly more trigger-happy than before. 11m needs two
+      # consecutive failed checks, preserving what the rule meant at 60s/5m.
+      for: "11m"
       severity: info
       summary: !unsafe "llm-router local tier (Mac) is down"
       description: !unsafe >-
-        A local-tier deployment has left the healthy pool for more than 5 minutes. This is
-        expected when the Mac is asleep or off the tailnet — informational only, not an
-        incident (FR-009).
+        A local-tier deployment has left the healthy pool across two consecutive background
+        health checks. This is expected when the Mac is asleep or off the tailnet —
+        informational only, not an incident (FR-009). Routed to Pushover at priority -1, so
+        it is delivered silently rather than as a notification (043 FR-016).
     - alert: LlmRouterAllBackendsFailing
       expr: |
         sum(rate(litellm_deployment_failure_responses_total[10m])) / (sum(rate(litellm_deployment_failure_responses_total[10m])) + sum(rate(litellm_deployment_success_responses_total[10m]))) > 0.9
@@ -57,17 +63,44 @@ monitoring_contract:
         The gateway is up but every backend is failing under load — the readiness probe alone
         would miss this (FR-018). This alert requires client traffic to fire;
         LlmRouterCanaryFailing covers the no-traffic case.
+    # warning, NOT critical — changed 2026-09-22, and the severity is the whole point of the
+    # change. Alertmanager maps critical to Pushover priority 2 (emergency), which re-delivers
+    # to the phone every 60s for up to an hour until acknowledged in the app. Paired with
+    # `for: "0m"` and an hourly metric, ONE transient failure produced up to 60 phone alerts.
+    #
+    # What made that intolerable is that the failure is routine, not exceptional: the Mac's
+    # oMLX returns 400 "prefill memory guard rejected this prompt" whenever GPU memory is
+    # tight, and the guard's projection is dominated by a 20-37 GB KV/SDPA transient rather
+    # than by prompt size — so even this canary's 14-token max_tokens:1 request gets refused.
+    # Measured 2026-09-22: 244 such 400s in 24h, 488 of 503 against model group `fast`, which
+    # is exactly what this canary calls.
+    #
+    # `for: "0m"` deliberately stays. The metric is a LEVEL refreshed hourly by a systemd
+    # timer, so any `for:` is additive on top of an up-to-60-minute sampling gap and would
+    # only delay SC-013 ("an alert fires within one canary interval") without suppressing
+    # anything. Tolerance belongs at the source instead, and now lives there: canary.sh
+    # retries llm_router_canary_attempts times before it writes a 0, so this firing means
+    # three consecutive failures, not one blip.
+    #
+    # CONSEQUENCE, recorded so it is not rediscovered as a surprise: contracts/monitoring.md
+    # relied on this rule to be the critical for "Mac away, no client traffic". Nothing pages
+    # at emergency priority for that case any more. That is the account owner's decision of
+    # 2026-09-22 (the Mac is a laptop that legitimately sleeps), and it settles FR-009's
+    # flagged open question. LlmRouterAllBackendsFailing still raises a critical whenever real
+    # traffic is broadly failing.
     - alert: LlmRouterCanaryFailing
       expr: |
         llm_router_canary_success == 0
       for: "0m"
-      severity: critical
+      severity: warning
       summary: !unsafe "llm-router: synthetic canary request failed"
       description: !unsafe >-
-        The low-cadence canary against {{ $labels.alias }} failed. Unlike
+        The low-cadence canary against {{ $labels.alias }} failed on every attempt. Unlike
         LlmRouterAllBackendsFailing, this fires even with zero client traffic (FR-018, SC-013)
         — the metric comes from a systemd-timer script via node_exporter's textfile collector,
-        not from LiteLLM itself.
+        not from LiteLLM itself. The usual cause is oMLX's prefill memory guard refusing the
+        request while the Mac is under memory pressure; check the gateway's 400 rate before
+        assuming an outage.
     - alert: LlmRouterBudgetCapExhausted
       expr: |
         litellm_remaining_team_budget_metric{team_alias="llm-router-gateway-wide"} <= 0

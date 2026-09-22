@@ -17,11 +17,11 @@ group only** via `background_health_check_model_groups`. Metered deployments add
 ```yaml
 general_settings:
   background_health_checks: true          # off by default — this is the intermittent-Mac fix
-  health_check_interval: 60               # LiteLLM default is 300; FR-005 requires ≤60
+  health_check_interval: 300              # was 60; FR-005's bound amended 2026-09-22 (= LiteLLM default)
   background_health_check_model_groups: ["hermes-fast-local", "hermes-balanced-local"]
 ```
 
-**Rationale**: FR-005 requires ≤60 s probing so a dead deployment leaves the pool before a request
+**Rationale**: FR-005 requires bounded probing so a dead deployment leaves the pool before a request
 lands; the "health checks cost money" edge case requires that probing not become a line item. Both
 are satisfiable at once because the only deployment that actually needs probing is the intermittent
 one. OpenRouter and Anthropic are always-available metered endpoints — probing them buys nothing and
