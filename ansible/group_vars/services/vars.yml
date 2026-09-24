@@ -425,11 +425,11 @@ caddy_base_domain: "hus-sky.no"
 # outside the LAN — the link points somewhere already gated, not at the service.
 caddy_landing_links:
   - title: "LLM Router"
-    desc: "Local LLM gateway — dashboards in Grafana"
-    # Grafana, not the gateway: hus-sky.no is public, and FR-008/SC-007 keep the gateway
-    # off the internet. The click-through is gated by Grafana's own auth. Precedent: the
-    # eurooffice card already links to Nextcloud rather than to itself.
-    link: "https://grafana.hus-sky.no/d/llm-router"
+    desc: "Local LLM gateway — LiteLLM web UI"
+    # LAN/tailnet address, not a hus-sky.no vhost: FR-008/SC-007 keep the gateway off the
+    # internet, so the tile links straight to the UI on the box. The click-through is gated
+    # by LITELLM_MASTER_KEY. Plain HTTP — the compose publishes port 4000 without TLS.
+    link: "http://{{ llm_router_ip }}:{{ llm_router_port }}/ui"
     # Matches the `instance` label of the blackbox probe that llm-router's
     # monitoring_contract.liveness_targets declares, which is what /api/status returns.
     probe: "llm-router-readiness"
