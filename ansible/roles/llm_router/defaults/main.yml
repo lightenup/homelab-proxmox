@@ -72,10 +72,19 @@ llm_router_canary_interval_minutes: 60
 #     clears when whatever is holding memory finishes, and retrying immediately just collects
 #     the same 400 three times.
 #
-# Worst case per run = attempts * curl timeout (30s) + (attempts - 1) * delay = 150s, which is
-# why llm-router-canary.service.j2 sets TimeoutStartSec. Keep the two in step.
+# Worst case per run = attempts * curl timeout + (attempts - 1) * delay. The service's
+# TimeoutStartSec is DERIVED from these three (llm-router-canary.service.j2), so it stays in
+# step on its own.
 llm_router_canary_attempts: 3
 llm_router_canary_retry_delay_seconds: 30
+# Per-attempt curl timeout. 30s until 2026-10-11, when the Mac put every chat model behind
+# llm_queue (local-llm proxy/llm_queue.py, FINDINGS §38): one inference request at a time,
+# waiting up to --max-wait 600s and then answering 429. A 30s canary queued behind a
+# multi-minute agent turn timed out and fired LlmRouterCanaryFailing for a backend that was
+# busy, not broken. 660s outlasts the queue's 600s wait, so a failure now means the queue
+# refused (429, which still fails the attempt) or the backend is really gone. Stays under the
+# 1200s alias timeout above.
+llm_router_canary_curl_timeout_seconds: 660
 
 # Where the canary drops its .prom file for node_exporter's textfile collector.
 #

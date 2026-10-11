@@ -5,12 +5,13 @@ After=docker.service
 [Service]
 Type=oneshot
 # Explicit, because the retry loop added 2026-09-22 overruns systemd's 90s
-# DefaultTimeoutStartSec. Worst case is llm_router_canary_attempts * 30s curl timeout plus
-# (attempts - 1) * llm_router_canary_retry_delay_seconds = 150s at the current 3 / 30s.
+# DefaultTimeoutStartSec. Derived, not hardcoded (it was a literal 300 until the curl timeout
+# went 30s -> 660s for the Mac's llm_queue, which would have overrun it): worst case is
+# attempts * curl timeout + (attempts - 1) * retry delay, plus 60s headroom. 2100s at 3 / 660 / 30.
 # Overrunning is not a benign truncation: SIGKILL skips the script's EXIT trap, the .prom
 # file is never rewritten, and node_exporter keeps serving the PREVIOUS value — a stale 1
-# would hide a real outage indefinitely. Keep this above the budget in defaults/main.yml.
-TimeoutStartSec=300
+# would hide a real outage indefinitely.
+TimeoutStartSec={{ llm_router_canary_attempts * llm_router_canary_curl_timeout_seconds + (llm_router_canary_attempts - 1) * llm_router_canary_retry_delay_seconds + 60 }}
 # Bounds the SIGTERM->SIGKILL escalation when the start timeout does fire, so a wedged run
 # cannot occupy the unit for systemd's 90s default on top of TimeoutStartSec.
 TimeoutStopSec=15

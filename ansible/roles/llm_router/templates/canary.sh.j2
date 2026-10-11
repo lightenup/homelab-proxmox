@@ -34,7 +34,7 @@ trap 'rm -f -- "$TMP_FILE"' EXIT HUP INT TERM
 
 ATTEMPTS={{ llm_router_canary_attempts }}
 RETRY_DELAY={{ llm_router_canary_retry_delay_seconds }}
-CURL_TIMEOUT=30
+CURL_TIMEOUT={{ llm_router_canary_curl_timeout_seconds }}
 
 canary_request() {
   # `local code` on its own line, deliberately. `local code=$(curl ...)` makes the exit
