@@ -81,6 +81,21 @@ scrape_configs:
 {% endif %}
 {% endfor %}
 
+  # Off-inventory scrape targets — hosts Ansible does not manage, so there is no
+  # hostvars[host].ansible_host to build a contract target from (e.g. the Mac running
+  # oMLX + llm_queue). Default-empty: renders nothing unless the var is set.
+{% for target in prometheus_external_scrape_targets | default([]) %}
+  - job_name: '{{ target.job_name }}'
+    scrape_interval: {{ target.scrape_interval | default(prometheus_scrape_interval) }}
+    scrape_timeout: {{ prometheus_scrape_timeout }}
+    static_configs:
+      - targets:
+          - '{{ target.address }}'
+        labels:
+          instance: '{{ target.instance }}'
+    metrics_path: {{ target.path | default('/metrics') }}
+{% endfor %}
+
   # HTTPS endpoint probes — static targets, NOT via monitoring contracts (FR-006, C-007)
   - job_name: 'blackbox-exporter'
     scrape_interval: {{ prometheus_scrape_interval }}

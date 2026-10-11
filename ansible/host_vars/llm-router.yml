@@ -141,3 +141,34 @@ monitoring_contract:
         the same moment produce the identical signal. To tell them apart, read a refusal body
         — it says "for team:" or "for api_key:". A single client over its own limit affects
         one api_key_alias only and does not fire this, which is the case worth excluding.
+    # llm_queue on the Mac (local-llm repo, proxy/llm_queue.py, FINDINGS §38): one inference
+    # request at a time across all models, grouped by model, 429 + Retry-After when a
+    # request has waited --max-wait (600s) or the queue is full. Scraped as job="llm-queue"
+    # via prometheus_external_scrape_targets (group_vars/monitoring), not via this contract,
+    # because the Mac is not an Ansible host. Rules live here because the queue sits behind
+    # this gateway.
+    #
+    # Deliberately NO alert on up{job="llm-queue"} == 0: the Mac is a laptop, asleep or off
+    # the LAN routinely, and LlmRouterLocalTierDown already covers "the backend is gone".
+    # Both rules are warnings: they mean "work is backing up", not "something is down".
+    - alert: LlmQueueWaitTooLong
+      expr: |
+        llm_queue_oldest_wait_seconds{job="llm-queue"} > 300
+      for: "5m"
+      severity: warning
+      summary: !unsafe "llm-queue: a request has been waiting more than 5 minutes"
+      description: !unsafe >-
+        Something has held the Mac's single inference slot long enough that a queued request
+        has waited over 5 minutes. Usually one long agent loop or batch job. Check
+        llm_queue_running for the model and the Mac's ~/Library/Logs/llm_queue/events.jsonl.
+        At 600s the waiter gets a 429.
+    - alert: LlmQueueRejecting
+      expr: |
+        sum(increase(llm_queue_requests_total{job="llm-queue", outcome=~"rejected_.*"}[15m])) > 0
+      for: "0m"
+      severity: warning
+      summary: !unsafe "llm-queue: requests are being refused with 429"
+      description: !unsafe >-
+        The Mac's llm_queue returned 429 in the last 15 minutes, because the queue was full
+        (outcome=rejected_full) or a request waited past --max-wait (rejected_timeout). opencode
+        retries 429 with Retry-After and then fails the turn; Hermes surfaces it to the user.
