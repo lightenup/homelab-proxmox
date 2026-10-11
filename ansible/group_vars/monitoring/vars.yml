@@ -71,6 +71,18 @@ grafana_dashboards_path: "{{ monitoring_base_path }}/grafana/dashboards"
 snmp_config_path: "{{ monitoring_base_path }}/snmp"
 alertmanager_config_path: "{{ monitoring_base_path }}/alertmanager"
 
+# Off-inventory scrape targets (rendered by prometheus.yml.j2).
+# llm-queue: local-llm repo proxy/llm_queue.py (FINDINGS §38) on the Mac that serves
+# oMLX. Metrics-only listener; inference stays on the Mac's loopback. The Mac is a
+# laptop: expect `up == 0` whenever it is asleep or off the LAN, so no alert keys
+# on `up` for this job. `instance` is a fixed label so the LAN address is not
+# what gets published.
+prometheus_external_scrape_targets:
+  - job_name: "llm-queue"
+    address: "192.168.1.177:9464"
+    instance: "llm-mac"
+    scrape_interval: "15s"
+
 # Blackbox exporter configuration
 # Feature: 042-monitoring-tier-c (FR-001, FR-003)
 blackbox_exporter_version: "v0.28.0"
