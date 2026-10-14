@@ -46,7 +46,11 @@ jobs:
 
   mutation:
     needs: gate
-    if: ${{ needs.gate.outputs.run == 'true' }}
+    # Never run fork PRs on the self-hosted runner: it has sudo and SSH to the PVE host.
+    if: >-
+      ${{ needs.gate.outputs.run == 'true' &&
+          (github.event_name != 'pull_request' ||
+           github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v4
