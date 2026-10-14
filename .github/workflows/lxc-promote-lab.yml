@@ -221,7 +221,10 @@ jobs:
         if: always()
         with:
           name: lab-plan-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+            !evidence/lab/${{ steps.capture_run_id.outputs.run_id }}/**/*.tfplan
 
   apply_lab:
     name: Apply (LAB)
@@ -332,4 +335,7 @@ jobs:
         if: always()
         with:
           name: lab-apply-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+            !evidence/lab/${{ steps.capture_run_id.outputs.run_id }}/**/*.tfplan

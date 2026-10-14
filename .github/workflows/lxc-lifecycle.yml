@@ -166,7 +166,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: lifecycle-plan-evidence-${{ github.event.inputs.environment }}-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}
+            !evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}/**/*.tfplan
 
   apply:
     name: Apply (Lifecycle)
@@ -379,4 +382,7 @@ jobs:
         if: always() && steps.capture_run_id.outputs.run_id != ''
         with:
           name: lifecycle-apply-evidence-${{ github.event.inputs.environment }}-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}
+            !evidence/${{ github.event.inputs.environment }}/${{ steps.capture_run_id.outputs.run_id }}/**/*.tfplan

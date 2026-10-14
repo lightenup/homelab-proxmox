@@ -46,11 +46,14 @@ jobs:
 
   mutation:
     needs: gate
-    # Never run fork PRs on the self-hosted runner: it has sudo and SSH to the PVE host.
+    # The self-hosted runner has sudo and SSH to the PVE host, so only the owner's own PRs may
+    # reach it: not forks, and not same-repo bots (Dependabot bumps the lock file this job
+    # installs, so a compromised PyPI release would execute here; Copilot pushes here too).
     if: >-
       ${{ needs.gate.outputs.run == 'true' &&
           (github.event_name != 'pull_request' ||
-           github.event.pull_request.head.repo.full_name == github.repository) }}
+           (github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.user.login == github.repository_owner)) }}
     runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v4
