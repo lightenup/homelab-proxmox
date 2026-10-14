@@ -81,4 +81,7 @@ jobs:
               if: env.ACT != 'true'
               with:
                   name: evidence-${{ env.RUN_ID }}
-                  path: evidence/
+                  # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+                  path: |
+                    evidence
+                    !evidence/**/*.tfplan

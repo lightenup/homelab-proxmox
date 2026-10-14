@@ -183,7 +183,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: lab-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence
+            !evidence/**/*.tfplan
 
   apply:
     name: Apply (LAB)
@@ -279,4 +282,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: lab-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence
+            !evidence/**/*.tfplan

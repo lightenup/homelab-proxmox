@@ -310,7 +310,10 @@ jobs:
         if: always()
         with:
           name: prod-pipeline-lab-apply-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence/lab/${{ steps.capture_run_id.outputs.run_id }}
+            !evidence/lab/${{ steps.capture_run_id.outputs.run_id }}/**/*.tfplan
 
   confidence_suite:
     name: Confidence suite (best-effort)
@@ -459,7 +462,10 @@ jobs:
         if: ${{ always() && steps.suite_on_pve.outputs.run_id != '' }}
         with:
           name: prod-pipeline-confidence-evidence-${{ steps.suite_on_pve.outputs.run_id }}
-          path: evidence/lab/${{ steps.suite_on_pve.outputs.run_id }}
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence/lab/${{ steps.suite_on_pve.outputs.run_id }}
+            !evidence/lab/${{ steps.suite_on_pve.outputs.run_id }}/**/*.tfplan
 
   plan_prod:
     name: Plan (PROD)
@@ -639,7 +645,10 @@ jobs:
         if: always()
         with:
           name: prod-pipeline-prod-plan-evidence-${{ github.event.inputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
+            !evidence/prod/${{ steps.capture_run_id.outputs.run_id }}/**/*.tfplan
 
   summarize_before_approval:
     name: Summary (before approval)

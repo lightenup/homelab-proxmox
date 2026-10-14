@@ -119,6 +119,21 @@ parse_common_flags() {
     fi
 }
 
+# `terraform show -json` writes every input variable in plaintext, `sensitive = true` or not, and
+# plan.json is uploaded as a public Actions artifact. Redact secret-named variables in place.
+scrub_plan_json() {
+    local path="$1" tmp
+    [[ -f "${path}" ]] || return 0
+    tmp="$(mktemp "${path}.XXXXXX")"
+    if jq '.variables |= with_entries(if (.key | test("secret|password|passwd|private_key|token_secret"; "i")) then .value.value = "REDACTED" else . end)' \
+        "${path}" >"${tmp}"; then
+        mv "${tmp}" "${path}"
+    else
+        rm -f "${tmp}"
+        die "failed to scrub secrets from ${path}"
+    fi
+}
+
 sha256_file() {
     local path="$1"
     if command -v sha256sum >/dev/null 2>&1; then
@@ -937,6 +952,7 @@ EOF
 
     terraform_chdir show -no-color "${planfile}" >"${plan_txt}"
     terraform_chdir show -json "${planfile}" >"${plan_json}"
+    scrub_plan_json "${plan_json}"
     preflight_ok "plan artifacts emitted (reports/plan/plan.txt + reports/plan/plan.json)"
 
     compute_blast_radius "${plan_json}" || true
@@ -1377,6 +1393,8 @@ cmd_apply() {
         else
             terraform_chdir show -json "${planfile}" >"${plan_json}"
         fi
+        # Plan packs written before scrubbing existed still hold the raw value.
+        scrub_plan_json "${plan_json}"
 
         preflight_ok "using saved planfile from run_id=${plan_source_run_id}"
 

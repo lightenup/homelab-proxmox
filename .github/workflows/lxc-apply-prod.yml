@@ -270,4 +270,7 @@ jobs:
         if: always() && steps.capture_run_id.outputs.run_id != ''
         with:
           name: prod-apply-evidence-${{ steps.meta.outputs.service }}-${{ steps.capture_run_id.outputs.run_id }}
-          path: evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
+          # plan.tfplan holds every Terraform variable in plaintext; it stays on pve.
+          path: |
+            evidence/prod/${{ steps.capture_run_id.outputs.run_id }}
+            !evidence/prod/${{ steps.capture_run_id.outputs.run_id }}/**/*.tfplan
