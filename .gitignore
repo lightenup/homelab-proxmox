@@ -82,3 +82,6 @@ node_modules/
 dist/
 build/
 coverage/
+
+# Local secret-scan reports
+gitleaks.json
