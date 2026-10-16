@@ -11,17 +11,17 @@
 - name: Assert the six vault secrets are defined and non-empty
   ansible.builtin.assert:
     that:
-      - item is defined
-      - item | length > 0
+      - vars[item] is defined
+      - vars[item] | length > 0
     loop:
-      - "{{ ntfy_owner_password_hash | default(omit) }}"
-      - "{{ ntfy_owner_token | default(omit) }}"
-      - "{{ ntfy_alertmanager_password_hash | default(omit) }}"
-      - "{{ ntfy_alertmanager_token | default(omit) }}"
-      - "{{ ntfy_hermes_password_hash | default(omit) }}"
-      - "{{ ntfy_hermes_token | default(omit) }}"
+      - ntfy_owner_password_hash
+      - ntfy_owner_token
+      - ntfy_alertmanager_password_hash
+      - ntfy_alertmanager_token
+      - ntfy_hermes_password_hash
+      - ntfy_hermes_token
     fail_msg: >-
-      One or more ntfy secrets are missing or empty.
+      One or more ntfy secrets are missing or empty ({{ item }}).
       Run 'ansible-vault edit group_vars/services/vault.yml' and add:
       ntfy_owner_password_hash, ntfy_owner_token,
       ntfy_alertmanager_password_hash, ntfy_alertmanager_token,

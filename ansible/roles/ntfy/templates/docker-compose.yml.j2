@@ -12,8 +12,8 @@ services:
     image: {{ ntfy_image }}:{{ ntfy_version }}
     command: serve
     ports:
-      - "{{ ntfy_port }}:80"
-      - "{{ ntfy_metrics_port }}:9090"
+      - "{{ ntfy_ip }}:{{ ntfy_port }}:80"
+      - "{{ ntfy_ip }}:{{ ntfy_metrics_port }}:9090"
     volumes:
       - "{{ ntfy_install_dir }}/server.yml:/etc/ntfy/server.yml:ro"
       - "{{ ntfy_install_dir }}/templates:/etc/ntfy/templates:ro"

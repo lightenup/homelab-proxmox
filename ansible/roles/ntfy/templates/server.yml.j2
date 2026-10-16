@@ -13,20 +13,20 @@ cache-file: /var/lib/ntfy/cache.db
 cache-duration: "72h"
 auth-file: /var/lib/ntfy/user.db
 auth-default-access: deny-all
-auth-users: |
-  owner:{{ ntfy_owner_password_hash }}:user
+auth-users:
+  - "owner:{{ ntfy_owner_password_hash }}:user"
 {% for user in ntfy_users %}
-  {{ user.name }}:{{ user.password_hash }}:user
+  - "{{ user.name }}:{{ user.password_hash }}:user"
 {% endfor %}
-auth-access: |
-  owner:*:read-only
+auth-access:
+  - "owner:*:read-only"
 {% for user in ntfy_users %}
-  {{ user.name }}:{{ user.topic }}:write-only
+  - "{{ user.name }}:{{ user.topic }}:write-only"
 {% endfor %}
-auth-tokens: |
-  owner:{{ ntfy_owner_token }}:owner-phone
+auth-tokens:
+  - "owner:{{ ntfy_owner_token }}:owner-phone"
 {% for user in ntfy_users %}
-  {{ user.name }}:{{ user.token }}:{{ user.name }}
+  - "{{ user.name }}:{{ user.token }}:{{ user.name }}"
 {% endfor %}
 template-dir: /etc/ntfy/templates
 message-size-limit: "32k"

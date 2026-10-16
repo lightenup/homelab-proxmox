@@ -12,6 +12,10 @@
 #
 # ✓ = HTTP 200; ✗ = HTTP 401 or 403.
 #
+# Reads use GET /<topic>/json?poll=1&since=1m (the JSON API), because GET /<topic>
+# serves the web app with a 200 to anyone and would fail the read cells.
+# Writes use POST /<topic> with a tagged body.
+#
 # Usage:
 #   NTFY_URL=http://192.168.1.222 \
 #   NTFY_OWNER_TOKEN=... NTFY_ALERTMANAGER_TOKEN=... NTFY_HERMES_TOKEN=... \
@@ -46,24 +50,30 @@ NTFY_URL="${NTFY_URL%/}"
 FAILURES=0
 TOTAL=0
 
-# do_request <token_or_empty> <method> <topic> <expected: allow|deny>
+# do_request <token_or_empty> <method: GET|POST> <topic> <expected: allow|deny>
 do_request() {
   local token="$1" method="$2" topic="$3" expected="$4"
-  local url="${NTFY_URL}/${topic}"
-  local code
+  local url code
 
   TOTAL=$((TOTAL + 1))
 
-  if [[ -z "$token" ]]; then
-    code=$(curl -s -o /dev/null -w '%{http_code}' -X "$method" "$url" \
-      ${method:+-d "acl-check $(date -Is)"} \
-      -H "Tags: acl-check" -H "Priority: min" 2>/dev/null || true)
+  # Build the curl argument array.
+  local -a curl_args=(-s -o /dev/null -w '%{http_code}')
+
+  if [[ "$method" == "GET" ]]; then
+    # JSON API poll: GET /<topic>/json?poll=1&since=1m
+    url="${NTFY_URL}/${topic}/json?poll=1&since=1m"
   else
-    code=$(curl -s -o /dev/null -w '%{http_code}' -X "$method" "$url" \
-      -H "Authorization: Bearer ${token}" \
-      ${method:+-d "acl-check $(date -Is)"} \
-      -H "Tags: acl-check" -H "Priority: min" 2>/dev/null || true)
+    # POST /<topic> with a tagged body
+    url="${NTFY_URL}/${topic}"
+    curl_args+=(-X POST -d "acl-check $(date -Is)" -H "Tags: acl-check" -H "Priority: min")
   fi
+
+  if [[ -n "$token" ]]; then
+    curl_args+=(-H "Authorization: Bearer ${token}")
+  fi
+
+  code=$(curl "${curl_args[@]}" "$url" 2>/dev/null || true)
 
   local got_label
   case "$code" in

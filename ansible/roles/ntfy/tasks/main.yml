@@ -41,34 +41,18 @@
     mode: '0644'
   notify: Restart ntfy
 
-- name: Ensure ntfy stack is running
-  community.docker.docker_compose_v2:
-    project_src: "{{ ntfy_install_dir }}"
-    state: present
-    remove_orphans: true
-    pull: always
-
-- name: Wait for ntfy health endpoint
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ ntfy_port }}/v1/health"
-    method: GET
-    status_code: 200
-  register: ntfy_health
-  retries: 18
-  delay: 10
-  until: ntfy_health.status == 200
-  changed_when: false
-
-- name: Assert rendered server.yml contains no forbidden keys (FR-004, R-009)
+# FR-004 gate: fail the deploy BEFORE ntfy starts if a forbidden key slipped into
+# the rendered config. A forbidden key means message content could leave the estate.
+- name: Read rendered server.yml for forbidden-key check
   ansible.builtin.slurp:
     src: "{{ ntfy_install_dir }}/server.yml"
   register: ntfy_server_yml
   no_log: true
 
-- name: Fail if any forbidden key appears in rendered server.yml
+- name: Fail if any forbidden key appears in rendered server.yml (FR-004, R-009)
   ansible.builtin.assert:
     that:
-      - ntfy_server_yml.content | b64decode | search(item) is not matched
+      - (ntfy_server_yml.content | b64decode) is not search(item)
     loop:
       - "upstream-base-url"
       - "upstream-access-token"
@@ -80,3 +64,21 @@
       Forbidden key '{{ item }}' found in rendered server.yml.
       Message content must not leave the estate (FR-004, research R-009).
     no_log: true
+
+- name: Ensure ntfy stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ ntfy_install_dir }}"
+    state: present
+    remove_orphans: true
+    pull: always
+
+- name: Wait for ntfy health endpoint
+  ansible.builtin.uri:
+    url: "http://{{ ntfy_ip }}:{{ ntfy_port }}/v1/health"
+    method: GET
+    status_code: 200
+  register: ntfy_health
+  retries: 18
+  delay: 10
+  until: ntfy_health.status == 200
+  changed_when: false
