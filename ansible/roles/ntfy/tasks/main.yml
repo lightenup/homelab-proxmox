@@ -43,16 +43,16 @@
 
 # FR-004 gate: fail the deploy BEFORE ntfy starts if a forbidden key slipped into
 # the rendered config. A forbidden key means message content could leave the estate.
-- name: Read rendered server.yml for forbidden-key check
-  ansible.builtin.slurp:
-    src: "{{ ntfy_install_dir }}/server.yml"
-  register: ntfy_server_yml
-  no_log: true
+# Render the template directly (not slurp the on-disk file) so the check is
+# correct under --check and on a fresh LXC where the file does not exist yet.
+- name: Render server.yml for forbidden-key check
+  ansible.builtin.set_fact:
+    ntfy_server_yml_rendered: "{{ lookup('ansible.builtin.template', 'server.yml.j2') }}"
 
 - name: Fail if any forbidden key appears in rendered server.yml (FR-004, R-009)
   ansible.builtin.assert:
     that:
-      - (ntfy_server_yml.content | b64decode) is not search(item)
+      - ntfy_server_yml_rendered is not search(item)
     loop:
       - "upstream-base-url"
       - "upstream-access-token"

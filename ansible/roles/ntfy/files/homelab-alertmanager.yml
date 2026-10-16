@@ -18,10 +18,8 @@ title: |
     [INFO] {{ $alertname }}
   {{- else -}}
     [WARNING] {{ $alertname }}
-  {{- end -}}
-  {{- if gt .truncatedAlerts 0.0 -}}
-    (+{{ .truncatedAlerts }} more)
   {{- end }}
+  {{- if gt .truncatedAlerts 0.0 }} (+{{ .truncatedAlerts }} more){{ end }}
 priority: |
   {{- $severity := .commonLabels.severity | default "" -}}
   {{- if eq .status "resolved" -}}
