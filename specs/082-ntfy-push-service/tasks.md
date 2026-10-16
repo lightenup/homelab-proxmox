@@ -264,3 +264,9 @@ Phases 1–3 deliver a locked-down ntfy that any estate job can publish to. That
 
 - [X] T053 In `ansible/roles/ntfy/tasks/main.yml`, run the FR-004 forbidden-key check on the template output (`lookup('ansible.builtin.template', 'server.yml.j2')`) instead of `slurp`ing `{{ ntfy_install_dir }}/server.yml`. Under `--check` the slurp reads the previous render, or fails because the file doesn't exist yet on a fresh LXC, so the `ansible-playbook ansible/playbooks/ntfy.yml --check --diff` dry run in quickstart § 1 / T021 either checks stale content or errors. Keep the assert ahead of "Ensure ntfy stack is running" and keep `no_log: true`, per FR-004, contracts/server-config.md § Forbidden, T050 (partial)
 - [X] T054 In `ansible/roles/ntfy/files/homelab-alertmanager.yml`, restore the space before the truncation suffix. The `-}}` on `{{- if gt .truncatedAlerts 0.0 -}}` trims the whitespace before `(+`, so the title renders as `[CRITICAL] HostDown(+3 more)`. Use `{{- if gt .truncatedAlerts 0.0 }} (+{{ .truncatedAlerts }} more){{ end }}` or similar, and confirm with the `truncatedAlerts: 3` payload in T033, per data-model.md § "Alert → notification mapping", T028 (partial)
+
+---
+
+## Phase 10: Convergence
+
+- [X] T055 Add `no_log: true` to the "Render server.yml for forbidden-key check" `set_fact` task in `ansible/roles/ntfy/tasks/main.yml`. The fact holds the full rendered `server.yml`, including all three bcrypt hashes and all three `tk_` tokens, so any `-v` run (locally or in a pipeline log) prints them, which the removed `slurp` task prevented with `no_log`. Confirm with `ansible-playbook ansible/playbooks/ntfy.yml --check -v` that the task's output is censored, per T053 ("keep `no_log: true`") and plan § Constitution Check II (secrets only in vault and the 0600 `server.yml`) (partial)

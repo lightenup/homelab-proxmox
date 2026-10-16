@@ -48,6 +48,7 @@
 - name: Render server.yml for forbidden-key check
   ansible.builtin.set_fact:
     ntfy_server_yml_rendered: "{{ lookup('ansible.builtin.template', 'server.yml.j2') }}"
+  no_log: true
 
 - name: Fail if any forbidden key appears in rendered server.yml (FR-004, R-009)
   ansible.builtin.assert:
