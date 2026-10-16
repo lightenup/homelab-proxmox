@@ -1,0 +1,32 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"TestNtfyNoSeverity\"}",
+  "truncatedAlerts": 0,
+  "status": "firing",
+  "receiver": "pushover-test",
+  "groupLabels": {
+    "alertname": "TestNtfyNoSeverity"
+  },
+  "commonLabels": {
+    "alertname": "TestNtfyNoSeverity"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyNoSeverity",
+        "instance": "test-1"
+      },
+      "annotations": {
+        "summary": "TestNtfyNoSeverity test alert 1",
+        "description": "TestNtfyNoSeverity test alert 1"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000000"
+    }
+  ]
+}

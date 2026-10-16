@@ -270,3 +270,10 @@ Phases 1–3 deliver a locked-down ntfy that any estate job can publish to. That
 ## Phase 10: Convergence
 
 - [X] T055 Add `no_log: true` to the "Render server.yml for forbidden-key check" `set_fact` task in `ansible/roles/ntfy/tasks/main.yml`. The fact holds the full rendered `server.yml`, including all three bcrypt hashes and all three `tk_` tokens, so any `-v` run (locally or in a pipeline log) prints them, which the removed `slurp` task prevented with `no_log`. Confirm with `ansible-playbook ansible/playbooks/ntfy.yml --check -v` that the task's output is censored, per T053 ("keep `no_log: true`") and plan § Constitution Check II (secrets only in vault and the 0600 `server.yml`) (partial)
+
+---
+
+## Phase 11: Local pre-validation (before LAB deploy)
+
+- [X] T056 Turn the ntfy comment block in `ansible/roles/monitoring_stack/templates/alertmanager.yml.j2` from a YAML comment into a Jinja comment (`{# … #}`). It sat inside `{% if pushover_enabled %}`, so it rendered with `ntfy_enabled: false` and broke the byte-identical gate check in T032 (contracts/alertmanager-webhook.md). Re-rendered against the pre-082 template with `ntfy_enabled: false`: the output is byte-identical
+- [X] T057 Pre-validate locally against `binwiederhier/ntfy:v2.28.0` in Docker with throwaway credentials: the rendered `server.yml` starts cleanly (health 200, 21 `ntfy_` metrics on :9090); `ntfy-acl-check.sh` passes 20/20; and `drills/send-payloads.sh` passes all 8 payloads in `drills/payloads/` (the 5 mapping rows, no-severity, a 10-alert 25 KB group, and `truncatedAlerts: 3` giving `(+3 more)`). The gate-on Alertmanager render passes `amtool check-config` (v0.30.0), and the rendered `NtfyDown` rule passes `promtool check rules` (v3.8.1). Re-run T033 on PROD with `drills/send-payloads.sh`

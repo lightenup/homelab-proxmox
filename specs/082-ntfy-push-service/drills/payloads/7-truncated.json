@@ -1,0 +1,178 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"TestNtfyTruncated\"}",
+  "truncatedAlerts": 3,
+  "status": "firing",
+  "receiver": "pushover-test",
+  "groupLabels": {
+    "alertname": "TestNtfyTruncated"
+  },
+  "commonLabels": {
+    "alertname": "TestNtfyTruncated",
+    "severity": "critical"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-1"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 1",
+        "description": "TestNtfyTruncated test alert 1"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000000"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-2"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 2",
+        "description": "TestNtfyTruncated test alert 2"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000001"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-3"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 3",
+        "description": "TestNtfyTruncated test alert 3"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000002"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-4"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 4",
+        "description": "TestNtfyTruncated test alert 4"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000003"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-5"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 5",
+        "description": "TestNtfyTruncated test alert 5"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000004"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-6"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 6",
+        "description": "TestNtfyTruncated test alert 6"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000005"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-7"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 7",
+        "description": "TestNtfyTruncated test alert 7"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000006"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-8"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 8",
+        "description": "TestNtfyTruncated test alert 8"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000007"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-9"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 9",
+        "description": "TestNtfyTruncated test alert 9"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000008"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestNtfyTruncated",
+        "severity": "critical",
+        "instance": "test-10"
+      },
+      "annotations": {
+        "summary": "TestNtfyTruncated test alert 10",
+        "description": "TestNtfyTruncated test alert 10"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000009"
+    }
+  ]
+}
