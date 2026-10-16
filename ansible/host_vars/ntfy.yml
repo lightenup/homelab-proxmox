@@ -1,0 +1,36 @@
+healthcheck_url:
+  scheme: http
+  port: 80
+  path: /v1/health
+healthcheck_profile: lan
+healthcheck_expect_status: 200
+
+# monitoring_contract (spec 082, contracts/monitoring-contract.md).
+#
+# scrape_targets: ntfy exposes /metrics on a dedicated listener (metrics-listen-http :9090)
+# that is never proxied through Caddy (R-006). Prometheus scrapes it directly on the LAN.
+#
+# liveness_targets: the blackbox http_2xx probe of the Caddy-routed health endpoint.
+# This is what the front-page card and the NtfyDown rule read.
+#
+# alert_rules: NtfyDown is routed like every critical alert, so it reaches Pushover.
+# The ntfy copy of NtfyDown fails (ntfy is down), which is harmless (R-005).
+monitoring_contract:
+  enabled: true
+  scrape_targets:
+    - job_name: "ntfy"
+      port: "{{ ntfy_metrics_port }}"
+      path: /metrics
+  liveness_targets:
+    - job_name: "ntfy-health"
+      url: "https://ntfy.{{ caddy_base_domain }}/v1/health"
+      module: http_2xx
+  alert_rules:
+    - alert: NtfyDown
+      expr: probe_success{job="ntfy-health"} == 0
+      for: "5m"
+      labels:
+        severity: critical
+      annotations:
+        summary: "ntfy is down"
+        description: "The ntfy health probe has failed for 5 minutes. Alerts are still delivered to Pushover; the ntfy copy is expected to fail while ntfy is down (R-005)."

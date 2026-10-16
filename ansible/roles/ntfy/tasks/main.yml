@@ -1,0 +1,82 @@
+---
+- name: Include preflight checks
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Ensure install directory exists
+  ansible.builtin.file:
+    path: "{{ ntfy_install_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Ensure templates directory exists
+  ansible.builtin.file:
+    path: "{{ ntfy_install_dir }}/templates"
+    state: directory
+    mode: '0755'
+
+- name: Ensure data directory exists
+  ansible.builtin.file:
+    path: "{{ ntfy_data_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Deploy server.yml
+  ansible.builtin.template:
+    src: server.yml.j2
+    dest: "{{ ntfy_install_dir }}/server.yml"
+    mode: '0600'
+  notify: Restart ntfy
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ ntfy_install_dir }}/docker-compose.yml"
+    mode: '0644'
+  notify: Restart ntfy
+
+- name: Install Alertmanager Go template (static file, not Jinja)
+  ansible.builtin.copy:
+    src: homelab-alertmanager.yml
+    dest: "{{ ntfy_install_dir }}/templates/homelab-alertmanager.yml"
+    mode: '0644'
+  notify: Restart ntfy
+
+- name: Ensure ntfy stack is running
+  community.docker.docker_compose_v2:
+    project_src: "{{ ntfy_install_dir }}"
+    state: present
+    remove_orphans: true
+    pull: always
+
+- name: Wait for ntfy health endpoint
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ ntfy_port }}/v1/health"
+    method: GET
+    status_code: 200
+  register: ntfy_health
+  retries: 18
+  delay: 10
+  until: ntfy_health.status == 200
+  changed_when: false
+
+- name: Assert rendered server.yml contains no forbidden keys (FR-004, R-009)
+  ansible.builtin.slurp:
+    src: "{{ ntfy_install_dir }}/server.yml"
+  register: ntfy_server_yml
+  no_log: true
+
+- name: Fail if any forbidden key appears in rendered server.yml
+  ansible.builtin.assert:
+    that:
+      - ntfy_server_yml.content | b64decode | search(item) is not matched
+    loop:
+      - "upstream-base-url"
+      - "upstream-access-token"
+      - "firebase-key-file"
+      - "web-push-"
+      - "smtp-sender-"
+      - "twilio-"
+    fail_msg: >-
+      Forbidden key '{{ item }}' found in rendered server.yml.
+      Message content must not leave the estate (FR-004, research R-009).
+    no_log: true

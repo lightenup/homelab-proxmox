@@ -32,6 +32,9 @@
   "nextcloud": [
     "module.nextcloud_lxc"
   ],
+  "ntfy": [
+    "module.ntfy_lxc"
+  ],
   "reverse_proxy": [
     "module.reverse_proxy_lxc"
   ]

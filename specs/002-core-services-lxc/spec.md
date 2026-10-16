@@ -106,6 +106,12 @@ all:
 - **Bootstrap Playbook**: `playbooks/bootstrap.yml` (Run as root).
 - **Site Playbook**: `playbooks/site.yml` (Run as ansible).
 
+### Service List
+
+- `ntfy-lxc` – ntfy, the estate's push channel to the owner's phone, at `192.168.1.222`,
+  LAN/tailnet only. State (SQLite message cache, auth DB) on local disk, no backup by design
+  (FR-014, spec `082`).
+
 ## Success Criteria
 
 ### Measurable Outcomes

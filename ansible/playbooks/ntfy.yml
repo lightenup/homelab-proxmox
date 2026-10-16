@@ -1,0 +1,13 @@
+---
+- name: Configure base for ntfy
+  hosts: ntfy
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure ntfy
+  hosts: ntfy
+  become: true
+  roles:
+    - geerlingguy.docker
+    - ntfy

@@ -1,0 +1,19 @@
+# ntfy — self-hosted push notifications (spec 082)
+# Image: binwiederhier/ntfy. ntfy_version is defined in group_vars/services/vars.yml
+# — pin to a specific tag, not "latest" (research R-001).
+ntfy_install_dir: "/opt/ntfy"
+ntfy_data_dir: "/opt/ntfy-data"
+ntfy_image: "binwiederhier/ntfy"
+
+# Publisher accounts (data-model.md § Account). One topic per publisher; no account
+# has role admin. The owner account is kept separate because it reads * and has no
+# topic of its own.
+ntfy_users:
+  - name: "alertmanager"
+    topic: "alerts"
+    password_hash: "{{ ntfy_alertmanager_password_hash }}"
+    token: "{{ ntfy_alertmanager_token }}"
+  - name: "hermes"
+    topic: "hermes"
+    password_hash: "{{ ntfy_hermes_password_hash }}"
+    token: "{{ ntfy_hermes_token }}"

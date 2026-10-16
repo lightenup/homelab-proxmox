@@ -19,6 +19,7 @@ on:
           - llm-router
           - monitoring
           - nextcloud
+          - ntfy
           - reverse_proxy
       confirm_destructive_lab:
         description: "Required when LAB plan is destructive: set to 'apply-lab-destructive'"

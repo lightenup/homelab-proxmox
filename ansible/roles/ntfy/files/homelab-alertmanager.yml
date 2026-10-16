@@ -1,0 +1,40 @@
+{{- /*
+  ntfy template for Alertmanager webhook payloads (v4).
+  Feature: 082-ntfy-push-service
+  Contract: specs/082-ntfy-push-service/data-model.md § "Alert → notification mapping"
+
+  Shipped as a static file (copied, not templated by Ansible) because it uses
+  Go template syntax, not Jinja2.
+*/ -}}
+{{- $severity := .CommonLabels.severity | default "" -}}
+{{- $alertname := .GroupLabels.alertname | default "unknown" -}}
+{{- $resolved := eq .Status "resolved" -}}
+{{- $title := "" -}}
+{{- $priority := 3 -}}
+{{- if $resolved -}}
+  {{- $title = "[RESOLVED] " -}}
+  {{- if eq $severity "info" -}}
+    {{- $priority = 1 -}}
+  {{- else -}}
+    {{- $priority = 3 -}}
+  {{- end -}}
+{{- else if eq $severity "critical" -}}
+  {{- $title = "[CRITICAL] " -}}
+  {{- $priority = 5 -}}
+{{- else if eq $severity "info" -}}
+  {{- $title = "[INFO] " -}}
+  {{- $priority = 1 -}}
+{{- else -}}
+  {{- $title = "[WARNING] " -}}
+  {{- $priority = 3 -}}
+{{- end -}}
+{{- $title = $title + $alertname -}}
+{{- if gt .TruncatedAlerts 0 -}}
+  {{- $title = printf "%s (+%d more)" $title .TruncatedAlerts -}}
+{{- end -}}
+title: {{ $title }}
+priority: {{ $priority }}
+message: |
+  {{- range .Alerts }}
+  {{ .Annotations.summary }}
+  {{- end }}

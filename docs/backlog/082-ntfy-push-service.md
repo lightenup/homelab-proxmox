@@ -2,7 +2,7 @@
 
 **Feature Branch**: `082-ntfy-push-service`
 **Created**: 2026-10-16
-**Status**: Draft — ready for `/speckit.specify`. Independent; ships before [`083`](./083-hermes-agent-runtime.md), which depends on it.
+**Status**: Specced → [`specs/082-ntfy-push-service/`](../../specs/082-ntfy-push-service/). Independent; ships before [`083`](./083-hermes-agent-runtime.md), which depends on it.
 **Input**: Run **ntfy** on its own LXC as the estate's push channel to the owner's Android phone.
 Two publishers from the start: **Alertmanager** (alongside Pushover, not replacing it) and the
 **Hermes Agent** scheduler from `083`. LAN and tailnet only, like every other service. Delivered as
@@ -178,7 +178,9 @@ Tailscale reconnects (ntfy caches undelivered messages).
 
 ## Open Questions
 
-1. **Priority mapping**: confirm that ntfy's `priority` query parameter combines with
-   `?template=alertmanager` on a webhook POST (documented separately; verify on the LAB deploy
-   before relying on one receiver per severity).
-2. **Cache duration**: 72 h proposed; long enough for a weekend off the tailnet.
+1. **Priority mapping**: ~~confirm that ntfy's `priority` query parameter combines with
+   `?template=alertmanager` on a webhook POST~~ — **Resolved** (research R-003): a custom Go
+   template (`homelab-alertmanager.yml`) computes `priority` from the payload itself, so one
+   webhook definition is enough and no query-parameter precedence is relied on.
+2. **Cache duration**: ~~72 h proposed; long enough for a weekend off the tailnet~~ —
+   **Resolved** (FR-013): 72 h, inlined in `server.yml.j2` as `cache-duration: "72h"`.
