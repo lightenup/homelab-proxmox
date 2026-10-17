@@ -16,11 +16,6 @@ hermes_whisper_model: "base"
 # must be set explicitly for FR-023 to hold.
 hermes_tts_engine: "transformers"
 
-# Automations (FR-025). The minimum recurrence interval a scheduled prompt may declare, in
-# seconds — a misconfigured schedule must not be able to exhaust the gateway's request
-# allowance by itself (contracts/gateway-usage.md § Rate discipline).
-hermes_automation_min_interval: 300
-
 # Reverse-proxy origin. Used for WEBUI_URL (PWA manifest, email links) — never localhost or
 # an internal IP, since the owner reaches this exclusively through hermes.hus-sky.no.
 hermes_public_url: "https://hermes.{{ caddy_base_domain }}"
@@ -30,3 +25,32 @@ hermes_public_url: "https://hermes.{{ caddy_base_domain }}"
 # bump (or an errant override somewhere) could otherwise reintroduce self-registration
 # silently. Not meant to be overridden.
 hermes_enable_signup: false
+
+# Agent runtime (spec 083, R-002/R-004). The stock hermes-agent image running `gateway run`
+# as a second compose service: cron scheduler + API server on :8642, no published ports.
+# hermes_agent_version lives in the versions block of group_vars/services/vars.yml.
+hermes_agent_image: "nousresearch/hermes-agent:{{ hermes_agent_version }}"
+# Data (jobs, scripts, memory, scout state) under the workspace's data dir, owned by the
+# agent's UID. The agent's own .env and the read-only config.yaml live in the install dir.
+hermes_agent_data_dir: "{{ hermes_data_dir }}/agent"
+hermes_agent_config_path: "{{ hermes_install_dir }}/agent-config.yaml"
+hermes_agent_env_path: "{{ hermes_install_dir }}/agent.env"
+# The image's `hermes` user (s6 drops from root to this UID at startup).
+hermes_agent_uid: 10000
+# The agent's OpenAI-compatible API server, as Open WebUI reaches it on the agent network.
+hermes_agent_api_base_url: "http://hermes-agent:8642/v1"
+# Default model for the agent; must exist in llm_router_aliases (preflight asserts it).
+hermes_agent_default_model: "hermes-balanced"
+# US4 (FR-016): host directory the heartbeat script writes its .prom file into; bind-mounted
+# at /heartbeat in the agent container, exposed to node_exporter by symlink (R-007).
+hermes_agent_heartbeat_dir: "/var/lib/hermes-agent-heartbeat"
+# Names of job secrets exposed to cron scripts through terminal.env_passthrough (R-004).
+# Each name's value is read from the vault variable `name | lower` (the llm_router_clients
+# key_env convention). Empty today — a job that needs a secret is the one case where adding
+# a job costs a deploy change (spec Edge Cases).
+hermes_agent_env_passthrough: []
+# R-011: operational when the deploy says PROD. The pipeline's LAB stage runs against the
+# SAME inventory as PROD (backlog 067), passing only `-e deploy_environment=lab`, so that flag
+# is the signal; `lab_inventory` (the 10.99.x rig) can only ever make it false. Gates the
+# ntfy token, the heartbeat job and the heartbeat mount.
+hermes_agent_operational: "{{ not (lab_inventory | default(false) | bool) and (deploy_environment | default('prod')) == 'prod' }}"

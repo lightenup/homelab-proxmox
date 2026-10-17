@@ -147,3 +147,155 @@
   loop_control:
     label: "{{ item.name }}"
   when: item.auth == 'bearer'
+
+# --- Agent runtime (spec 083, data-model.md § Agent) ---
+#
+# The agent must never start without its confinement in place (approvals, read-only config,
+# egress allowlist, no ports — T012–T015). These checks are the deploy-time half of that
+# guarantee; the compose-level half is the post-render assertion in main.yml.
+
+- name: Assert the agent image version is pinned
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_version is defined
+      - hermes_agent_version != ""
+      - hermes_agent_version != "latest"
+      - hermes_agent_version is match('^v\d+\.\d+\.\d+$')
+    fail_msg: >-
+      hermes_agent_version must be a plain vX.Y.Z pin (currently
+      '{{ hermes_agent_version | default('unset') }}'). Never 'latest', a -desktop or rc
+      variant — the upgrade procedure (research R-001) reads the upstream changelog for
+      approvals/cron/ntfy before bumping.
+
+- name: Assert the agent's default model exists in 064's alias mapping
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_default_model in hermes_gateway_alias_names
+    fail_msg: >-
+      hermes_agent_default_model ('{{ hermes_agent_default_model }}') is not a name defined
+      in llm_router_aliases. The agent would fail at first turn, not at deploy.
+
+- name: Assert the agent's vault-sourced credentials are defined
+  ansible.builtin.assert:
+    that:
+      - llm_router_client_hermes_agent_key is defined
+      - llm_router_client_hermes_agent_key | length > 0
+      - hermes_agent_api_server_key is defined
+      - hermes_agent_api_server_key | length >= 8
+    fail_msg: >-
+      Missing vault variables llm_router_client_hermes_agent_key (the agent's gateway client
+      key, minted by the llm_router role) and/or hermes_agent_api_server_key (the API-server
+      key Open WebUI authenticates with, >= 8 chars) — run 'ansible-vault edit
+      group_vars/services/vault.yml' to add them (spec 083, Constitution II). Never commit a
+      value.
+  no_log: true
+
+- name: Assert every enabled MCP server URL parses to host and port
+  ansible.builtin.assert:
+    that:
+      - item.url is url
+      - item.url | urlsplit('hostname') is defined
+      - item.url | urlsplit('hostname') | length > 0
+      - item.url | urlsplit('port') is not none
+      - item.url | urlsplit('port') | int > 0
+    fail_msg: >-
+      MCP server '{{ item.name }}' has an enabled entry whose URL
+      ('{{ item.url }}') does not parse to a host and a port. The egress allowlist derives
+      one accept rule per enabled server from this list (FR-008), so an unparseable URL would
+      silently drop a required destination.
+  loop: "{{ hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Assert the ntfy token is defined when the agent is operational
+  ansible.builtin.assert:
+    that:
+      - ntfy_hermes_token is defined
+      - ntfy_hermes_token | length > 0
+    fail_msg: >-
+      hermes_agent_operational is true but ntfy_hermes_token (spec 082) is not defined or is
+      empty — scheduled jobs would have no way to reach the phone (FR-012).
+  when: hermes_agent_operational
+  no_log: true
+
+# The pipeline's LAB stage uses the prod inventory with -e deploy_environment=lab (backlog
+# 067), so only the reverse mismatch is an error: the 10.99.x LAB-rig inventory paired with
+# a prod deploy.
+- name: Assert a LAB-rig inventory is not paired with a PROD deploy (R-011)
+  ansible.builtin.assert:
+    that:
+      - not (lab_inventory | default(false) | bool and (deploy_environment | default('prod')) == 'prod')
+    fail_msg: >-
+      lab_inventory=true but deploy_environment is 'prod' (or unset). A LAB-rig inventory must
+      be paired with -e deploy_environment=lab, otherwise the ntfy token and the heartbeat job
+      would be rendered on the LAB rig.
+
+- name: Assert every env-passthrough name has a defined, non-empty vault variable
+  ansible.builtin.assert:
+    that:
+      - lookup('vars', item | lower, default='') | length > 0
+    fail_msg: >-
+      hermes_agent_env_passthrough names '{{ item }}', but the vault variable
+      '{{ item | lower }}' is not defined or is empty. The agent .env renders the value from
+      that variable (the llm_router_clients key_env convention).
+  loop: "{{ hermes_agent_env_passthrough }}"
+  loop_control:
+    label: "{{ item }}"
+  no_log: true
+
+# --- Exposure precondition (spec 083 FR-017, research R-012) ---
+#
+# The agent's egress allowlist (FR-008) is only as strong as the assumption that the
+# hus-sky.no names it may reach are NOT publicly resolvable — if any of them had a public
+# A/AAAA record, the reverse proxy would be a front door and FR-017's manual router check
+# would be insufficient. This assertion fails the deploy on any public answer; NXDOMAIN and
+# empty answers pass. It queries two public resolvers so a single-resolver artefact cannot
+# hide a record.
+
+- name: Ensure dnsutils is installed for the exposure check
+  ansible.builtin.package:
+    name: dnsutils
+    state: present
+
+- name: Build the list of hus-sky.no names to check for public exposure
+  ansible.builtin.set_fact:
+    hermes_exposure_names: >-
+      {{ (caddy_services | default([]) | map(attribute='host') | list)
+         + [caddy_base_domain, (99999999 | random) ~ '-exposure-check.' ~ caddy_base_domain] }}
+
+- name: Query public resolvers for A and AAAA answers on each hus-sky.no name
+  ansible.builtin.command:
+    argv:
+      - dig
+      - +short
+      - "{{ item.1 }}"
+      - "{{ item.0 }}"
+      - "@{{ item.2 }}"
+  loop: "{{ hermes_exposure_names | product(['A', 'AAAA'], ['1.1.1.1', '8.8.8.8']) | list }}"
+  loop_control:
+    label: "{{ item.0 }} {{ item.1 }} @{{ item.2 }}"
+  register: hermes_exposure_answers
+  changed_when: false
+
+# Only address lines count: `dig +short` also prints CNAME targets (hostnames), which are
+# ignored — the address they resolve to is printed as its own line. An address is acceptable
+# when it is RFC 1918, tailnet (100.64/10) or ULA (fc00::/7); anything else is public.
+- name: Fail the deploy if any hus-sky.no name resolves publicly (FR-017)
+  ansible.builtin.assert:
+    that:
+      - hermes_exposure_offenders | length == 0
+    fail_msg: >-
+      Public DNS answers a non-private address for '{{ item.item.0 }}' ({{ item.item.1 }}
+      @{{ item.item.2 }}): {{ hermes_exposure_offenders | join(', ') }}. The names served by
+      the reverse proxy must not be publicly resolvable (FR-017) — the agent's egress
+      allowlist assumes they are not. Remove the public record (and re-check the router's
+      port forwards) before deploying.
+  loop: "{{ hermes_exposure_answers.results }}"
+  loop_control:
+    label: "{{ item.item.0 }} {{ item.item.1 }} @{{ item.item.2 }}"
+  vars:
+    hermes_exposure_ip_re: '^(\d{1,3}(\.\d{1,3}){3}|[0-9a-fA-F]*:[0-9a-fA-F:.]*)$'
+    hermes_exposure_private_re: '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|[fF][cCdD][0-9a-fA-F]{2}:)'
+    hermes_exposure_offenders: >-
+      {{ item.stdout_lines | map('trim') | select('match', hermes_exposure_ip_re)
+         | reject('match', hermes_exposure_private_re) | list }}

@@ -24,6 +24,98 @@
     state: directory
     mode: '0755'
 
+# --- Agent runtime (spec 083) ---
+#
+# The agent's data directory (jobs, scripts, memory, scout state) and its deploy-owned
+# configuration. The config is mounted read-only over /opt/data/config.yaml (FR-002); the
+# env file carries the vault-rendered secrets and is never backed up or restored (FR-010).
+
+- name: Ensure the agent data directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_agent_data_dir }}"
+    state: directory
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0750'
+
+- name: Ensure the agent scripts directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_agent_data_dir }}/scripts"
+    state: directory
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0750'
+
+# Scheduler heartbeat (US4, R-007): PROD only. The container writes into its own directory;
+# node_exporter reads it through a symlink, so the agent never gets write access to the
+# shared textfile directory.
+- name: Ensure the agent heartbeat directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_agent_heartbeat_dir }}"
+    state: directory
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0755'
+  when: hermes_agent_operational
+
+- name: Install the heartbeat script
+  ansible.builtin.template:
+    src: agent-heartbeat.sh.j2
+    dest: "{{ hermes_agent_data_dir }}/scripts/heartbeat.sh"
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0755'
+  when: hermes_agent_operational
+
+- name: Expose the heartbeat file to node_exporter
+  ansible.builtin.file:
+    src: "{{ hermes_agent_heartbeat_dir }}/hermes_agent.prom"
+    # Same fallback as backup_hermes.sh.j2: node_exporter_textfile_directory is a default of
+    # the node_exporter role, which this play does not include.
+    dest: "{{ node_exporter_textfile_directory | default('/var/lib/node_exporter/textfile_collector') }}/hermes_agent.prom"
+    state: link
+    force: true
+    follow: false
+  when: hermes_agent_operational
+
+- name: Deploy the agent configuration (read-only mount source)
+  ansible.builtin.template:
+    src: agent-config.yaml.j2
+    dest: "{{ hermes_agent_config_path }}"
+    owner: root
+    mode: '0644'
+  notify: Restart hermes
+
+- name: Deploy the agent environment (vault-rendered secrets)
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: "{{ hermes_agent_env_path }}"
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0600'
+  notify: Restart hermes
+  no_log: true
+
+# FR-014: the LAB stage must never hold the push credential. Check the rendered file, not the
+# inputs, so a template regression is caught. (LAB deploys the real LXC — backlog 067 — so
+# this is also what removes a token left by an earlier PROD deploy: the template re-renders.)
+- name: Read the rendered agent environment (LAB guard)
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_env_path }}"
+  register: hermes_agent_env_rendered
+  when: not hermes_agent_operational
+  no_log: true
+
+- name: Assert the LAB agent environment holds no push token (FR-014)
+  ansible.builtin.assert:
+    that:
+      - (hermes_agent_env_rendered.content | b64decode).splitlines() | select('match', '^\\s*NTFY_TOKEN\\s*=') | list | length == 0
+    fail_msg: >-
+      The rendered agent environment contains NTFY_TOKEN on a non-operational (LAB) deploy.
+      The LAB stage must never be able to reach the phone (spec 083 FR-014).
+  when: not hermes_agent_operational
+  no_log: true
+
 - name: Deploy SearXNG settings
   ansible.builtin.template:
     src: searxng-settings.yml.j2
@@ -59,6 +151,44 @@
   # Facts land in hostvars, and a future auth: bearer entry puts a real token in this one.
   no_log: true
 
+# Retiring Open WebUI Automations (083 US3, FR-015): list any that exist and stop, rather than
+# switch the feature off underneath them. Moving or deleting one is an owner decision. Skips on
+# a first deploy (no container yet) and on a database without the table.
+- name: List existing Open WebUI automations
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - hermes_open_webui
+      - python3
+      - "-c"
+      - |
+        import json, sqlite3
+        con = sqlite3.connect('/app/backend/data/webui.db', timeout=5)
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='automation'").fetchone():
+            print('[]')
+        else:
+            rows = con.execute('SELECT name, data, is_active FROM automation').fetchall()
+            print(json.dumps([{'name': n, 'schedule': (json.loads(d or '{}').get('rrule') or ''),
+                               'active': bool(a)} for n, d, a in rows]))
+  register: hermes_automations
+  changed_when: false
+  failed_when:
+    - hermes_automations.rc != 0
+    - hermes_automations.stderr is not search('No such container|is not running')
+
+- name: Assert no Open WebUI automations remain (FR-015)
+  ansible.builtin.assert:
+    that:
+      - hermes_automations.stdout | from_json | length == 0
+    fail_msg: >-
+      Open WebUI still has {{ hermes_automations.stdout | from_json | length }} automation(s):
+      {% for a in hermes_automations.stdout | from_json %}'{{ a.name }}'
+      ({{ a.schedule | replace('\n', ' ') }}, active={{ a.active }}){{ '; ' if not loop.last }}{% endfor %}.
+      Move each to an agent job (`hermes cron create`) or delete it in Open WebUI, then deploy
+      again. The deploy will not disable Automations underneath them.
+  when: hermes_automations.rc == 0
+
 - name: Deploy docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -66,6 +196,79 @@
     mode: '0640'
   notify: Restart hermes
   no_log: true
+
+# --- Agent confinement (spec 083, FR-004, FR-007) ---
+#
+# The agent must never start without its confinement in place. Preflight checks the inputs
+# (pin, credentials, URLs); this checks the OUTPUT — the rendered compose — so a template
+# regression that re-adds a port, a privilege or a socket mount fails the deploy before
+# docker_compose_v2 ever runs.
+# slurp, not lookup('file'): lookups run on the controller, and the compose file was
+# rendered on the target.
+- name: Read the rendered compose file
+  ansible.builtin.slurp:
+    src: "{{ hermes_install_dir }}/docker-compose.yml"
+  register: hermes_compose_rendered
+
+- name: Assert the rendered agent service is confined (FR-004, FR-007)
+  ansible.builtin.assert:
+    that:
+      - "'hermes-agent' in (hermes_compose | from_yaml).services"
+      - (hermes_compose | from_yaml).services['hermes-agent'].get('ports', []) | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].get('privileged', false) in [false, none]
+      - (hermes_compose | from_yaml).services['hermes-agent'].get('cap_add', []) | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', 'docker.sock') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].networks | list | sort == ['agent']
+    fail_msg: >-
+      The rendered hermes-agent service is not confined: it must have no published ports,
+      no privileged mode, no cap_add, no Docker socket mount, and sit only on the `agent`
+      network (spec 083 FR-004/FR-007/FR-008). Fix docker-compose.yml.j2 before deploying.
+  vars:
+    hermes_compose: "{{ hermes_compose_rendered.content | b64decode }}"
+
+# --- Egress allowlist (spec 083, FR-008) — must be live before the agent starts ---
+#
+# The script flushes and refills its own chain and is idempotent; the oneshot re-applies it
+# on every Docker restart (PartOf), and we run it on every deploy. On a first deploy the
+# DOCKER-USER chain may not exist until Docker starts — the script creates it if missing.
+
+- name: Deploy the agent egress allowlist script
+  ansible.builtin.template:
+    src: hermes-agent-egress.sh.j2
+    dest: /usr/local/sbin/hermes-agent-egress.sh
+    owner: root
+    mode: '0750'
+
+- name: Install the agent egress systemd unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/hermes-agent-egress.service
+    owner: root
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Hermes agent egress allowlist (spec 083, FR-008)
+      After=docker.service
+      Wants=docker.service
+      PartOf=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/hermes-agent-egress.sh
+
+      [Install]
+      WantedBy=docker.service
+
+- name: Enable the agent egress systemd unit
+  ansible.builtin.systemd:
+    name: hermes-agent-egress
+    enabled: true
+    daemon_reload: true
+
+- name: Apply the agent egress allowlist now
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/hermes-agent-egress.sh
+  changed_when: false
 
 - name: Ensure hermes stack is running
   community.docker.docker_compose_v2:
@@ -91,6 +294,147 @@
   delay: 10
   until: hermes_health.status == 200
   changed_when: false
+
+# --- Egress probe (spec 083, SC-009) ---
+#
+# The allowlist (FR-008) is only as good as its enforcement, so the deploy proves it from
+# the agent's own network namespace: every allowlisted destination must connect, every
+# blocked destination must fail. A mismatch names the offending destination and fails the
+# deploy.
+- name: Wait for the agent to be healthy
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - --format
+      - "{% raw %}{{ .State.Health.Status }}{% endraw %}"
+      - hermes_agent
+  register: hermes_agent_health
+  until: hermes_agent_health.stdout == 'healthy'
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Build the egress probe destination list
+  ansible.builtin.set_fact:
+    hermes_agent_egress_probe_allowed: >-
+      {%- set ns = namespace(dests=[
+           {'name': 'searxng', 'host': 'searxng', 'port': 8080},
+           {'name': 'llm-router', 'host': llm_router_ip, 'port': llm_router_port | int}]) -%}
+      {%- for s in hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') -%}
+      {%- set ns.dests = ns.dests + [{'name': 'mcp-' ~ s.name, 'host': s.url | urlsplit('hostname'), 'port': s.url | urlsplit('port') | int}] -%}
+      {%- endfor -%}
+      {{- ns.dests + [{'name': 'reverse-proxy', 'host': reverse_proxy_ip, 'port': 443}] -}}
+    hermes_agent_egress_probe_blocked_full: >-
+      {{ hermes_agent_egress_probe_blocked + [{'name': 'hermes-own-node-exporter', 'host': hermes_ip, 'port': 9100}] }}
+
+- name: Probe allowlisted destinations from inside the agent (must connect)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - hermes_agent
+      - python3
+      - -c
+      - >-
+        import socket, sys;
+        host, port, timeout = sys.argv[1], int(sys.argv[2]), 3;
+        s = socket.create_connection((host, port), timeout=timeout);
+        s.close()
+      - "{{ item.host }}"
+      - "{{ item.port }}"
+  loop: "{{ hermes_agent_egress_probe_allowed }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.host }}:{{ item.port }})"
+  register: hermes_agent_egress_probe_allowed_results
+  changed_when: false
+
+- name: Assert every allowlisted egress destination connected (SC-009)
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: >-
+      Egress probe: allowlisted destination '{{ item.item.name }}'
+      ({{ item.item.host }}:{{ item.item.port }}) did NOT connect from inside the agent
+      container (rc={{ item.rc }}: {{ item.stderr | default('') | trim }}). The egress
+      allowlist is missing a required rule (FR-008).
+  loop: "{{ hermes_agent_egress_probe_allowed_results.results }}"
+  loop_control:
+    label: "{{ item.item.name }} ({{ item.item.host }}:{{ item.item.port }})"
+
+- name: Probe blocked destinations from inside the agent (must fail)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - hermes_agent
+      - python3
+      - -c
+      - >-
+        import socket, sys;
+        host, port, timeout = sys.argv[1], int(sys.argv[2]), 3;
+        s = socket.create_connection((host, port), timeout=timeout);
+        s.close()
+      - "{{ item.host }}"
+      - "{{ item.port }}"
+  loop: "{{ hermes_agent_egress_probe_blocked_full }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.host }}:{{ item.port }})"
+  register: hermes_agent_egress_probe_blocked_results
+  changed_when: false
+  failed_when: false
+
+- name: Assert every blocked egress destination was refused (SC-009)
+  ansible.builtin.assert:
+    that:
+      - item.rc != 0
+    fail_msg: >-
+      Egress probe: BLOCKED destination '{{ item.item.name }}'
+      ({{ item.item.host }}:{{ item.item.port }}) CONNECTED from inside the agent container.
+      The egress allowlist is leaking (FR-008) — fix the rules before the agent is trusted.
+  loop: "{{ hermes_agent_egress_probe_blocked_results.results }}"
+  loop_control:
+    label: "{{ item.item.name }} ({{ item.item.host }}:{{ item.item.port }})"
+
+# The heartbeat job is Ansible-owned on PROD only (R-007, FR-014). Created only when absent,
+# so it is idempotent and safe after a restore (which brings the job back). Every other job is
+# owner content.
+- name: List the agent's scheduled jobs
+  ansible.builtin.command:
+    argv: [docker, exec, -u, hermes, hermes_agent, hermes, cron, list]
+  register: hermes_agent_jobs
+  changed_when: false
+
+- name: Create the heartbeat job (PROD only)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -u
+      - hermes
+      - hermes_agent
+      - hermes
+      - cron
+      - create
+      - every 15m
+      - --no-agent
+      - --script
+      - heartbeat.sh
+      - --deliver
+      - ntfy
+      - --name
+      - heartbeat
+  when:
+    - hermes_agent_operational
+    - hermes_agent_jobs.stdout is not search('(?m)^\\s+Name:\\s+heartbeat\\s*$')
+  changed_when: true
+
+- name: Assert no heartbeat job exists outside PROD (FR-014)
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_jobs.stdout is not search('(?m)^\\s+Name:\\s+heartbeat\\s*$')
+    fail_msg: A heartbeat job exists on a non-operational deploy; remove it with `hermes cron remove`.
+  when: not hermes_agent_operational
 
 # TOOL_SERVER_CONNECTIONS is a PersistentConfig: seed_defaults() inserts a key "only if the
 # key is absent" — "Existing DB values take precedence over defaults." So the env var seeds
@@ -133,46 +477,41 @@
       - hermes_open_webui
       - python3
       - "-c"
-      - |
-        import json, sqlite3, sys, time
-
-        desired = json.loads(sys.stdin.read())
-        con = sqlite3.connect('/app/backend/data/webui.db', timeout=5)
-        con.execute('PRAGMA busy_timeout=5000')
-
-        cols = [r[1] for r in con.execute('PRAGMA table_info(config)')]
-        if 'key' not in cols or 'value' not in cols:
-            sys.exit('SCHEMA DRIFT: config table has columns %s; expected key/value. '
-                     'Refusing to write.' % cols)
-
-        changed = []
-        now = int(time.time())
-        for key, want in sorted(desired.items()):
-            row = con.execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()
-            current = None
-            if row and row[0] is not None:
-                try:
-                    current = json.loads(row[0])
-                except (TypeError, ValueError):
-                    current = row[0]
-            if current == want:
-                continue
-            con.execute(
-                'INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?) '
-                'ON CONFLICT(key) DO UPDATE SET value=excluded.value, '
-                'updated_at=excluded.updated_at',
-                (key, json.dumps(want), now),
-            )
-            changed.append(key)
-        if changed:
-            con.commit()
-        con.close()
-        print('CHANGED ' + ','.join(changed) if changed else 'UNCHANGED')
+      - "{{ lookup('ansible.builtin.file', 'reconcile_config.py') }}"
     stdin: "{{ hermes_managed_config | to_json }}"
   register: hermes_config_reconcile
   # Exact prefix, not `in`: 'CHANGED' is a substring of 'UNCHANGED'.
   changed_when: hermes_config_reconcile.stdout is match('^CHANGED')
   notify: Restart hermes
+
+
+# The model connections (083 US2, R-010): the gateway stays at index 0 (the default) and the
+# agent is the second. Same PersistentConfig problem and the same script, but the values
+# include the connection keys, so this task is no_log and fed on stdin; Ansible would otherwise
+# echo them on failure. The one exception to "secrets are absent from hermes_managed_config".
+- name: Reconcile the Open WebUI model connections
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "-i"
+      - hermes_open_webui
+      - python3
+      - "-c"
+      - "{{ lookup('ansible.builtin.file', 'reconcile_config.py') }}"
+    stdin: "{{ hermes_openai_connections | to_json }}"
+  vars:
+    hermes_openai_connections:
+      openai.api_base_urls:
+        - "{{ hermes_gateway_base_url }}"
+        - "{{ hermes_agent_api_base_url }}"
+      openai.api_keys:
+        - "{{ llm_router_client_hermes_key }}"
+        - "{{ hermes_agent_api_server_key }}"
+  register: hermes_connections_reconcile
+  changed_when: hermes_connections_reconcile.stdout is match('^CHANGED')
+  notify: Restart hermes
+  no_log: true
 
 - name: Reconcile the persisted MCP tool-server registrations
   ansible.builtin.command:

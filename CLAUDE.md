@@ -19,6 +19,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-25
 - SQLite + vector store on the LXC's local disk, bind-mounted for backup to Synology; no NFS for state (FR-019) (065-hermes-ai-workspace)
 - HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash, Go + `modules/lxc_service`; `geerlingguy.docker` + (082-ntfy-push-service)
 - SQLite message cache and auth DB under `/opt/ntfy-data` on the LXC's local disk. Both (082-ntfy-push-service)
+- YAML (Ansible 2.x), Jinja2, Bash; HCL only if LXC memory must grow. No (083-hermes-agent-runtime)
+- agent data on the LXC's local disk under `{{ hermes_data_dir }}/agent`. It holds SQLite (083-hermes-agent-runtime)
 
 - HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy) + `telmate/proxmox` Terraform provider, `lxc_service` Terraform module, `geerlingguy.docker` Ansible role, `community.docker.docker_compose_v2` Ansible module (044-transcriber-proxmox-deploy)
 
@@ -38,9 +40,9 @@ tests/
 HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy): Follow standard conventions
 
 ## Recent Changes
+- 083-hermes-agent-runtime: Added YAML (Ansible 2.x), Jinja2, Bash; HCL only if LXC memory must grow. No
 - 082-ntfy-push-service: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash, Go + `modules/lxc_service`; `geerlingguy.docker` +
 - 065-hermes-ai-workspace: Added No application code (FR-026) — configuration only: HCL, YAML (Ansible 2.x), Jinja2 + `modules/lxc_service` (Terraform); `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible); Open WebUI and SearXNG images pinned non-`latest`; the `064` gateway; oMLX embedding + reranker models on the inference hos
-- 064-llm-router: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash. No new language. + `modules/lxc_service` (Terraform); `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible); `ghcr.io/berriai/litellm` (pinned, non-`latest`); `postgres:17-alpine`; `tailscale/tailscale` (userspace sidecar)
 
 
 <!-- MANUAL ADDITIONS START -->
