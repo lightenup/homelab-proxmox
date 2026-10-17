@@ -17,6 +17,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-25
 - PostgreSQL on the LXC's local disk (`/opt/llm-router-data/postgres`) for virtual keys, budgets and `LiteLLM_SpendLogs`. No NFS mount (`features_mount` omitted) — FR-012. No user data persisted; prompt/response bodies not logged. (064-llm-router)
 - No application code (FR-026) — configuration only: HCL, YAML (Ansible 2.x), Jinja2 + `modules/lxc_service` (Terraform); `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible); Open WebUI and SearXNG images pinned non-`latest`; the `064` gateway; oMLX embedding + reranker models on the inference hos (065-hermes-ai-workspace)
 - SQLite + vector store on the LXC's local disk, bind-mounted for backup to Synology; no NFS for state (FR-019) (065-hermes-ai-workspace)
+- HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash, Go + `modules/lxc_service`; `geerlingguy.docker` + (082-ntfy-push-service)
+- SQLite message cache and auth DB under `/opt/ntfy-data` on the LXC's local disk. Both (082-ntfy-push-service)
 
 - HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy) + `telmate/proxmox` Terraform provider, `lxc_service` Terraform module, `geerlingguy.docker` Ansible role, `community.docker.docker_compose_v2` Ansible module (044-transcriber-proxmox-deploy)
 
@@ -36,9 +38,9 @@ tests/
 HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy): Follow standard conventions
 
 ## Recent Changes
+- 082-ntfy-push-service: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash, Go + `modules/lxc_service`; `geerlingguy.docker` +
 - 065-hermes-ai-workspace: Added No application code (FR-026) — configuration only: HCL, YAML (Ansible 2.x), Jinja2 + `modules/lxc_service` (Terraform); `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible); Open WebUI and SearXNG images pinned non-`latest`; the `064` gateway; oMLX embedding + reranker models on the inference hos
 - 064-llm-router: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash. No new language. + `modules/lxc_service` (Terraform); `geerlingguy.docker` + `community.docker.docker_compose_v2` (Ansible); `ghcr.io/berriai/litellm` (pinned, non-`latest`); `postgres:17-alpine`; `tailscale/tailscale` (userspace sidecar)
-- 063-ci-confidence-path-gate: Added GitHub Actions workflow YAML; Bash (POSIX/`bash`) in `run:` steps; `git` for + `actions/checkout@v4` (with `fetch-depth: 0` for merge-base), `git`,
 
 
 <!-- MANUAL ADDITIONS START -->

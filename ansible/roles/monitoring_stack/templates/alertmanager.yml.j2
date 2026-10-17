@@ -62,6 +62,15 @@ receivers:
           </ul>
 {% endif %}
 {% if pushover_enabled | default(false) | bool %}
+{#
+  ntfy dual delivery (spec 082, contracts/alertmanager-webhook.md). The webhook is
+  added to each Pushover receiver rather than a separate route: Alertmanager's notify
+  pipeline fans out to each integration of a receiver separately, each with its own
+  retry stage, so a failing webhook should not delay Pushover. R-005 records the
+  fallback (separate receiver on a continue: true sibling route) if the quickstart § 5
+  drill shows otherwise. A Jinja comment, not YAML, so the render with ntfy_enabled
+  false stays byte-identical to the pre-082 config (T032).
+#}
   - name: 'pushover-critical'
     pushover_configs:
       - user_key: '{{ pushover_user_key }}'
@@ -76,6 +85,16 @@ receivers:
           {{"{{ .Annotations.summary }}"}}
           {{"{{ end }}"}}
         url: '{{ pushover_grafana_url }}'
+{% if ntfy_enabled | default(false) | bool %}
+    webhook_configs:
+      - url: 'https://ntfy.{{ caddy_base_domain }}/alerts?template=homelab-alertmanager'
+        send_resolved: true
+        max_alerts: 10
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: '{{ ntfy_alertmanager_token }}'
+{% endif %}
 
   - name: 'pushover-warning'
     pushover_configs:
@@ -89,6 +108,16 @@ receivers:
           {{"{{ .Annotations.summary }}"}}
           {{"{{ end }}"}}
         url: '{{ pushover_grafana_url }}'
+{% if ntfy_enabled | default(false) | bool %}
+    webhook_configs:
+      - url: 'https://ntfy.{{ caddy_base_domain }}/alerts?template=homelab-alertmanager'
+        send_resolved: true
+        max_alerts: 10
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: '{{ ntfy_alertmanager_token }}'
+{% endif %}
 
   # Pushover priority -1: DELIVERED but silent — no sound, no vibration — which is what
   # FR-016 asks for. Not -2 (which suppresses the notification entirely) so the event
@@ -109,6 +138,16 @@ receivers:
           {{"{{ .Annotations.summary }}"}}
           {{"{{ end }}"}}
         url: '{{ pushover_grafana_url }}'
+{% if ntfy_enabled | default(false) | bool %}
+    webhook_configs:
+      - url: 'https://ntfy.{{ caddy_base_domain }}/alerts?template=homelab-alertmanager'
+        send_resolved: true
+        max_alerts: 10
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: '{{ ntfy_alertmanager_token }}'
+{% endif %}
 {% endif %}
 
 inhibit_rules:

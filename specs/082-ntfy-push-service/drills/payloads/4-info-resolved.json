@@ -1,0 +1,34 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"TestNtfyInfo\"}",
+  "truncatedAlerts": 0,
+  "status": "resolved",
+  "receiver": "pushover-test",
+  "groupLabels": {
+    "alertname": "TestNtfyInfo"
+  },
+  "commonLabels": {
+    "alertname": "TestNtfyInfo",
+    "severity": "info"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager:9093",
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "TestNtfyInfo",
+        "severity": "info",
+        "instance": "test-1"
+      },
+      "annotations": {
+        "summary": "TestNtfyInfo test alert 1",
+        "description": "TestNtfyInfo test alert 1"
+      },
+      "startsAt": "2026-10-16T12:00:00Z",
+      "endsAt": "2026-10-16T12:05:00Z",
+      "generatorURL": "http://prometheus/graph",
+      "fingerprint": "0000000000000000"
+    }
+  ]
+}

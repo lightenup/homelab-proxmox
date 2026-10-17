@@ -24,6 +24,7 @@ on:
           - llm-router
           - monitoring
           - nextcloud
+          - ntfy
           - reverse_proxy
       apply:
         description: "Run plan+apply (true) or plan-only (false)"

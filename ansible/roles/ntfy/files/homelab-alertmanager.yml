@@ -1,0 +1,31 @@
+# ntfy template for Alertmanager webhook payloads (v4).
+# Feature: 082-ntfy-push-service
+# Contract: specs/082-ntfy-push-service/data-model.md § "Alert → notification mapping"
+#
+# ntfy parses this file as YAML first, then executes each key's value as a Go template
+# independently. Variables cannot be shared between keys. The Alertmanager webhook
+# payload (v4) is unmarshalled into a map[string]interface{}, so field access uses the
+# raw JSON keys (.status, .commonLabels.severity, .groupLabels.alertname, etc.), not
+# Go-struct casing. Numbers from JSON are float64, so compare against 0.0.
+title: |
+  {{- $severity := .commonLabels.severity | default "" -}}
+  {{- $alertname := .groupLabels.alertname | default "unknown" -}}
+  {{- if eq .status "resolved" -}}
+    [RESOLVED] {{ $alertname }}
+  {{- else if eq $severity "critical" -}}
+    [CRITICAL] {{ $alertname }}
+  {{- else if eq $severity "info" -}}
+    [INFO] {{ $alertname }}
+  {{- else -}}
+    [WARNING] {{ $alertname }}
+  {{- end }}
+  {{- if gt .truncatedAlerts 0.0 }} (+{{ .truncatedAlerts }} more){{ end }}
+priority: |
+  {{- $severity := .commonLabels.severity | default "" -}}
+  {{- if eq .status "resolved" -}}
+    {{- if eq $severity "info" -}}1{{- else -}}3{{- end -}}
+  {{- else if eq $severity "critical" -}}5{{- else if eq $severity "info" -}}1{{- else -}}3{{- end -}}
+message: |
+  {{- range .alerts }}
+  {{ .annotations.summary }}
+  {{- end }}

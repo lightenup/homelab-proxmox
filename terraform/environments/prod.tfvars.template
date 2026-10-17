@@ -67,6 +67,7 @@ service_ips = {
   eurooffice           = "192.168.1.219/24"
   llm-router           = "192.168.1.220/24"
   hermes               = "192.168.1.221/24"
+  ntfy                 = "192.168.1.222/24"
 }
 
 ssh_public_keys = [

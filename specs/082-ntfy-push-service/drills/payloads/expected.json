@@ -1,0 +1,42 @@
+{
+  "1-critical-firing": {
+    "title": "[CRITICAL] TestNtfyCritical",
+    "priority": 5,
+    "lines": 1
+  },
+  "2-warning-firing": {
+    "title": "[WARNING] TestNtfyWarning",
+    "priority": 3,
+    "lines": 1
+  },
+  "2b-no-severity-firing": {
+    "title": "[WARNING] TestNtfyNoSeverity",
+    "priority": 3,
+    "lines": 1
+  },
+  "3-info-firing": {
+    "title": "[INFO] TestNtfyInfo",
+    "priority": 1,
+    "lines": 1
+  },
+  "4-info-resolved": {
+    "title": "[RESOLVED] TestNtfyInfo",
+    "priority": 1,
+    "lines": 1
+  },
+  "5-critical-resolved": {
+    "title": "[RESOLVED] TestNtfyCritical",
+    "priority": 3,
+    "lines": 1
+  },
+  "6-ten-alerts-long": {
+    "title": "[WARNING] TestNtfyGroup",
+    "priority": 3,
+    "lines": 10
+  },
+  "7-truncated": {
+    "title": "[CRITICAL] TestNtfyTruncated (+3 more)",
+    "priority": 5,
+    "lines": 10
+  }
+}

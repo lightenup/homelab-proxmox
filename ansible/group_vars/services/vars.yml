@@ -24,6 +24,7 @@ llm_router_version: "v1.83.3-stable"
 llm_router_postgres_version: "17.11-alpine3.24"
 hermes_version: "0.11.3"
 hermes_searxng_version: "2026.9.19-c0014f015"
+ntfy_version: "v2.28.0"
 
 # Euro-Office Configuration
 eurooffice_ip: "192.168.1.219"
@@ -347,6 +348,12 @@ hermes_backup_schedule: "*-*-* 04:45:00"
 # through the reverse proxy — it exists only for the duration of a drill.
 hermes_restore_test_port: 8081
 
+# ntfy Configuration (spec 082) — self-hosted push notifications to the owner's phone.
+# LAN/tailnet only, behind Caddy. State (SQLite cache, auth DB) on local disk, disposable.
+ntfy_ip: "192.168.1.222"
+ntfy_port: 80
+ntfy_metrics_port: 9090
+
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.
 financial_scenario_ip: "192.168.1.217"
@@ -502,6 +509,16 @@ caddy_services:
     # generation and the symptom looks like a model fault, not a proxy one. 1260s leaves the
     # same margin over 1200s that llm_router_aliases' own per-deployment timeout does.
     proxy_timeout: "1260s"
+  - host: ntfy
+    ip: "{{ ntfy_ip }}"
+    port: "{{ ntfy_port }}"
+    title: "ntfy"
+    desc: "Push notifications to the phone"
+    enabled: true
+    # user_facing: true creates the route, the landing-page card AND the blackbox HTTPS
+    # probe (R-007). web-root must stay at the upstream default "/" so the front-page
+    # probe of https://ntfy.hus-sky.no/ gets a 200 (contracts/server-config.md).
+    user_facing: true
   - host: adguard
     ip: "{{ adguard_ip }}"
     port: "{{ adguard_web_port }}"
