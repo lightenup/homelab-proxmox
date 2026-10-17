@@ -217,6 +217,14 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   before PROD and still cannot reach the phone (FR-014).
   - Precondition: LAB can resolve and reach `ntfy.hus-sky.no`. If it cannot, the LAB check reports
     "not exercised" and the check moves to the first PROD deploy (Q-P2). It is not silently skipped.
+- **Restart notices [observed v0.21.6, LAB 2026-10-17]**: independent of the adapter's own behaviour,
+  the gateway posts a "♻️ Gateway online/restarted" notice to a platform's home channel on every start
+  and stop (`PlatformConfig.gateway_restart_notification`, default `True`). The LAB log showed the
+  stop-time send being refused (403) right after SIGTERM. On PROD it would be a phone push at every
+  deploy and container restart. **Decision**: set `ntfy: {gateway_restart_notification: false}` in the
+  rendered config (verified in the pinned image that the key is honoured). A stopped scheduler is
+  caught by the heartbeat alert instead. Other home-channel notices (cron store unwritable/recovered,
+  session DB failure) stay on: they only fire on faults.
 - **Size**: the adapter truncates at 4096 characters and logs a warning **[doc]**. That is below
   ntfy's 32 KB limit, so 082's 413 cannot happen through this adapter. The spec's size edge case is
   satisfied by truncation.

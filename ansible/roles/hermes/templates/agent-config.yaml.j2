@@ -68,6 +68,14 @@ cron:
 memory:
   memory_enabled: true
 
+# Push channel (FR-012, R-006). By default the gateway posts a "Gateway online/restarted" notice
+# to a platform's home channel on every start and stop — here that would be a phone push on
+# every deploy and container restart. Silence has to mean "nothing to report" (FR-013), and a
+# stopped scheduler is already caught by the heartbeat alert (FR-016), so the notice is off.
+# The key sits at the top level, named for the platform (verified at v0.21.6).
+ntfy:
+  gateway_restart_notification: false
+
 # MCP servers (FR-011, R-005): rendered from the single hermes_mcp_servers list — the same
 # list Open WebUI's TOOL_SERVER_CONNECTIONS is built from, so the two surfaces can never
 # drift apart. Bearer entries reference the token by env-var name only; the value is in
