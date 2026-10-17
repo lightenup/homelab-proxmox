@@ -13,6 +13,11 @@ The account owner opens Hermes from a phone on the train, or a laptop at a desk,
 a conversation with a model running on hardware they own. No VPN step, no terminal, no third party
 receiving the conversation.
 
+> **Corrected by 083 (2026-10-17)**: "from wherever they are" means on the LAN or over the tailnet.
+> Every `hus-sky.no` name resolves to the reverse proxy's LAN address (asserted at deploy time,
+> 083 FR-017), so off the LAN the owner joins the tailnet first. "Public address" in this story means
+> *routed by the reverse proxy*, not reachable from the internet. 083's risk acceptance rests on this.
+
 **Why this priority**: This is the feature. Everything else is in service of it, and on its own it is
 already worth deploying — a private assistant reachable from anywhere is the whole point.
 
@@ -182,6 +187,8 @@ cites it.
 
 - **FR-001**: The system MUST be reachable from the public internet at a stable address, over an
   encrypted connection, without the owner needing a VPN or terminal.
+  *Corrected by 083*: reachable on the LAN and over the tailnet at a stable address routed by the
+  reverse proxy, over an encrypted connection. Not reachable from the internet (083 FR-017).
 - **FR-002**: The system MUST authenticate every request itself and MUST NOT rely on the network
   path or on any other component for access control.
 - **FR-003**: Self-registration MUST be disabled. Accounts MUST be created deliberately by an
@@ -246,11 +253,15 @@ cites it.
   FR-002 and FR-004.
 - **FR-025**: The owner MUST be able to schedule prompts to run on a recurring basis, with the same
   tools and knowledge available as in an interactive conversation, and with failures visible.
+  *Amended by 083*: scheduled prompts and scripts run in the agent runtime's scheduler, and their output
+  and failures are delivered to the phone (ntfy). Open WebUI Automations are retired.
 
 #### Delivery constraint
 
 - **FR-026**: The feature MUST be satisfiable by deploying and configuring existing, unmodified
   software. Delivering it MUST NOT require writing bespoke application code.
+  *Amended by 083*: job scripts the owner or the agent writes for the scheduler are content, like
+  documents and prompts, not application code. The platform itself still ships only configuration.
 
 ### Key Entities
 
