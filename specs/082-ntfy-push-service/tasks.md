@@ -35,7 +35,7 @@ progress note, backlog `072`).
 **Purpose**: Branch, secrets, and the central variables every later task reads.
 
 - [X] T001 Create branch `082-ntfy-push-service` from `main` (the spec, plan and `CLAUDE.md` changes are already in the working tree; commit them as the first commit on the branch)
-- [ ] T002 Generate the six secrets and add them to the encrypted `ansible/group_vars/services/vault.yml` with `ansible-vault edit` (research R-012). Use `docker run --rm -it binwiederhier/ntfy:v2.28.0 user hash` for `ntfy_owner_password_hash` (enter the real owner password and store it only in the password manager). Use the same command with a random password that you then discard for `ntfy_alertmanager_password_hash` and `ntfy_hermes_password_hash`. Use `docker run --rm binwiederhier/ntfy:v2.28.0 token generate` three times for `ntfy_owner_token`, `ntfy_alertmanager_token` and `ntfy_hermes_token`. Constraints: hashes are bcrypt with "cost ≥ 10". Tokens are "`tk_` + 29 chars" (32 total). Never commit plaintext
+- [X] T002 Generate the six secrets and add them to the encrypted `ansible/group_vars/services/vault.yml` with `ansible-vault edit` (research R-012). Use `docker run --rm -it binwiederhier/ntfy:v2.28.0 user hash` for `ntfy_owner_password_hash` (enter the real owner password and store it only in the password manager). Use the same command with a random password that you then discard for `ntfy_alertmanager_password_hash` and `ntfy_hermes_password_hash`. Use `docker run --rm binwiederhier/ntfy:v2.28.0 token generate` three times for `ntfy_owner_token`, `ntfy_alertmanager_token` and `ntfy_hermes_token`. Constraints: hashes are bcrypt with "cost ≥ 10". Tokens are "`tk_` + 29 chars" (32 total). Never commit plaintext
 - [X] T003 [P] Add `ntfy_version: "v2.28.0"` to the `# Service versions` block, and a `# ntfy Configuration (spec 082)` block with `ntfy_ip: "192.168.1.222"`, `ntfy_port: 80`, and `ntfy_metrics_port: 9090` (consumed by the compose file and `host_vars/ntfy.yml`) after the Hermes block. The cache duration is inlined in `server.yml.j2` (T012); it has one consumer, so it gets no variable (constitution IV), in `ansible/group_vars/services/vars.yml`
 - [X] T004 [P] Add `ntfy = "192.168.1.222/24"` to `service_ips` (aligned with the other entries, after `hermes`) in `terraform/environments/lab.tfvars.template` and `terraform/environments/prod.tfvars.template`
 - [X] T005 [P] Add `ntfy` (`ansible_host: 192.168.1.222`, `ansible_user: root`) under `services.hosts` after `hermes` in `ansible/inventories/prod/hosts.yml`. This is required for any monitoring to be generated (research R-010, backlog `066`)
@@ -55,7 +55,7 @@ story publishes to or reads from it.
 - [X] T007 [P] Create `terraform/services/ntfy/outputs.tf` with `output "ansible_inventory"` returning `{ services = { "ntfy" = module.ntfy_lxc.ipv4 } }` (copy of `terraform/services/eurooffice/outputs.tf`)
 - [X] T008 [P] Add `"ntfy": ["module.ntfy_lxc"]` in alphabetical position in `scripts/lab/service-scope-allowlist.json`
 - [X] T009 [P] Add `ntfy` to the service `options:` dropdown in `.github/workflows/lxc-deploy-lab.yml`, `.github/workflows/lxc-promote-lab.yml` and `.github/workflows/lxc-promote-prod.yml`, then run `act -l` (constitution § Local Workflow Testing; record the reason if `act` is unavailable) — `act` is not installed in this environment; dropdowns verified by inspection
-- [ ] T010 Run `scripts/lab/pve-service-deploy plan --environment lab --service ntfy` and confirm the plan creates exactly `module.ntfy_lxc` and nothing else (depends on T004, T006–T008)
+- [X] T010 Run `scripts/lab/pve-service-deploy plan --environment lab --service ntfy` and confirm the plan creates exactly `module.ntfy_lxc` and nothing else (depends on T004, T006–T008) — 2026-10-17 run 39001488715: `Plan: 1 to add, 0 to change, 0 to destroy` (module.ntfy_lxc only)
 
 ### ntfy role (contracts/server-config.md)
 
@@ -75,8 +75,8 @@ story publishes to or reads from it.
 
 ### Deploy and prove the base
 
-- [ ] T021 Deploy to LAB (pipeline `lxc-deploy-lab`, service `ntfy`, or the same `pve-service-deploy apply --environment lab --service ntfy` locally), then run `ansible-playbook ansible/playbooks/ntfy.yml --check --diff`, then the real run. Expected: `curl -s http://<lab ntfy ip>/v1/health` returns `{"healthy":true}` (quickstart § 1)
-- [ ] T022 Re-run the playbook on LAB and confirm it reports **0 changed**, which proves the hashes and rendered config are stable (research R-012). If anything changes, fix it before continuing
+- [X] T021 Deploy to LAB (pipeline `lxc-deploy-lab`, service `ntfy`, or the same `pve-service-deploy apply --environment lab --service ntfy` locally), then run `ansible-playbook ansible/playbooks/ntfy.yml --check --diff`, then the real run. Expected: `curl -s http://<lab ntfy ip>/v1/health` returns `{"healthy":true}` (quickstart § 1) — 2026-10-17 run 39018974920 (first attempt 39018720014 failed at preflight: `loop:` mis-indented, fixed in 6f3fab4); `/v1/health` → `{"healthy":true}`, anonymous read → 403
+- [X] T022 Re-run the playbook on LAB and confirm it reports **0 changed**, which proves the hashes and rendered config are stable (research R-012). If anything changes, fix it before continuing — 2026-10-17 run 39019116710: ntfy play `changed=0`
 - [ ] T023 Promote to PROD (`lxc-promote-lab` → `lxc-promote-prod`), run `ansible-playbook ansible/playbooks/reverse_proxy.yml` so Caddy serves `ntfy.hus-sky.no`, and confirm `https://ntfy.hus-sky.no/v1/health` returns healthy from the LAN
 
 **Checkpoint**: ntfy is running at `ntfy.hus-sky.no` with `deny-all`. Stories can start.
@@ -96,7 +96,7 @@ Publishing without a token, or with the alertmanager token, is refused (spec US-
 is scripted.
 
 - [X] T024 [US2] Create `scripts/healthcheck/ntfy-acl-check.sh` (bash, `set -euo pipefail`). It reads `NTFY_URL`, `NTFY_OWNER_TOKEN`, `NTFY_ALERTMANAGER_TOKEN` and `NTFY_HERMES_TOKEN` from the environment and asserts every one of the 20 cells in data-model.md § "The access matrix the SC-002 check asserts". Writes use `curl -X POST -d "acl-check $(date -Is)"` (tagged `Tags: acl-check`, priority `min`). Reads use `GET <topic>/json?poll=1&since=1m`. ✓ means HTTP 200; ✗ means HTTP 401 or 403. Print one line per cell (`PASS`/`FAIL credential action topic got=<code>`), print a summary, and exit non-zero on any FAIL. Support `--help`. Never echo tokens
-- [ ] T025 [US2] Run `scripts/healthcheck/ntfy-acl-check.sh` against LAB (`NTFY_URL=http://<lab ntfy ip>`) and PROD (`NTFY_URL=https://ntfy.hus-sky.no`), with tokens exported from vault. Expected: 20/20 PASS on both (SC-002, quickstart § 2)
+- [ ] T025 [US2] Run `scripts/healthcheck/ntfy-acl-check.sh` against LAB (`NTFY_URL=http://<lab ntfy ip>`) and PROD (`NTFY_URL=https://ntfy.hus-sky.no`), with tokens exported from vault. Expected: 20/20 PASS on both (SC-002, quickstart § 2) — LAB 20/20 PASS 2026-10-17; PROD pending
 - [ ] T026 [US2] From the Hermes LXC (`ssh root@192.168.1.221`), publish to `https://ntfy.hus-sky.no/hermes` with `Authorization: Bearer <ntfy_hermes_token>`. Confirm HTTP 200 and that the message appears in the owner's read (`GET /hermes/json?poll=1`, owner token). This proves the path `083` will use
 - [X] T027 [P] [US2] Write `docs/runbooks/ntfy-add-publisher.md` from contracts/publisher-interface.md § Onboarding: add a `ntfy_users` item, add two vault vars, deploy, subscribe in the app, and extend the matrix in `ntfy-acl-check.sh`
 
