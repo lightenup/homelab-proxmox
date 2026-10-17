@@ -1,0 +1,65 @@
+# Quickstart / validation: Hermes Agent behind Hermes (083)
+
+Every Ansible run goes through the pipeline. The dev box has no SSH to the LXCs (082), so a
+deploy runs `lxc-deploy-lab` → `lxc-promote-*` → `lxc-apply-prod`. Commands below that run *on the
+Hermes LXC* are run from the PVE host (`pct exec <vmid> -- …`) or in a pipeline step.
+
+A laptop run must pass `-e deploy_environment=lab|prod`. It defaults to `prod`; a LAB run that
+forgets it fails the preflight, because the LAB inventory's `lab_inventory: true` disagrees.
+
+Contracts: [agent-runtime.md](./contracts/agent-runtime.md),
+[egress-allowlist.md](./contracts/egress-allowlist.md). Entities: [data-model.md](./data-model.md).
+
+## Order of deploys
+
+1. **llm-router** (new `hermes_agent` client, which mints the key) on LAB, then PROD.
+2. **hermes** on LAB, then the checks Q-L1…Q-L7.
+3. **hermes** on PROD, then the checks Q-P1…Q-P6.
+4. **monitoring** on PROD only (`allow_override_failed_lab_gate=true`, backlog 072), for
+   `HermesAgentCronStale`.
+
+## LAB checks (deploy gate, no phone traffic)
+
+| # | Check | Expected | Covers |
+|---|---|---|---|
+| Q-L1 | Deploy passes; `docker exec -u hermes hermes_agent hermes --version`; `python3 --version`; `git --version` | pin matches; Python ≥ 3.11; git present | FR-001, FR-019 |
+| Q-L2 | `config.yaml` is mounted read-only and the agent starts cleanly; `hermes config show` shows approvals `manual/deny/deny/300` | starts; values as rendered. If startup needs a writable config, switch to the R-004 fallback | FR-007 |
+| Q-L3 | In Open WebUI pick `hermes-agent`: "show disk usage", "search the web for X", one MCP question | terminal, SearXNG and MCP all used; `hermes-balanced` answers exactly as before | US-2 #1–2, SC-005 |
+| Q-L4 | In Open WebUI ask `hermes-agent` to run a flagged command (e.g. `rm -rf /opt/data/workspace/x`) | refused with a readable message in < 5 s | FR-007, SC-008 |
+| Q-L5 | Create a throwaway agent job with a bad model alias, `--deliver local`; `hermes cron run`; inspect `hermes cron runs` | failure recorded; learn whether agent-job failures go to `deliver` or need a separate target, and record it in research R-006 | FR-013 |
+| Q-L6 | Egress probes from inside `hermes_agent` (the deploy runs them too) | gateway, MCP, Caddy:443 and SearXNG connect; Proxmox :8006, NAS, router, LXC :9100 fail | FR-008, SC-009 |
+| Q-L7 | ntfy adapter with no token: `docker logs hermes_agent` after 10 min; one script job `--deliver ntfy` printing "lab" | refused subscription logged without a tight loop; publish refused (401/403); **nothing on the phone**. If LAB cannot reach `ntfy.hus-sky.no`, record "not exercised" and rely on Q-P2 | FR-012, FR-014 |
+| Q-L8 | Heartbeat **not** present on LAB (`hermes cron list`); node_exporter symlink mechanism tested with a manual write | no `heartbeat` job; metric appears on `:9100/metrics` | FR-014, R-007 |
+| Q-L9 | Inference host away: chat `hermes-agent` | readable error within seconds | US-2 #3 |
+| Q-L10 | Memory: `docker stats` during a multi-tool agent turn plus a voice request in Open WebUI | LXC peak < 80 %; otherwise a Terraform memory bump before PROD | SC-011 |
+
+## PROD checks
+
+| # | Check | Expected | Covers |
+|---|---|---|---|
+| Q-P1 | Deploy passes, including the DNS exposure assertion and egress probes | green | FR-017, SC-009 |
+| Q-P2 | `docker logs hermes_agent`; `hermes cron list` shows `heartbeat`; `docker exec -u hermes hermes_agent hermes send ntfy "083 path test"` | subscription refused (403) without a loop; **the phone shows the message**, which proves Hermes LXC → Caddy → ntfy | FR-012, 082 T026 gap |
+| Q-P3 | Install the scout as owner content (below); `hermes cron run model-scout`; run again | first run: report on the phone; second: nothing | US-1, FR-019 |
+| Q-P4 | Mac asleep, `hermes cron run model-scout` | runs and delivers (or silent if no news) | SC-002 |
+| Q-P5 | Failing job: `echo 'exit 3' > scripts/fail.sh`, schedule `every 15m`, wait one tick, then remove it | phone shows a failure naming `fail` | SC-003 |
+| Q-P6 | Manual router check: no port forward to `reverse_proxy_ip` (or any) on 80/443. Record: date, router, screenshot reference | recorded here | FR-017 |
+| Q-P7 | `docker stop hermes_agent`, wait | `HermesAgentCronStale` within 1 h + 5 m, via Alertmanager | US-4, SC-004 |
+| Q-P8 | Backup, then `hermes-restore-drill.yml` | `agent-manifest.sha256` verifies; `heartbeat` and `model-scout` are listed; one run succeeds; no phone message | US-5, SC-007 |
+| Q-P9 | Open WebUI: Automations not offered; the gateway connection is still the default | as stated | FR-015, FR-006 |
+| Q-P10 | After 2 weeks: gateway metrics for client `hermes` show no 429s caused by `hermes_agent`; no LAB-origin or duplicate scout messages | as stated | SC-006, SC-010 |
+
+### Installing the model scout (owner content, not Ansible)
+
+Source: `github.com/lightenup/local-llm` (≥ `d7f6a4a`), runbook `docs/SCOUT.md`.
+
+```sh
+docker exec -it -u hermes hermes_agent bash
+cd /tmp && git clone https://github.com/lightenup/local-llm && \
+  cp local-llm/scout/hermes-cron.sh "$HERMES_HOME/scripts/model-scout.sh"
+hermes cron create "30 7 * * *" --no-agent --script model-scout.sh --deliver ntfy --name model-scout
+hermes cron run model-scout
+```
+
+### Adding a second job (SC-001)
+
+Repeat the block above with a different script and name. No repository change is needed.

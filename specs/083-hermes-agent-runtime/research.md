@@ -1,0 +1,295 @@
+# Research: Hermes Agent behind Hermes (083)
+
+Facts marked **[doc]** come from upstream documentation read 2026-10-17 and are not yet observed in
+this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md). Facts marked
+**[repo]** were read from this repository.
+
+## R-001 — Image and pin
+
+- **Decision**: `nousresearch/hermes-agent:v0.21.6` (Docker Hub, released 2026-10-08), pinned as
+  `hermes_agent_version` in the `group_vars/services/vars.yml` versions block next to
+  `hermes_version`. The preflight rejects an empty pin or `latest`, as it already does for Open WebUI.
+- **Rationale**: owner's choice (2026-10-17). It is the first release on upstream's new semver scheme
+  and has 9 days of soak time. `v0.22.x` shipped three releases in two days.
+- **Alternatives**: `v0.22.2`, the newest, has no soak. `v2026.9.24`, the last dated tag, may predate
+  the ntfy plugin and `approvals.unattended_mode` as documented, and any upgrade from it crosses the
+  scheme change.
+- **Tag scheme [doc/registry]**: dated `vYYYY.M.D` until 2026-09-24, then `v0.21.6`, `v0.22.0`… The
+  same repository also carries `-desktop`, `rc.N-` and per-arch variants. Pin only plain `vX.Y.Z`.
+- **Upgrade procedure**: the same as Open WebUI (065). Bump the pin, deploy through LAB, run the
+  quickstart LAB checks Q-L1…Q-L10, promote, then deploy PROD. Read the upstream changelog for
+  `approvals`, `cron` and `ntfy` changes before bumping, because those three carry this feature's
+  security and delivery guarantees. Job definitions survive upgrades **[doc]**.
+
+## R-002 — How the runtime runs
+
+- **Decision**: one compose service `hermes-agent` (container `hermes_agent`), `command: gateway run`,
+  data bind-mounted at `/opt/data` from `{{ hermes_data_dir }}/agent`. No `ports:`. Not privileged,
+  no Docker socket, no other host mounts except the heartbeat file (R-007) and the read-only config
+  (R-004).
+- **Facts [doc]**:
+  - The entrypoint is s6-overlay `/init`. It starts as root to fix volume ownership, then drops to user
+    `hermes` (UID 10000).
+  - `gateway run` hosts the cron scheduler (a tick every 60 s) and, with `API_SERVER_ENABLED=true`,
+    the API server on `:8642`.
+  - The dashboard runs only if `HERMES_DASHBOARD=1`. It is left unset, which satisfies FR-005 by not
+    running it at all.
+  - The image ships system `git` and Python 3.14 (`/opt/hermes/.venv`), which satisfies the scout's
+    Python ≥ 3.11. `/opt/hermes` (the code) is root-owned and read-only to the agent.
+  - Two gateways must never share one data directory. This matters for the restore drill (R-009).
+- **API server**: `API_SERVER_ENABLED=true`, `API_SERVER_HOST=0.0.0.0` (inside the container's own
+  network namespace only, with nothing published), `API_SERVER_KEY` from vault (≥ 8 chars). The
+  advertised model is `hermes-agent` for the default profile **[doc]**, which is the name the spec
+  uses.
+- **Memory**: upstream asks for 1 GB minimum and recommends 2–4 GB. The LXC has 6 GB, shared with Open
+  WebUI's in-container Whisper and TTS. Set `mem_limit: 3g` on the agent so a runaway turn cannot
+  starve Open WebUI, measure peak use during a real agent turn on LAB (SC-011), and raise LXC memory in
+  the environment tfvars (Terraform, Constitution III) only if peak LXC use is above 80 %.
+
+## R-003 — Model backend
+
+- **Decision**: provider `custom`, base URL `{{ hermes_gateway_base_url }}`, key
+  `llm_router_client_hermes_agent_key`, default model `hermes-balanced`. Agent jobs may set `--model`.
+  The preflight asserts that the default alias exists in `llm_router_aliases`, the same check the
+  role already makes for Open WebUI's aliases.
+- **New gateway client** `hermes_agent` in `llm_router_clients`: `rpm_limit: 20`, `max_budget: 5.00`,
+  `budget_duration: "30d"`, `key_env: LLM_ROUTER_CLIENT_HERMES_AGENT_KEY`. Sizing rule:
+  `max = 60 ≤ gateway 65 < sum = 60 + 10 + 20 = 90`, so it holds with no gateway change. The
+  llm_router role mints the virtual key (`virtual_keys.yml`). This is an llm-router deploy as well as
+  a hermes deploy.
+- **To verify on LAB**: tool calls work through each alias the agent may use, and the agent fails with a
+  readable error within seconds when the inference host is away (US-2 #3).
+
+## R-004 — Configuration ownership and approvals
+
+- **Decision**: Ansible renders `config.yaml` as `{{ hermes_install_dir }}/agent-config.yaml`
+  (root-owned) and mounts it **read-only** over `/opt/data/config.yaml`. The agent can then not switch
+  its own approvals off from the terminal. Contents:
+  - `approvals: {mode: manual, unattended_mode: deny, cron_mode: deny, timeout: 300}`
+  - model / provider (R-003), `terminal.backend: local`
+  - `web.search_backend: searxng`
+  - `mcp_servers` rendered from `hermes_mcp_servers` (R-005)
+  - `cron.failure_nudge_threshold: 3` (upstream default, stated explicitly)
+- **Fallback** if `/init` profile reconciliation or a CLI write needs `config.yaml` writable (LAB
+  check Q-L2): render it into the data directory and treat it like `hermes_managed_config`. It is
+  owned by the deploy and re-asserted on every run, so an agent edit lasts only until the next deploy.
+  The accepted risk then names this explicitly.
+- **Facts [doc]**:
+  - `unattended_mode` covers API-server sessions, which is every request from Open WebUI.
+  - `cron_mode` covers scheduled jobs. Both default to deny, and an unanswered prompt times out to
+    deny.
+  - Approvals apply to the `local` backend. Isolated backends such as Docker skip them, which is
+    another reason to keep `local` inside the container.
+  - Sources disagree on whether `mode` defaults to `smart` or `manual`. It is set explicitly.
+- **`.env`** (vault-rendered, 0600, owned by UID 10000) holds:
+  - `API_SERVER_*`
+  - the gateway key, under the variable name the custom provider reads
+  - `SEARXNG_URL=http://searxng:8080`
+  - `NTFY_*` (R-006)
+  - MCP bearer tokens, when any exist
+
+  Cron scripts do not inherit provider credentials **[doc]**. A job secret is exposed by name through
+  `terminal.env_passthrough`, which is the one case where a new job needs a deploy change (spec Edge
+  Cases).
+
+## R-005 — Tool services and web search
+
+- **Decision**: one list, `hermes_mcp_servers`, rendered twice. It goes into Open WebUI's
+  `TOOL_SERVER_CONNECTIONS` and reconcile task as today, and into the agent's `mcp_servers` in
+  `config.yaml`. A bearer entry's token goes into the agent's `.env` and is referenced from
+  `config.yaml` by variable, never inlined.
+- **Web search**: the existing SearXNG sidecar. The agent joins the network SearXNG is on. No paid
+  extract provider is configured.
+
+## R-006 — Delivery and the ntfy adapter
+
+- **Finding [doc] that changes FR-012**: the ntfy platform plugin **requires `NTFY_TOPIC` and
+  subscribes to it** for inbound messages. Upstream's "send-only" recipe still subscribes. It only
+  leaves `NTFY_ALLOWED_USERS` unset, so the agent never answers ("an empty allowlist rejects
+  everything"). A "never subscribes" setting does not exist.
+- **Decision**: rely on two independent controls rather than one.
+  1. **The server refuses the subscription.** 082's `hermes` token is write-only (082 SC-002, 20/20),
+     so the subscribe is refused with 401/403 and nothing can arrive.
+  2. **The agent ignores anything that does arrive.** `NTFY_ALLOWED_USERS` is unset and
+     `NTFY_ALLOW_ALL_USERS` is not set.
+
+  Spec FR-012 is amended to say this. On PROD:
+
+  ```
+  NTFY_SERVER_URL=https://ntfy.hus-sky.no
+  NTFY_TOKEN={{ ntfy_hermes_token }}
+  NTFY_TOPIC=hermes
+  NTFY_PUBLISH_TOPIC=hermes
+  NTFY_HOME_CHANNEL=hermes
+  NTFY_MARKDOWN=true
+  ```
+
+- **Unknown**: how the adapter behaves when its subscription is refused. It might retry with backoff,
+  loop and spam the log, or mark the platform unhealthy and stop delivering. Cron delivery uses a
+  standalone sender that opens its own HTTP connection **[doc]**, so delivery should not depend on
+  the subscription, but this is not stated outright.
+- **LAB (owner's choice, 2026-10-17)**: the adapter is configured with **no token**. Subscribe and
+  publish are then both refused by ntfy's deny-all default (082). That exercises the refused path
+  before PROD and still cannot reach the phone (FR-014).
+  - Precondition: LAB can resolve and reach `ntfy.hus-sky.no`. If it cannot, the LAB check reports
+    "not exercised" and the check moves to the first PROD deploy (Q-P2). It is not silently skipped.
+- **Size**: the adapter truncates at 4096 characters and logs a warning **[doc]**. That is below
+  ntfy's 32 KB limit, so 082's 413 cannot happen through this adapter. The spec's size edge case is
+  satisfied by truncation.
+- **Failure delivery**: script-only jobs deliver an error alert to the job's `deliver` target on a
+  non-zero exit or a timeout **[doc]**. For agent jobs, verify on LAB whether failures go to
+  `deliver` or need a separate failure target (Q-L5). Either way, the job validation rule in
+  [data-model.md](./data-model.md) requires a phone-reaching target for failures.
+
+## R-007 — Scheduler heartbeat (FR-016)
+
+- **Decision** (owner, 2026-10-17): Ansible owns the heartbeat job **on PROD only**.
+  - The role installs `heartbeat.sh` into `$HERMES_HOME/scripts/`.
+  - It creates the job `heartbeat` (`every 15m`, `--no-agent`, `--deliver ntfy`) **only if no job of
+    that name exists**. That makes it idempotent and safe after a restore, which brings the job back
+    with it.
+  - Every other job remains owner content (SC-001).
+- **Mechanism**:
+  - The script writes `hermes_agent_heartbeat_timestamp_seconds <now>` to
+    `/var/lib/hermes-agent-heartbeat/hermes_agent.prom`. That host directory is bind-mounted into the
+    container, owned by UID 10000, and holds nothing else.
+  - The script writes a temp file and renames it, which is atomic within the mounted directory.
+  - The script prints nothing, so a tick is silent. A failure exits non-zero and reaches the phone.
+  - node_exporter reads the file through a symlink in its textfile directory. The agent never gets
+    write access to the shared textfile directory, so it cannot forge the backup or canary metrics.
+  - Fallback if node_exporter's textfile collector does not follow the symlink (Q-L6): pass a second
+    `--collector.textfile.directory`, which node_exporter 1.8+ supports.
+- **Alert** (`host_vars/hermes.yml`, `monitoring_contract.alert_rules`):
+  `HermesAgentCronStale`, firing on
+  `time() - hermes_agent_heartbeat_timestamp_seconds > 3600 or absent(hermes_agent_heartbeat_timestamp_seconds)`,
+  with `for: 5m` and severity warning.
+  - A stopped container stops the ticks, so the value ages and the alert fires. It is independent of
+    ntfy, because it goes through Alertmanager to Pushover and the alerts topic.
+  - `absent()` covers a first deploy whose job was never created. Since Ansible creates the job, that
+    should only happen if creation failed.
+- **Why not a host systemd timer**: it would prove that systemd runs, not that the agent's scheduler
+  does.
+- **LAB and the alert [repo]**: the estate has one Prometheus (PROD), and LAB `monitoring` deploys
+  are blocked (backlog 072). LAB hermes is never scraped, so `absent()` cannot fire for LAB, and
+  the rule needs no environment guard.
+
+## R-008 — Egress allowlist (FR-008)
+
+- **Decision**: the agent gets a fixed address on its own compose network `agent`, and netfilter rules
+  in the LXC's own network namespace filter by that source address. This is the chain Docker reserves
+  for operators (`DOCKER-USER`), plus `INPUT` for traffic addressed to the LXC itself. Rules, in
+  order, for packets from the agent's address:
+
+  | # | Match | Action | Why |
+  |---|---|---|---|
+  | 1 | established/related | accept | replies |
+  | 2 | dst = `agent` network subnet | accept | SearXNG, and replies to Open WebUI (bridge traffic traverses FORWARD with br_netfilter) |
+  | 3 | dst `adguard_ip` udp/tcp 53 | accept | DNS, if the embedded resolver forwards from the container's namespace |
+  | 4 | dst `llm_router_ip:llm_router_port` tcp | accept | gateway |
+  | 5 | dst each `hermes_mcp_servers` host:port tcp | accept | tool services (rendered from the same list) |
+  | 6 | dst `reverse_proxy_ip:443` tcp | accept | ntfy via Caddy. **Owner's choice**: this opens every Caddy vhost at L4, and each keeps its own auth. Recorded in the accepted risk. |
+  | 7 | dst 10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16 | reject | rest of LAN, tailnet, link-local (hypervisor, NAS, router…) |
+  | 8 | else | accept | internet (GitHub, Hugging Face, web) |
+  | INPUT | src agent, new | reject | the LXC itself: sshd, node_exporter… |
+
+  IPv6 stays off on the `agent` network.
+- **Ownership and persistence**:
+  - A root-owned script `hermes-agent-egress.sh` (Ansible template) flushes and refills its own chain
+    `HERMES-AGENT` and ensures the jump from `DOCKER-USER` and `INPUT`.
+  - A systemd oneshot runs it with `After=docker.service`, `PartOf=docker.service` and
+    `WantedBy=docker.service`, so a Docker restart re-applies the rules. The deploy also runs it.
+  - The container has no `NET_ADMIN` (Docker default) and the rules live in the LXC's namespace, so
+    the agent cannot change them (FR-008).
+- **Verification**: a deploy assertion runs `docker exec hermes_agent` probes. Each allowlisted
+  destination must connect and each sample blocked destination must fail: the Proxmox host on 8006,
+  the NAS, the router on 80, and the LXC's own 9100. This is SC-009.
+- **Multi-homing note**: Open WebUI also joins the `agent` network to reach `hermes-agent:8642`. The
+  rules match the agent's /32, never the subnet as a source, so Open WebUI's reach is unchanged (spec
+  Out of Scope).
+- **Alternatives rejected**:
+  - The Proxmox firewall on the LXC would restrict Open WebUI too, and it is PVE-host configuration.
+  - An HTTP egress proxy can be bypassed by a terminal that ignores `HTTP_PROXY`.
+  - Allowing only the ntfy LXC directly was the owner's rejected option. It departs from 082's
+    contract.
+
+## R-009 — Backup, restore and drill (FR-018)
+
+- **Backup**: `backup_hermes.sh` gains the agent's directory.
+  - Every SQLite file under `{{ hermes_data_dir }}/agent` is snapshotted with
+    `sqlite3.Connection.backup()` inside `hermes_agent` (the same method as `webui.db`), and the rest
+    is tar-piped.
+  - Excluded: `.env` (re-rendered from vault), `config.yaml` (rendered by Ansible), `logs/`, `cache/`,
+    and `-wal`/`-shm` files.
+  - The scout's clone and state under `$HERMES_HOME` are included, because SC-007 needs the scout
+    state.
+  - The archive carries `agent-manifest.sha256`, the sha256 of every non-SQLite file it contains.
+    This proves scripts, memory and scout state intact without the drill knowing where any owner
+    content lives.
+- **Restore** (`restore_hermes.sh`): stop the agent, then restore the directory with ownership set to
+  UID 10000. The deploy re-renders `.env` and `config.yaml`.
+- **Drill**: the playbook gains an agent leg on the extracted copy.
+  - It first runs `sha256sum -c agent-manifest.sha256` and fails on any mismatch or missing file.
+    This is how SC-007's scout state is verified. A live scout run would prove nothing, because the
+    drill never touches the live data.
+  - It runs `hermes cron list` in a throwaway `docker run --rm` container. That container has the
+    restored data and no `gateway run`, so no scheduler is live and two gateways never share a
+    directory.
+  - It has **no ntfy env and no `.env`**, so a drill can never message the phone.
+  - It asserts that jobs `heartbeat` and `model-scout` exist, and runs one job (`heartbeat`, via
+    `hermes cron run` or `hermes cron tick`, settled by the upstream CLI read in tasks T002) with a success recorded in `hermes cron runs`.
+
+## R-010 — Open WebUI: second connection and retiring Automations
+
+- **Connection**:
+  - `OPENAI_API_BASE_URLS="{{ hermes_gateway_base_url }};http://hermes-agent:8642/v1"` and
+    `OPENAI_API_KEYS` in the same order replace the single-URL variables. The gateway stays at
+    index 0, the default.
+  - The persisted keys (`openai.api_base_urls`, `openai.api_keys`) are PersistentConfig, so they are
+    reconciled the way `hermes_managed_config` is.
+  - Unlike the existing managed keys, this set contains secrets, so it is reconciled in a separate
+    `no_log` task fed on stdin. 065's rule "secrets deliberately absent from managed config" is
+    amended for this one case, because without it the connection never appears on an existing deploy.
+  - Verify the exact key names against `open_webui/config.py` at the pinned `0.11.3` before
+    implementing.
+- **Automations**:
+  - First list existing automations (expected none, FR-015).
+  - Then set `ENABLE_AUTOMATIONS=false`, drop `AUTOMATION_MIN_INTERVAL` and the
+    `hermes_automation_min_interval` default, and add the persisted key (name to verify at 0.11.3)
+    to `hermes_managed_config`.
+  - If automations exist, the deploy stops and reports them rather than disabling them.
+
+## R-011 — LAB vs PROD (FR-014)
+
+- The deploy already passes `-e deploy_environment=<lab|prod>` **[repo]**: `pve-service-deploy`, used
+  by `immich.yml` and `nextcloud.yml`. The LAB inventory also sets `lab_inventory: true`
+  **[repo]** (`ansible/inventories/lab/hosts.yml`). The hermes role derives
+  `hermes_agent_operational: "{{ not (lab_inventory | default(false) | bool) and (deploy_environment | default('prod')) == 'prod' }}"`,
+  so both signals must say PROD. The preflight fails if they disagree.
+- **Why two signals**: the vault is shared by LAB and PROD, so `ntfy_hermes_token` is always
+  defined. A flag derived from `deploy_environment` alone would put the token on LAB whenever a
+  laptop LAB run forgot `-e deploy_environment=lab`, and the LAB `.env` guard would not run,
+  because it only runs when the flag is already false.
+- When it is false:
+  - No `ntfy_hermes_token` is rendered.
+  - The heartbeat job is not created.
+  - The preflight asserts that the LAB `.env` holds no `NTFY_TOKEN`.
+- The default is `prod`, which keeps a laptop run against the prod inventory correct (Constitution V).
+  A laptop LAB run must pass `-e deploy_environment=lab`, which is documented in quickstart. If it
+  is forgotten, the preflight's consistency check fails the run rather than rendering a token.
+
+## R-012 — Exposure precondition (FR-017)
+
+- **Decision**: a preflight task in the hermes role.
+  - It installs `dnsutils` if missing.
+  - For every `hus-sky.no` name the reverse proxy serves (`caddy_services[].host` in
+    `group_vars/services/vars.yml`), plus the apex and one random label (catching a wildcard), it
+    queries public resolvers `1.1.1.1` and `8.8.8.8` with `dig +short`. Querying two resolvers rules
+    out a single-resolver artefact.
+  - It **fails the deploy** if any answer is an address outside RFC 1918, 100.64/10 or ULA.
+  - NXDOMAIN or empty answers pass.
+- It runs on the Hermes LXC before the egress rules matter, because the LXC's own namespace is not
+  filtered.
+- **Manual router check**: done once and recorded in `quickstart.md` § Q-P6 with date, router model
+  and the port-forward table (no forwards to `reverse_proxy_ip`).
+- **Revisit trigger**: unchanged from the spec. Any public A or AAAA record turns this into a
+  front-door-auth prerequisite.
