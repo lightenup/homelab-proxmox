@@ -27,6 +27,7 @@ Contracts: [agent-runtime.md](./contracts/agent-runtime.md),
 | Q-L1 | 2026-10-17 | PASS — `v0.21.6`, Python 3.14.7, git 2.47.3 (pinned image run locally; the deploy does not exec these) |
 | Q-L2 | 2026-10-17 | PASS — read-only config starts cleanly once `_config_version` is stamped; approvals `manual/deny/deny/300` loaded; the LAB deploy's health wait passed (run 39042576752) |
 | Q-L6 | 2026-10-17 | PASS — LAB deploy run 39041787329: searxng, llm-router, MCP and reverse-proxy connected; Proxmox :8006, NAS :5000, router :80 and the LXC's :9100 refused |
+| Q-L10 | 2026-10-17 | PASS — peak LXC used memory 2130 MB of 6144 MB (34.7 %) under concurrent agent turn + Whisper + SpeechT5; no resize. See research "Observed in the pinned image" |
 | Note | | LAB deploys the production LXC (backlog 067), so these ran on the real machine, without the ntfy token |
 
 ## LAB checks (deploy gate, no phone traffic)

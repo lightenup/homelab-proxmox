@@ -140,6 +140,25 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   `model.context_length` is rendered from the alias definition, otherwise the agent assumes 256k.
 - **FR-005**: s6 logs `service dashboard: starting`, but the only listener in the container is `:8642`.
   The dashboard is not running.
+- **Q-L10 memory (SC-011), 2026-10-17, LXC 110 (6144 MB, 4 cores)**, sampled every 2 s for 3 minutes
+  while three loads ran at once: a multi-tool agent turn through the real gateway (terminal `df`, SearXNG
+  web search, MCP tool listing; it succeeded), Whisper `base` transcribing 20 s of audio, and SpeechT5
+  TTS loading and synthesising (the worst case for Open WebUI's in-process `transformers` TTS):
+
+  | | idle | peak |
+  |---|---|---|
+  | LXC used memory (`free`, excludes cache) | 1093 MB | **2130 MB (34.7 %)** |
+  | LXC available | 5050 MB | min 4013 MB |
+  | `hermes_open_webui` | 657 MB | 1712 MB |
+  | `hermes_agent` (limit 3 g) | 266 MB | 489 MB |
+  | `hermes_searxng` | 91 MB | 127 MB |
+
+  Well under the 80 % threshold, so **no Terraform memory change**. Caveats: the agent turn was short
+  and did not use the browser tool (Chromium is bundled in the image), so a heavy browsing turn would use
+  more, bounded by the agent's `mem_limit`; the STT input was noise and the TTS speaker embedding was
+  zeros, which does not change model memory. The cgroup figure (about 6.0 GB) is page cache and is not
+  a pressure signal. Side finding: SpeechT5 is not cached in Open WebUI, so the first spoken reply
+  downloads it, and the cold load took about 99 s.
 - **API contract**: `/v1/models` without a key or with a wrong key → 401; with the key → `["hermes-agent"]`.
 - **Script-only jobs** (`--no-agent --deliver local`): output is delivered; empty output is recorded as
   `silent (empty output)`; a non-zero exit is recorded as `script failed` ("Script exited with code 3").
