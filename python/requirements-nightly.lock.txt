@@ -4,9 +4,9 @@ ansible-compat==25.12.0 \
     --hash=sha256:322ccc7002030a91588d1fdba21e934703d64736f0e483dc6afe8ecd93a75614 \
     --hash=sha256:d38a149c5f95bb0d529c3b5e5fa3200b26f5e938ec7c31d8bb01d87c1f634410
     # via molecule
-ansible-core==2.17.14 \
-    --hash=sha256:34a49582a57c2f2af17ede2cefd3b3602a2d55d22089f3928570d52030cafa35 \
-    --hash=sha256:7c17fee39f8c29d70e3282a7e9c10bd70d5cd4fd13ddffc5dcaa52adbd142ff8
+ansible-core==2.18.18rc1 \
+    --hash=sha256:1d8bf8f27013a897b85a2c60c4d59fba1de12091bae67e98d39c4c4640a22a74 \
+    --hash=sha256:b5fc47f3ceb3e28a119e43773106289c87e3234ed0ffcd7bd152f043df11ae99
     # via
     #   -r python/requirements-nightly.txt
     #   ansible-compat
