@@ -30,6 +30,9 @@ Set up the ntfy Android app to receive push notifications from the self-hosted n
 2. Subscribe to `alerts` (Alertmanager notifications).
 3. Subscribe to `hermes` (Hermes Agent scheduled jobs, spec `083`).
 4. For each topic, confirm **"Instant delivery"** is toggled on.
+5. **Settings** → **Connection protocol** → **WebSockets** (the app offers this; lighter on
+   battery than the default JSON stream). Caddy proxies WebSockets without extra config;
+   verified 2026-10-17 at 7 s on mobile data.
 
 ## Notification channel (optional)
 
