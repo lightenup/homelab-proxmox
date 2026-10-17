@@ -1,9 +1,9 @@
 # ntfy 4-Week Trial Report (SC-006)
 
-**Trial start**: _(date T035 passed — fill in after the amtool synthetic alerts have been
-verified on both Pushover and ntfy)_
+**Trial start**: 2026-10-17 (T035 passed: 3 synthetic alerts plus resolutions delivered on both
+Pushover and ntfy)
 
-**Trial end**: _(start + 4 weeks)_
+**Trial end**: 2026-11-14
 
 **Purpose**: Compare ntfy delivery against Pushover over a real alerting window before any
 decision to drop Pushover. The comparison is like-for-like: the same alert text reaches both
