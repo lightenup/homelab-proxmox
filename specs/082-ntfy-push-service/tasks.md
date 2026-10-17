@@ -162,7 +162,7 @@ on ntfy itself.
 - [X] T042 [P] Update `docs/backlog/082-ntfy-push-service.md` status to "Specced → `specs/082-ntfy-push-service/`", and update its row in `docs/backlog/backlog.md`. Answer the backlog's two open questions in place (priority: custom template, R-003; cache: 72 h, FR-013)
 - [X] T043 [P] Add an `ntfy-lxc` entry to the authoritative service list in `specs/002-core-services-lxc/spec.md` (constitution § Services Model), in the same style as the existing `hermes-lxc` entry. It should say: ntfy, the estate's push channel to the owner's phone, at `192.168.1.222`, LAN/tailnet only, with state on local disk and no backup by design (FR-014), spec `082`
 - [X] T044 Record the 4-week trial start date (the date T035 passed) at the top of `specs/082-ntfy-push-service/trial-report.md`. Add a skeleton table (alert, fired at, Pushover at, ntfy at, missed/late/duplicate) for SC-006. The write-up itself is due at the end of the window and is not a blocker for merging — trial start 2026-10-17, end 2026-11-14
-- [ ] T045 Final review: compare `git diff main --stat` with the plan.md Source Code tree (no unplanned files, nothing secret in the diff, `vault.yml` still encrypted), and open the PR with `gh pr create`, ending the body with the attribution line
+- [X] T045 Final review: compare `git diff main --stat` with the plan.md Source Code tree (no unplanned files, nothing secret in the diff, `vault.yml` still encrypted), and open the PR with `gh pr create`, ending the body with the attribution line — 2026-10-17: 57 files, all in the plan tree (plus `CLAUDE.md` agent context and the 083 backlog refresh); no tokens or hashes in the diff; `vault.yml` still `$ANSIBLE_VAULT;1.1;AES256`
 
 ---
 
