@@ -14,8 +14,8 @@ alertmanager_version: "v0.30.0"
 monitoring_ip: "192.168.1.214"
 monitoring_hostname: "monitoring"
 
-# Synology NAS targets
-synology_nas_ip: "192.168.1.109"
+# Synology NAS targets — synology_nas_ip lives in group_vars/all/vars.yml (central, spec
+# 083); the hostname is monitoring-specific.
 synology_nas_hostname: "nas.local"
 
 # Prometheus configuration

@@ -24,6 +24,46 @@
     state: directory
     mode: '0755'
 
+# --- Agent runtime (spec 083) ---
+#
+# The agent's data directory (jobs, scripts, memory, scout state) and its deploy-owned
+# configuration. The config is mounted read-only over /opt/data/config.yaml (FR-002); the
+# env file carries the vault-rendered secrets and is never backed up or restored (FR-010).
+
+- name: Ensure the agent data directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_agent_data_dir }}"
+    state: directory
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0750'
+
+- name: Ensure the agent scripts directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_agent_data_dir }}/scripts"
+    state: directory
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0750'
+
+- name: Deploy the agent configuration (read-only mount source)
+  ansible.builtin.template:
+    src: agent-config.yaml.j2
+    dest: "{{ hermes_agent_config_path }}"
+    owner: root
+    mode: '0644'
+  notify: Restart hermes
+
+- name: Deploy the agent environment (vault-rendered secrets)
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: "{{ hermes_agent_env_path }}"
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0600'
+  notify: Restart hermes
+  no_log: true
+
 - name: Deploy SearXNG settings
   ansible.builtin.template:
     src: searxng-settings.yml.j2
@@ -67,6 +107,72 @@
   notify: Restart hermes
   no_log: true
 
+# --- Agent confinement (spec 083, FR-004, FR-007) ---
+#
+# The agent must never start without its confinement in place. Preflight checks the inputs
+# (pin, credentials, URLs); this checks the OUTPUT — the rendered compose — so a template
+# regression that re-adds a port, a privilege or a socket mount fails the deploy before
+# docker_compose_v2 ever runs.
+- name: Assert the rendered agent service is confined (FR-004, FR-007)
+  ansible.builtin.assert:
+    that:
+      - "'hermes-agent' in (hermes_compose | from_yaml).services"
+      - (hermes_compose | from_yaml).services['hermes-agent'].get('ports', []) | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].get('privileged', false) in [false, none]
+      - (hermes_compose | from_yaml).services['hermes-agent'].get('cap_add', []) | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', 'docker.sock') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].networks | list | sort == ['agent']
+    fail_msg: >-
+      The rendered hermes-agent service is not confined: it must have no published ports,
+      no privileged mode, no cap_add, no Docker socket mount, and sit only on the `agent`
+      network (spec 083 FR-004/FR-007/FR-008). Fix docker-compose.yml.j2 before deploying.
+  vars:
+    hermes_compose: "{{ lookup('ansible.builtin.file', hermes_install_dir ~ '/docker-compose.yml') }}"
+
+# --- Egress allowlist (spec 083, FR-008) — must be live before the agent starts ---
+#
+# The script flushes and refills its own chain and is idempotent; the oneshot re-applies it
+# on every Docker restart (PartOf), and we run it on every deploy. On a first deploy the
+# DOCKER-USER chain may not exist until Docker starts — the script creates it if missing.
+
+- name: Deploy the agent egress allowlist script
+  ansible.builtin.template:
+    src: hermes-agent-egress.sh.j2
+    dest: /usr/local/sbin/hermes-agent-egress.sh
+    owner: root
+    mode: '0750'
+
+- name: Install the agent egress systemd unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/hermes-agent-egress.service
+    owner: root
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Hermes agent egress allowlist (spec 083, FR-008)
+      After=docker.service
+      Wants=docker.service
+      PartOf=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/hermes-agent-egress.sh
+
+      [Install]
+      WantedBy=docker.service
+
+- name: Enable the agent egress systemd unit
+  ansible.builtin.systemd:
+    name: hermes-agent-egress
+    enabled: true
+    daemon_reload: true
+
+- name: Apply the agent egress allowlist now
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/hermes-agent-egress.sh
+  changed_when: false
+
 - name: Ensure hermes stack is running
   community.docker.docker_compose_v2:
     project_src: "{{ hermes_install_dir }}"
@@ -91,6 +197,107 @@
   delay: 10
   until: hermes_health.status == 200
   changed_when: false
+
+# --- Egress probe (spec 083, SC-009) ---
+#
+# The allowlist (FR-008) is only as good as its enforcement, so the deploy proves it from
+# the agent's own network namespace: every allowlisted destination must connect, every
+# blocked destination must fail. A mismatch names the offending destination and fails the
+# deploy.
+- name: Wait for the agent to be healthy
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - --format
+      - "{% raw %}{{ .State.Health.Status }}{% endraw %}"
+      - hermes_agent
+  register: hermes_agent_health
+  until: hermes_agent_health.stdout == 'healthy'
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Build the egress probe destination list
+  ansible.builtin.set_fact:
+    hermes_agent_egress_probe_allowed: >-
+      {%- set ns = namespace(dests=[
+           {'name': 'searxng', 'host': 'searxng', 'port': 8080},
+           {'name': 'llm-router', 'host': llm_router_ip, 'port': llm_router_port | int}]) -%}
+      {%- for s in hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') -%}
+      {%- set ns.dests = ns.dests + [{'name': 'mcp-' ~ s.name, 'host': s.url | urlsplit('hostname'), 'port': s.url | urlsplit('port') | int}] -%}
+      {%- endfor -%}
+      {{- ns.dests + [{'name': 'reverse-proxy', 'host': reverse_proxy_ip, 'port': 443}] -}}
+    hermes_agent_egress_probe_blocked_full: >-
+      {{ hermes_agent_egress_probe_blocked + [{'name': 'hermes-own-node-exporter', 'host': hermes_ip, 'port': 9100}] }}
+
+- name: Probe allowlisted destinations from inside the agent (must connect)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - hermes_agent
+      - python3
+      - -c
+      - >-
+        import socket, sys;
+        host, port, timeout = sys.argv[1], int(sys.argv[2]), 3;
+        s = socket.create_connection((host, port), timeout=timeout);
+        s.close()
+      - "{{ item.host }}"
+      - "{{ item.port }}"
+  loop: "{{ hermes_agent_egress_probe_allowed }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.host }}:{{ item.port }})"
+  register: hermes_agent_egress_probe_allowed_results
+  changed_when: false
+
+- name: Assert every allowlisted egress destination connected (SC-009)
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: >-
+      Egress probe: allowlisted destination '{{ item.item.name }}'
+      ({{ item.item.host }}:{{ item.item.port }}) did NOT connect from inside the agent
+      container (rc={{ item.rc }}: {{ item.stderr | default('') | trim }}). The egress
+      allowlist is missing a required rule (FR-008).
+  loop: "{{ hermes_agent_egress_probe_allowed_results.results }}"
+  loop_control:
+    label: "{{ item.item.name }} ({{ item.item.host }}:{{ item.item.port }})"
+
+- name: Probe blocked destinations from inside the agent (must fail)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - hermes_agent
+      - python3
+      - -c
+      - >-
+        import socket, sys;
+        host, port, timeout = sys.argv[1], int(sys.argv[2]), 3;
+        s = socket.create_connection((host, port), timeout=timeout);
+        s.close()
+      - "{{ item.host }}"
+      - "{{ item.port }}"
+  loop: "{{ hermes_agent_egress_probe_blocked_full }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.host }}:{{ item.port }})"
+  register: hermes_agent_egress_probe_blocked_results
+  changed_when: false
+  failed_when: false
+
+- name: Assert every blocked egress destination was refused (SC-009)
+  ansible.builtin.assert:
+    that:
+      - item.rc != 0
+    fail_msg: >-
+      Egress probe: BLOCKED destination '{{ item.item.name }}'
+      ({{ item.item.host }}:{{ item.item.port }}) CONNECTED from inside the agent container.
+      The egress allowlist is leaking (FR-008) — fix the rules before the agent is trusted.
+  loop: "{{ hermes_agent_egress_probe_blocked_results.results }}"
+  loop_control:
+    label: "{{ item.item.name }} ({{ item.item.host }}:{{ item.item.port }})"
 
 # TOOL_SERVER_CONNECTIONS is a PersistentConfig: seed_defaults() inserts a key "only if the
 # key is absent" — "Existing DB values take precedence over defaults." So the env var seeds

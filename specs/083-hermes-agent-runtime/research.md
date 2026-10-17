@@ -52,6 +52,15 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   `llm_router_client_hermes_agent_key`, default model `hermes-balanced`. Agent jobs may set `--model`.
   The preflight asserts that the default alias exists in `llm_router_aliases`, the same check the
   role already makes for Open WebUI's aliases.
+- **Config schema [observed v0.21.6]**: `config.yaml` takes top-level `model: <name>`,
+  `provider: custom` and `base_url: <url>` (`cli-config.yaml.example` lines 90–135). For a bare
+  `provider: custom`, the API key is read from the env var named by `model.key_env`
+  (`hermes_cli/auth.py` `_model_level_key_env` → `model_cfg.get("key_env") or model_cfg.get("api_key_env")`,
+  resolved through `get_secret`, i.e. `$HERMES_HOME/.env` / process env — `agent/secret_scope.py`).
+  There is **no fixed default env var name** for the custom provider; the variable name is declared in
+  config. We declare `key_env: LLM_ROUTER_CLIENT_HERMES_AGENT_KEY` and render the same name into the
+  agent `.env`. (Named `providers:` entries use the same `key_env` field, `hermes_cli/config.py`
+  `_VALID_CUSTOM_PROVIDER_FIELDS`.)
 - **New gateway client** `hermes_agent` in `llm_router_clients`: `rpm_limit: 20`, `max_budget: 5.00`,
   `budget_duration: "30d"`, `key_env: LLM_ROUTER_CLIENT_HERMES_AGENT_KEY`. Sizing rule:
   `max = 60 ≤ gateway 65 < sum = 60 + 10 + 20 = 90`, so it holds with no gateway change. The
@@ -74,13 +83,40 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   check Q-L2): render it into the data directory and treat it like `hermes_managed_config`. It is
   owned by the deploy and re-asserted on every run, so an agent edit lasts only until the next deploy.
   The accepted risk then names this explicitly.
-- **Facts [doc]**:
-  - `unattended_mode` covers API-server sessions, which is every request from Open WebUI.
-  - `cron_mode` covers scheduled jobs. Both default to deny, and an unanswered prompt times out to
-    deny.
-  - Approvals apply to the `local` backend. Isolated backends such as Docker skip them, which is
-    another reason to keep `local` inside the container.
-  - Sources disagree on whether `mode` defaults to `smart` or `manual`. It is set explicitly.
+- **Facts [observed v0.21.6]** (`hermes_cli/config_defaults.py`, `tools/approval.py`):
+  - `approvals` schema: `mode` (`manual` | `smart` | `off`), `timeout` (seconds, default 300),
+    `cron_mode` (`deny` | `approve`), `single_query_mode`, `unattended_mode`, plus `smart_policy`,
+    `denial_breaker_threshold`, `deny` (glob list), `mcp_reload_confirm`,
+    `destructive_slash_confirm`.
+  - `unattended_mode` covers "unattended programmatic platforms (webhook/msgraph_webhook/api_server)"
+    (`tools/approval.py:764`) — i.e. every request from Open WebUI. `cron_mode` covers cron jobs.
+    Both default to `deny`; `mode` defaults to `smart`, so we set `manual` explicitly.
+  - Approvals apply to the `local` terminal backend. Isolated backends such as Docker skip them
+    (`terminal.backend: local` is therefore required for the control to hold).
+  - `terminal.env_passthrough` (default `[]`) is the list of env-var **names** forwarded into
+    sandboxed terminal/execute_code children (`tools/env_passthrough.py`); values are resolved at
+    runtime through the secret scope, so the config carries names only.
+  - `web.search_backend: searxng` selects the bundled SearXNG web-search provider
+    (`plugins/web/searxng/provider.py`, `NAME = "searxng"`; the endpoint comes from `SEARXNG_URL`).
+  - `cron.failure_nudge_threshold` (default 3, 0 disables) appends a "worth a review" nudge after N
+    consecutive failures of a recurring job (`cron/scheduler.py:136`).
+  - Persistent memory is `memory.memory_enabled` (default `True`); we state it explicitly (FR-018).
+  - `mcp_servers` schema: stdio servers use `command`/`args`/`env`; HTTP servers use `url` +
+    `headers`. Header values may reference env vars as `${VAR}`; they are interpolated at connect
+    time from `$HERMES_HOME/.env` (`hermes_cli/mcp_config.py` `_resolve_mcp_server_config` →
+    `_interpolate_env_vars`; the CLI's own bearer templates are
+    `Authorization: Bearer ${MCP_<NAME>_API_KEY}`). So a bearer entry in our rendered config is
+    `headers: {Authorization: "Bearer ${<credential_env>}"}` with the token in the agent `.env`.
+- **`hermes cron` CLI [observed v0.21.6]** (`hermes_cli/subcommands/cron.py`):
+  - `hermes cron create SCHEDULE [PROMPT] --name NAME --deliver TARGET --script PATH --no-agent`
+    — all four flags used by this feature exist. `--script` is a path under `~/.hermes/scripts/`
+    (with `HERMES_HOME=/opt/data`, that is `/opt/data/scripts/`); `.sh` files run via bash.
+    `--no-agent` skips the LLM and delivers the script's stdout verbatim (empty stdout = silent).
+  - `--deliver` grammar: `origin, local, telegram, discord, signal, platform:chat_id, …` — `ntfy`
+    is a platform name and works here. `--failure-deliver` overrides the failure-notice target only
+    (`'local'` suppresses; omitted = failures follow `--deliver`).
+  - `hermes cron list [--all]`, `hermes cron run JOB_ID`, `hermes cron runs [JOB_ID]`,
+    `hermes cron tick`, `hermes cron status`, `hermes cron doctor`.
 - **`.env`** (vault-rendered, 0600, owned by UID 10000) holds:
   - `API_SERVER_*`
   - the gateway key, under the variable name the custom provider reads
@@ -103,10 +139,18 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
 
 ## R-006 — Delivery and the ntfy adapter
 
-- **Finding [doc] that changes FR-012**: the ntfy platform plugin **requires `NTFY_TOPIC` and
-  subscribes to it** for inbound messages. Upstream's "send-only" recipe still subscribes. It only
+- **Finding [observed v0.21.6] that changes FR-012**: the ntfy platform plugin **requires `NTFY_TOPIC`
+  and subscribes to it** for inbound messages (`plugins/platforms/ntfy/adapter.py`: HTTP-streaming
+  subscription on `/json`, `poll=false`). Upstream's "send-only" recipe still subscribes. It only
   leaves `NTFY_ALLOWED_USERS` unset, so the agent never answers ("an empty allowlist rejects
   everything"). A "never subscribes" setting does not exist.
+- **Env vars [observed v0.21.6]** (adapter docstring, read at construct time; `platforms.ntfy.extra`
+  wins over env): `NTFY_TOPIC`, `NTFY_SERVER_URL`, `NTFY_TOKEN` (Bearer, or `user:pass` Basic),
+  `NTFY_PUBLISH_TOPIC` (defaults to topic), `NTFY_MARKDOWN` (`"true"`/`"1"`/`"yes"`),
+  `NTFY_ALLOWED_USERS` (topic names), `NTFY_ALLOW_ALL_USERS` (dev only), `NTFY_HOME_CHANNEL`,
+  `NTFY_HOME_CHANNEL_NAME`. A 401 on subscribe is a fatal stream error
+  (`ntfy_unauthorized`, adapter line 189); the reconnect backoff is `[2, 5, 10, 30, 60]` s — bounded,
+  not a tight loop.
 - **Decision**: rely on two independent controls rather than one.
   1. **The server refuses the subscription.** 082's `hermes` token is write-only (082 SC-002, 20/20),
      so the subscribe is refused with 401/403 and nothing can arrive.
@@ -124,8 +168,9 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   NTFY_MARKDOWN=true
   ```
 
-- **Unknown**: how the adapter behaves when its subscription is refused. It might retry with backoff,
-  loop and spam the log, or mark the platform unhealthy and stop delivering. Cron delivery uses a
+- **Unknown**: how the adapter behaves when its subscription is refused. The observed backoff is
+  bounded (`[2, 5, 10, 30, 60]` s, `RECONNECT_BACKOFF`), so a refused subscription should settle into
+  the 60 s retry cadence rather than a tight loop — to be confirmed by Q-L7. Cron delivery uses a
   standalone sender that opens its own HTTP connection **[doc]**, so delivery should not depend on
   the subscription, but this is not stated outright.
 - **LAB (owner's choice, 2026-10-17)**: the adapter is configured with **no token**. Subscribe and
@@ -159,6 +204,13 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
     write access to the shared textfile directory, so it cannot forge the backup or canary metrics.
   - Fallback if node_exporter's textfile collector does not follow the symlink (Q-L6): pass a second
     `--collector.textfile.directory`, which node_exporter 1.8+ supports.
+- **node_exporter [repo]**: `ansible/roles/node_exporter/defaults/main.yml` pins
+  `node_exporter_version: "1.10.2"` (≥ 1.8, so multiple `--collector.textfile.directory` flags are
+  supported) and `node_exporter_textfile_directory:
+  "/var/lib/node_exporter/textfile_collector"`, passed as a single flag in the unit. **Chosen
+  mechanism: symlink** `{{ node_exporter_textfile_directory }}/hermes_agent.prom` →
+  `{{ hermes_agent_heartbeat_dir }}/hermes_agent.prom` (the agent never gets write access to the
+  shared directory). The second-directory flag is the fallback; final confirmation on LAB (Q-L8).
 - **Alert** (`host_vars/hermes.yml`, `monitoring_contract.alert_rules`):
   `HermesAgentCronStale`, firing on
   `time() - hermes_agent_heartbeat_timestamp_seconds > 3600 or absent(hermes_agent_heartbeat_timestamp_seconds)`,
@@ -240,6 +292,19 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
 
 ## R-010 — Open WebUI: second connection and retiring Automations
 
+- **Facts [observed v0.11.3]** (`backend/open_webui/config.py`):
+  - Env vars: `OPENAI_API_BASE_URLS` and `OPENAI_API_KEYS` (lines 333–345), `;`-separated, falling
+    back to the singular `OPENAI_API_KEY`/`OPENAI_API_BASE_URL`.
+  - Persisted keys (in `DEFAULT_CONFIG`): `openai.api_keys` (line 2841) and
+    `openai.api_base_urls` (line 2842) — PersistentConfig, so they survive restarts and must be
+    reconciled, not only set via env.
+  - `ENABLE_AUTOMATIONS` (line 2048, default `'True'`) → persisted key `automations.enable`
+    (line 3113); `AUTOMATION_MIN_INTERVAL` (line 2060) → `automations.min_interval` (line 3122).
+  - Automations live in the `automation` table (class `Automation`,
+    `__tablename__ = 'automation'`, `backend/open_webui/models/automations.py` line 20–21); columns
+    include `name`, `data` (JSON: prompt/model_id/rrule), `is_active`, `next_run_at`. FR-015's
+    "list existing automations" is a `SELECT name, data FROM automation` against `webui.db` inside
+    the `hermes` container.
 - **Connection**:
   - `OPENAI_API_BASE_URLS="{{ hermes_gateway_base_url }};http://hermes-agent:8642/v1"` and
     `OPENAI_API_KEYS` in the same order replace the single-URL variables. The gateway stays at
@@ -249,14 +314,19 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   - Unlike the existing managed keys, this set contains secrets, so it is reconciled in a separate
     `no_log` task fed on stdin. 065's rule "secrets deliberately absent from managed config" is
     amended for this one case, because without it the connection never appears on an existing deploy.
-  - Verify the exact key names against `open_webui/config.py` at the pinned `0.11.3` before
-    implementing.
 - **Automations**:
-  - First list existing automations (expected none, FR-015).
+  - First list existing automations from the `automation` table (expected none, FR-015).
   - Then set `ENABLE_AUTOMATIONS=false`, drop `AUTOMATION_MIN_INTERVAL` and the
-    `hermes_automation_min_interval` default, and add the persisted key (name to verify at 0.11.3)
-    to `hermes_managed_config`.
+    `hermes_automation_min_interval` default, and add the persisted key `automations.enable` with
+    value `false` to `hermes_managed_config`.
   - If automations exist, the deploy stops and reports them rather than disabling them.
+
+- **Egress probe blocked list [repo, deviation from task wording]**: T018 asks for "LAB values
+  (10.99.x network)". Backlog 067 established that the LAB pipeline renders tfvars byte-identical to
+  prod (same `192.168.1.x` IPs, same PVE node) — "lab" is a gating stage, not a separate network; the
+  `10.99.0.0/24` rig only exists in `scripts/lab/pve-lab`. The blocked destinations are the same real
+  IPs in both environments, so `hermes_agent_egress_probe_blocked` is a single central list in
+  `group_vars/services/vars.yml`, keyed by nothing (no environment split).
 
 ## R-011 — LAB vs PROD (FR-014)
 

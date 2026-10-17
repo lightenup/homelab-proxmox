@@ -24,6 +24,10 @@ llm_router_version: "v1.83.3-stable"
 llm_router_postgres_version: "17.11-alpine3.24"
 hermes_version: "0.11.3"
 hermes_searxng_version: "2026.9.19-c0014f015"
+# Hermes agent runtime (spec 083). Plain vX.Y.Z only — never `latest`, `-desktop` or `rc.`
+# variants (R-001). Upgrade procedure: read the upstream changelog for `approvals`, `cron`
+# and `ntfy` changes first, then bump and run the 083 quickstart LAB checks.
+hermes_agent_version: "v0.21.6"
 ntfy_version: "v2.28.0"
 
 # Euro-Office Configuration
@@ -198,6 +202,14 @@ llm_router_clients:
     max_budget: 1.00
     budget_duration: "30d"
     rpm_limit: 10
+  # Agent runtime (spec 083, R-003). Its own client so the agent's inference is metered and
+  # capped separately from Open WebUI's `hermes` client — a runaway agent turn cannot exhaust
+  # the workspace's allowance, and the gateway can show the two apart.
+  - alias: hermes_agent
+    key_env: LLM_ROUTER_CLIENT_HERMES_AGENT_KEY
+    max_budget: 5.00
+    budget_duration: "30d"
+    rpm_limit: 20
 
 # Gateway-wide backstop (FR-010, SC-012). Two caps with OPPOSITE sizing rules — see below.
 llm_router_gateway_budget:
@@ -216,15 +228,16 @@ llm_router_gateway_budget:
   # inside this band, which the preflight asserts:
   #
   #     max(client rpm_limit)  <=  gateway rpm_limit  <  sum(client rpm_limit)
-  #            60              <=          65         <         70
+  #            60              <=          65         <         90
   #
   # Lower bound: at least the largest single client, so one compliant client is never
   # refused by the GATEWAY cap — its own limit should always bind first, otherwise the
   # two levels are indistinguishable in practice and the error tells the operator nothing.
   #
   # Upper bound: strictly below the sum, so clients COMBINING can trip it. That is the
-  # scenario this exists for: `hermes` (60) and `canary` (10) are each well-behaved and
-  # together are 70 requests/minute of real inference against a single Mac.
+  # scenario this exists for: `hermes` (60), `canary` (10) and `hermes_agent` (20, spec
+  # 083) are each well-behaved and together are 90 requests/minute of real inference
+  # against a single Mac.
   #
   # 65 rather than 60 deliberately: at exactly 60, a fully-loaded `hermes` would consume
   # the entire gateway allowance and starve the synthetic canary (FR-018), blinding the
@@ -239,6 +252,25 @@ llm_router_gateway_budget:
 hermes_ip: "192.168.1.221"
 hermes_port: 8080
 hermes_install_dir: "/opt/hermes"
+# Agent runtime (spec 083, R-002/R-008). The agent sits on its own compose network with a
+# fixed address so the egress allowlist can filter by source /32; the subnet must not
+# collide with any existing Docker network on this LXC.
+hermes_agent_subnet: "172.30.83.0/24"
+hermes_agent_ip: "172.30.83.10"
+# Egress probe (spec 083, SC-009): destinations the agent MUST NOT reach. The deploy runs
+# a TCP probe from inside the agent container against each of these and fails on any that
+# connects. Single central list — LAB and PROD are the same real LXC at the same real IPs
+# (backlog 067), so there is no environment split (research R-011 note).
+hermes_agent_egress_probe_blocked:
+  - name: proxmox-host
+    host: "{{ proxmox_host_ip }}"
+    port: 8006
+  - name: nas
+    host: "{{ synology_nas_ip }}"
+    port: 5000
+  - name: lan-router
+    host: "{{ lan_router_ip }}"
+    port: 80
 # Local disk only — never NFS (FR-019, data-model.md). SQLite, uploaded documents and the
 # vector index all live under here; the financial-scenario split, for the same reason
 # (locking failures / corruption over NFS for a single-writer SQLite store).
