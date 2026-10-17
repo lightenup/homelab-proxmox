@@ -379,6 +379,9 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   - Unlike the existing managed keys, this set contains secrets, so it is reconciled in a separate
     `no_log` task fed on stdin. 065's rule "secrets deliberately absent from managed config" is
     amended for this one case, because without it the connection never appears on an existing deploy.
+- **Observed on PROD (2026-10-17)**: the pre-disable check found one active automation, "Daglig
+  nyhetsdigest (ukedager 07:30)" (`hermes-deep`, weekdays 07:30, never run). Owner decision: delete it
+  without a replacement. The row was deleted by hand before the US3 deploy, and `automation` is now empty.
 - **MCP single source (T030, FR-011)** [repo]: the agent config, the egress script and Open WebUI's
   `hermes_tool_server_connections` all iterate `hermes_mcp_servers`. The agent and the egress chain
   take `selectattr('enabled')`. Open WebUI registers every entry with `config.enable: item.enabled`,
