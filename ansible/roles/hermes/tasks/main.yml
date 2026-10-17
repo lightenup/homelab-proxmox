@@ -64,6 +64,26 @@
   notify: Restart hermes
   no_log: true
 
+# FR-014: the LAB stage must never hold the push credential. Check the rendered file, not the
+# inputs, so a template regression is caught. (LAB deploys the real LXC — backlog 067 — so
+# this is also what removes a token left by an earlier PROD deploy: the template re-renders.)
+- name: Read the rendered agent environment (LAB guard)
+  ansible.builtin.slurp:
+    src: "{{ hermes_agent_env_path }}"
+  register: hermes_agent_env_rendered
+  when: not hermes_agent_operational
+  no_log: true
+
+- name: Assert the LAB agent environment holds no push token (FR-014)
+  ansible.builtin.assert:
+    that:
+      - (hermes_agent_env_rendered.content | b64decode).splitlines() | select('match', '^\\s*NTFY_TOKEN\\s*=') | list | length == 0
+    fail_msg: >-
+      The rendered agent environment contains NTFY_TOKEN on a non-operational (LAB) deploy.
+      The LAB stage must never be able to reach the phone (spec 083 FR-014).
+  when: not hermes_agent_operational
+  no_log: true
+
 - name: Deploy SearXNG settings
   ansible.builtin.template:
     src: searxng-settings.yml.j2
