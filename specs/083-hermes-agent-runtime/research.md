@@ -232,6 +232,11 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   rendered config (verified in the pinned image that the key is honoured). A stopped scheduler is
   caught by the heartbeat alert instead. Other home-channel notices (cron store unwritable/recovered,
   session DB failure) stay on: they only fire on faults.
+- **PROD with the write-only token [Q-P2, 2026-10-17]**: the subscription is refused with 403 exactly as
+  on LAB, on the same bounded backoff, and the publish succeeds (`hermes send --to ntfy …` →
+  `success: true`, ntfy message id returned). The refused subscription does not stop delivery. The CLI
+  form is `hermes send --to <platform> "<text>"` (an earlier draft had `hermes send ntfy "<text>"`,
+  which the CLI rejects).
 - **Size**: the adapter truncates at 4096 characters and logs a warning **[doc]**. That is below
   ntfy's 32 KB limit, so 082's 413 cannot happen through this adapter. The spec's size edge case is
   satisfied by truncation.
