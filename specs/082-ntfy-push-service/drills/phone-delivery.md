@@ -7,6 +7,6 @@ Phone: owner's Android, ntfy app subscribed to `alerts` and `hermes` on `https:/
 | 0 | Initial subscribe: 8 cached T033 payloads delivered on first subscribe | 2026-10-17 | 2026-10-17 | — | PASS |
 | A | Wi-Fi off, mobile data + Tailscale, app closed | 10:49:23 | 10:49:30 | 7 s | PASS |
 | A2 | Same as A, repeat run | 10:55:49 | 10:55:56 | 7 s | PASS |
-| B | Tailscale off, ~5 min gap, then reconnect | | | | |
+| B | Tailscale off, ~5 min gap, then reconnect (Tailscale on 11:02 UTC) | 10:56:32 | 11:02 | arrived on reconnect, < 1 min after Tailscale on | PASS |
 | C | Overnight idle, app not opened | | | | |
 | D | Each severity on mobile data (after T034/T035) | | | | |
