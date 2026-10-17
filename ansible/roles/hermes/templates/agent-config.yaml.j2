@@ -10,6 +10,11 @@
 # key_env (rendered into agent.env by Ansible from the vault), and MCP bearer tokens are
 # referenced as ${VAR} and resolved from the agent's .env at connect time.
 
+# Config schema version of the pinned image (v0.21.6 → 50). The image's entrypoint migrates an
+# unversioned config on every start and fails noisily on a read-only mount; stamping the
+# version avoids that. Re-check this number when hermes_agent_version is bumped (R-001).
+_config_version: 50
+
 # `model` is a mapping (research R-003, observed at v0.21.6). For a bare `provider: custom`
 # the API key is read from the env var named by model.key_env, and only while model.base_url
 # is the configured endpoint (hermes_cli/runtime_provider_custom.py). The value lives in
@@ -19,6 +24,9 @@ model:
   provider: custom
   base_url: "{{ hermes_gateway_base_url }}"
   key_env: LLM_ROUTER_CLIENT_HERMES_AGENT_KEY
+  # The gateway does not expose /v1/models context data, so the agent would otherwise assume
+  # 256k. Taken from the alias definition, so the two cannot drift (smallest deployment wins).
+  context_length: {{ (llm_router_aliases | selectattr('name', 'equalto', hermes_agent_default_model) | first).deployments | map(attribute='context_window') | min }}
 
 # Approvals (FR-002, R-004). manual = always prompt; the non-interactive surfaces (cron
 # jobs, the API server — i.e. every Open WebUI request) fail closed to deny. timeout is

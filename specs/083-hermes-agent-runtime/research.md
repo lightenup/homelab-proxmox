@@ -128,6 +128,26 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   `terminal.env_passthrough`, which is the one case where a new job needs a deploy change (spec Edge
   Cases).
 
+## Observed in the pinned image (2026-10-17, local run of `nousresearch/hermes-agent:v0.21.6` with the rendered config mounted read-only)
+
+- **Q-L1**: `hermes --version` = `v0.21.6 (2026.9.24)`; `python3` = 3.14.7 (`/opt/hermes/.venv`); `git` 2.47.3;
+  `curl` present (the compose healthcheck uses it). The container user is `hermes`.
+- **Q-L2**: a read-only `config.yaml` works. `gateway run` starts and `/health` answers. The entrypoint
+  tries to migrate an *unversioned* config on every start and logs `[config-migrate] ERROR: Read-only
+  file system`, so the template stamps `_config_version: 50` (the pinned image's schema); re-check it on
+  every pin bump. `load_config()` returns exactly the rendered `approvals` (`manual`/`deny`/`deny`/300),
+  `terminal.backend: local`, `web.search_backend: searxng`, `memory_enabled: true` and `mcp_servers`.
+  `model.context_length` is rendered from the alias definition, otherwise the agent assumes 256k.
+- **FR-005**: s6 logs `service dashboard: starting`, but the only listener in the container is `:8642`.
+  The dashboard is not running.
+- **API contract**: `/v1/models` without a key or with a wrong key → 401; with the key → `["hermes-agent"]`.
+- **Script-only jobs** (`--no-agent --deliver local`): output is delivered; empty output is recorded as
+  `silent (empty output)`; a non-zero exit is recorded as `script failed` ("Script exited with code 3").
+  The flags `--no-agent --script --deliver --name` all exist.
+- **`hermes cron runs` stays empty after a manual `hermes cron run`** (CLI prints `Ran now: succeeded`/
+  `failed`; the outcome is written under `$HERMES_HOME/cron/output/<job>/`). The restore drill must not
+  rely on `cron runs`; see tasks T043.
+
 ## R-005 — Tool services and web search
 
 - **Decision**: one list, `hermes_mcp_servers`, rendered twice. It goes into Open WebUI's
