@@ -218,17 +218,17 @@
   when: hermes_agent_operational
   no_log: true
 
-- name: Assert the inventory and the environment agree on LAB vs PROD (R-011)
+# The pipeline's LAB stage uses the prod inventory with -e deploy_environment=lab (backlog
+# 067), so only the reverse mismatch is an error: the 10.99.x LAB-rig inventory paired with
+# a prod deploy.
+- name: Assert a LAB-rig inventory is not paired with a PROD deploy (R-011)
   ansible.builtin.assert:
     that:
       - not (lab_inventory | default(false) | bool and (deploy_environment | default('prod')) == 'prod')
-      - not ((deploy_environment | default('prod')) == 'lab' and not (lab_inventory | default(false) | bool))
     fail_msg: >-
-      The environment signals disagree: lab_inventory={{ lab_inventory | default(false) }},
-      deploy_environment={{ deploy_environment | default('prod') }}. A LAB inventory must be
-      paired with -e deploy_environment=lab and a PROD inventory with prod (or the default).
-      The agent's operational state is derived from BOTH, so a mismatch means the ntfy token
-      and the heartbeat job would be rendered in the wrong environment.
+      lab_inventory=true but deploy_environment is 'prod' (or unset). A LAB-rig inventory must
+      be paired with -e deploy_environment=lab, otherwise the ntfy token and the heartbeat job
+      would be rendered on the LAB rig.
 
 - name: Assert every env-passthrough name has a defined, non-empty vault variable
   ansible.builtin.assert:

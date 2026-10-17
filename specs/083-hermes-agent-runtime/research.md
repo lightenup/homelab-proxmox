@@ -331,21 +331,26 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
 ## R-011 — LAB vs PROD (FR-014)
 
 - The deploy already passes `-e deploy_environment=<lab|prod>` **[repo]**: `pve-service-deploy`, used
-  by `immich.yml` and `nextcloud.yml`. The LAB inventory also sets `lab_inventory: true`
-  **[repo]** (`ansible/inventories/lab/hosts.yml`). The hermes role derives
-  `hermes_agent_operational: "{{ not (lab_inventory | default(false) | bool) and (deploy_environment | default('prod')) == 'prod' }}"`,
-  so both signals must say PROD. The preflight fails if they disagree.
-- **Why two signals**: the vault is shared by LAB and PROD, so `ntfy_hermes_token` is always
-  defined. A flag derived from `deploy_environment` alone would put the token on LAB whenever a
-  laptop LAB run forgot `-e deploy_environment=lab`, and the LAB `.env` guard would not run,
-  because it only runs when the flag is already false.
+  by `immich.yml` and `nextcloud.yml`. The hermes role derives
+  `hermes_agent_operational: "{{ not (lab_inventory | default(false) | bool) and (deploy_environment | default('prod')) == 'prod' }}"`.
+- **Correction (first LAB run, 2026-10-17)**: an earlier draft required `lab_inventory` and
+  `deploy_environment` to agree, and failed the pipeline's own LAB stage. That stage deploys with
+  the **prod inventory** and only `-e deploy_environment=lab` (backlog 067: "lab" is a gating
+  stage at the production address, not a separate environment), so `lab_inventory` is false there.
+  `deploy_environment` is therefore the signal. `lab_inventory` (the 10.99.x rig) can only make
+  the flag false, and the preflight rejects that inventory paired with a prod deploy.
+- **Residual gap**: the vault is shared, so `ntfy_hermes_token` is always defined. A laptop LAB
+  run against the prod inventory that forgets `-e deploy_environment=lab` is indistinguishable
+  from a PROD run. The pipeline always passes the flag, and quickstart documents it for laptops.
+- **Consequence of 067**: a LAB deploy of `hermes` changes the production LXC (real egress rules,
+  real containers). Q-L checks therefore run on the production machine, without the ntfy token.
 - When it is false:
   - No `ntfy_hermes_token` is rendered.
   - The heartbeat job is not created.
   - The preflight asserts that the LAB `.env` holds no `NTFY_TOKEN`.
 - The default is `prod`, which keeps a laptop run against the prod inventory correct (Constitution V).
   A laptop LAB run must pass `-e deploy_environment=lab`, which is documented in quickstart. If it
-  is forgotten, the preflight's consistency check fails the run rather than rendering a token.
+  is forgotten, the run is treated as PROD (see the residual gap above).
 
 ## R-012 — Exposure precondition (FR-017)
 

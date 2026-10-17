@@ -90,5 +90,5 @@ order. Index 0 (the gateway) stays the default. Reconciled by `no_log` (R-010).
 2. `hermes-balanced` and any configured agent default exist in `llm_router_aliases`.
 3. The new vault variables are present (`no_log`).
 4. Exposure: no `hus-sky.no` name resolves to a public address (R-012), otherwise the deploy fails.
-5. LAB: no `NTFY_TOKEN` is rendered, and `lab_inventory` agrees with `deploy_environment`.
+5. LAB (`deploy_environment=lab`): no `NTFY_TOKEN` is rendered; a `lab_inventory` is never paired with a prod deploy.
 6. Every `hermes_mcp_servers` URL parses to host:port, which the egress rules need.

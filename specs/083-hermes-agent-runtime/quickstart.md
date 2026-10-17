@@ -4,8 +4,10 @@ Every Ansible run goes through the pipeline. The dev box has no SSH to the LXCs 
 deploy runs `lxc-deploy-lab` → `lxc-promote-*` → `lxc-apply-prod`. Commands below that run *on the
 Hermes LXC* are run from the PVE host (`pct exec <vmid> -- …`) or in a pipeline step.
 
-A laptop run must pass `-e deploy_environment=lab|prod`. It defaults to `prod`; a LAB run that
-forgets it fails the preflight, because the LAB inventory's `lab_inventory: true` disagrees.
+A laptop run must pass `-e deploy_environment=lab|prod`. It defaults to `prod`, and a forgotten
+flag on a LAB run is indistinguishable from PROD (research R-011). The pipeline always passes it.
+Per backlog 067 the LAB stage deploys the real Hermes LXC, so LAB checks run on the production
+machine, without the ntfy token.
 
 Contracts: [agent-runtime.md](./contracts/agent-runtime.md),
 [egress-allowlist.md](./contracts/egress-allowlist.md). Entities: [data-model.md](./data-model.md).

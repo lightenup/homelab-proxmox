@@ -52,7 +52,8 @@ hermes_agent_heartbeat_dir: "/var/lib/hermes-agent-heartbeat"
 # key_env convention). Empty today — a job that needs a secret is the one case where adding
 # a job costs a deploy change (spec Edge Cases).
 hermes_agent_env_passthrough: []
-# R-011: operational only when BOTH the inventory and the environment say PROD, so a laptop
-# LAB run that forgets `-e deploy_environment=lab` is still non-operational. Gates the ntfy
-# token, the heartbeat job and the heartbeat mount.
+# R-011: operational when the deploy says PROD. The pipeline's LAB stage runs against the
+# SAME inventory as PROD (backlog 067), passing only `-e deploy_environment=lab`, so that flag
+# is the signal; `lab_inventory` (the 10.99.x rig) can only ever make it false. Gates the
+# ntfy token, the heartbeat job and the heartbeat mount.
 hermes_agent_operational: "{{ not (lab_inventory | default(false) | bool) and (deploy_environment | default('prod')) == 'prod' }}"
