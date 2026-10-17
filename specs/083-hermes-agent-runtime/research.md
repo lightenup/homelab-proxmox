@@ -207,7 +207,14 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   NTFY_MARKDOWN=true
   ```
 
-- **Unknown**: how the adapter behaves when its subscription is refused. The observed backoff is
+- **Observed on LAB with no token [Q-L7, 2026-10-17, LXC 110, agent up 624 s]**: the subscription is
+  refused with **403** (not 401). Retries follow `[2, 5, 10, 30, 60]` s and settle at one warning per
+  minute: 14 lines in 10 minutes, no tight loop. A script job with `--deliver ntfy` runs its script
+  and then records `ran, but the result was not delivered (delivery error: ntfy HTTP 403 …)`; the
+  server refused the publish, so nothing can have reached the phone. A delivery failure is therefore
+  visible on the job, not silent. Not yet observed: the same path on PROD with the write-only token
+  (Q-P2), where the subscription is refused but publishing must succeed.
+- **Unknown (now answered above for LAB)**: how the adapter behaves when its subscription is refused. The observed backoff is
   bounded (`[2, 5, 10, 30, 60]` s, `RECONNECT_BACKOFF`), so a refused subscription should settle into
   the 60 s retry cadence rather than a tight loop — to be confirmed by Q-L7. Cron delivery uses a
   standalone sender that opens its own HTTP connection **[doc]**, so delivery should not depend on

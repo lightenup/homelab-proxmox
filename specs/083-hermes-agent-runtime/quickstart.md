@@ -28,6 +28,7 @@ Contracts: [agent-runtime.md](./contracts/agent-runtime.md),
 | Q-L2 | 2026-10-17 | PASS — read-only config starts cleanly once `_config_version` is stamped; approvals `manual/deny/deny/300` loaded; the LAB deploy's health wait passed (run 39042576752) |
 | Q-L6 | 2026-10-17 | PASS — LAB deploy run 39041787329: searxng, llm-router, MCP and reverse-proxy connected; Proxmox :8006, NAS :5000, router :80 and the LXC's :9100 refused |
 | Q-L10 | 2026-10-17 | PASS — peak LXC used memory 2130 MB of 6144 MB (34.7 %) under concurrent agent turn + Whisper + SpeechT5; no resize. See research "Observed in the pinned image" |
+| Q-L7 | 2026-10-17 | PASS — no token: subscribe 403 with 60 s steady-state retry (14 lines / 10 min); `--deliver ntfy` job ran but was refused (`ntfy HTTP 403`); nothing sent. LAB reached `ntfy.hus-sky.no`, so it was exercised, not skipped. Also found and disabled the gateway's restart notices (research R-006) |
 | Note | | LAB deploys the production LXC (backlog 067), so these ran on the real machine, without the ntfy token |
 
 ## LAB checks (deploy gate, no phone traffic)
