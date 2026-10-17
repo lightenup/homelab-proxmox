@@ -49,10 +49,10 @@ smtp_port: 587
 pushover_enabled: true
 # ntfy dual delivery (spec 082, contracts/alertmanager-webhook.md). When true, each
 # Pushover receiver also posts to the ntfy webhook. Keep false until the template has
-# been validated against synthetic payloads (tasks T033) — a broken template would put
+# been validated against synthetic payloads (T033, passed 2026-10-17) — a broken template would put
 # malformed alerts on the phone for the whole trial window.
 # ntfy_alertmanager_token → group_vars/services/vault.yml
-ntfy_enabled: false
+ntfy_enabled: true
 
 # Backup configuration
 backup_retention_days: 30
