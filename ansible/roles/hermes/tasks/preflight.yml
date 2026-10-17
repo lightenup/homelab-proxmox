@@ -196,8 +196,8 @@
       - item.url is url
       - item.url | urlsplit('hostname') is defined
       - item.url | urlsplit('hostname') | length > 0
-      - item.url | urlsplit('port') is defined
-      - item.url | urlsplit('port') | length > 0
+      - item.url | urlsplit('port') is not none
+      - item.url | urlsplit('port') | int > 0
     fail_msg: >-
       MCP server '{{ item.name }}' has an enabled entry whose URL
       ('{{ item.url }}') does not parse to a host and a port. The egress allowlist derives

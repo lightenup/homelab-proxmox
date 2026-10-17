@@ -113,6 +113,13 @@
 # (pin, credentials, URLs); this checks the OUTPUT — the rendered compose — so a template
 # regression that re-adds a port, a privilege or a socket mount fails the deploy before
 # docker_compose_v2 ever runs.
+# slurp, not lookup('file'): lookups run on the controller, and the compose file was
+# rendered on the target.
+- name: Read the rendered compose file
+  ansible.builtin.slurp:
+    src: "{{ hermes_install_dir }}/docker-compose.yml"
+  register: hermes_compose_rendered
+
 - name: Assert the rendered agent service is confined (FR-004, FR-007)
   ansible.builtin.assert:
     that:
@@ -127,7 +134,7 @@
       no privileged mode, no cap_add, no Docker socket mount, and sit only on the `agent`
       network (spec 083 FR-004/FR-007/FR-008). Fix docker-compose.yml.j2 before deploying.
   vars:
-    hermes_compose: "{{ lookup('ansible.builtin.file', hermes_install_dir ~ '/docker-compose.yml') }}"
+    hermes_compose: "{{ hermes_compose_rendered.content | b64decode }}"
 
 # --- Egress allowlist (spec 083, FR-008) — must be live before the agent starts ---
 #
