@@ -2,7 +2,7 @@
 
 **Feature Branch**: `083-hermes-agent-runtime`
 **Created**: 2026-10-16
-**Status**: Draft — ready for `/speckit.specify`. Depends on [`082`](./082-ntfy-push-service.md) (push channel). Amends [`065`](./065-hermes-service.md).
+**Status**: Draft — ready for `/speckit-specify`. Its dependency [`082`](./082-ntfy-push-service.md) (push channel) is **implemented and live since 2026-10-17**. Amends [`065`](./065-hermes-service.md).
 **Input**: Add the upstream **Hermes Agent** (Nous Research) to the Hermes LXC as a second backend
 behind the existing Open WebUI, so that (a) chats can use a full agent with terminal, tools and
 memory, and (b) **any scheduled job is one script plus one `hermes cron create` line**, delivered
@@ -292,8 +292,17 @@ already reported.
 
 ## Dependencies
 
-- **`082`** — ntfy server and the `hermes` publisher token (FR-011). Hard dependency for
-  delivery; the runtime itself could be deployed first with `--deliver local`.
+- **`082`** — **done, live since 2026-10-17.** The interface to code against is
+  [`specs/082-ntfy-push-service/contracts/publisher-interface.md`](../../specs/082-ntfy-push-service/contracts/publisher-interface.md).
+  - **Credentials**: `POST https://ntfy.hus-sky.no/hermes` with `Authorization: Bearer
+    {{ ntfy_hermes_token }}` (vault `group_vars/services/vault.yml`). The token is write-only on
+    `hermes` and refused everywhere else (082 SC-002, 20/20).
+  - **Phone**: the owner's phone is already subscribed to `hermes`.
+  - **Limits**: 32 KB per message, cached for 72 h. Read the publisher contract for the
+    responses a sender must handle.
+  - **Still unproven**: 082 never published *from the Hermes LXC* (T026 accepted without
+    running, because the dev box has no SSH there). 083's own tests must prove the path
+    Hermes LXC → Caddy → ntfy.
 - **`064`** — a new client entry (FR-008).
 - **`local-llm`** — done: `scan --quiet` and `scout/hermes-cron.sh` are on `main` (`d7f6a4a`).
   Its webhook/Pushover `--notify` path stays as the non-Hermes alternative.
@@ -330,20 +339,26 @@ Facts taken from upstream documentation, not yet observed in this estate:
 
 Everything needed is in two public repos; nothing depends on the session that wrote this.
 
-- **This repo**: `docs/backlog/082-ntfy-push-service.md` (do first) and this file. Start with
-  `/speckit.specify` on `082`, then on `083`. Decisions above are the owner's, recorded
+- **This repo**: this file. `082` is done (`specs/082-ntfy-push-service/`); start with
+  `/speckit-specify` on `083`. Decisions above are the owner's, recorded
   2026-10-16; do not re-open them without the owner.
 - **`github.com/lightenup/local-llm`** (public): `bench/model_scout.py`, `scout/scout.toml`
   (policy, each rule cites a FINDINGS section), `scout/setup.json` (the Mac's exported
   architectures and model sizes — refreshed on the Mac with `model_scout.py export`),
   `scout/hermes-cron.sh`, `docs/SCOUT.md`, tests in `tests/test_model_scout.py`
   (`python3 -m unittest discover -s tests`).
-- **New vault entries** (none exist yet):
-  - `082`: `ntfy_owner_password_hash`, `ntfy_owner_token`, `ntfy_alertmanager_token`,
-    `ntfy_hermes_token`.
-  - `083`: `llm_router_client_hermes_agent_key` (minted by `virtual_keys.yml` from this value),
+- **Vault entries**:
+  - `082` (exist since 2026-10-17): `ntfy_owner_password_hash`, `ntfy_owner_token`,
+    `ntfy_alertmanager_password_hash`, `ntfy_alertmanager_token`, `ntfy_hermes_password_hash`,
+    `ntfy_hermes_token`. 083 reads only `ntfy_hermes_token`.
+  - `083` (new): `llm_router_client_hermes_agent_key` (minted by `virtual_keys.yml` from this value),
     `hermes_agent_api_server_key`.
-- **Owner-side steps that cannot be automated**: ntfy Android app login and subscriptions,
-  Tailscale always-on VPN and battery exemption on the phone (`082` FR-011).
+- **Owner-side phone setup**: done in `082` (app login as `owner`, subscriptions to `alerts` and
+  `hermes`, WebSockets, battery exemption, Tailscale always-on;
+  `docs/runbooks/ntfy-phone-setup.md`). Nothing new is needed for 083.
+- **Deploy constraints learned in `082`**: the Linux dev box has no SSH to the LXCs, so every
+  Ansible run goes through the pipeline (`lxc-deploy-lab` → `lxc-promote-*` → `lxc-apply-prod`).
+  Monitoring changes need the prod path with `allow_override_failed_lab_gate=true` (backlog
+  `072`).
 - **Do not** enable the agent's inbound ntfy topic (FR-011), publish `:8642`, or run the dashboard
   on a LAN address (FR-004/005).

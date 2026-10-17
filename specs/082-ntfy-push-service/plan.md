@@ -157,3 +157,23 @@ rather than a new role. Nothing is added to `terraform/main.tf`.
 ## Complexity Tracking
 
 No violations to justify.
+
+## Outcome (2026-10-17)
+
+Delivered as planned, with these deviations and findings:
+
+- **Code fixes found before or during deploy** (Phases 8–11 in `tasks.md`): the `server.yml` auth
+  lists and the alert template's file format; the `NtfyDown` rule shape; the ACL script's read
+  path; `loop:` indentation in preflight; the forbidden-key gate made check-mode safe and run
+  before start; the Alertmanager comment made a Jinja comment so the gate-off render stays
+  byte-identical.
+- **No SSH from the dev box to any LXC.** Every Ansible run went through the pipeline: the ntfy
+  role via `lxc-deploy-lab`/promote/apply, Caddy via `lxc-deploy-lab` with service
+  `reverse_proxy`, and monitoring via `lxc-promote-prod` with the LAB-gate override.
+  Verification ran over HTTP: Prometheus and Alertmanager APIs, and ntfy through Caddy. T026
+  and T041 were accepted without running.
+- **R-005 resolved in favour of the shared receiver**: Pushover latency was identical with ntfy
+  down and up (31 s each).
+- **WebSockets** in the Android app work through Caddy unchanged and are now in the runbook.
+- **Trial (SC-006)** runs from 2026-10-17 to 2026-11-14. After that, decide whether to drop
+  Pushover.

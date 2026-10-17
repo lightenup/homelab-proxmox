@@ -4,7 +4,8 @@
 
 **Created**: 2026-10-16
 
-**Status**: Draft
+**Status**: Implemented — live on PROD since 2026-10-17. Dual delivery with Pushover in a 4-week
+trial until 2026-11-14 (SC-006, `trial-report.md`)
 
 **Input**: User description: "082-ntfy-push-service.md" — the backlog entry
 [`docs/backlog/082-ntfy-push-service.md`](../../docs/backlog/082-ntfy-push-service.md): run a

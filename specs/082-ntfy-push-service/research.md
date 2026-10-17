@@ -76,6 +76,13 @@ Templates are loaded from `template-dir` (default `/etc/ntfy/templates`) and sel
   Jinja and Alertmanager.
 - *verify on LAB*: render all four rows of the table with a synthetic payload (quickstart § 3).
 
+- **Template file format (learned in implementation)**: ntfy parses the file as YAML first and then
+  executes each of `title`, `message` and `priority` as a separate Go template, so the keys
+  cannot share variables. The payload is a generic map, so fields use the raw Alertmanager JSON
+  keys (`.status`, `.commonLabels.severity`, `.groupLabels.alertname`, `.truncatedAlerts`), not
+  Go-struct casing, and JSON numbers are floats (`gt .truncatedAlerts 0.0`). Verified against
+  v2.28.0 with `drills/payloads/` (8/8).
+
 ## R-004 — Template body size limit
 
 **Finding**: `handlePublishWithoutResponse` peeks the request body with
@@ -112,6 +119,10 @@ can exceed 4 KB.
   assumed*. It is a **drill**: stop ntfy, fire a critical test alert, and time Pushover delivery
   against its usual time (quickstart § 5). If the drill shows a delay, the fallback is to move the
   webhook to a separate receiver on a `continue: true` sibling route.
+- **Outcome (drill 2026-10-17, T040)**: with `ntfy-lxc` shut down, Pushover delivered a critical
+  test alert in 31 s, identical to the 31 s baseline with ntfy up. `NtfyDown` reached Pushover,
+  and the missed ntfy copies arrived through Alertmanager's retries after restart. **The shared
+  receiver stays; the fallback is not needed** (`drills/failure-independence.md`).
 - **Self-alerting**: `NtfyDown` (critical) is routed like every other critical alert and reaches
   Pushover. Its copy to ntfy fails and retries, which is harmless. ntfy is never the only path for
   news of its own outage.
@@ -154,9 +165,10 @@ can exceed 4 KB.
 - **Finding**: `upstream-base-url` defaults to `""` in v2.28.0 (`cmd/serve.go`). The setting is
   only needed for iOS through ntfy.sh. `firebase-key-file` defaults to none. Web push needs
   explicitly generated VAPID keys.
-- **Decision**: Set none of these. The rendered `server.yml` is checked by a preflight assertion
-  that fails the deploy if `upstream-base-url` or `firebase-key-file` appears, which makes FR-004 a
-  tested invariant rather than a default.
+- **Decision**: Set none of these. The role renders `server.yml` in memory and asserts, before the
+  stack starts, that none of `upstream-base-url`, `upstream-access-token`, `firebase-key-file`,
+  `web-push-*`, `smtp-sender-*` or `twilio-*` appears. That makes FR-004 a tested invariant rather
+  than a default, and the check also holds under `--check` and on a fresh LXC.
 - The Android app uses its own persistent connection to a self-hosted server ("instant delivery")
   in both the Play and F-Droid builds, so it does not need Firebase for a non-ntfy.sh server.
 
@@ -214,3 +226,8 @@ tailnet is what every `hus-sky.no` service already requires, and `docs/tailscale
 grants `192.168.1.0/24:*`. The live policy is not in the repo, so quickstart § 4 confirms the phone's
 reach before any delivery test. The runbook covers app setup, the battery exemption, and checking the app's
 "instant delivery" state.
+
+- **Outcome (2026-10-17, T037)**: tailnet reach confirmed. Delivery on mobile data with the app
+  closed took 7 s (twice), and again 7 s after switching the app to **WebSockets**, which the
+  app recommends for battery and Caddy proxies without extra config. A message sent during a
+  5½-minute Tailscale gap was delivered within a minute of reconnecting.

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `082-ntfy-push-service`
 **Created**: 2026-10-16
-**Status**: Specced → [`specs/082-ntfy-push-service/`](../../specs/082-ntfy-push-service/). Independent; ships before [`083`](./083-hermes-agent-runtime.md), which depends on it.
+**Status**: **Implemented** — live on PROD since 2026-10-17 ([`specs/082-ntfy-push-service/`](../../specs/082-ntfy-push-service/)). Dual delivery with Pushover in a 4-week trial until 2026-11-14. Unblocks [`083`](./083-hermes-agent-runtime.md).
 **Input**: Run **ntfy** on its own LXC as the estate's push channel to the owner's Android phone.
 Two publishers from the start: **Alertmanager** (alongside Pushover, not replacing it) and the
 **Hermes Agent** scheduler from `083`. LAN and tailnet only, like every other service. Delivered as
