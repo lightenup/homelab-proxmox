@@ -159,6 +159,12 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   zeros, which does not change model memory. The cgroup figure (about 6.0 GB) is page cache and is not
   a pressure signal. Side finding: SpeechT5 is not cached in Open WebUI, so the first spoken reply
   downloads it, and the cold load took about 99 s.
+- **Scheduler timezone**: the container has no `TZ` and the config `timezone` defaults to empty, i.e. UTC,
+  so a cron expression is evaluated in UTC (a job created at 16:01 UTC reported `Next run …T07:30:00+00:00`).
+  `timezone` (or `HERMES_TIMEZONE`) takes an IANA name; verified in the pinned image that
+  `timezone: "Europe/Oslo"` makes `hermes_time.now()` Oslo-local. The rendered config sets it from
+  `{{ timezone | default('Europe/Oslo') }}`, the estate's existing convention. Existing jobs keep their
+  stored `next_run_at` until re-saved.
 - **API contract**: `/v1/models` without a key or with a wrong key → 401; with the key → `["hermes-agent"]`.
 - **Script-only jobs** (`--no-agent --deliver local`): output is delivered; empty output is recorded as
   `silent (empty output)`; a non-zero exit is recorded as `script failed` ("Script exited with code 3").

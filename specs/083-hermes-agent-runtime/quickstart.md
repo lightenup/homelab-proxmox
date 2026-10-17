@@ -30,7 +30,7 @@ Contracts: [agent-runtime.md](./contracts/agent-runtime.md),
 | Q-L10 | 2026-10-17 | PASS — peak LXC used memory 2130 MB of 6144 MB (34.7 %) under concurrent agent turn + Whisper + SpeechT5; no resize. See research "Observed in the pinned image" |
 | Q-L7 | 2026-10-17 | PASS — no token: subscribe 403 with 60 s steady-state retry (14 lines / 10 min); `--deliver ntfy` job ran but was refused (`ntfy HTTP 403`); nothing sent. LAB reached `ntfy.hus-sky.no`, so it was exercised, not skipped. Also found and disabled the gateway's restart notices (research R-006) |
 | Q-P1 | 2026-10-17 | PASS — `hermes` PROD apply 39047151905 (promote 39046881454, `7369da3`): exposure gate, confinement assertion, health wait and all 8 egress probes green, `failed=0`. `llm-router` PROD apply 39046516486 first. |
-| Q-P2 | 2026-10-17 | PARTIAL — `NTFY_TOKEN` set and heartbeat mount present after the apply; subscribe refused with 403 on the 2/5/10/30/60 s backoff (6 lines in 2 min), no restart notice; `hermes send --to ntfy "083 path test"` returned `success: true`, ntfy message id `KtARnzvjTLVZ`. Phone receipt: pending owner confirmation. `hermes cron list` is empty until US4 creates `heartbeat` (T038) |
+| Q-P2 | 2026-10-17 | PASS — `NTFY_TOKEN` set and heartbeat mount present after the apply; subscribe refused with 403 on the 2/5/10/30/60 s backoff (6 lines in 2 min), no restart notice; `hermes send --to ntfy "083 path test"` returned `success: true`, ntfy message id `KtARnzvjTLVZ`. Phone receipt: confirmed by owner. `hermes cron list` is empty until US4 creates `heartbeat` (T038) |
 | Note | | LAB deploys the production LXC (backlog 067), so these ran on the real machine, without the ntfy token |
 
 ## LAB checks (deploy gate, no phone traffic)
@@ -74,6 +74,13 @@ cd /tmp && git clone https://github.com/lightenup/local-llm && \
 hermes cron create "30 7 * * *" --no-agent --script model-scout.sh --deliver ntfy --name model-scout
 hermes cron run model-scout
 ```
+
+Installed on PROD 2026-10-17 from `local-llm` commit `d7f6a4a0822009c944e21921d822e6c58dc21dc4`
+(script sha256 `c72f93c8…f6729`, fetched at that commit rather than `main`): job `model-scout`
+(`2f76dd46f0cd`), `30 7 * * *`, `--no-agent --deliver ntfy`, no repository change. The agent's clock is
+UTC unless `timezone` is set (research "Observed in the pinned image"), so this job's first schedule fired
+at 07:30 UTC until the `timezone: Europe/Oslo` config deploys; re-save the schedule afterwards
+(`hermes cron edit model-scout --schedule "30 7 * * *"`) so `next_run_at` is recomputed.
 
 ### Adding a second job (SC-001)
 

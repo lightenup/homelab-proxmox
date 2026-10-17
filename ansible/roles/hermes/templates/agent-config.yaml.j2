@@ -28,6 +28,10 @@ model:
   # 256k. Taken from the alias definition, so the two cannot drift (smallest deployment wins).
   context_length: {{ (llm_router_aliases | selectattr('name', 'equalto', hermes_agent_default_model) | first).deployments | map(attribute='context_window') | min }}
 
+# Scheduler clock. Empty means the container's UTC, so "30 7 * * *" would fire at 09:30 Oslo
+# (08:30 after the clocks change). The estate convention is Europe/Oslo (financial_scenario).
+timezone: "{{ timezone | default('Europe/Oslo') }}"
+
 # Approvals (FR-002, R-004). manual = always prompt; the non-interactive surfaces (cron
 # jobs, the API server — i.e. every Open WebUI request) fail closed to deny. timeout is
 # upstream's default, stated explicitly.
