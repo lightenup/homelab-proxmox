@@ -439,46 +439,41 @@
       - hermes_open_webui
       - python3
       - "-c"
-      - |
-        import json, sqlite3, sys, time
-
-        desired = json.loads(sys.stdin.read())
-        con = sqlite3.connect('/app/backend/data/webui.db', timeout=5)
-        con.execute('PRAGMA busy_timeout=5000')
-
-        cols = [r[1] for r in con.execute('PRAGMA table_info(config)')]
-        if 'key' not in cols or 'value' not in cols:
-            sys.exit('SCHEMA DRIFT: config table has columns %s; expected key/value. '
-                     'Refusing to write.' % cols)
-
-        changed = []
-        now = int(time.time())
-        for key, want in sorted(desired.items()):
-            row = con.execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()
-            current = None
-            if row and row[0] is not None:
-                try:
-                    current = json.loads(row[0])
-                except (TypeError, ValueError):
-                    current = row[0]
-            if current == want:
-                continue
-            con.execute(
-                'INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?) '
-                'ON CONFLICT(key) DO UPDATE SET value=excluded.value, '
-                'updated_at=excluded.updated_at',
-                (key, json.dumps(want), now),
-            )
-            changed.append(key)
-        if changed:
-            con.commit()
-        con.close()
-        print('CHANGED ' + ','.join(changed) if changed else 'UNCHANGED')
+      - "{{ lookup('ansible.builtin.file', 'reconcile_config.py') }}"
     stdin: "{{ hermes_managed_config | to_json }}"
   register: hermes_config_reconcile
   # Exact prefix, not `in`: 'CHANGED' is a substring of 'UNCHANGED'.
   changed_when: hermes_config_reconcile.stdout is match('^CHANGED')
   notify: Restart hermes
+
+
+# The model connections (083 US2, R-010): the gateway stays at index 0 (the default) and the
+# agent is the second. Same PersistentConfig problem and the same script, but the values
+# include the connection keys, so this task is no_log and fed on stdin; Ansible would otherwise
+# echo them on failure. The one exception to "secrets are absent from hermes_managed_config".
+- name: Reconcile the Open WebUI model connections
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "-i"
+      - hermes_open_webui
+      - python3
+      - "-c"
+      - "{{ lookup('ansible.builtin.file', 'reconcile_config.py') }}"
+    stdin: "{{ hermes_openai_connections | to_json }}"
+  vars:
+    hermes_openai_connections:
+      openai.api_base_urls:
+        - "{{ hermes_gateway_base_url }}"
+        - "{{ hermes_agent_api_base_url }}"
+      openai.api_keys:
+        - "{{ llm_router_client_hermes_key }}"
+        - "{{ hermes_agent_api_server_key }}"
+  register: hermes_connections_reconcile
+  changed_when: hermes_connections_reconcile.stdout is match('^CHANGED')
+  notify: Restart hermes
+  no_log: true
 
 - name: Reconcile the persisted MCP tool-server registrations
   ansible.builtin.command:

@@ -315,6 +315,9 @@ hermes_embedding_batch_size: 128
 # Secrets are deliberately ABSENT. rag.openai.api_key and the reranker key were seeded
 # correctly on first boot and have never needed changing; managing them here would mean
 # putting credentials through another code path for a case that has not occurred.
+# One exception (083 R-010): the model connections (openai.api_base_urls/api_keys) must
+# change for the agent connection to appear at all, so they are reconciled in a separate
+# no_log task fed on stdin ("Reconcile the Open WebUI model connections"), not listed here.
 hermes_managed_config:
   # Security posture — a silent reversion here is the one that actually matters (FR-003).
   ui.enable_signup: "{{ hermes_enable_signup }}"

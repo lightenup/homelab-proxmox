@@ -379,6 +379,11 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   - Unlike the existing managed keys, this set contains secrets, so it is reconciled in a separate
     `no_log` task fed on stdin. 065's rule "secrets deliberately absent from managed config" is
     amended for this one case, because without it the connection never appears on an existing deploy.
+- **MCP single source (T030, FR-011)** [repo]: the agent config, the egress script and Open WebUI's
+  `hermes_tool_server_connections` all iterate `hermes_mcp_servers`. The agent and the egress chain
+  take `selectattr('enabled')`. Open WebUI registers every entry with `config.enable: item.enabled`,
+  so a disabled server is off in both places. The Open WebUI fact is not reused for the agent: it
+  has Open WebUI's shape and carries bearer tokens (`no_log`).
 - **Automations**:
   - First list existing automations from the `automation` table (expected none, FR-015).
   - Then set `ENABLE_AUTOMATIONS=false`, drop `AUTOMATION_MIN_INTERVAL` and the

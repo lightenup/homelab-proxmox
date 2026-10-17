@@ -74,8 +74,10 @@ services:
       WEBUI_ADMIN_PASSWORD: "{{ hermes_admin_password_bootstrap }}"
 
       # --- Gateway backend (FR-007) — the 064 gateway, one credential, never a raw model ID ---
-      OPENAI_API_BASE_URL: "{{ hermes_gateway_base_url }}"
-      OPENAI_API_KEY: "{{ llm_router_client_hermes_key }}"
+      # Two connections (083 US2): the gateway at index 0 stays the default, the agent second.
+      # Seeds a fresh deploy only; "Reconcile the Open WebUI model connections" owns them after.
+      OPENAI_API_BASE_URLS: "{{ hermes_gateway_base_url }};{{ hermes_agent_api_base_url }}"
+      OPENAI_API_KEYS: "{{ llm_router_client_hermes_key }};{{ hermes_agent_api_server_key }}"
       # Upstream enables an Ollama integration by default, pointed at
       # host.docker.internal:11434. Nothing here runs Ollama — every model arrives through the
       # 064 gateway (FR-007) — so it polled a host that does not exist and logged a connection
@@ -90,7 +92,7 @@ services:
       # --- Retrieval (FR-015, FR-016, research R-002) — embeddings AND reranking run on the
       # inference host, reached through the SAME gateway credential as chat. Both
       # RAG_OPENAI_* variables are set explicitly and unconditionally: they do NOT reliably
-      # inherit from OPENAI_API_BASE_URL/OPENAI_API_KEY (upstream open-webui#22084) — left
+      # inherit from the OPENAI_API_* connection (upstream open-webui#22084) — left
       # unset, retrieval silently reaches api.openai.com. preflight.yml asserts this pair.
       RAG_EMBEDDING_ENGINE: "openai"
       RAG_EMBEDDING_MODEL: "{{ hermes_embedding_alias }}"
