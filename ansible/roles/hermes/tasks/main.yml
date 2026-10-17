@@ -70,7 +70,9 @@
 - name: Expose the heartbeat file to node_exporter
   ansible.builtin.file:
     src: "{{ hermes_agent_heartbeat_dir }}/hermes_agent.prom"
-    dest: "{{ node_exporter_textfile_directory }}/hermes_agent.prom"
+    # Same fallback as backup_hermes.sh.j2: node_exporter_textfile_directory is a default of
+    # the node_exporter role, which this play does not include.
+    dest: "{{ node_exporter_textfile_directory | default('/var/lib/node_exporter/textfile_collector') }}/hermes_agent.prom"
     state: link
     force: true
     follow: false
