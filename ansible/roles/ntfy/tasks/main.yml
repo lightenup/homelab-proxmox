@@ -54,17 +54,17 @@
   ansible.builtin.assert:
     that:
       - ntfy_server_yml_rendered is not search(item)
-    loop:
-      - "upstream-base-url"
-      - "upstream-access-token"
-      - "firebase-key-file"
-      - "web-push-"
-      - "smtp-sender-"
-      - "twilio-"
     fail_msg: >-
       Forbidden key '{{ item }}' found in rendered server.yml.
       Message content must not leave the estate (FR-004, research R-009).
-    no_log: true
+  loop:
+    - "upstream-base-url"
+    - "upstream-access-token"
+    - "firebase-key-file"
+    - "web-push-"
+    - "smtp-sender-"
+    - "twilio-"
+  no_log: true
 
 - name: Ensure ntfy stack is running
   community.docker.docker_compose_v2:
