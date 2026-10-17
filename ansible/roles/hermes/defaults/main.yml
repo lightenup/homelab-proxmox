@@ -16,11 +16,6 @@ hermes_whisper_model: "base"
 # must be set explicitly for FR-023 to hold.
 hermes_tts_engine: "transformers"
 
-# Automations (FR-025). The minimum recurrence interval a scheduled prompt may declare, in
-# seconds — a misconfigured schedule must not be able to exhaust the gateway's request
-# allowance by itself (contracts/gateway-usage.md § Rate discipline).
-hermes_automation_min_interval: 300
-
 # Reverse-proxy origin. Used for WEBUI_URL (PWA manifest, email links) — never localhost or
 # an internal IP, since the owner reaches this exclusively through hermes.hus-sky.no.
 hermes_public_url: "https://hermes.{{ caddy_base_domain }}"

@@ -130,10 +130,9 @@ services:
       # surface: a per-user API key, never the bare endpoint (FR-002, FR-004).
       ENABLE_API_KEYS: "true"
 
-      # --- Scheduled prompts (FR-025) — bounded so a misconfigured schedule cannot exhaust
-      # the gateway's request allowance on its own (contracts/gateway-usage.md).
-      ENABLE_AUTOMATIONS: "true"
-      AUTOMATION_MIN_INTERVAL: "{{ hermes_automation_min_interval }}"
+      # --- Scheduled prompts — retired (083 US3, FR-015): the agent's scheduler is the one
+      # place jobs run. Persisted as automations.enable, so hermes_managed_config owns it too.
+      ENABLE_AUTOMATIONS: "false"
     restart: unless-stopped
     depends_on:
       - searxng

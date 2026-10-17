@@ -151,6 +151,44 @@
   # Facts land in hostvars, and a future auth: bearer entry puts a real token in this one.
   no_log: true
 
+# Retiring Open WebUI Automations (083 US3, FR-015): list any that exist and stop, rather than
+# switch the feature off underneath them. Moving or deleting one is an owner decision. Skips on
+# a first deploy (no container yet) and on a database without the table.
+- name: List existing Open WebUI automations
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - hermes_open_webui
+      - python3
+      - "-c"
+      - |
+        import json, sqlite3
+        con = sqlite3.connect('/app/backend/data/webui.db', timeout=5)
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='automation'").fetchone():
+            print('[]')
+        else:
+            rows = con.execute('SELECT name, data, is_active FROM automation').fetchall()
+            print(json.dumps([{'name': n, 'schedule': (json.loads(d or '{}').get('rrule') or ''),
+                               'active': bool(a)} for n, d, a in rows]))
+  register: hermes_automations
+  changed_when: false
+  failed_when:
+    - hermes_automations.rc != 0
+    - hermes_automations.stderr is not search('No such container|is not running')
+
+- name: Assert no Open WebUI automations remain (FR-015)
+  ansible.builtin.assert:
+    that:
+      - hermes_automations.stdout | from_json | length == 0
+    fail_msg: >-
+      Open WebUI still has {{ hermes_automations.stdout | from_json | length }} automation(s):
+      {% for a in hermes_automations.stdout | from_json %}'{{ a.name }}'
+      ({{ a.schedule | replace('\n', ' ') }}, active={{ a.active }}){{ '; ' if not loop.last }}{% endfor %}.
+      Move each to an agent job (`hermes cron create`) or delete it in Open WebUI, then deploy
+      again. The deploy will not disable Automations underneath them.
+  when: hermes_automations.rc == 0
+
 - name: Deploy docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
