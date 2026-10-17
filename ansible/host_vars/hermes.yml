@@ -32,6 +32,18 @@ monitoring_contract:
       description: !unsafe >-
         Hermes has been unreachable for more than 5 minutes. This is also the signal the
         front-page card reads (FR-017) — the owner's only route in is gone.
+    # Scheduler watchdog (US4, R-007). The heartbeat job refreshes the metric every 15 min; it
+    # ages past 1 h only if the agent's scheduler stopped ticking. absent() covers a job that
+    # was never created. Independent of ntfy: it goes through Alertmanager.
+    - alert: HermesAgentCronStale
+      expr: |
+        time() - hermes_agent_heartbeat_timestamp_seconds > 3600 or absent(hermes_agent_heartbeat_timestamp_seconds)
+      for: "5m"
+      severity: warning
+      summary: "Hermes agent scheduler is not ticking"
+      description: >-
+        The Hermes agent scheduler has not run its heartbeat for more than an hour. Scheduled
+        jobs are not running; this is a stopped scheduler, not a job that found nothing to report.
     # Backup staleness (US-4, data-model.md § Workspace state). The metric comes from
     # backup_hermes.sh via node_exporter's textfile collector, the same mechanism
     # llm-router's canary uses — no scrape_targets entry needed, it rides the existing

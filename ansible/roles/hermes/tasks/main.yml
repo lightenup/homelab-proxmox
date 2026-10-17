@@ -46,6 +46,36 @@
     group: "{{ hermes_agent_uid }}"
     mode: '0750'
 
+# Scheduler heartbeat (US4, R-007): PROD only. The container writes into its own directory;
+# node_exporter reads it through a symlink, so the agent never gets write access to the
+# shared textfile directory.
+- name: Ensure the agent heartbeat directory exists
+  ansible.builtin.file:
+    path: "{{ hermes_agent_heartbeat_dir }}"
+    state: directory
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0755'
+  when: hermes_agent_operational
+
+- name: Install the heartbeat script
+  ansible.builtin.template:
+    src: agent-heartbeat.sh.j2
+    dest: "{{ hermes_agent_data_dir }}/scripts/heartbeat.sh"
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0755'
+  when: hermes_agent_operational
+
+- name: Expose the heartbeat file to node_exporter
+  ansible.builtin.file:
+    src: "{{ hermes_agent_heartbeat_dir }}/hermes_agent.prom"
+    dest: "{{ node_exporter_textfile_directory }}/hermes_agent.prom"
+    state: link
+    force: true
+    follow: false
+  when: hermes_agent_operational
+
 - name: Deploy the agent configuration (read-only mount source)
   ansible.builtin.template:
     src: agent-config.yaml.j2
@@ -325,6 +355,46 @@
   loop: "{{ hermes_agent_egress_probe_blocked_results.results }}"
   loop_control:
     label: "{{ item.item.name }} ({{ item.item.host }}:{{ item.item.port }})"
+
+# The heartbeat job is Ansible-owned on PROD only (R-007, FR-014). Created only when absent,
+# so it is idempotent and safe after a restore (which brings the job back). Every other job is
+# owner content.
+- name: List the agent's scheduled jobs
+  ansible.builtin.command:
+    argv: [docker, exec, -u, hermes, hermes_agent, hermes, cron, list]
+  register: hermes_agent_jobs
+  changed_when: false
+
+- name: Create the heartbeat job (PROD only)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -u
+      - hermes
+      - hermes_agent
+      - hermes
+      - cron
+      - create
+      - every 15m
+      - --no-agent
+      - --script
+      - heartbeat.sh
+      - --deliver
+      - ntfy
+      - --name
+      - heartbeat
+  when:
+    - hermes_agent_operational
+    - hermes_agent_jobs.stdout is not search('(?m)^\\s+Name:\\s+heartbeat\\s*$')
+  changed_when: true
+
+- name: Assert no heartbeat job exists outside PROD (FR-014)
+  ansible.builtin.assert:
+    that:
+      - hermes_agent_jobs.stdout is not search('(?m)^\\s+Name:\\s+heartbeat\\s*$')
+    fail_msg: A heartbeat job exists on a non-operational deploy; remove it with `hermes cron remove`.
+  when: not hermes_agent_operational
 
 # TOOL_SERVER_CONNECTIONS is a PersistentConfig: seed_defaults() inserts a key "only if the
 # key is absent" — "Existing DB values take precedence over defaults." So the env var seeds
