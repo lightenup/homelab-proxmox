@@ -129,6 +129,89 @@
               {{ (hermes_restore_state.stdout | from_json).chat }} conversation(s),
               {{ (hermes_restore_state.stdout | from_json).config }} config rows.
 
+        # --- The agent leg (spec 083, R-009, SC-007) — on the extracted copy only. ---
+        - name: Assert the archive contains the agent directory and its manifest
+          ansible.builtin.stat:
+            path: "{{ hermes_restore_dir }}/{{ hermes_restore_basename }}/agent-manifest.sha256"
+          register: hermes_restored_agent_manifest
+          failed_when: not hermes_restored_agent_manifest.stat.exists
+
+        # SC-007's "scripts, memory and scout state intact": every non-SQLite file the backup
+        # saw, byte for byte. A live scout run would prove nothing — the live system is untouched.
+        - name: Verify the agent files against the manifest
+          ansible.builtin.command:
+            argv: [sha256sum, -c, --quiet, ../agent-manifest.sha256]
+            chdir: "{{ hermes_restore_dir }}/{{ hermes_restore_basename }}/agent"
+          changed_when: false
+
+        - name: Create a throwaway heartbeat directory for the drill
+          ansible.builtin.file:
+            path: "{{ hermes_restore_dir }}/heartbeat"
+            state: directory
+            owner: "{{ hermes_agent_uid }}"
+            group: "{{ hermes_agent_uid }}"
+            mode: '0755'
+
+        # A one-shot container: the restored copy only, no .env, no NTFY_*, no `gateway run`
+        # (so no scheduler and never two gateways on one directory) and no network, so a
+        # drill can never message the phone.
+        - name: List the restored agent's jobs
+          ansible.builtin.command:
+            argv:
+              - docker
+              - run
+              - --rm
+              - --network
+              - none
+              - -v
+              - "{{ hermes_restore_dir }}/{{ hermes_restore_basename }}/agent:/opt/data"
+              - "{{ hermes_agent_image }}"
+              - cron
+              - list
+          register: hermes_restored_jobs
+          changed_when: false
+
+        - name: Assert the restored agent has its jobs
+          ansible.builtin.assert:
+            that:
+              - hermes_restored_jobs.stdout is search('(?m)^\\s+Name:\\s+heartbeat\\s*$')
+              - hermes_restored_jobs.stdout is search('(?m)^\\s+Name:\\s+model-scout\\s*$')
+            fail_msg: "Restored agent is missing heartbeat or model-scout: {{ hermes_restored_jobs.stdout }}"
+
+        - name: Run the heartbeat job once on the restored agent
+          ansible.builtin.command:
+            argv:
+              - docker
+              - run
+              - --rm
+              - --network
+              - none
+              - -v
+              - "{{ hermes_restore_dir }}/{{ hermes_restore_basename }}/agent:/opt/data"
+              - -v
+              - "{{ hermes_restore_dir }}/heartbeat:/heartbeat"
+              - "{{ hermes_agent_image }}"
+              - cron
+              - run
+              - heartbeat
+          register: hermes_restored_run
+          changed_when: false
+
+        # `hermes cron runs` stays empty after a manual run (research "Observed in the pinned
+        # image"); the CLI line and the heartbeat file are the evidence.
+        - name: Read the drill heartbeat
+          ansible.builtin.stat:
+            path: "{{ hermes_restore_dir }}/heartbeat/hermes_agent.prom"
+          register: hermes_restored_heartbeat
+
+        - name: Assert the restored scheduler ran a job
+          ansible.builtin.assert:
+            that:
+              - hermes_restored_run.stdout is search('Ran now:\\s+succeeded')
+              - hermes_restored_heartbeat.stat.exists
+            fail_msg: "Restored agent did not run heartbeat: {{ hermes_restored_run.stdout }}"
+            success_msg: Restored agent lists its jobs and ran heartbeat; files match the manifest.
+
       always:
         - name: Tear down the restored instance
           community.docker.docker_compose_v2:

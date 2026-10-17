@@ -20,6 +20,9 @@ set -euo pipefail
 
 BACKUP_DIR="{{ hermes_backup_path }}"
 DATA_DIR="{{ hermes_data_dir }}/open-webui"
+AGENT_DIR="{{ hermes_data_dir }}/agent"
+# The agent image's UID (hermes role, hermes_agent_uid); not in scope in this role.
+AGENT_UID=10000
 INSTALL_DIR="{{ hermes_install_dir }}"
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
 
@@ -63,6 +66,14 @@ users = con.execute('select count(*) from user').fetchone()[0]
 print(f'  archive looks sound: {users} account(s), {chats} conversation(s)')
 PY
 
+# The agent leg (spec 083). Verified before anything stops, like webui.db above.
+HAS_AGENT=false
+if [ -d "$EXTRACTED/agent" ]; then
+    HAS_AGENT=true
+    echo "Verifying the agent files against agent-manifest.sha256..."
+    (cd "$EXTRACTED/agent" && sha256sum -c --quiet ../agent-manifest.sha256)
+fi
+
 echo "Stopping the stack..."
 docker compose -f "$INSTALL_DIR/docker-compose.yml" stop
 
@@ -76,6 +87,19 @@ echo "Installing the restored workspace..."
 mkdir -p "$DATA_DIR"
 tar -cf - -C "$EXTRACTED/open-webui" . | tar -xf - -C "$DATA_DIR"
 
+if [ "$HAS_AGENT" = true ]; then
+    AGENT_ASIDE="${AGENT_DIR}.superseded-${TIMESTAMP}"
+    if [ -d "$AGENT_DIR" ]; then
+        echo "Moving the current agent directory aside -> $AGENT_ASIDE"
+        mv "$AGENT_DIR" "$AGENT_ASIDE"
+    fi
+    echo "Installing the restored agent directory..."
+    mkdir -p "$AGENT_DIR"
+    tar -cf - -C "$EXTRACTED/agent" . | tar -xf - -C "$AGENT_DIR"
+    chown -R "$AGENT_UID:$AGENT_UID" "$AGENT_DIR"
+    chmod 0750 "$AGENT_DIR"
+fi
+
 # The model cache is deliberately absent from backups (re-downloadable). The app refetches
 # what it needs on first use; the first voice request after a restore will be slow.
 
@@ -87,6 +111,11 @@ for _ in $(seq 1 30); do
     if curl -fsS -o /dev/null "http://127.0.0.1:{{ hermes_port }}/health"; then
         echo "Restore complete and the workspace is healthy."
         echo "Previous workspace retained at: $ASIDE"
+        if [ "$HAS_AGENT" = true ]; then
+            echo "Previous agent directory retained at: ${AGENT_ASIDE:-none}"
+            echo "Now run the hermes deploy: it re-renders the agent's .env and config.yaml"
+            echo "from vault (never restored, FR-010) and reconciles the heartbeat job."
+        fi
         echo "Remove it yourself once you are satisfied with the restore."
         exit 0
     fi

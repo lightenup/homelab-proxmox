@@ -333,8 +333,10 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
 
 - **Backup**: `backup_hermes.sh` gains the agent's directory.
   - Every SQLite file under `{{ hermes_data_dir }}/agent` is snapshotted with
-    `sqlite3.Connection.backup()` inside `hermes_agent` (the same method as `webui.db`), and the rest
-    is tar-piped.
+    `sqlite3.Connection.backup()`, and the rest is tar-piped.
+    - **Implemented (T041)**: the snapshot runs with the host's `python3` (which Ansible already
+      requires), not inside `hermes_agent`. A backup must still work while the agent is down.
+      `audio_cache/`, `image_cache/` and `*.lock` are excluded as well.
   - Excluded: `.env` (re-rendered from vault), `config.yaml` (rendered by Ansible), `logs/`, `cache/`,
     and `-wal`/`-shm` files.
   - The scout's clone and state under `$HERMES_HOME` are included, because SC-007 needs the scout

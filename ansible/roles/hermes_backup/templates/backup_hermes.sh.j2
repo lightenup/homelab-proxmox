@@ -4,6 +4,7 @@ set -euo pipefail
 # Configuration
 BACKUP_DIR="{{ hermes_backup_path }}"
 DATA_DIR="{{ hermes_data_dir }}/open-webui"
+AGENT_DIR="{{ hermes_data_dir }}/agent"
 CONTAINER="hermes_open_webui"
 RETENTION_DAYS={{ hermes_backup_retention_days }}
 RETENTION_WEEKS={{ hermes_backup_retention_weeks }}
@@ -122,6 +123,66 @@ tar -cf - -C "$DATA_DIR" \
     . | tar -xf - -C "$WORK_DIR/open-webui"
 cp "$DATA_DIR/.backup-snapshot.db" "$WORK_DIR/open-webui/webui.db"
 docker exec "$CONTAINER" rm -f /app/backend/data/.backup-snapshot.db
+
+# The agent (spec 083, R-009): jobs, scripts, memory, skills, the scout's clone and state.
+#
+#   .env, config.yaml   Rendered from vault/Ansible by the deploy; never restored (FR-010).
+#   logs/ cache/        Regenerated. audio_cache/ and image_cache/ likewise.
+#   audio_cache/ image_cache/
+#   *.lock              Runtime locks of the live process.
+#   *-wal *-shm         Belong to the live databases, as with webui.db above.
+#   *.db *.sqlite*      Copied separately below as consistent snapshots.
+#
+# The SQLite snapshots run with the HOST python3 (Ansible's own requirement on this LXC),
+# not inside hermes_agent: the agent being down is exactly when a backup must still work.
+# agent-manifest.sha256 records every other file, so the drill proves scripts, memory and
+# scout state byte-identical without knowing where any of them live.
+if [ -d "$AGENT_DIR" ]; then
+    echo "Archiving the agent directory..."
+    mkdir -p "$WORK_DIR/agent"
+    tar -cf - -C "$AGENT_DIR" \
+        --exclude='./.env' \
+        --exclude='./config.yaml' \
+        --exclude='./logs' \
+        --exclude='./cache' \
+        --exclude='./audio_cache' \
+        --exclude='./image_cache' \
+        --exclude='*.lock' \
+        --exclude='*-wal' \
+        --exclude='*-shm' \
+        --exclude='*.db' \
+        --exclude='*.sqlite' \
+        --exclude='*.sqlite3' \
+        . | tar -xf - -C "$WORK_DIR/agent"
+    (cd "$WORK_DIR/agent" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum) \
+        > "$WORK_DIR/agent-manifest.sha256"
+
+    python3 - "$AGENT_DIR" "$WORK_DIR/agent" <<'PY'
+import os, shutil, sqlite3, sys
+src_root, dst_root = sys.argv[1], sys.argv[2]
+skip = {'logs', 'cache', 'audio_cache', 'image_cache'}
+for dirpath, dirnames, filenames in os.walk(src_root):
+    if dirpath == src_root:
+        dirnames[:] = [d for d in dirnames if d not in skip]
+    for name in filenames:
+        if not name.endswith(('.db', '.sqlite', '.sqlite3')):
+            continue
+        src = os.path.join(dirpath, name)
+        dst = os.path.join(dst_root, os.path.relpath(src, src_root))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(src, 'rb') as f:
+            is_sqlite = f.read(16) == b'SQLite format 3\x00'
+        if not is_sqlite:
+            shutil.copy2(src, dst)
+            continue
+        con = sqlite3.connect('file:%s?mode=ro' % src, uri=True)
+        out = sqlite3.connect(dst)
+        con.backup(out)
+        out.close()
+        con.close()
+        print('  snapshot', os.path.relpath(src, src_root))
+PY
+fi
 
 # Include the rendered compose file for reference.
 if [ -f "{{ hermes_install_dir }}/docker-compose.yml" ]; then
