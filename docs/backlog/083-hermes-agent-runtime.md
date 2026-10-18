@@ -2,7 +2,7 @@
 
 **Feature Branch**: `083-hermes-agent-runtime`
 **Created**: 2026-10-16
-**Status**: **Implemented** — live on PROD since 2026-10-18 ([`specs/083-hermes-agent-runtime/`](../../specs/083-hermes-agent-runtime/), [PR #247](https://github.com/lightenup/homelab-proxmox/pull/247)). Open follow-ups: one-time router check Q-P6 (T047) and the two-week review Q-P10 (T050, ~2026-11-01). Depends on [`082`](./082-ntfy-push-service.md); amends [`065`](./065-hermes-service.md).
+**Status**: **Implemented** — live on PROD since 2026-10-18 ([`specs/083-hermes-agent-runtime/`](../../specs/083-hermes-agent-runtime/), [PR #247](https://github.com/lightenup/homelab-proxmox/pull/247)). Open follow-up: the two-week review Q-P10 (T050, ~2026-11-01). Router check Q-P6 done: ISP Carrier-Grade NAT, so there is no inbound path. Depends on [`082`](./082-ntfy-push-service.md); amends [`065`](./065-hermes-service.md).
 **Input**: Add the upstream **Hermes Agent** (Nous Research) to the Hermes LXC as a second backend
 behind the existing Open WebUI, so that (a) chats can use a full agent with terminal, tools and
 memory, and (b) **any scheduled job is one script plus one `hermes cron create` line**, delivered
