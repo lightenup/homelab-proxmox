@@ -7,8 +7,10 @@ groups:
     interval: 30s
     rules:
       # FR-012: Generic service-down detection (replaces Uptime Kuma)
+      # Targets labelled no_down_alert="true" are excluded: hosts that are expected to vanish
+      # (the Mac's llm-queue, a laptop that sleeps) — set via prometheus_external_scrape_targets.
       - alert: ServiceDown
-        expr: up == 0
+        expr: up{no_down_alert!="true"} == 0
         for: 2m
         labels:
           severity: critical

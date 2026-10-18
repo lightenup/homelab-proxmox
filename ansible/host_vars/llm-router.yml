@@ -53,9 +53,25 @@ monitoring_contract:
         health checks. This is expected when the Mac is asleep or off the tailnet —
         informational only, not an incident (FR-009). Routed to Pushover at priority -1, so
         it is delivered silently rather than as a notification (043 FR-016).
+    # Client traffic only, and only while the Mac is present — changed 2026-10-18. Before,
+    # the canary's own three failed attempts against a sleeping Mac were the only deployment
+    # traffic in the window, so the ratio read 100% and this paged at critical ~6 minutes
+    # after every canary run (7 times in 3 days, the hourly canary at :38 → firing at :44).
+    # The canary and LiteLLM's internal health checks are excluded from both sides of the
+    # ratio, and the `and on()` clause requires the Mac's llm-queue to have answered every
+    # scrape across the window: real traffic failing against a Mac that is there. Mac-away
+    # stays covered by the silent LlmRouterLocalTierDown. Known gap: a Mac on the tailnet but
+    # off the home LAN is not scrapeable, so a breakage while travelling does not fire this.
     - alert: LlmRouterAllBackendsFailing
       expr: |
-        sum(rate(litellm_deployment_failure_responses_total[10m])) / (sum(rate(litellm_deployment_failure_responses_total[10m])) + sum(rate(litellm_deployment_success_responses_total[10m]))) > 0.9
+        (
+          sum(rate(litellm_deployment_failure_responses_total{api_key_alias!~"canary|litellm-internal-health-check"}[10m]))
+          / (
+            sum(rate(litellm_deployment_failure_responses_total{api_key_alias!~"canary|litellm-internal-health-check"}[10m]))
+            + sum(rate(litellm_deployment_success_responses_total{api_key_alias!~"canary|litellm-internal-health-check"}[10m]))
+          ) > 0.9
+        )
+        and on() min_over_time(up{job="llm-queue"}[10m]) == 1
       for: "10m"
       severity: critical
       summary: !unsafe "llm-router: over 90% of requests are failing across all deployments"
