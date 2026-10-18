@@ -101,6 +101,14 @@ services:
       - "{{ blackbox_exporter_port }}:9115"
     volumes:
       - {{ blackbox_config_path }}:/etc/blackbox:ro
+{% if blackbox_static_hosts | default([]) | length > 0 %}
+    # Probes reach the reverse proxy over the LAN without a public DNS lookup — see
+    # blackbox_static_hosts in group_vars/monitoring/vars.yml.
+    extra_hosts:
+{% for entry in blackbox_static_hosts %}
+      - "{{ entry }}"
+{% endfor %}
+{% endif %}
     environment:
       - TZ={{ timezone }}
     restart: unless-stopped

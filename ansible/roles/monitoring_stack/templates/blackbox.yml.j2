@@ -22,3 +22,20 @@ modules:
       follow_redirects: true
       preferred_ip_protocol: "ip4"
       valid_status_codes: [200]
+
+  # Public DNS for the estate's names, queried directly against the resolver the LXCs use.
+  # The HTTP probes above no longer exercise public DNS (the blackbox container pins
+  # *.{{ caddy_base_domain }} in /etc/hosts), so this is the one place a missing, wrong or
+  # unreachable record shows up. Fails on a timeout, a non-NOERROR rcode, or an A record
+  # that is not the reverse proxy.
+  dns_public:
+    prober: dns
+    timeout: 5s
+    dns:
+      query_name: "{{ caddy_base_domain }}"
+      query_type: "A"
+      preferred_ip_protocol: "ip4"
+      valid_rcodes: [NOERROR]
+      validate_answer_rrs:
+        fail_if_none_matches_regexp:
+          - '.*\s{{ reverse_proxy_ip | regex_escape }}$'

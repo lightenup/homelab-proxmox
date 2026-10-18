@@ -127,6 +127,26 @@ scrape_configs:
       - target_label: __address__
         replacement: blackbox-exporter:9115
 
+  # Public DNS probe — the resolver is the target, the name is fixed in the dns_public module
+  - job_name: 'blackbox-dns'
+    scrape_interval: 30s
+    scrape_timeout: {{ prometheus_scrape_timeout }}
+    metrics_path: /probe
+    params:
+      module: [dns_public]
+    static_configs:
+      - targets:
+{% for resolver in blackbox_dns_resolvers | default([]) %}
+          - '{{ resolver }}:53'
+{% endfor %}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
   # HTTP liveness probes — plain-HTTP targets from service monitoring contracts
 {% for host in groups['all'] | default([]) %}
 {% set contract = hostvars[host].monitoring_contract | default({}) %}
