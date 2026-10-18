@@ -1,0 +1,104 @@
+# Hermes agent configuration — spec 083 (R-004).
+#
+# DEPLOY-OWNED: this file is rendered by Ansible on every deploy and mounted READ-ONLY over
+# /opt/data/config.yaml in the hermes-agent container. The agent cannot edit it (read-only
+# mount), which is what keeps it from switching its own approvals off from the terminal
+# (FR-002). If upstream ever needs this file writable, switch to the R-004 fallback (render
+# into the data directory and re-assert every deploy) and note it in the accepted risk.
+#
+# Secrets are never inlined here: the gateway key is read from the env var named by
+# key_env (rendered into agent.env by Ansible from the vault), and MCP bearer tokens are
+# referenced as ${VAR} and resolved from the agent's .env at connect time.
+
+# Config schema version of the pinned image (v0.21.6 → 50). The image's entrypoint migrates an
+# unversioned config on every start and fails noisily on a read-only mount; stamping the
+# version avoids that. Re-check this number when hermes_agent_version is bumped (R-001).
+_config_version: 50
+
+# `model` is a mapping (research R-003, observed at v0.21.6). For a bare `provider: custom`
+# the API key is read from the env var named by model.key_env, and only while model.base_url
+# is the configured endpoint (hermes_cli/runtime_provider_custom.py). The value lives in
+# agent.env, rendered from the vault — never in this file.
+model:
+  default: {{ hermes_agent_default_model }}
+  provider: custom
+  base_url: "{{ hermes_gateway_base_url }}"
+  # Not the router-side name (LLM_ROUTER_CLIENT_HERMES_AGENT_KEY): upstream scrubs a child's env
+  # only of names it knows, and AUXILIARY_*_API_KEY is one of them, so job scripts and terminal
+  # commands cannot read this key (research R-004 key-scope finding). "HERMES" is no auxiliary
+  # task, so the name activates nothing.
+  key_env: AUXILIARY_HERMES_API_KEY
+  # The gateway does not expose /v1/models context data, so the agent would otherwise assume
+  # 256k. Taken from the alias definition, so the two cannot drift (smallest deployment wins).
+  context_length: {{ (llm_router_aliases | selectattr('name', 'equalto', hermes_agent_default_model) | first).deployments | map(attribute='context_window') | min }}
+
+# Scheduler clock. Empty means the container's UTC, so "30 7 * * *" would fire at 09:30 Oslo
+# (08:30 after the clocks change). The estate convention is Europe/Oslo (financial_scenario).
+timezone: "{{ timezone | default('Europe/Oslo') }}"
+
+# Approvals (FR-002, R-004). manual = always prompt; the non-interactive surfaces (cron
+# jobs, the API server — i.e. every Open WebUI request) fail closed to deny. timeout is
+# upstream's default, stated explicitly.
+approvals:
+  mode: manual
+  timeout: 300
+  cron_mode: deny
+  single_query_mode: deny
+  unattended_mode: deny
+
+# Terminal (R-004). local backend inside the container: approvals apply to it (isolated
+# backends such as Docker skip them), and the egress allowlist (FR-008) is what confines it.
+terminal:
+  backend: local
+{% if hermes_agent_env_passthrough | length > 0 %}
+  # Job secrets exposed to cron scripts by name (R-004, spec Edge Cases). Values are
+  # resolved at runtime from the agent's .env; this list carries names only.
+  env_passthrough:
+{% for name in hermes_agent_env_passthrough %}
+    - "{{ name }}"
+{% endfor %}
+{% else %}
+  env_passthrough: []
+{% endif %}
+
+# Web search (R-005): the existing SearXNG sidecar, reached over the compose network.
+# The endpoint comes from SEARXNG_URL in agent.env.
+web:
+  search_backend: searxng
+
+# Scheduler (R-006): after this many consecutive failures of a recurring job, a "worth a
+# review" nudge is appended to the failure delivery. Upstream default, stated explicitly.
+cron:
+  failure_nudge_threshold: 3
+
+# Persistent memory (FR-018): bounded curated memory injected into the system prompt.
+# Upstream default is enabled; stated explicitly so a version bump cannot silently drop it.
+memory:
+  memory_enabled: true
+
+# Push channel (FR-012, R-006). By default the gateway posts a "Gateway online/restarted" notice
+# to a platform's home channel on every start and stop — here that would be a phone push on
+# every deploy and container restart. Silence has to mean "nothing to report" (FR-013), and a
+# stopped scheduler is already caught by the heartbeat alert (FR-016), so the notice is off.
+# The key sits at the top level, named for the platform (verified at v0.21.6).
+ntfy:
+  gateway_restart_notification: false
+
+# MCP servers (FR-011, R-005): rendered from the single hermes_mcp_servers list — the same
+# list Open WebUI's TOOL_SERVER_CONNECTIONS is built from, so the two surfaces can never
+# drift apart. Bearer entries reference the token by env-var name only; the value is in
+# agent.env (vault-rendered) and interpolated at connect time.
+{% set enabled_mcp_servers = hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | list %}
+{% if enabled_mcp_servers | length > 0 %}
+mcp_servers:
+{% for server in enabled_mcp_servers %}
+  {{ server.name }}:
+    url: "{{ server.url }}"
+{% if server.auth == 'bearer' %}
+    headers:
+      Authorization: "Bearer ${{ server.credential_env }}"
+{% endif %}
+{% endfor %}
+{% else %}
+mcp_servers: {}
+{% endif %}

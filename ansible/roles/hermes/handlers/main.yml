@@ -3,3 +3,30 @@
   community.docker.docker_compose_v2:
     project_src: "{{ hermes_install_dir }}"
     state: restarted
+
+# Open WebUI fetches its model list once at startup and, with "cache base model list" on (an
+# admin-UI setting), keeps it. Started together with the agent, it asked before the agent's API
+# was listening and the `hermes-agent` model was missing until the next restart (083 T031,
+# 2026-10-18). So after any stack restart: wait for the agent, then restart Open WebUI alone.
+# Not a compose `condition: service_healthy`: that would keep plain chat down whenever the
+# agent is broken.
+- name: Wait for the agent API before refreshing Open WebUI
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - --format
+      - "{% raw %}{{ .State.Health.Status }}{% endraw %}"
+      - hermes_agent
+  register: hermes_agent_handler_health
+  until: hermes_agent_handler_health.stdout == 'healthy'
+  retries: 30
+  delay: 10
+  changed_when: false
+  listen: Restart hermes
+
+- name: Restart Open WebUI so it lists the agent
+  ansible.builtin.command:
+    argv: [docker, restart, hermes_open_webui]
+  changed_when: true
+  listen: Restart hermes

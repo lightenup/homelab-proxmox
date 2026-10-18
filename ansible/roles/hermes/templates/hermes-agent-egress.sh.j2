@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Hermes agent egress allowlist — spec 083 (FR-008, R-008).
+#
+# DEPLOY-OWNED: rendered by Ansible, run by the hermes-agent-egress.service oneshot (which
+# is PartOf docker.service, so a Docker restart re-applies the rules) and on every deploy.
+#
+# The rules live in the LXC's own network namespace, in the chain Docker reserves for
+# operators (DOCKER-USER) plus INPUT for traffic addressed to the LXC itself. They filter
+# by the agent's fixed source address on the `agent` compose network — the agent has no
+# NET_ADMIN and cannot change them.
+#
+# Idempotent: the chain is flushed and refilled on every run; the jump rules are removed
+# and re-added exactly once.
+
+set -euo pipefail
+
+AGENT_SRC="{{ hermes_agent_ip }}"
+AGENT_SUBNET="{{ hermes_agent_subnet }}"
+ROUTER_IP="{{ llm_router_ip }}"
+ROUTER_PORT="{{ llm_router_port }}"
+PROXY_IP="{{ reverse_proxy_ip }}"
+
+# One accept rule per enabled MCP server, derived from the same list the agent config is
+# rendered from (FR-011) — never hand-listed.
+{% set enabled_mcp_servers = hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | list %}
+{% if enabled_mcp_servers | length > 0 %}
+MCP_DESTINATIONS=(
+{% for server in enabled_mcp_servers %}
+  "{{ server.url | urlsplit('hostname') }} {{ server.url | urlsplit('port') }}"
+{% endfor %}
+)
+{% else %}
+MCP_DESTINATIONS=()
+{% endif %}
+
+# Blocked ranges: rest of LAN, tailnet, link-local (hypervisor, NAS, router…).
+BLOCKED_RANGES=(
+  "10.0.0.0/8"
+  "172.16.0.0/12"
+  "192.168.0.0/16"
+  "100.64.0.0/10"
+  "169.254.0.0/16"
+)
+
+# DOCKER-USER may not exist until Docker has started; create it if missing.
+if ! iptables -n -L DOCKER-USER >/dev/null 2>&1; then
+  iptables -N DOCKER-USER
+fi
+
+# Flush and refill our chain.
+iptables -N HERMES-AGENT 2>/dev/null || iptables -F HERMES-AGENT
+iptables -F HERMES-AGENT
+
+# 1. Replies to connections the agent initiated.
+iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -m state --state ESTABLISHED,RELATED -j ACCEPT
+# 2. The agent's own compose subnet (SearXNG, and bridge traffic to Open WebUI).
+iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${AGENT_SUBNET}" -j ACCEPT
+# 3. DNS needs no rule: the LXC resolves through a public resolver (1.1.1.1), which the
+#    private-range rejects below do not cover. There is no AdGuard in this estate; the
+#    earlier accept rule for adguard_ip pointed at an unused address (Q-L6, 2026-10-18).
+# 4. The 064 gateway.
+iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${ROUTER_IP}/32" -p tcp --dport "${ROUTER_PORT}" -j ACCEPT
+# 5. Each enabled MCP server (derived, FR-011).
+# (Bash's array-length expansion is avoided here: its brace-hash opens a Jinja comment.)
+if [ -n "${MCP_DESTINATIONS[*]:-}" ]; then
+  for dest in "${MCP_DESTINATIONS[@]}"; do
+    read -r mcp_host mcp_port <<< "${dest}"
+    iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${mcp_host}/32" -p tcp --dport "${mcp_port}" -j ACCEPT
+  done
+fi
+# 6. The reverse proxy on 443 (ntfy via Caddy). Owner's choice: this opens every Caddy
+#    vhost at L4; each keeps its own auth (R-008, accepted risk).
+iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${PROXY_IP}/32" -p tcp --dport 443 -j ACCEPT
+# 7. The rest of the LAN, tailnet and link-local are refused.
+for range in "${BLOCKED_RANGES[@]}"; do
+  iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${range}" -j REJECT
+done
+# 8. Everything else (internet) is allowed.
+iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -j RETURN
+
+# Exactly one jump at the top of DOCKER-USER.
+iptables -D DOCKER-USER -s "${AGENT_SRC}/32" -j HERMES-AGENT 2>/dev/null || true
+iptables -I DOCKER-USER 1 -s "${AGENT_SRC}/32" -j HERMES-AGENT
+
+# The LXC itself (sshd, node_exporter, …): no NEW connections from the agent.
+iptables -D INPUT -s "${AGENT_SRC}/32" -m state --state NEW -j REJECT 2>/dev/null || true
+iptables -I INPUT 1 -s "${AGENT_SRC}/32" -m state --state NEW -j REJECT

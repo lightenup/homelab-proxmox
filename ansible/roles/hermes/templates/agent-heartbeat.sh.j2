@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Scheduler heartbeat (R-007, FR-016). Runs as a no-agent job every 15 minutes inside the
+# agent container. Each tick refreshes a timestamp that node_exporter exposes, so a stopped or
+# wedged scheduler shows up as a stale metric. Prints nothing on success (a silent tick);
+# any error exits non-zero and reaches the phone.
+set -euo pipefail
+
+DIR=/heartbeat
+{
+  echo '# HELP hermes_agent_heartbeat_timestamp_seconds Unix time of the last scheduler heartbeat.'
+  echo '# TYPE hermes_agent_heartbeat_timestamp_seconds gauge'
+  echo "hermes_agent_heartbeat_timestamp_seconds $(date +%s)"
+} > "$DIR/hermes_agent.prom.tmp"
+mv "$DIR/hermes_agent.prom.tmp" "$DIR/hermes_agent.prom"

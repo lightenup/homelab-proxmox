@@ -169,6 +169,18 @@ requirement or claiming a pass it did not earn.
 that point the work here is one list entry in `hermes_mcp_servers` plus a vault variable — which is
 precisely the cheapness FR-013 demands, and adding it will itself be the test of FR-013.
 
+## R-009 — The question this feature did not ask: an agent runtime (answered by 083)
+
+- **The gap**: 065 delivered a chat surface. It never asked where work runs that nobody is
+  watching: scheduled jobs, scripts and multi-step tool use with a terminal. Open WebUI Automations
+  covered scheduled prompts only, with output nobody saw unless they opened the app.
+- **Answer**: `083-hermes-agent-runtime` adds the upstream Hermes Agent as a third service in this
+  stack. It has a scheduler, script and agent jobs, delivery to the phone through 082's ntfy, and a
+  second Open WebUI connection `hermes-agent`. It is confined with fail-closed approvals, an egress
+  allowlist and its own gateway identity, and watched by a heartbeat alert.
+- **Consequences here**: FR-025 and FR-026 are amended, and US-1/FR-001 are corrected to LAN +
+  tailnet (see spec.md). Automations are retired, so there is one scheduler.
+
 ---
 
 ## Sources

@@ -1,6 +1,14 @@
 ---
 ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 
+# Estate infrastructure addresses (Constitution: IPs defined centrally, in exactly one
+# place). Consumed by the monitoring stack (SNMP/telegraf), the hermes egress probe
+# (spec 083) and anything else that needs to name the NAS, the LAN router or the Proxmox
+# host.
+synology_nas_ip: "192.168.1.109"
+lan_router_ip: "192.168.1.1"
+proxmox_host_ip: "192.168.1.112"
+
 # Tailscale Configuration
 tailscale_tailnet_name: "-" # Use "-" to automatically detect tailnet from API key
 tailscale_safe_mode: true
