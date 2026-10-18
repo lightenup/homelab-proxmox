@@ -1,0 +1,17 @@
+# Dependabot for the Python test/nightly tooling under /python (not used by deploys —
+# the pipeline runs the pve host's own Ansible).
+#
+# Version updates are OFF (open-pull-requests-limit: 0); only security updates open PRs.
+# The entry exists so the ignore rules below apply to those security PRs too.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/python"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    ignore:
+      # requirements-nightly.txt pins ansible-core <2.18; a minor or major bump is a pin
+      # change made by hand, not a lock refresh (PR #238 offered 2.18.18rc1).
+      - dependency-name: "ansible-core"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
