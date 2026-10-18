@@ -88,14 +88,23 @@ monitoring_contract:
     # 2026-09-22 (the Mac is a laptop that legitimately sleeps), and it settles FR-009's
     # flagged open question. LlmRouterAllBackendsFailing still raises a critical whenever real
     # traffic is broadly failing.
+    #
+    # Mac-away EXCLUDED, 2026-10-18. Even as a warning this was the noisiest rule in the
+    # estate: 7 episodes in 3 days, every one "Connect call failed" to the sleeping Mac, each
+    # a firing + resolved push on both Pushover and ntfy. That state is expected and already
+    # reported silently by LlmRouterLocalTierDown, and the clients surface it themselves
+    # (Open WebUI inline in chat, a failed agent cron job as a (FAILED) ntfy report). The
+    # canary now records whether the backend accepted a TCP connection, and this fires only
+    # when it did and still could not serve: the Mac is there and inference is broken.
     - alert: LlmRouterCanaryFailing
       expr: |
-        llm_router_canary_success == 0
+        llm_router_canary_success == 0 and on(alias) llm_router_canary_backend_reachable == 1
       for: "0m"
       severity: warning
       summary: !unsafe "llm-router: synthetic canary request failed"
       description: !unsafe >-
-        The low-cadence canary against {{ $labels.alias }} failed on every attempt. Unlike
+        The low-cadence canary against {{ $labels.alias }} failed on every attempt while its
+        backend still accepted connections, so the Mac is up but not serving. Unlike
         LlmRouterAllBackendsFailing, this fires even with zero client traffic (FR-018, SC-013)
         — the metric comes from a systemd-timer script via node_exporter's textfile collector,
         not from LiteLLM itself. The usual cause is oMLX's prefill memory guard refusing the

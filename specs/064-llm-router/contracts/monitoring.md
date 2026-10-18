@@ -34,7 +34,7 @@ monitoring_contract:
     - alert: LlmRouterDown                # severity: critical
     - alert: LlmRouterLocalTierDown       # severity: info
     - alert: LlmRouterAllBackendsFailing  # severity: critical
-    - alert: LlmRouterCanaryFailing       # severity: critical
+    - alert: LlmRouterCanaryFailing       # severity: warning
     - alert: LlmRouterBudgetCapExhausted  # severity: critical
 ```
 
@@ -45,7 +45,7 @@ monitoring_contract:
 | Gateway down or database unreachable | blackbox on `/health/readiness` | **critical** | Every client is refused. FR-009 requires the gateway being down to alert. |
 | Local tier (Mac) unavailable | `litellm_deployment_state` for the local deployments | **info** | FR-009 requires this to be informational, not critical. Routed to Pushover at priority `-1` since 2026-09-22 (043 FR-016), i.e. delivered silently. **The rationale was revisited — see below.** |
 | **All backends failing, under traffic** | failure ratio across all deployments > 90% over 10m | **critical** | FR-018. The gateway is alive and the database is fine, but nothing can be served. |
-| **All backends failing, no traffic** | synthetic canary request fails (every attempt) | **warning** | FR-018, SC-013. The failure-rate signal is silent with no clients calling — which is exactly how this trap goes unnoticed until someone tries to use the gateway. **Was `critical` until 2026-09-22** — see below. |
+| **All backends failing, no traffic** | synthetic canary request fails (every attempt) while the backend still accepts a TCP connection | **warning** | FR-018, SC-013. The failure-rate signal is silent with no clients calling — which is exactly how this trap goes unnoticed until someone tries to use the gateway. **Was `critical` until 2026-09-22** — see below. |
 | Gateway-wide budget cap exhausted | `litellm_remaining_team_budget_metric` at/near zero | **critical** | SC-012. This refuses every client at once, so it is an availability event, not just a spend one. **Cannot currently fire** — spend is structurally 0.0. |
 | **Gateway-wide rate cap binding** | 429s across ≥2 distinct `api_key_alias` on the gateway team | **warning** | FR-010's second level, live since 2026-09-20. Warning not critical: the window resets every minute and the backstop is doing its job — it means the homelab is at its ceiling. |
 | Per-client **rate-limit** breach | `litellm_proxy_failed_requests_metric_total{exception_status="429"}` by `api_key_alias` | (dashboard only) | SC-010 — visible and attributable, but one client hitting its own limit is working as designed, not an incident. **Verified 2026-09-20**, `doctor-fault-injection.md` § Row 11. |
@@ -141,6 +141,31 @@ What replaces it, and what does not:
 no `equal:` clause because the two carry different `instance` labels. Left out deliberately —
 it is a second change to the same surface and the audible half is one push per four hours at
 `repeat_interval`, which the owner accepted.
+
+### Revisited 2026-10-18: Mac-away no longer fires the canary
+
+The residue above turned out not to be "one push per four hours". Over 2026-10-15..18 the
+canary failed in **7 separate episodes**. Each was `Connect call failed` to the Mac in the
+gateway log, so the Mac was asleep or away. Each episode sent a firing plus a resolved push
+to both Pushover and ntfy (082), which comes to about 28 audible pushes in three days for a
+state this contract already calls routine.
+
+The owner's call: separate *unreachable* from *reachable but not serving*, in the canary itself.
+
+- When every attempt fails, `canary.sh` makes one TCP connect to the canary alias's backend
+  and exports the result as `llm_router_canary_backend_reachable` (1 whenever the canary
+  succeeded).
+- `LlmRouterCanaryFailing` is now `llm_router_canary_success == 0 and on(alias)
+  llm_router_canary_backend_reachable == 1`, still a **warning**. It fires only when the Mac
+  is there and inference is broken.
+- Mac away is covered by `LlmRouterLocalTierDown` (info, silent) alone. The clients report
+  it themselves: Open WebUI inline in the chat, and the 083 agent's failed cron jobs as a
+  `(FAILED)` ntfy report.
+
+Rejected: the inhibit rule above. `litellm_deployment_state` refreshes only on health checks,
+fires 11 minutes after the canary, and was measured stale at `2` on the `hermes-*` series
+while the canary succeeded. So it could neither suppress the canary in time nor be trusted
+as a source.
 
 **Why two all-backends signals rather than one.** `/health/readiness` returns 200 while every
 deployment is dead — it only checks the database. The failure-rate signal closes that, but only while

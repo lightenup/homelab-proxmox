@@ -72,6 +72,16 @@ while [[ "$attempt" -le "$ATTEMPTS" ]]; do
   attempt=$(( attempt + 1 ))
 done
 
+# REACHABILITY, added 2026-10-18. Every failure measured over 2026-10-15..18 (7 episodes,
+# each a firing + resolved push to Pushover AND ntfy) was "Connect call failed" to the Mac:
+# a laptop asleep or away, which LlmRouterLocalTierDown already reports silently. One TCP
+# connect after the attempts tells that apart from a Mac that answers but cannot serve,
+# and only the latter is worth a notification (the alert rule tests both gauges).
+reachable=1
+if [[ "$success" -eq 0 ]]; then
+  timeout 5 bash -c '</dev/tcp/{{ llm_router_canary_backend_host }}/{{ llm_router_canary_backend_port }}' 2>/dev/null || reachable=0
+fi
+
 cat > "$TMP_FILE" <<METRICS
 # HELP llm_router_canary_success Whether the last synthetic canary run succeeded (1) or not (0).
 # TYPE llm_router_canary_success gauge
@@ -79,6 +89,9 @@ llm_router_canary_success{alias="{{ llm_router_canary_alias }}"} ${success}
 # HELP llm_router_canary_attempts Attempts the last canary run consumed (1 = clean first try).
 # TYPE llm_router_canary_attempts gauge
 llm_router_canary_attempts{alias="{{ llm_router_canary_alias }}"} ${attempts_used}
+# HELP llm_router_canary_backend_reachable Whether the canary alias's backend accepted a TCP connection (1) or not (0); 1 whenever the canary succeeded.
+# TYPE llm_router_canary_backend_reachable gauge
+llm_router_canary_backend_reachable{alias="{{ llm_router_canary_alias }}"} ${reachable}
 # HELP llm_router_canary_last_run_timestamp_seconds Unix timestamp of the last canary run.
 # TYPE llm_router_canary_last_run_timestamp_seconds gauge
 llm_router_canary_last_run_timestamp_seconds{alias="{{ llm_router_canary_alias }}"} $(date +%s)
