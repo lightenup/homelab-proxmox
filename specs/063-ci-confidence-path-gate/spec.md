@@ -114,6 +114,12 @@ runs despite the path gate saying skip.
   metadata records `lab_gate_failed=false`, and `Prod 2 - LXC Apply` proceeds without override.
 - **FR-006**: A **failed** suite MUST behave exactly as today (blocks prod apply unless overridden).
 - **FR-007**: The gate MUST fail safe: any inability to compute the diff/base ⇒ run the suite.
+- **FR-009** *(amended 2026-10-18)*: The diff base MUST first be the newest commit the suite
+  actually **verified**: a previous promote whose suite job concluded `success` and whose
+  `promotion-metadata.json` records `suite_ok=true`, and whose `checked_sha` is an ancestor of the
+  promoted SHA. An empty diff from that base means the SHA is already verified, so `run=false`.
+  The FR-001 merge-base, with its fail-safes, is the fallback only when no such commit is found.
+  The gate writes its decision and reason to the step summary.
 - **FR-008**: There MUST be no change to what the suite itself does, to the destructive-plan gate, or
   to the LAB apply job (which stays unconditional and service-specific).
 
@@ -128,6 +134,24 @@ runs despite the path gate saying skip.
 - **SC-003**: All three of the recent fail2ban/monitoring-style promotes would be fast under the new
   gate (verified by replaying their diffs against the path list).
 - **SC-004**: Zero regressions in the destructive-plan gate and the failed-suite override path.
+
+- **SC-005** *(amended 2026-10-18)*: Promoting `main` after a role/template-only merge skips the
+  suite, and a second service promoted from an already-verified SHA skips it. A merged-but-unpromoted
+  provisioning change still forces the suite on the next promote.
+
+### Amendment 2026-10-18: why FR-001's base stopped working
+
+PRs now merge before they promote, so the usual promoted ref is `main` itself. `merge-base origin/main
+<sha>` is then the SHA, the diff is empty, and FR-007's fail-safe ran the suite on **every** promote
+of `main`. 063 had been silently disabled for the main flow. Measured from run history: the suite
+ran 8 times since 063 landed, at about 20 minutes each. Today alone it ran 3 times, twice on the same
+commit for two services, and none of those runs had a provisioning change since the previous pass.
+
+First-parent diffing (`<sha>^1..<sha>`) was rejected. It sees only the last merge, so a terraform PR
+merged yesterday and promoted behind today's role PR would be skipped: a false skip, which this spec
+ranks worse than a false run. Diffing from the last verified commit has no such gap. It also closes a
+gap the merge-base had all along for branch promotes, which could not see unverified provisioning
+changes already on `main`.
 
 ## Assumptions
 

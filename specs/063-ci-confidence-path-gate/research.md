@@ -166,3 +166,20 @@ document that in the PR per the constitution and rely on the five acceptance-sce
 **Rationale**: Constitution "Local Workflow Testing" mandates `act` validation when feasible for
 workflow edits. Full behavioural acceptance needs real self-hosted promotes (the suite + `flock` +
 evidence packs can't run under `act`), so `act` is a syntax/parse gate, not a functional one.
+
+## Decision 8 — Diff from the last verified commit (amendment 2026-10-18)
+
+**Decision**: Resolve the base from the newest earlier promote whose suite job concluded `success`
+and whose `prod-promotion-metadata` artifact records `suite_ok=true`, provided its `checked_sha` is
+an ancestor of the promoted SHA. The lookup scans the last 30 completed promotes through the Actions
+API, with `actions: read` on the gate job only. If none qualifies, use Decision 2's merge-base,
+fail-safes unchanged.
+
+**Rationale**: See the spec amendment. Both checks are needed: the suite's steps are
+`continue-on-error`, so a successful job does not prove the suite passed, and a metadata
+`suite_ok=true` is also written for a *skipped* suite (Decision 5). No new state is stored. The
+metadata artifact already exists, and once it ages past the 90-day retention the lookup just falls
+back.
+
+**Alternatives rejected**: first-parent diff (a false skip when unpromoted merges stack up); a git
+tag or repository variable updated by CI (needs write permissions and a second source of truth).
