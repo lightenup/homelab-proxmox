@@ -100,6 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Read earlier promote runs and their metadata artifact (FR-009, the last verified SHA).
+      actions: read
     needs: [setup]
     outputs:
       run: ${{ steps.decide.outputs.run }}
@@ -113,39 +115,78 @@ jobs:
         env:
           FORCE: ${{ github.event.inputs.run_confidence_suite }}
           SHA: ${{ needs.setup.outputs.checked_sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
+          decide() {
+            echo "run=$1" >>"$GITHUB_OUTPUT"
+            echo "- Confidence gate: run=$1 ($2)" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+
           # Operator force-run wins (FR-003).
           if [[ "${FORCE}" == "true" ]]; then
-            echo "run=true" >>"$GITHUB_OUTPUT"
-            exit 0
+            decide true "forced by run_confidence_suite"
           fi
 
           # Fail-safe: no SHA to diff from ⇒ run (FR-007).
           if [[ -z "${SHA}" ]]; then
-            echo "run=true" >>"$GITHUB_OUTPUT"
-            exit 0
+            decide true "no checked SHA"
           fi
 
-          base="$(git merge-base origin/main "${SHA}" 2>/dev/null || true)"
-          if [[ -z "${base}" ]]; then
-            echo "run=true" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
+          # Base, first choice (FR-009, 2026-10-18): the newest commit the suite actually
+          # VERIFIED and that is an ancestor of SHA. The merge-base below is empty whenever
+          # the promoted ref is main itself — the normal flow since PRs merge before they
+          # promote — and the empty diff then always fell through to the fail-safe, so the
+          # gate never skipped a promote of main. Diffing from the last verified commit also
+          # covers provisioning changes merged to main but not yet promoted, which a
+          # merge-base diff of a branch cannot see.
+          #
+          # "Verified" means the suite job concluded success AND the run's metadata records
+          # suite_ok=true (the suite's steps are continue-on-error, so the job conclusion
+          # alone does not say the suite passed). A skipped suite never counts. Metadata
+          # past artifact retention is simply not found, which falls back below.
+          verified=""
+          run_ids="$(gh api "repos/${REPO}/actions/workflows/lxc-promote-prod.yml/runs?status=completed&per_page=30" \
+            --jq '.workflow_runs[].id' 2>/dev/null || true)"
+          for id in ${run_ids}; do
+            ran="$(gh api "repos/${REPO}/actions/runs/${id}/jobs?per_page=30" \
+              --jq '.jobs[] | select(.name == "Confidence suite (best-effort)") | .conclusion' 2>/dev/null || true)"
+            [[ "${ran}" == "success" ]] || continue
+            meta="$(mktemp -d)"
+            gh run download "${id}" -R "${REPO}" -n prod-promotion-metadata -D "${meta}" >/dev/null 2>&1 || continue
+            candidate="$(jq -r 'select(.suite_ok == "true") | .checked_sha // empty' "${meta}/promotion-metadata.json" 2>/dev/null || true)"
+            if [[ -n "${candidate}" ]] && git merge-base --is-ancestor "${candidate}" "${SHA}" 2>/dev/null; then
+              verified="${candidate}"
+              echo "- Confidence gate: last verified ${verified:0:8} (promote run ${id})" >>"$GITHUB_STEP_SUMMARY"
+              break
+            fi
+          done
 
-          diff="$(git diff --name-only "${base}" "${SHA}" 2>/dev/null || true)"
-          if [[ -z "${diff}" ]]; then
-            echo "run=true" >>"$GITHUB_OUTPUT"
-            exit 0
+          if [[ -n "${verified}" ]]; then
+            # An empty diff here is a SHA the suite already passed on — a second service
+            # promoted from the same commit — so it skips rather than fails safe.
+            diff="$(git diff --name-only "${verified}" "${SHA}")" || decide true "diff from the verified commit failed"
+          else
+            # Fallback: the original 063 base (FR-001), with its fail-safes.
+            base="$(git merge-base origin/main "${SHA}" 2>/dev/null || true)"
+            if [[ -z "${base}" ]]; then
+              decide true "no verified commit and no merge-base"
+            fi
+            diff="$(git diff --name-only "${base}" "${SHA}" 2>/dev/null || true)"
+            if [[ -z "${diff}" ]]; then
+              decide true "no verified commit and an empty merge-base diff"
+            fi
           fi
 
           # Provisioning-relevant paths — see specs/063-ci-confidence-path-gate/spec.md
           # (keep conservative: prefer false-run over false-skip).
           if printf '%s\n' "${diff}" | grep -qE '^terraform/|^scripts/lab/|^ansible/playbooks/lab_.*\.ya?ml$|^ansible/inventories/|^ansible/roles/lxc_base/'; then
-            echo "run=true" >>"$GITHUB_OUTPUT"
+            decide true "provisioning paths changed"
           else
-            echo "run=false" >>"$GITHUB_OUTPUT"
+            decide false "no provisioning paths changed"
           fi
 
   apply_lab:
