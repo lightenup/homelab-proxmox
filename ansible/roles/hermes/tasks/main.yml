@@ -429,12 +429,17 @@
     - hermes_agent_jobs.stdout is not search('(?m)^\\s+Name:\\s+heartbeat\\s*$')
   changed_when: true
 
-- name: Assert no heartbeat job exists outside PROD (FR-014)
+# Only on the LAB rig (lab_inventory). The pipeline's LAB stage deploys the PRODUCTION machine
+# with deploy_environment=lab (backlog 067), where the PROD heartbeat job legitimately exists:
+# asserting there failed LAB deploy 39092898788. On that stage the job keeps running but cannot
+# write (no /heartbeat mount) or deliver (no NTFY_TOKEN), so the metric ages and
+# HermesAgentCronStale fires until the PROD apply, which is the right signal.
+- name: Assert no heartbeat job exists on the LAB rig (FR-014)
   ansible.builtin.assert:
     that:
       - hermes_agent_jobs.stdout is not search('(?m)^\\s+Name:\\s+heartbeat\\s*$')
-    fail_msg: A heartbeat job exists on a non-operational deploy; remove it with `hermes cron remove`.
-  when: not hermes_agent_operational
+    fail_msg: A heartbeat job exists on the LAB rig; remove it with `hermes cron remove`.
+  when: lab_inventory | default(false) | bool
 
 # TOOL_SERVER_CONNECTIONS is a PersistentConfig: seed_defaults() inserts a key "only if the
 # key is absent" — "Existing DB values take precedence over defaults." So the env var seeds
