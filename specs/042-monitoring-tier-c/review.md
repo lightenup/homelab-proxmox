@@ -17,7 +17,7 @@
 
 | AC | Description | Status | Evidence |
 |----|-------------|--------|----------|
-| AC-1.1 | 5 probe targets appear (grafana, immich, nextcloud, jellyfin, adguard) | PASS | `blackbox_https_targets` list in `group_vars/monitoring/vars.yml` (5 entries); relabeling sets `instance` to URL |
+| AC-1.1 | 4 probe targets appear (grafana, immich, nextcloud, jellyfin) | PASS | `blackbox_https_targets` list in `group_vars/monitoring/vars.yml` (4 entries); relabeling sets `instance` to URL |
 | AC-1.2 | EndpointDown alert email within 5 minutes of 2-min sustained failure | PASS | `security_alerts.yml`: `probe_success{job="blackbox-https"} == 0` for 2m, critical; 30s scrape interval |
 | AC-1.3 | Recovery email within 3 minutes | PASS | `send_resolved: true` in alertmanager.yml.j2 receiver; 30s probe interval |
 | AC-1.4 | HighProbeLatency alert for responses >5s sustained 5m | PASS | `security_alerts.yml`: `probe_duration_seconds > 5` for 5m, warning |
@@ -56,7 +56,7 @@
 | FR-002 | Probe deployed as container in existing Docker Compose stack | PASS |
 | FR-003 | 5 HTTPS probe targets | PASS |
 | FR-004 | Metrics: probe_success, HTTP status code, TLS expiry, duration, DNS time | PASS |
-| FR-005 | HTTP redirects followed (Nextcloud, AdGuard, Grafana redirect to login) | PASS |
+| FR-005 | HTTP redirects followed (Nextcloud, Grafana redirect to login) | PASS |
 | FR-006 | Static scrape config (not monitoring contracts) for probe targets | PASS |
 | FR-007 | TLS certificate expiry metric in days per endpoint | PASS |
 | FR-008 | 14-day warning / 7-day critical TLS alerts, 15-minute sustained | PASS |

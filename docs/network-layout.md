@@ -8,7 +8,6 @@ As of **Iteration 1 (Bootstrap)**, the network is flat to simplify initial adopt
 - **Gateway**: `192.168.1.1`
 - **Domain**: `hus-sky.no` (Domeneshop), wildcard `*.hus-sky.no → 192.168.1.211` via public DNS
 - **Service IPs**:
-  - AdGuard: `192.168.1.210` (`adguard.hus-sky.no`)
   - Reverse Proxy: `192.168.1.211` (HTTPS termination, Let's Encrypt via DNS-01)
   - Home Assistant: `192.168.1.212` (`ha.hus-sky.no`)
   - Immich: `192.168.1.213` (`immich.hus-sky.no`)
@@ -35,7 +34,6 @@ This document describes the **target state** for the home network that supports 
 - Isolate **management**, **services**, **clients**, and **IoT**.
 - Make it easy to **rebuild** Proxmox/services without breaking the rest of the house.
 - Give a clean place to:
-  - Run **AdGuard** as central DNS.
   - Expose **Immich** and **Home Assistant** safely (primarily via VPN, optionally via reverse proxy later).
   - Route one SSID’s traffic out via **VPN**.
 - Keep the design simple enough to **retrofit gradually** from an initially flat network.
@@ -49,7 +47,7 @@ Conceptually there are 5 logical networks (VLANs):
 - **VLAN 10 – Management**
   Proxmox host, Synology NAS, Raspberry Pi (CI runner), router management.
 - **VLAN 20 – Services**
-  LXCs / VMs providing services like Immich, AdGuard, Home Assistant, reverse proxy.
+  LXCs / VMs providing services like Immich, Home Assistant, reverse proxy.
 - **VLAN 30 – LAN (Normal clients)**
   Laptops, desktops, phones, TV etc.
 - **VLAN 40 – VPN egress**
@@ -112,7 +110,6 @@ Dedicated network for homelab services.
 **Planned LXCs/VMs:**
 
 - `immich-lxc`
-- `adguard-lxc`
 - `homeassistant-lxc`
 - `reverse-proxy-lxc` (Caddy with DNS-01 HTTPS)
 - Future services (e.g. Gitea, monitoring, etc.)
@@ -121,7 +118,6 @@ Dedicated network for homelab services.
 
 - **From LAN (VLAN 30)**:
   - HTTP(S) to services via reverse proxy.
-  - DNS queries to AdGuard.
 - **From IoT (VLAN 50)**:
   - Connections to Home Assistant (MQTT, integrations).
 - **To NAS (mgmt VLAN 10)**:
@@ -141,7 +137,7 @@ Everyday devices with “normal” internet access.
 **Routing / DNS:**
 
 - Default route: directly out to WAN.
-- Default DNS: **AdGuard LXC** (VLAN 20) as primary DNS.
+- Default DNS: the router.
 - Access to management VLAN is restricted (ideally none, except when explicitly allowed from an admin device).
 
 ### 3.4 VLAN 40 – VPN egress (`192.168.40.0/24`)
@@ -193,9 +189,6 @@ Each major service gets its **own LXC**:
   - OS: Debian stable.
   - Data: Synology NFS mount inside the LXC for photo storage.
   - App: Immich stack run via containers (Docker/Compose or Podman), managed by Ansible.
-- `adguard-lxc`
-  - Provides DNS for LAN/Services/IoT.
-  - Router’s DNS points here.
 - `homeassistant-lxc`
   - Integrates with IoT devices in VLAN 50.
   - Accessed from LAN and remotely via VPN.
@@ -225,7 +218,6 @@ The network does **not** have to be fully segmented from day one. A realistic mi
 1. **Phase 0 – Flat network**
    - Everything is in a single subnet.
    - Proxmox + services + clients all share that network.
-   - DNS still via AdGuard if possible.
 
 2. **Phase 1 – Introduce VLANs on the router and Proxmox**
    - Enable VLAN-aware bridge on Proxmox (e.g. `vmbr0`).
@@ -245,7 +237,7 @@ The network does **not** have to be fully segmented from day one. A realistic mi
      - HA → IoT
      - Admin/VPN → Management.
 
-During all phases, access services via **hostnames** (e.g. using AdGuard for DNS overrides) so IP changes and subnet moves don’t break client configs.
+During all phases, access services via **hostnames** (e.g. using router DNS entries) so IP changes and subnet moves don’t break client configs.
 
 ## 7. Open questions / placeholders
 

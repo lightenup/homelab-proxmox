@@ -103,36 +103,6 @@ FR-013 and US-5 require Domeneshop API credentials (token + secret) stored in An
 
 ---
 
-## R-004: AdGuard DNS Rewrite Configuration
-
-### Context
-
-FR-006 requires AdGuard DNS rewrites for all service subdomains to resolve to the reverse proxy IP on the LAN. The spec notes this may be manual (D-002, out-of-scope note). What are the automation options?
-
-### Findings
-
-1. **AdGuard Home stores rewrites in `AdGuardHome.yaml`** under the `dns.rewrites` key.
-2. **AdGuard Home API** exposes endpoints for managing rewrites programmatically:
-   - `POST /control/rewrite/add` — add a rewrite rule
-   - `POST /control/rewrite/delete` — remove a rewrite rule
-   - `GET /control/rewrite/list` — list all rewrite rules
-3. **Ansible modules**: `community.dns.adguardhome_rewrite` exists in the community.dns collection for managing rewrites via the API.
-4. **No existing AdGuard Ansible role in this project** — the adguard playbook exists but there's no `ansible/roles/adguard/` directory with rewrite management. AdGuard appears to be configured via Docker with manual setup.
-
-### Decision
-
-**Document DNS rewrites as a manual one-time step (via AdGuard web UI).** This aligns with decision D-002 and the out-of-scope note. Optionally, provide an Ansible task using the `community.dns.adguardhome_rewrite` module as a convenience, but do not require it for the feature to be complete.
-
-### Rationale
-
-- The spec explicitly marks AdGuard rewrite automation as out of scope
-- AdGuard's Docker-based setup in this project has no existing Ansible role for rewrite management
-- Adding the `community.dns` collection dependency solely for 5-6 rewrite rules is disproportionate
-- Manual configuration via the web UI takes under 2 minutes and is a one-time operation
-- The quickstart.md will document the exact rewrites needed
-
----
-
 ## R-005: Nextcloud Domain Migration
 
 ### Context

@@ -44,7 +44,7 @@ Complete the idempotent rebuild orchestrator by migrating Terraform state and An
 - tfvars remain on PVE filesystem (secrets policy)
 
 **Scale/Scope**:
-- Services: 6 (immich, monitoring, reverse_proxy, homeassistant, jellyfin, adguard)
+- Services: 5 (immich, monitoring, reverse_proxy, homeassistant, jellyfin)
 - Environments: 2 (lab, static/prod)
 - State files: ~12 total (<2MB combined)
 
@@ -182,7 +182,6 @@ specs/033-idempotent-rebuild/
     - { env: 'lab', service: 'reverse_proxy' }
     - { env: 'lab', service: 'homeassistant' }
     - { env: 'lab', service: 'jellyfin' }
-    - { env: 'lab', service: 'adguard' }
     - { env: 'static', service: 'immich' }
     - { env: 'static', service: 'monitoring' }
     - { env: 'static', service: 'reverse_proxy' }
@@ -285,7 +284,7 @@ echo ""
 
 for env in lab static; do
   echo "Environment: $env"
-  for svc in immich monitoring reverse_proxy homeassistant jellyfin adguard; do
+  for svc in immich monitoring reverse_proxy homeassistant jellyfin; do
     old_path="/var/lib/homelab-proxmox/state/services/${svc}/terraform.tfstate"
     if [[ -f "$old_path" ]]; then
       size=$(stat -c '%s' "$old_path" 2>/dev/null || stat -f '%z' "$old_path")
@@ -618,7 +617,6 @@ proxmox_state_services:
   - reverse_proxy
   - homeassistant
   - jellyfin
-  - adguard
 ```
 
 **Acceptance Test**:

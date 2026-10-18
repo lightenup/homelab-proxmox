@@ -5,7 +5,7 @@
 
 ## Summary
 
-This feature restores the broken Synology SNMP metrics pipeline (Priority 1), fixes non-functional alert rules, and adds application-level metrics for three services that currently lack them — AdGuard Home, Nextcloud, and Jellyfin (Priority 2/3). The approach leverages the self-registration pattern (monitoring contracts in host_vars) established in Feature 040, deploys community-maintained exporters via service roles, and keeps the central monitoring role free of service-specific configuration.
+This feature restores the broken Synology SNMP metrics pipeline (Priority 1), fixes non-functional alert rules, and adds application-level metrics for two services that currently lack them — Nextcloud and Jellyfin (Priority 2/3). The approach leverages the self-registration pattern (monitoring contracts in host_vars) established in Feature 040, deploys community-maintained exporters via service roles, and keeps the central monitoring role free of service-specific configuration.
 
 ## Technical Context
 
@@ -26,12 +26,12 @@ This feature restores the broken Synology SNMP metrics pipeline (Priority 1), fi
 | # | Principle | Status | Evidence |
 |---|-----------|--------|----------|
 | I | Spec-Driven Workflow | ✅ PASS | All steps trace to FR/US in spec.md. Plan output to specs/041-monitoring-tier-b/. |
-| II | Secrets Policy | ✅ PASS | SNMP creds (existing vault), AdGuard user/pass, Nextcloud token, Jellyfin API key → all in `ansible/group_vars/services/vault.yml` or `monitoring/vault.yml`. No plaintext secrets. |
+| II | Secrets Policy | ✅ PASS | SNMP creds (existing vault), Nextcloud token, Jellyfin API key → all in `ansible/group_vars/services/vault.yml` or `monitoring/vault.yml`. No plaintext secrets. |
 | III | Separation of Concerns | ✅ PASS | Terraform unchanged. All changes are Ansible roles/playbooks (configuration inside machines). |
-| IV | Code Economy (YAGNI) | ✅ PASS | Each exporter has 2+ consumers (dashboard + alert rules). Minimal adguard role contains only exporter tasks — not full service config. No wrapper abstractions or indirection layers. Jellyfin proceeds only because a viable exporter exists (research confirmed). |
-| V | Dual-Provisioning Parity | ✅ PASS | All changes are Ansible playbooks executable from both CI (GitHub Actions self-hosted runner) and developer laptop. No new scripts, no CI-only paths. Existing playbooks (`monitoring.yml`, `adguard.yml`, `nextcloud.yml`, `jellyfin.yml`) already in both contexts. |
+| IV | Code Economy (YAGNI) | ✅ PASS | Each exporter has 2+ consumers (dashboard + alert rules). No wrapper abstractions or indirection layers. Jellyfin proceeds only because a viable exporter exists (research confirmed). |
+| V | Dual-Provisioning Parity | ✅ PASS | All changes are Ansible playbooks executable from both CI (GitHub Actions self-hosted runner) and developer laptop. No new scripts, no CI-only paths. Existing playbooks (`monitoring.yml`, `nextcloud.yml`, `jellyfin.yml`) already in both contexts. |
 
-**Post-Design Re-check**: ✅ All five principles still PASS after Phase 1 design completion. The minimal adguard role was evaluated against YAGNI — it is justified because the playbook already references the role (it would fail without it), and it has two consumers (exporter deployment + monitoring contract). No unnecessary abstraction introduced.
+**Post-Design Re-check**: ✅ All five principles still PASS after Phase 1 design completion. No unnecessary abstraction introduced.
 
 ## Project Structure
 
@@ -71,12 +71,6 @@ ansible/roles/monitoring_stack/handlers/main.yml             — Add Reload prom
 ansible/roles/monitoring_stack/tasks/compose_stack.yml       — Split notify: Prometheus config → Reload prometheus
 
 # CREATED files
-ansible/host_vars/adguard.yml                                — AdGuard monitoring contract + healthcheck config
-ansible/roles/adguard/tasks/main.yml                         — Deploy AdGuard exporter Docker container
-ansible/roles/adguard/defaults/main.yml                      — Default variables (exporter version, port)
-ansible/roles/adguard/handlers/main.yml                      — Restart handler for exporter
-ansible/roles/adguard/templates/docker-compose.yml.j2        — Docker Compose for AdGuard exporter
-ansible/roles/adguard/files/grafana/dashboards/adguard-home.json — Grafana dashboard
 ansible/roles/nextcloud/files/grafana/dashboards/nextcloud.json  — Grafana dashboard
 ansible/roles/jellyfin/files/grafana/dashboards/jellyfin.json    — Grafana dashboard
 ansible/roles/jellyfin/templates/jellyfin-exporter.service.j2    — Systemd service unit
@@ -106,20 +100,19 @@ No constitution violations. No complexity justifications needed.
    ┌─────┴──────────────┴───────────────────────────────────┴─────────┐
    │ Scrape Targets                    SNMP Poll                       │
    │                                                                   │
-   │ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌───────────┐│
-   │ │ AdGuard LXC  │ │ Nextcloud LXC│ │ Jellyfin LXC │ │ Synology  ││
-   │ │ .210         │ │ .216         │ │ .215         │ │ NAS .109  ││
-   │ │              │ │              │ │              │ │           ││
-   │ │ node:9100    │ │ node:9100    │ │ node:9100    │ │ SNMP:161  ││
-   │ │ exporter:9618│ │ exporter:9205│ │ exporter:9594│ │(UDP,SNMPv3)│
-   │ └──────────────┘ └──────────────┘ └──────────────┘ └───────────┘│
+   │                  ┌──────────────┐ ┌──────────────┐ ┌───────────┐│
+   │                  │ Nextcloud LXC│ │ Jellyfin LXC │ │ Synology  ││
+   │                  │ .216         │ │ .215         │ │ NAS .109  ││
+   │                  │              │ │              │ │           ││
+   │                  │ node:9100    │ │ node:9100    │ │ SNMP:161  ││
+   │                  │ exporter:9205│ │ exporter:9594│ │(UDP,SNMPv3)│
+   │                  └──────────────┘ └──────────────┘ └───────────┘│
    └──────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
 
 1. **Synology NAS**: Telegraf (on monitoring LXC) polls NAS via SNMPv3 → transforms OIDs to named metrics → exposes on `:9273/metrics` → Prometheus scrapes `telegraf-snmp` job
-2. **AdGuard Home**: `adguard-exporter` container (on adguard LXC) queries AdGuard API → exposes on `:9618/metrics` → Prometheus scrapes `adguard-exporter` job
 3. **Nextcloud**: `nextcloud-exporter` container (sidecar in nextcloud compose) queries serverinfo API → exposes on `:9205/metrics` → Prometheus scrapes `nextcloud-exporter` job
 4. **Jellyfin**: `jellyfin_exporter` binary (systemd on jellyfin LXC) queries Jellyfin API → exposes on `:9594/metrics` → Prometheus scrapes `jellyfin-exporter` job
 
@@ -129,7 +122,6 @@ No constitution violations. No complexity justifications needed.
 |----------|--------|-----------|
 | Metric naming alignment | Rewrite Telegraf to produce `snmp_synology_*` metrics and rewrite dashboard to match | Both Telegraf config AND dashboard change, but produces clean, consistent naming going forward |
 | SNMP table vs scalar queries | Table queries for disks, volumes, interfaces | More complex Telegraf config, but handles multiple disks/volumes/interfaces automatically |
-| AdGuard exporter placement | Docker container on adguard LXC | Requires minimal adguard role, but follows FR-026 (exporter owned by service role) |
 | Nextcloud exporter placement | Docker sidecar in nextcloud compose | Can reach nextcloud_app via Docker network (no external auth needed for internal URL) |
 | Jellyfin exporter placement | Go binary + systemd on jellyfin LXC | No Docker on jellyfin LXC; binary install follows node_exporter pattern |
 | Jellyfin monitoring status | Proceed (not descoped) | `rebelcore/jellyfin_exporter` v1.4.0 is viable — spec's descoping condition not met |
@@ -138,7 +130,6 @@ No constitution violations. No complexity justifications needed.
 
 | Component | Choice | Rationale |
 |-----------|--------|-----------|
-| AdGuard exporter | `henrywhitaker3/adguard-exporter` v1.2.1 | 151 stars, MIT, Docker image, covers all required metrics (R1) |
 | Nextcloud exporter | `xperimental/nextcloud-exporter` v0.9.0 | 273 stars, MIT, Docker image, token auth, covers required metrics (R2) |
 | Jellyfin exporter | `rebelcore/jellyfin_exporter` v1.4.0 | 34 stars, Apache-2.0, Go binary, actively maintained Feb 2026 (R3) |
 | Synology volume OIDs | RAID MIB (1.3.6.1.4.1.6574.3) | Bytes directly, no multiplication needed (R4) |
@@ -191,56 +182,6 @@ No constitution violations. No complexity justifications needed.
 - **Parallel-safe**: No (depends on Step 1 metric names)
 - **Traces to**: FR-007, FR-020, US-1, US-6
 - **Done-condition**: `jq . synology-nas.json` returns valid JSON (exit code 0); all panel `expr` fields reference only metric names from Step 1
-
-### Step 4: Create AdGuard Home Host Vars (Monitoring Contract)
-
-- **Files**: `ansible/host_vars/adguard.yml` (CREATE)
-- **Description**: Create monitoring contract for AdGuard Home with:
-  1. Healthcheck config (scheme: http, port: 3000, path: /)
-  2. Monitoring contract: enabled=true, scrape target for `adguard-exporter` on port 9618
-  3. Alert rules: `AdGuardHighBlockedRate` (blocked percentage > 50% for 10m — likely misconfigured filter)
-  4. Dashboard file reference: `grafana/dashboards/adguard-home.json`
-  5. Follow exact structure of `ansible/host_vars/reverse_proxy.yml` (Caddy contract)
-- **Dependencies**: None
-- **Parallel-safe**: Yes
-- **Traces to**: FR-013, FR-022, US-3
-- **Done-condition**: `python3 -c "import yaml; yaml.safe_load(open('ansible/host_vars/adguard.yml'))"` succeeds; file contains `monitoring_contract.enabled: true` with non-empty `scrape_targets`; `alert_rules` contains `AdGuardHighBlockedRate`
-
-### Step 5: Create Minimal AdGuard Ansible Role
-
-- **Files**:
-  - `ansible/roles/adguard/defaults/main.yml` (CREATE)
-  - `ansible/roles/adguard/tasks/main.yml` (CREATE)
-  - `ansible/roles/adguard/handlers/main.yml` (CREATE)
-  - `ansible/roles/adguard/templates/docker-compose.yml.j2` (CREATE)
-- **Description**: Create a minimal role that deploys the AdGuard exporter as a Docker container:
-  1. `defaults/main.yml`: version pin (`adguard_exporter_version: "1.2.1"`), port (9618), install dir
-  2. `tasks/main.yml`: Create install directory, deploy docker-compose template, start container via `docker compose up -d`
-  3. `handlers/main.yml`: Restart handler for exporter container
-  4. `templates/docker-compose.yml.j2`: Single-service compose with `ghcr.io/henrywhitaker3/adguard-exporter` image, env vars for AdGuard credentials (from vault), port mapping, healthcheck
-  5. Credentials sourced from vault variables: `adguard_admin_user`, `adguard_admin_password`
-  6. Role does NOT configure AdGuard Home itself — only the exporter
-- **Dependencies**: Step 4 (host_vars must exist for contract discovery)
-- **Parallel-safe**: Yes (different files from Step 4)
-- **Traces to**: FR-008, FR-011, FR-026, US-3
-- **Done-condition**: `ansible-playbook --syntax-check playbooks/adguard.yml` passes; role directory has `tasks/main.yml`, `defaults/main.yml`, `handlers/main.yml`, `templates/docker-compose.yml.j2`
-
-### Step 6: Create AdGuard Home Grafana Dashboard
-
-- **Files**: `ansible/roles/adguard/files/grafana/dashboards/adguard-home.json` (CREATE)
-- **Description**: Create a Grafana dashboard JSON with panels:
-  1. DNS Query Rate (stat): `adguard_queries`
-  2. Blocked Query Count & Percentage (stat): `adguard_blocked_filtered`, derived percentage
-  3. Top Blocked Domains (table): `adguard_top_blocked_domains`
-  4. Upstream Response Times (graph): `adguard_top_upstreams_avg_response_time_seconds`
-  5. Protection Status (stat): `adguard_protection_enabled`
-  6. Query Types (pie chart or bar): `adguard_query_types`
-  7. Unique `uid: "adguard-home"`, title: "AdGuard Home DNS"
-  8. Compatible with Grafana 12.3.1
-- **Dependencies**: None (uses known metric names from exporter docs)
-- **Parallel-safe**: Yes
-- **Traces to**: FR-016, FR-019, US-3, US-6
-- **Done-condition**: `jq . adguard-home.json` returns valid JSON; uid is unique across all dashboards
 
 ### Step 7: Update Nextcloud Host Vars (Monitoring Contract)
 
@@ -358,11 +299,9 @@ No constitution violations. No complexity justifications needed.
 ### Step 14: Add Vault Variable Preflight Assertions
 
 - **Files**:
-  - `ansible/roles/adguard/tasks/main.yml` (MODIFY — prepend assertions)
   - `ansible/roles/nextcloud/tasks/main.yml` (MODIFY — prepend exporter assertions)
   - `ansible/roles/jellyfin/tasks/main.yml` (MODIFY — prepend exporter assertions)
 - **Description**: Add `ansible.builtin.assert` tasks at the beginning of each exporter deployment section that verify required vault variables are defined:
-  1. AdGuard: assert `adguard_admin_user` and `adguard_admin_password` are defined
   2. Nextcloud: assert `nextcloud_serverinfo_token` is defined (before exporter tasks, not before the entire role)
   3. Jellyfin: assert `jellyfin_api_key` is defined (before exporter tasks, not before the entire role)
   4. Each assertion must use `fail_msg` with a human-readable message naming the missing variable and pointing to the vault file
@@ -387,7 +326,7 @@ No constitution violations. No complexity justifications needed.
 
 - **Files**: None (verification only)
 - **Description**: Run full verification suite:
-  1. `ansible-playbook --syntax-check` for all affected playbooks (monitoring, adguard, nextcloud, jellyfin)
+  1. `ansible-playbook --syntax-check` for all affected playbooks (monitoring, nextcloud, jellyfin)
   2. `ansible-lint` on all modified roles
   3. `jq .` validation on all dashboard JSON files
   4. Verify no secrets in plaintext (grep for passwords/tokens in non-vault files)
@@ -395,7 +334,7 @@ No constitution violations. No complexity justifications needed.
   6. Verify all monitoring contracts have unique job names
   7. Verify all dashboard UIDs are unique
   8. Verify `--web.enable-lifecycle` is present in Prometheus command (Step 13)
-  9. Verify vault assertion tasks exist in adguard, nextcloud, jellyfin roles (Step 14)
+  9. Verify vault assertion tasks exist in nextcloud, jellyfin roles (Step 14)
 - **Dependencies**: Steps 1-15 (everything must be complete)
 - **Parallel-safe**: No (final gate)
 - **Traces to**: FR-023, FR-024, FR-025, FR-026, FR-027, FR-028, SC-007, SC-008
@@ -407,7 +346,6 @@ No constitution violations. No complexity justifications needed.
 |------|--------|-------------|------------|
 | Synology SNMP OIDs differ on actual DSM version | Telegraf produces zero metrics for affected OIDs | Medium | Research confirmed OIDs for DSM 7.x; operator can verify via `snmpwalk` before deploy |
 | SNMPv3 credentials rotated since Feature 017 | Telegraf auth fails, zero metrics | Medium | FR-006 requires verification; credentials in vault can be updated by operator |
-| AdGuard API credentials unknown | Exporter cannot authenticate | Low | Operator provides during vault setup (quickstart Step 2) |
 | Nextcloud serverinfo app disabled | Exporter returns errors | Low | App is bundled and enabled by default; task verifies via `occ app:list` |
 | Jellyfin exporter binary unavailable for platform | Download fails | Low | LXC is amd64 Debian; binary published for linux-amd64 |
 | Grafana 12.3.1 deprecates panel types used | Dashboard panels don't render | Low | Using only `stat`, `timeseries`, `table`, `gauge` — all current in Grafana 12.x |
@@ -418,7 +356,7 @@ No constitution violations. No complexity justifications needed.
 
 ### Syntax & Lint (automated, pre-deploy)
 
-- `ansible-playbook --syntax-check` for `monitoring.yml`, `adguard.yml`, `nextcloud.yml`, `jellyfin.yml`
+- `ansible-playbook --syntax-check` for `monitoring.yml`, `nextcloud.yml`, `jellyfin.yml`
 - `ansible-lint` on all modified roles
 - `jq .` on all dashboard JSON files
 - `promtool check rules` on `synology_alerts.yml`
@@ -433,7 +371,6 @@ No constitution violations. No complexity justifications needed.
 
 - **SC-001**: Synology NAS dashboard shows live data on all panels
 - **SC-002**: Block SNMP traffic → `SynologyNASDown` fires within 3 minutes
-- **SC-004**: AdGuard Home dashboard shows DNS query metrics
 - **SC-005**: Nextcloud dashboard shows active users and storage
 - **SC-006**: All scrape targets show "UP" in Prometheus targets page
 - **SC-007**: `git diff ansible/roles/monitoring_stack/` shows no service-specific exporter config

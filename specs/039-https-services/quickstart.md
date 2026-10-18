@@ -14,7 +14,7 @@ Before deploying, complete these one-time manual steps:
 Log in to [Domeneshop control panel](https://www.domeneshop.no/admin) → DNS → `hus-sky.no`:
 
 - Add a **wildcard A record**: `*.hus-sky.no` → `192.168.1.211`
-- (Or add individual A records for each subdomain: `nextcloud`, `immich`, `grafana`, `jellyfin`, `adguard`)
+- (Or add individual A records for each subdomain: `nextcloud`, `immich`, `grafana`, `jellyfin`)
 
 ### 2. Domeneshop API Credentials
 
@@ -34,24 +34,6 @@ Add these entries:
 domeneshop_api_token: "YOUR_TOKEN_HERE"
 domeneshop_api_secret: "YOUR_SECRET_HERE"
 ```
-
-### 3. AdGuard DNS Rewrites (LAN split-horizon)
-
-Log in to AdGuard Home web UI (`http://192.168.1.210:3000`) → Filters → DNS rewrites.
-
-Add these entries:
-
-| Domain | Answer |
-|---|---|
-| `nextcloud.hus-sky.no` | `192.168.1.211` |
-| `immich.hus-sky.no` | `192.168.1.211` |
-| `grafana.hus-sky.no` | `192.168.1.211` |
-| `jellyfin.hus-sky.no` | `192.168.1.211` |
-| `adguard.hus-sky.no` | `192.168.1.211` |
-
-This ensures LAN clients resolve the subdomains to the reverse proxy directly, rather than going through public DNS.
-
----
 
 ## Deployment
 
@@ -90,7 +72,7 @@ Use the existing `lxc-deploy-lab.yml` workflow:
 
 ```bash
 # Check HTTPS and certificate for each service
-for svc in nextcloud immich grafana jellyfin adguard; do
+for svc in nextcloud immich grafana jellyfin; do
   echo "--- $svc ---"
   curl -sI "https://$svc.hus-sky.no" | head -5
   echo | openssl s_client -connect "$svc.hus-sky.no:443" -servername "$svc.hus-sky.no" 2>/dev/null | openssl x509 -noout -issuer -dates
@@ -135,6 +117,5 @@ To add HTTPS for a new service:
 1. Create a new Caddy site template: `ansible/roles/reverse_proxy/templates/<service>.caddy.j2`
 2. Add the deploy task to `ansible/roles/reverse_proxy/tasks/main.yml`
 3. Define `<service>_ip` and `<service>_port` in group vars
-4. Add a DNS rewrite in AdGuard Home web UI
-5. (Optional) Add an A record at Domeneshop if not using wildcard
-6. Run the reverse proxy playbook
+4. (Optional) Add an A record at Domeneshop if not using wildcard
+5. Run the reverse proxy playbook

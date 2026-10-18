@@ -484,7 +484,7 @@ These findings were discovered by examining the existing Immich, Jellyfin, and r
 - The main Caddyfile has `auto_https off` and imports `{{ caddy_conf_dir }}/*.caddy`
 - Each service `.caddy` file must be a standalone valid Caddyfile (required by the `caddy validate` step)
 - **Decision**: Nextcloud uses `http://nextcloud.local` as site address. Caddy merges imported site blocks: `http://nextcloud.local` handles Nextcloud traffic, `:80` catches everything else (Immich).
-- **DNS requirement**: For proxy routing to work, `nextcloud.local` must resolve to the proxy IP (`192.168.20.211`), not the LXC IP. This requires AdGuard DNS rewrite or `/etc/hosts` configuration. Direct access via `http://192.168.20.216:8080` is always available as a fallback.
+- **DNS requirement**: For proxy routing to work, `nextcloud.local` must resolve to the proxy IP (`192.168.20.211`), not the LXC IP. This requires a DNS entry or `/etc/hosts` configuration. Direct access via `http://192.168.20.216:8080` is always available as a fallback.
 
 ### 11.3 Terraform `features_mount` Variable
 

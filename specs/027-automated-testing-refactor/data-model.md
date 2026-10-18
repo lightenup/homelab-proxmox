@@ -12,7 +12,7 @@ Represents a single attempt to run an action for a service and environment.
 
 **Fields**
 - `run_id` (string): Unique identifier for the run (stable within a workflow execution)
-- `service` (string): Service identifier (e.g., `adguard`, `immich`)
+- `service` (string): Service identifier (e.g., `ntfy`, `immich`)
 - `environment` (enum): `lab` | `prod`
 - `action` (enum): `plan` | `apply` | `verify`
 - `source_ref` (string, optional): Git ref or SHA the run is associated with

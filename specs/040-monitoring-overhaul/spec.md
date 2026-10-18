@@ -23,7 +23,7 @@ As a homelab administrator, I want to see CPU, memory, disk, and network metrics
 
 **Acceptance Scenarios**:
 
-1. **Given** the infrastructure metrics agent is deployed to all service containers (AdGuard, Reverse Proxy, Home Assistant, Immich, Monitoring, Jellyfin, Nextcloud), **When** the operator opens the infrastructure dashboard, **Then** each container appears as a separate row/panel showing CPU usage, memory usage, disk usage, and network throughput with data no older than 60 seconds.
+1. **Given** the infrastructure metrics agent is deployed to all service containers (Reverse Proxy, Home Assistant, Immich, Monitoring, Jellyfin, Nextcloud), **When** the operator opens the infrastructure dashboard, **Then** each container appears as a separate row/panel showing CPU usage, memory usage, disk usage, and network throughput with data no older than 60 seconds.
 2. **Given** a container is under high CPU load, **When** the operator views the infrastructure dashboard, **Then** the CPU metric for that specific container reflects the elevated usage within 60 seconds.
 3. **Given** a container's root filesystem is 86% full, **When** the alert evaluation runs, **Then** the operator receives an email alert identifying the specific container and current disk usage percentage within 5 minutes.
 4. **Given** a container's memory usage exceeds 85% for 5 consecutive minutes, **When** the alert evaluation runs, **Then** the operator receives a warning email identifying the specific container and current memory usage percentage.
@@ -138,7 +138,7 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase, 
 
 #### Infrastructure Metrics
 
-- **FR-001**: System MUST deploy an infrastructure metrics agent to every service container in the homelab (AdGuard at 192.168.1.210, Reverse Proxy at 192.168.1.211, Home Assistant at 192.168.1.212, Immich at 192.168.1.213, Monitoring at 192.168.1.214, Jellyfin at 192.168.1.215, Nextcloud at 192.168.1.216). *(traces to US-1)*
+- **FR-001**: System MUST deploy an infrastructure metrics agent to every service container in the homelab (Reverse Proxy at 192.168.1.211, Home Assistant at 192.168.1.212, Immich at 192.168.1.213, Monitoring at 192.168.1.214, Jellyfin at 192.168.1.215, Nextcloud at 192.168.1.216). *(traces to US-1)*
 - **FR-002**: Each infrastructure metrics agent MUST expose CPU, disk, filesystem, memory, network, and system uptime metrics. *(traces to US-1)*
 - **FR-003**: The monitoring system MUST automatically scrape infrastructure metrics from all service containers without hardcoding individual targets in the monitoring configuration. *(traces to US-1, US-4)*
 
@@ -223,7 +223,7 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase, 
 
 ## Assumptions
 
-- **A-001**: All service containers (192.168.1.210–216) are reachable from the monitoring container (192.168.1.214) on the 192.168.1.0/24 subnet without firewall restrictions on metrics ports.
+- **A-001**: All service containers (192.168.1.211–216) are reachable from the monitoring container (192.168.1.214) on the 192.168.1.0/24 subnet without firewall restrictions on metrics ports.
 - **A-002**: The existing SMTP email notification channel (configured in Alertmanager) continues to function for all new alert rules. No new notification channels are needed.
 - **A-003**: Caddy supports native Prometheus-format metrics via a configuration directive. No external exporter is needed.
 - **A-004**: Immich supports native Prometheus-format metrics via environment variable configuration. No external exporter is needed.
@@ -246,7 +246,7 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase, 
 
 ## Out of Scope
 
-- **External exporters** for services without native metrics (Nextcloud, Jellyfin, AdGuard, Proxmox VE) — deferred to a future iteration after this foundation is established.
+- **External exporters** for services without native metrics (Nextcloud, Jellyfin, Proxmox VE) — deferred to a future iteration after this foundation is established.
 - **Healthcheck script removal** — the existing Python healthcheck script on systemd timer is retained as-is. It is independent, harmless, and provides a safety net during the transition. Removal deferred to a future iteration.
 - **Security monitoring** — fail2ban, Blackbox Exporter, certificate lifecycle monitoring, DNS anomaly detection, authentication failure correlation — all deferred to a future iteration.
 - **Log aggregation** (e.g., centralized log collection and search) — entirely out of scope for the monitoring overhaul.
@@ -272,7 +272,7 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase, 
 
 - **D-001**: Feature 017 (Synology Metrics) — the existing monitoring stack, Prometheus, Grafana, Telegraf, and Alertmanager are already deployed and functional. This feature builds on that foundation.
 - **D-002**: Feature 039 (HTTPS Services) — Caddy is configured with HTTPS for all services. Metrics exposure must not interfere with the existing Caddyfile structure.
-- **D-003**: Existing Ansible roles for each service (reverse_proxy, immich, jellyfin, nextcloud, adguard, homeassistant, lxc_base) — monitoring contracts will be added to these roles' defaults.
+- **D-003**: Existing Ansible roles for each service (reverse_proxy, immich, jellyfin, nextcloud, homeassistant, lxc_base) — monitoring contracts will be added to these roles' defaults.
 - **D-004**: Existing Ansible Vault for the monitoring group — secrets for Uptime Kuma removal and any new credentials.
 - **D-005**: Network connectivity between monitoring LXC (192.168.1.214) and all service LXCs on metrics-specific ports.
 - **D-006**: Feature 013 (Proxmox Config Backup) — the `proxmox_backup` role has Uptime Kuma references (`configure_kuma.yml`, `kuma_only` mode) that must be cleaned up as part of the Uptime Kuma decommission.
@@ -283,7 +283,7 @@ As a homelab administrator, I want Uptime Kuma fully removed from the codebase, 
 |---|-----------|----------|-----------|
 | DL-01 | How many iterations should this spec cover? | Iteration A only (foundation). Iterations B (external exporters, healthcheck removal) and C (security monitoring) are explicitly out of scope. | Iteration A establishes the extensible pattern that B and C build on. Shipping A first delivers immediate value and validates the self-registration approach before committing to the full roadmap. |
 | DL-02 | Should the healthcheck script be removed? | No. Retain the existing Python healthcheck script as-is. | It is independent of the monitoring stack, adds no maintenance burden in this iteration, and provides a safety net during the transition. Removal is deferred to a future iteration when all services have full metrics coverage. |
-| DL-03 | Which services get native application metrics? | Only Caddy (reverse proxy) and Immich (photo service). | These are the only two services in the homelab that expose Prometheus-format metrics natively with minimal configuration changes. All others (Nextcloud, Jellyfin, AdGuard, Proxmox VE) require external exporters, which are deferred. |
+| DL-03 | Which services get native application metrics? | Only Caddy (reverse proxy) and Immich (photo service). | These are the only two services in the homelab that expose Prometheus-format metrics natively with minimal configuration changes. All others (Nextcloud, Jellyfin, Proxmox VE) require external exporters, which are deferred. |
 | DL-04 | Should Home Assistant get a monitoring contract? | No. Excluded from this iteration. | The HA Ansible role is a placeholder — the service is not yet deployed. Cannot monitor what does not exist. The infrastructure metrics agent will be deployed to the container if it exists, but no HA-specific monitoring contract is created. |
 | DL-05 | What alert thresholds to use for infrastructure alerts? | 85% warning, 95% critical for disk. 85% warning for memory and CPU. 2 minutes for service-down. | Industry-standard thresholds that balance early warning with noise reduction. Aligned with the existing Synology volume alert threshold (85%). The 2-minute service-down threshold matches the existing Uptime Kuma `alert_down_threshold` of 2 minutes. |
 | DL-06 | Should Uptime Kuma be removed in this iteration or deferred? | Remove in this iteration. | Once the Prometheus `up` metric + generic ServiceDown alert rule is in place, Uptime Kuma provides zero additional value. Keeping it running wastes resources and creates confusion about which system is authoritative. The monitoring playbook already does not include the Uptime Kuma role, making removal low-risk. |

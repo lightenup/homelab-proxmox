@@ -10,7 +10,7 @@
 The `personal-financial-scenarios` app is currently run only on a developer laptop. This feature
 hosts it on the Proxmox homelab on a **new dedicated LXC** named `financial-scenario`
 (`192.168.1.217`, the next free service IP), following the same one-LXC-per-service recipe used by
-Immich, Nextcloud, Jellyfin, and AdGuard: a Terraform `lxc_service` module block, an Ansible role
+Immich, Nextcloud, and Jellyfin: a Terraform `lxc_service` module block, an Ansible role
 rendering a `docker-compose.yml`, the gated lab→prod deploy pipeline, and the monitoring contract.
 
 Unlike every existing service, the images are **private** and built in a *different* repository.
@@ -169,7 +169,7 @@ the down-alert fires.
 
 - **GHCR pull-credential missing/expired**: If the `read:packages` token is absent or expired, the
   `docker_login`/pull MUST fail loudly with a clear message (mirroring the existing roles' vault
-  assertions, e.g. AdGuard/Nextcloud `assert ... is defined`), not silently fall back to a stale or
+  assertions, e.g. Nextcloud `assert ... is defined`), not silently fall back to a stale or
   public image.
 - **First deploy vs upgrade**: First deploy has an empty host data dir (must seed); an upgrade
   re-pulls a new tag against an existing data dir (must not clobber). The role must handle both.
@@ -180,7 +180,7 @@ the down-alert fires.
   AI-ingestion admin feature will be inert; the engine, GUI, and MCP MUST be unaffected. This is an
   accepted limitation, not a failure.
 - **IP/name collision**: `192.168.1.217` and the names `financial-scenario` /
-  `financial_scenario_lxc` MUST NOT collide with the existing `.210–.216` allocations or module
+  `financial_scenario_lxc` MUST NOT collide with the existing `.211–.216` allocations or module
   names.
 - **Lab vs prod parity**: The `service_ips` entry must be added to **both** `lab.tfvars` and
   `prod.tfvars` templates, or promotion will fail for the missing environment.
@@ -309,7 +309,7 @@ the down-alert fires.
 - **A-002**: The Proxmox host runs Tailscale as a subnet router advertising `192.168.1.0/24`
   (role `tailscale_router`, `tailscale_subnet_routes: "192.168.1.0/24"`), so tailnet clients reach
   `192.168.1.217` directly with no per-host Tailscale agent on the new LXC.
-- **A-003**: `192.168.1.217` is free (`.210–.216` are the current allocations) and within the
+- **A-003**: `192.168.1.217` is free (`.211–.216` are the current allocations) and within the
   advertised subnet.
 - **A-004**: The existing `lxc_service` Terraform module, `geerlingguy.docker` role, gated
   lab/prod workflows, and `community.docker` collection are available and unchanged in shape.

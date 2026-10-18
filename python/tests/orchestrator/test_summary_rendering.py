@@ -16,7 +16,7 @@ def test_plan_ui_renderer_includes_token_and_truncation_line():
     obj = {
         "run_id": "r1",
         "environment": "lab",
-        "service": "adguard",
+        "service": "ntfy",
         "destructive": True,
         "confirmation_token_required": "TOKEN123",
         "counts": {"create": 1, "update": 2, "replace": 3, "destroy": 4},
@@ -38,7 +38,7 @@ def test_render_markdown_bounds_output_lines():
     obj = {
         "run_id": "r1",
         "environment": "lab",
-        "service": "adguard",
+        "service": "ntfy",
         "destructive": False,
         "confirmation_token_required": None,
         "counts": {"create": 0, "update": 0, "replace": 0, "destroy": 0},

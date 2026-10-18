@@ -28,9 +28,9 @@ All paths are relative to the repository root:
 
 **Purpose**: Centralize variables and role defaults required by all subsequent phases. All three tasks are independent and can run in parallel.
 
-**Done-condition checkpoint**: `grep -E 'jellyfin_ip|adguard_ip|homeassistant_ip' ansible/group_vars/services/vars.yml` returns 3 matches. `grep 'caddy_base_domain' ansible/roles/reverse_proxy/defaults/main.yml` returns 1 match.
+**Done-condition checkpoint**: `grep -E 'jellyfin_ip|homeassistant_ip' ansible/group_vars/services/vars.yml` returns 2 matches. `grep 'caddy_base_domain' ansible/roles/reverse_proxy/defaults/main.yml` returns 1 match.
 
-- [X] T001 [P] Add missing service IPs/ports to `ansible/group_vars/services/vars.yml`: `jellyfin_ip: "192.168.1.215"`, `jellyfin_port: 8096`, `adguard_ip: "192.168.1.210"`, `adguard_web_port: 3000`, `homeassistant_ip: "192.168.1.212"`, `homeassistant_port: 8123` (Plan Step 1, FR-010, FR-015, data-model E-001)
+- [X] T001 [P] Add missing service IPs/ports to `ansible/group_vars/services/vars.yml`: `jellyfin_ip: "192.168.1.215"`, `jellyfin_port: 8096`, `homeassistant_ip: "192.168.1.212"`, `homeassistant_port: 8123` (Plan Step 1, FR-010, FR-015, data-model E-001)
 - [X] T002 [P] Add encrypted vault entries `domeneshop_api_token` and `domeneshop_api_secret` to `ansible/group_vars/services/vault.yml` using `ansible-vault edit` (Plan Step 2, FR-013, US5, data-model E-005)
 - [X] T003 [P] Add HTTPS and xcaddy role defaults to `ansible/roles/reverse_proxy/defaults/main.yml`: `caddy_base_domain: "hus-sky.no"`, `caddy_acme_dns_provider: "lego_deprecated"`, `caddy_acme_dns_provider_name: "domeneshop"`, `caddy_custom_binary: true`, `caddy_xcaddy_plugins: ["github.com/caddy-dns/lego-deprecated"]`, `go_version: "1.22.0"`, `homeassistant_active: false` (Plan Step 3, FR-001, FR-012, FR-015, data-model variable registry)
 
@@ -85,15 +85,14 @@ All paths are relative to the repository root:
 
 ## Phase 5: User Story 2 — Browser-Trusted Access to All Services (Priority: P2)
 
-**Goal**: Add HTTPS-proxied site blocks for Grafana, Jellyfin, AdGuard, and Home Assistant (conditional), and update Grafana's root URL so all five active services are browser-accessible at their `hus-sky.no` subdomains.
+**Goal**: Add HTTPS-proxied site blocks for Grafana, Jellyfin, and Home Assistant (conditional), and update Grafana's root URL so all four active services are browser-accessible at their `hus-sky.no` subdomains.
 
-**Independent Test**: `for svc in grafana jellyfin adguard; do curl -sI https://$svc.hus-sky.no | head -1; done` returns HTTP 200/redirect for each. Browser padlock icon with Let's Encrypt cert visible on all five services. `openssl s_client -connect grafana.hus-sky.no:443 2>/dev/null | openssl x509 -noout -issuer` shows `Let's Encrypt`.
+**Independent Test**: `for svc in grafana jellyfin; do curl -sI https://$svc.hus-sky.no | head -1; done` returns HTTP 200/redirect for each. Browser padlock icon with Let's Encrypt cert visible on all four services. `openssl s_client -connect grafana.hus-sky.no:443 2>/dev/null | openssl x509 -noout -issuer` shows `Let's Encrypt`.
 
 ### Implementation for User Story 2
 
 - [X] T012 [P] [US2] Create NEW `ansible/roles/reverse_proxy/templates/grafana.caddy.j2`: site block for `grafana.{{ caddy_base_domain }}` proxying to `{{ monitoring_ip }}:{{ grafana_port }}` with HTTPS headers per `caddy-site-block.md` contract (Plan Step 6, FR-010). Depends on T001, T003.
 - [X] T013 [P] [US2] Create NEW `ansible/roles/reverse_proxy/templates/jellyfin.caddy.j2`: site block for `jellyfin.{{ caddy_base_domain }}` proxying to `{{ jellyfin_ip }}:{{ jellyfin_port }}` with HTTPS headers per `caddy-site-block.md` contract (Plan Step 6, FR-010). Depends on T001, T003.
-- [X] T014 [P] [US2] Create NEW `ansible/roles/reverse_proxy/templates/adguard.caddy.j2`: site block for `adguard.{{ caddy_base_domain }}` proxying to `{{ adguard_ip }}:{{ adguard_web_port }}` with HTTPS headers per `caddy-site-block.md` contract (Plan Step 6, FR-010). Depends on T001, T003.
 - [X] T015 [P] [US2] Create NEW `ansible/roles/reverse_proxy/templates/homeassistant.caddy.j2`: site block for `ha.{{ caddy_base_domain }}` proxying to `{{ homeassistant_ip }}:{{ homeassistant_port }}` wrapped in `{% if homeassistant_active | default(false) %}...{% endif %}` guard per `caddy-site-block.md` contract (Plan Step 6, FR-015, A-009, D-003). Depends on T001, T003.
 - [X] T016 [P] [US2] Modify `ansible/group_vars/monitoring/vars.yml`: change `grafana_domain` from `monitoring.local` to `grafana.hus-sky.no`, add `grafana_protocol: "https"` (Plan Step 11, FR-009, R-006). No dependencies.
 - [X] T017 [US2] Modify `ansible/roles/monitoring_stack/templates/docker-compose.yml.j2`: update `GF_SERVER_ROOT_URL` from `http://{{ grafana_domain }}:{{ grafana_port }}` to `{{ grafana_protocol }}://{{ grafana_domain }}` (no port — proxy handles 443). `GF_SERVER_DOMAIN` remains `{{ grafana_domain }}` (Plan Step 11, FR-009, R-006). Depends on T016.
@@ -110,7 +109,7 @@ All paths are relative to the repository root:
 
 ### Implementation for User Story 3
 
-- [X] T018 [US3] Modify `ansible/roles/reverse_proxy/tasks/main.yml`: add the following task blocks in order after the existing APT install tasks: (1) install Go `{{ go_version }}` and xcaddy build tool; (2) build custom Caddy binary with `xcaddy build --with {{ caddy_xcaddy_plugins | join(' --with ') }}` when `caddy_custom_binary` is true; (3) use `dpkg-divert` to prevent APT from overwriting the custom binary; (4) copy the built binary to `/usr/bin/caddy`; (5) create `/etc/systemd/system/caddy.service.d/` directory; (6) template `domeneshop.env.j2` to `/etc/caddy/domeneshop.env` with `mode: '0600'` (notifies `Reload systemd` then `Restart caddy`); (7) template `caddy-domeneshop.conf.j2` to `/etc/systemd/system/caddy.service.d/domeneshop.conf` (notifies `Reload systemd` then `Restart caddy`); (8) add deploy tasks for `grafana.caddy.j2`, `jellyfin.caddy.j2`, `adguard.caddy.j2`, and `homeassistant.caddy.j2` to `{{ caddy_conf_dir }}/` (each with `caddy validate` in validate parameter, notifies `Restart caddy`) (Plan Step 8, FR-012, FR-013, FR-010, R-002, R-003, D-005, D-006). Depends on T004, T005, T006, T007, T008, T009, T012, T013, T014, T015.
+- [X] T018 [US3] Modify `ansible/roles/reverse_proxy/tasks/main.yml`: add the following task blocks in order after the existing APT install tasks: (1) install Go `{{ go_version }}` and xcaddy build tool; (2) build custom Caddy binary with `xcaddy build --with {{ caddy_xcaddy_plugins | join(' --with ') }}` when `caddy_custom_binary` is true; (3) use `dpkg-divert` to prevent APT from overwriting the custom binary; (4) copy the built binary to `/usr/bin/caddy`; (5) create `/etc/systemd/system/caddy.service.d/` directory; (6) template `domeneshop.env.j2` to `/etc/caddy/domeneshop.env` with `mode: '0600'` (notifies `Reload systemd` then `Restart caddy`); (7) template `caddy-domeneshop.conf.j2` to `/etc/systemd/system/caddy.service.d/domeneshop.conf` (notifies `Reload systemd` then `Restart caddy`); (8) add deploy tasks for `grafana.caddy.j2`, `jellyfin.caddy.j2`, and `homeassistant.caddy.j2` to `{{ caddy_conf_dir }}/` (each with `caddy validate` in validate parameter, notifies `Restart caddy`) (Plan Step 8, FR-012, FR-013, FR-010, R-002, R-003, D-005, D-006). Depends on T004, T005, T006, T007, T008, T009, T012, T013, T015.
 
 **Checkpoint**: `ansible-lint ansible/roles/reverse_proxy` returns exit 0. `grep -c 'xcaddy' ansible/roles/reverse_proxy/tasks/main.yml` ≥ 1. `grep -c 'domeneshop.env' ansible/roles/reverse_proxy/tasks/main.yml` ≥ 1. `grep -c 'grafana.caddy' ansible/roles/reverse_proxy/tasks/main.yml` ≥ 1.
 
@@ -156,7 +155,7 @@ The rollback procedure in `quickstart.md` documents how to revert if migration f
 - **US5 (Phase 3)**: T006, T007 depend on T002. Can start in parallel with Phase 2.
 - **US1 (Phase 4)**: T008, T009 depend on T003. T010 is independent. T011 depends on T010.
 - **US2 (Phase 5)**: T012–T015 depend on T001 and T003. T016 is independent. T017 depends on T016.
-- **US3 (Phase 6)**: T018 depends on T004, T005, T006, T007, T008, T009, T012, T013, T014, T015 — all template tasks complete.
+- **US3 (Phase 6)**: T018 depends on T004, T005, T006, T007, T008, T009, T012, T013, T015 — all template tasks complete.
 - **Polish (Phase 8)**: T019 depends on T018 (all changes in place).
 
 ### User Story Dependencies
@@ -185,7 +184,6 @@ T003 ──► T004 ────────────────────
          T009 ─────────────────────────────── │
          T012 ─────────────────────────────── │
          T013 ─────────────────────────────── │
-         T014 ─────────────────────────────── │
          T015 ─────────────────────────────── │
 T010 ──► T011 ─────────────────────────────── │
 T016 ──► T017 ─────────────────────────────── ┘
@@ -194,7 +192,7 @@ T016 ──► T017 ────────────────────
 ## Implementation Order
 
 1. **Immediately (parallel)**: T001, T002, T003, T005 — no dependencies at all
-2. **After T003**: T004, T008, T009, T012, T013, T014, T015
+2. **After T003**: T004, T008, T009, T012, T013, T015
 3. **After T002**: T006, T007
 4. **After T010**: T011
 5. **After T016**: T017
@@ -222,7 +220,6 @@ Task: "Update immich.caddy.j2 to FQDN + HTTPS"                         # T008
 Task: "Update nextcloud.caddy.j2 to FQDN + HTTPS"                      # T009
 Task: "Create grafana.caddy.j2"                                          # T012
 Task: "Create jellyfin.caddy.j2"                                         # T013
-Task: "Create adguard.caddy.j2"                                          # T014
 Task: "Create homeassistant.caddy.j2"                                    # T015
 Task: "Update nextcloud/defaults/main.yml for HTTPS vars"               # T010
 Task: "Update monitoring/vars.yml for grafana domain/protocol"          # T016
@@ -255,7 +252,7 @@ Task: "Update monitoring/vars.yml for grafana domain/protocol"          # T016
 2. T004 → T005 (Foundational)
 3. T006 → T007 (US5)
 4. T008 → T009 → T010 → T011 (US1)
-5. T012 → T013 → T014 → T015 → T016 → T017 (US2)
+5. T012 → T013 → T015 → T016 → T017 (US2)
 6. T018 (Integration)
 7. T019 (Verify)
 
@@ -272,7 +269,6 @@ Task: "Update monitoring/vars.yml for grafana domain/protocol"          # T016
   - `ansible/roles/reverse_proxy/templates/caddy-domeneshop.conf.j2`
   - `ansible/roles/reverse_proxy/templates/grafana.caddy.j2`
   - `ansible/roles/reverse_proxy/templates/jellyfin.caddy.j2`
-  - `ansible/roles/reverse_proxy/templates/adguard.caddy.j2`
   - `ansible/roles/reverse_proxy/templates/homeassistant.caddy.j2`
 - **Files modified (EXISTING)**: 12 files
   - `ansible/group_vars/services/vars.yml`

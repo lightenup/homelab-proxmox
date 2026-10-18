@@ -30,7 +30,7 @@ This plan transforms the homelab monitoring from a minimal two-target Prometheus
 | IV | Dual-Provisioning Parity | ✅ PASS | All changes are Ansible playbooks runnable from both CI/CD (self-hosted runner) and laptop. No CI-only paths. Service scope allowlist already includes all 7 services. No new service to add. |
 | WF-1 | Test-Driven Changes | ✅ PASS | `promtool check config/rules` for Prometheus validation; `ansible-lint` for role quality; `--check` mode for dry-run; explicit verification tasks in monitoring_stack role. |
 | WF-2 | CI/CD Expectations | ✅ PASS | No destructive automation. Uptime Kuma cleanup is additive (removes dead container, idempotent). All changes deploy via existing playbook pipeline. |
-| NET-1 | Static IPs | ✅ PASS | All service IPs from inventory (192.168.1.210–216). node_exporter port 9100, Caddy metrics 2019, Immich metrics 8081/8082 — all defined as variables, not scattered. |
+| NET-1 | Static IPs | ✅ PASS | All service IPs from inventory (192.168.1.211–216). node_exporter port 9100, Caddy metrics 2019, Immich metrics 8081/8082 — all defined as variables, not scattered. |
 | SEC-1 | No plaintext secrets | ✅ PASS | Reviewed: no new secrets. Existing SMTP config in vault. Kuma secrets removed. |
 
 ## Project Structure

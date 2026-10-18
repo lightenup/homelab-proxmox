@@ -57,18 +57,10 @@ caddy_services:
 | immich | `{{ immich_ip }}` | `{{ immich_port }}` | true | true | immich.caddy.j2 + blackbox target |
 | nextcloud | `{{ nextcloud_ip }}` | `{{ nextcloud_port }}` | true | true | nextcloud.caddy.j2 + blackbox target |
 | jellyfin | `{{ jellyfin_ip }}` | `{{ jellyfin_port }}` | true | true | jellyfin.caddy.j2 + blackbox target |
-| adguard | `{{ adguard_ip }}` | `{{ adguard_web_port }}` | **false** | true | adguard.caddy.j2 (see note) |
 | ha | `{{ homeassistant_ip }}` | `{{ homeassistant_port }}` | **false** | true | homeassistant.caddy.j2 guarded by `homeassistant_active: false` |
 
 > **grafana** has no `grafana_ip` var — it uses `monitoring_ip` (the Grafana container runs on the
 > monitoring LXC). The entry references `{{ monitoring_ip }}`/`{{ grafana_port }}`, the existing vars.
->
-> **adguard** is `enabled: false` because AdGuard is **not in use at all** (LXC pending candidate #8,
-> blackbox target already commented out). Note that today's `adguard.caddy.j2` renders
-> **unconditionally**, so a live `adguard.hus-sky.no` route currently points at an unused backend.
-> Setting the entry to `enabled: false` **intentionally removes that dangling route** — this is a
-> correct cleanup, NOT a parity regression against the T001 baseline. The disabled entry is retained
-> (not deleted) so candidate #8 can re-enable it with a one-line flag flip.
 >
 > **ha** is `enabled: false`, matching today (its template is already guarded off via
 > `homeassistant_active: false`) — no route today, no route after. True parity.

@@ -8,7 +8,6 @@
     "service": {
       "type": "string",
       "enum": [
-        "adguard",
         "homeassistant",
         "immich",
         "jellyfin",

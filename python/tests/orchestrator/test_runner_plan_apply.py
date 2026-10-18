@@ -12,7 +12,7 @@ def _run(action: str, *, evidence_root: str):
             "--environment",
             "lab",
             "--service",
-            "adguard",
+            "ntfy",
             "--evidence-root",
             evidence_root,
             "--runner-script-path",

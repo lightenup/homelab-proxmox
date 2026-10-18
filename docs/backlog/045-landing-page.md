@@ -35,8 +35,7 @@ access, each as a clickable card, so that I don't have to remember each subdomai
 each `<service>.hus-sky.no` URL individually. The landing page is the feature's reason to exist.
 
 **Independent Test**: Open `https://hus-sky.no` in a browser on the LAN. Verify a card appears
-for each enabled, user-facing service (Immich, Jellyfin, Nextcloud, Grafana, and AdGuard once
-provisioned), each with a title, description, and a working link to the correct
+for each enabled, user-facing service (Immich, Jellyfin, Nextcloud, Grafana), each with a title, description, and a working link to the correct
 `<service>.hus-sky.no` URL.
 
 **Acceptance Scenarios**:
@@ -116,17 +115,13 @@ verify all three disappear.
 - **Health endpoint exposure**: The page's health data path must not expose the full Prometheus
   query API to the browser. The query must be pinned server-side so a client can only retrieve
   the fixed health metric, never arbitrary PromQL.
-- **Apex DNS record**: An A record (or the existing wildcard) for `hus-sky.no` itself, plus an
-  AdGuard rewrite for the apex, must resolve to the reverse proxy LXC IP (`192.168.1.211`) so
+- **Apex DNS record**: An A record (or the existing wildcard) for `hus-sky.no` itself must resolve to the reverse proxy LXC IP (`192.168.1.211`) so
   LAN and Tailscale clients reach the landing page.
 - **Service with no description/title**: A `caddy_services` entry missing display metadata must
   still render a usable card (fall back to the hostname) rather than breaking the page.
 - **Stale health data**: If the blackbox probe interval is long, a just-stopped service may still
   show "up" until the next probe. The indicator reflects the last successful probe, not real-time
   state; this is acceptable and should be understood as monitoring-derived, not live ping.
-- **AdGuard not yet provisioned**: AdGuard's blackbox target is currently commented out pending
-  candidate #8. Its `caddy_services` entry should be `enabled: false` (or equivalent) until the
-  LXC exists, so it neither probes a non-existent target nor shows a permanently-down card.
 
 ## Requirements
 
@@ -162,7 +157,7 @@ verify all three disappear.
   *(traces to US-2)*
 - **FR-011**: The apex domain `hus-sky.no` MUST resolve to the reverse proxy LXC IP
   (`192.168.1.211`) for LAN and Tailscale clients, via the registrar A record (or existing
-  wildcard) and an AdGuard rewrite for the apex. *(traces to US-1)*
+  wildcard). *(traces to US-1)*
 - **FR-012**: The card-to-health join MUST be derived from the shared `caddy_services` source so
   that a card and its health metric cannot reference mismatched hostnames. *(traces to US-2, US-3)*
 - **FR-013**: All changes MUST be deployable from both CI/CD (GitHub Actions) and a developer
@@ -218,8 +213,7 @@ verify all three disappear.
   service subdomains via `blackbox_https_targets`, producing `probe_success` metrics.
 - **A-003**: The Domeneshop DNS-01 flow can issue a certificate for the bare apex `hus-sky.no`
   exactly as it does for subdomains.
-- **A-004**: An apex DNS record (or the existing wildcard `*.hus-sky.no`) and an AdGuard rewrite
-  can be configured to resolve `hus-sky.no` to `192.168.1.211` for LAN and Tailscale clients.
+- **A-004**: An apex DNS record (or the existing wildcard `*.hus-sky.no`) can be configured to resolve `hus-sky.no` to `192.168.1.211` for LAN and Tailscale clients.
 - **A-005**: All current service backend IPs and ports remain unchanged; this feature changes only
   the reverse proxy (apex block + generated subdomain blocks), the blackbox target generation, and
   adds the landing assets.
@@ -261,7 +255,7 @@ verify all three disappear.
 | D-004 | How the browser gets health data without exposing Prometheus | A same-origin `/api/status` handler on the apex that reverse-proxies a **pinned** query (`probe_success`) to Prometheus; the client cannot submit arbitrary PromQL. | Same-origin avoids CORS; pinning the query prevents the landing page from becoming an open Prometheus query proxy. If the apex is ever exposed beyond LAN/Tailscale, this endpoint should additionally be auth-gated. |
 | D-005 | Apex serving and port concerns | Add a `hus-sky.no` site block on the existing shared 443 listener; no special port handling. | Caddy routes by Host/SNI, so the apex coexists with subdomains. The user's "maybe not port 80" concern does not apply — port 80 simply auto-redirects to HTTPS as for subdomains. |
 | D-006 | Static page vs server-side app | Static `index.html` + minimal client-side JS for health polling, served by Caddy `file_server`. | No new long-running service, nothing to monitor or that can drift; the page loads even if the health source is down. Health is the only dynamic part and it degrades gracefully. |
-| D-007 | Disabled/internal services (Home Assistant, metrics `:9180`, AdGuard pre-provisioning) | Control inclusion with `enabled` and `user_facing` flags on each `caddy_services` entry. | Lets the declaration express intent — a not-yet-deployed or internal-only endpoint is omitted from page and probes consistently, which runtime discovery could not infer. |
+| D-007 | Disabled/internal services (Home Assistant, metrics `:9180`) | Control inclusion with `enabled` and `user_facing` flags on each `caddy_services` entry. | Lets the declaration express intent — a not-yet-deployed or internal-only endpoint is omitted from page and probes consistently, which runtime discovery could not infer. |
 | D-008 | Scope of the consolidation refactor | Fold the existing per-service `.caddy` templates and the `blackbox_https_targets` literal into the `caddy_services`-driven generation as part of this feature. | The refactor is what makes the page sound rather than a fourth duplicate list. It touches the `reverse_proxy` and `monitoring_stack` roles and is the bulk of the work; it must be sequenced to preserve current routes/probes (no service interruption). |
 
 ## Open Questions

@@ -33,7 +33,7 @@ description: "Task list for 018d-service-lifecycle"
 - [x] T006 [US1] Create `scripts/add-service.sh` to automate inventory addition
 - [x] T007 [P] [US1] Migrate `immich` host_vars to new schema in `ansible/host_vars/immich.yml`
 - [x] T008 [P] [US1] Migrate `monitoring` host_vars to new schema in `ansible/host_vars/monitoring/vars.yml`
-- [x] T009 [P] [US1] Migrate `homeassistant` and `adguard` host_vars to new schema
+- [x] T009 [P] [US1] Migrate `homeassistant` host_vars to new schema
 - [x] T010 [P] [US1] Migrate `proxmox` and `reverse_proxy` host_vars to new schema
 - [x] T011 [US1] Verify `add-service.sh` functionality with a dry-run test
 

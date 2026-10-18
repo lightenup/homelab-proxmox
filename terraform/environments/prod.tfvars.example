@@ -51,7 +51,6 @@ service_mountpoints = {
 }
 
 service_ips = {
-  adguard        = "<service-ip>/24"  # e.g. <host>/24 in CIDR notation
   reverse_proxy  = "<service-ip>/24"
   homeassistant  = "<service-ip>/24"
   immich         = "<service-ip>/24"

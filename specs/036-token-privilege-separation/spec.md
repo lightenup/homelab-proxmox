@@ -69,7 +69,7 @@ As a homelab operator, I want the privilege-separation changes to leave existing
 **Acceptance Scenarios**:
 
 1. **Given** existing LXC containers that already have bind mounts set via the rebuild orchestrator, **When** `terraform plan` is run after the module changes, **Then** no changes are proposed for those containers' `mountpoint` or `features` attributes (verified by `lifecycle { ignore_changes }`).
-2. **Given** an existing service without bind mounts (e.g., AdGuard), **When** `terraform plan` is run, **Then** no changes are proposed at all for that container.
+2. **Given** an existing service without bind mounts (e.g., Home Assistant), **When** `terraform plan` is run, **Then** no changes are proposed at all for that container.
 
 ---
 

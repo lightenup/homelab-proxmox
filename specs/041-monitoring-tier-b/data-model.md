@@ -49,7 +49,6 @@ Metrics produced by Telegraf's SNMP input plugin, exposed via `outputs.prometheu
 
 | Service | Exporter | Port | Job Name | Deployment |
 |---------|----------|------|----------|------------|
-| AdGuard Home | `henrywhitaker3/adguard-exporter` | 9618 | `adguard-exporter` | Docker (adguard LXC) |
 | Nextcloud | `xperimental/nextcloud-exporter` | 9205 | `nextcloud-exporter` | Docker sidecar (nextcloud LXC) |
 | Jellyfin | `rebelcore/jellyfin_exporter` | 9594 | `jellyfin-exporter` | Go binary + systemd (jellyfin LXC) |
 
@@ -59,7 +58,6 @@ Metrics produced by Telegraf's SNMP input plugin, exposed via `outputs.prometheu
 |------|---------|------|-----------|
 | 9100 | node_exporter | all service LXCs | scrape (monitoring→service) |
 | 9273 | Telegraf SNMP | monitoring LXC | scrape (prometheus→telegraf, internal) |
-| 9618 | AdGuard exporter | adguard LXC (192.168.1.210) | scrape (monitoring→adguard) |
 | 9205 | Nextcloud exporter | nextcloud LXC (192.168.1.216) | scrape (monitoring→nextcloud) |
 | 9594 | Jellyfin exporter | jellyfin LXC (192.168.1.215) | scrape (monitoring→jellyfin) |
 | 161/UDP | SNMP | synology NAS (192.168.1.109) | poll (telegraf→synology) |
@@ -69,7 +67,6 @@ Metrics produced by Telegraf's SNMP input plugin, exposed via `outputs.prometheu
 | Credential | Storage | Used By | Provisioned By |
 |------------|---------|---------|----------------|
 | SNMP v3 auth/priv passwords | `ansible/group_vars/monitoring/vault.yml` | Telegraf SNMP input | Existing (Feature 017) |
-| AdGuard admin username/password | `ansible/group_vars/services/vault.yml` | AdGuard exporter | New (this feature) |
 | Nextcloud serverinfo API token | `ansible/group_vars/services/vault.yml` | Nextcloud exporter | New (this feature) |
 | Jellyfin API key | `ansible/group_vars/services/vault.yml` | Jellyfin exporter | New (this feature) |
 

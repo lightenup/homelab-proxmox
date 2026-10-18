@@ -71,18 +71,6 @@ jellyfin.{{ caddy_base_domain }} {
 }
 ```
 
-### AdGuard (`adguard.caddy.j2`) — NEW
-
-```caddy
-adguard.{{ caddy_base_domain }} {
-    reverse_proxy {{ adguard_ip }}:{{ adguard_web_port }} {
-        header_up X-Forwarded-Proto https
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-    }
-}
-```
-
 ### Home Assistant (`homeassistant.caddy.j2`) — NEW (conditional)
 
 ```caddy

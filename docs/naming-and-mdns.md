@@ -15,7 +15,6 @@ All managed hosts broadcast their hostname on the local network via the `.local`
 | `pve.local` | `192.168.1.112` | Proxmox VE Host |
 | `proxy.local` | `192.168.1.211` | Nginx Reverse Proxy |
 | `immich.local` | `192.168.1.213` | Immich Photo Backup |
-| `adguard.local` | `192.168.1.210` | AdGuard Home (DNS) |
 | `homeassistant.local` | `192.168.1.212` | Home Assistant |
 | `nextcloud.local` | `192.168.1.216` | Nextcloud Cloud Storage |
 | `llm-router.local` | `192.168.1.220` | LiteLLM gateway (spec `064`) |
@@ -78,9 +77,8 @@ ssh root@192.168.1.112 'systemctl restart avahi-daemon && sleep 2 && getent host
 Once a new router is introduced (e.g., OPNsense/pfSense) or the existing router allows custom DNS settings:
 
 1.  **Domain**: We will migrate to `home.arpa` (RFC 8375) or `*.lan`.
-2.  **Resolver**: AdGuard Home (`192.168.1.210`) will become the primary DNS for the network.
-3.  **DHCP**: The router will assign AdGuard as the DNS server via DHCP.
-4.  **Static Leases**: We will configure static leases or DNS rewrites in AdGuard to map hostnames to IPs.
+2.  **Resolver**: The new router will provide LAN DNS.
+3.  **Static Leases**: We will configure static leases or DNS entries on that router to map hostnames to IPs.
 
 This will solve the Android limitation and provide a more robust naming system.
 

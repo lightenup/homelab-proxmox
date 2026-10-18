@@ -9,7 +9,7 @@
 - New LXC `financial-scenario`. Prod is on `192.168.1.0/24` → `192.168.1.217` (committed
   templates + prod inventory). Lab is a separate subnet `192.168.20.0/24`, so the operator's
   (gitignored, local) `lab.tfvars` uses `192.168.20.218`.
-- 2 cores / 2048 MB / 16 GB — same sizing as adguard/homeassistant
+- 2 cores / 2048 MB / 16 GB — same sizing as homeassistant
 - Three containers from two private GHCR images: `api`, `mcp` (same image, different command), `gui`
 - Tailscale/LAN-only — no Caddy route, no landing-page card, no public DNS
 - Vault-backed GHCR pull credential (first private registry pull in this repo)

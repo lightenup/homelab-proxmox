@@ -32,13 +32,12 @@ IaC repo — no `src/`/`tests/` tree. Real paths: `ansible/group_vars/`, `ansibl
 
 **Purpose**: Capture the parity baseline so the consolidation can be proven drift-free.
 
-- [X] T001 [P] Record the parity baseline before any change. Today **five** per-service blocks render
-  (immich, nextcloud, grafana, jellyfin, **adguard** — its template is unguarded; `ha` does NOT render,
+- [X] T001 [P] Record the parity baseline before any change. Today **four** per-service blocks render
+  (immich, nextcloud, grafana, jellyfin; `ha` does NOT render,
   guarded off by `homeassistant_active: false`) and **four** `blackbox_https_targets` exist (grafana,
   immich, nextcloud, jellyfin), as listed in
   `specs/045-landing-page/contracts/caddy_services.schema.md` (initial-population table). The US3
-  consolidation must reproduce the four active services exactly; the adguard route is the one
-  deliberate removal (see T008).
+  consolidation must reproduce the four active services exactly.
 
 ---
 
@@ -50,11 +49,10 @@ IaC repo — no `src/`/`tests/` tree. Real paths: `ansible/group_vars/`, `ansibl
 
 - [X] T002 Define `caddy_services` in `ansible/group_vars/services/vars.yml` per
   `specs/045-landing-page/contracts/caddy_services.schema.md`: entries for grafana, immich, nextcloud,
-  jellyfin (`enabled: true`, `user_facing: true`), adguard (`enabled: false` — AdGuard is not in use at
-  all; LXC pending candidate #8), and ha (`enabled: false`). Each entry's `ip`/`port` MUST reference the
+  jellyfin (`enabled: true`, `user_facing: true`), and ha (`enabled: false`). Each entry's `ip`/`port` MUST reference the
   existing central backend vars
   (e.g. `ip: "{{ immich_ip }}"`, `port: "{{ immich_port }}"`; grafana → `{{ monitoring_ip }}`/`{{ grafana_port }}`;
-  adguard → `{{ adguard_ip }}`/`{{ adguard_web_port }}`; ha → `{{ homeassistant_ip }}`/`{{ homeassistant_port }}`)
+  ha → `{{ homeassistant_ip }}`/`{{ homeassistant_port }}`)
   so IP strings stay centrally defined (constitution Networking rule), not duplicated.
 - [X] T003 Add `caddy_base_domain: "hus-sky.no"` to `ansible/group_vars/services/vars.yml` and remove
   the now-redundant `caddy_base_domain` default from `ansible/roles/reverse_proxy/defaults/main.yml`,
@@ -82,8 +80,8 @@ and no literal `blackbox_https_targets` list.
   `Deploy <service> Caddy configuration` template tasks with one looped task over
   `caddy_services | selectattr('enabled')` (route gated by `enabled` only) rendering `service.caddy.j2`
   → `{{ caddy_conf_dir }}/{{ item.host }}.caddy`, `loop_control.label: "{{ item.host }}"`, notify Restart caddy.
-- [X] T006 [P] [US3] Delete the six obsolete templates in `ansible/roles/reverse_proxy/templates/`:
-  `immich.caddy.j2`, `nextcloud.caddy.j2`, `grafana.caddy.j2`, `jellyfin.caddy.j2`, `adguard.caddy.j2`,
+- [X] T006 [P] [US3] Delete the five obsolete templates in `ansible/roles/reverse_proxy/templates/`:
+  `immich.caddy.j2`, `nextcloud.caddy.j2`, `grafana.caddy.j2`, `jellyfin.caddy.j2`,
   `homeassistant.caddy.j2`.
 - [X] T007 [P] [US3] In `ansible/group_vars/monitoring/vars.yml`, replace the literal
   `blackbox_https_targets` list with a generated expression: for each `caddy_services` entry where
@@ -94,13 +92,10 @@ and no literal `blackbox_https_targets` list.
   and the in-role `caddy validate`; confirm the resolved `blackbox_https_targets` and the rendered
   site blocks match the Phase 1 (T001) baseline for the **four active services** (grafana, immich,
   nextcloud, jellyfin) — no probe drift, no route drift for those.
-  **One intentional difference**: today's `adguard.caddy.j2` renders unconditionally, so a live
-  `adguard.hus-sky.no` route exists now; with `enabled: false` that dangling route to an unused
-  backend is **removed on purpose** (AdGuard isn't in use — confirm with the user / candidate #8, not a
-  regression). `ha` is absent both before and after (already guarded off) — true parity.
+  `ha` is absent both before and after (already guarded off) — true parity.
 
 **Checkpoint**: Routes and probes for the four active services are generated from one source, identical
-to before; old duplicate templates/literal removed; the unused adguard route is intentionally gone.
+to before; old duplicate templates/literal removed.
 
 ---
 
@@ -129,11 +124,11 @@ Disabled/internal entries show no card.
 - [X] T013 [US1] Deploy and verify (SC-001, SC-002, FR-011): run
   `ansible-playbook -i ansible/inventories/prod/hosts.yml ansible/playbooks/site.yml --tags reverse_proxy,monitoring`.
   Complete the one-time apex DNS step (a **public DNS A record at Domeneshop** `hus-sky.no → 192.168.1.211`,
-  per quickstart) — this is a manual step. DNS is public-only; AdGuard is unused and plays no role.
+  per quickstart) — this is a manual step. DNS is public-only.
   **Explicitly verify apex resolution before the browser check** (FR-011): from both a LAN client and a
   Tailscale client, `dig +short hus-sky.no` (or `nslookup`) returns `192.168.1.211`. Then browse
   `https://hus-sky.no` — valid cert, a card per active service, each link reaches the right subdomain;
-  no card for adguard/ha.
+  no card for ha.
 
 **Checkpoint**: Landing page is live and lists all services (MVP). Health indicators are still `unknown`.
 

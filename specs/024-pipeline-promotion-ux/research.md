@@ -27,7 +27,7 @@ GitHub Actions workflow_dispatch inputs do not support dynamic choice generation
 3. **Generated workflow YAML via CI**: Rejected as too complex; adds generation step and complicates workflow maintenance
 
 ### Implementation Notes
-- Hardcode service choices in workflow YAML: `["adguard", "homeassistant", "immich", "jellyfin", "monitoring", "reverse_proxy"]`
+- Hardcode service choices in workflow YAML: `["homeassistant", "immich", "jellyfin", "monitoring", "reverse_proxy"]`
 - Add validation step at start of each workflow job:
   ```bash
   jq -e --arg svc "$SERVICE" 'has($svc)' scripts/lab/service-scope-allowlist.json

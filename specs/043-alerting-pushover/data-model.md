@@ -109,7 +109,6 @@ All 18 existing alert rules and their routing:
 | HighProbeLatency | security_alerts.yml | performance |
 | Fail2banHighBanRate | security_alerts.yml | security |
 | CaddyHighErrorRate | service_alerts.yml.j2 (reverse_proxy contract) | — |
-| AdGuardHighBlockedRate | service_alerts.yml.j2 (adguard contract) | — |
 | ImmichJobBacklogHigh | service_alerts.yml.j2 (immich contract) | — |
 
 ## Relationship Diagram

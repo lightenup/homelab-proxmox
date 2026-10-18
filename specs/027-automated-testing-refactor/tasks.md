@@ -84,7 +84,7 @@ These slices are the intended shipping order while keeping workflow UX stable.
 - [X] T043 [US1] Enforce apply provenance association in src/homelab_proxmox_orchestrator/orchestrator.py: if --from-plan-run-id set, verify referenced plan identity exists and matches (service/environment/source_ref) or fail with bounded remediation guidance
 - [X] T044 [P] [US1] Add mismatch tests in tests/orchestrator/test_provenance_mismatch.py (unknown plan id, wrong service/env/source_ref, missing identity file)
 
-**Checkpoint**: `python3 -m homelab_proxmox_orchestrator.cli plan --environment lab --service adguard --runner-script-path python/tests/orchestrator/fixtures/fake_pve_service_deploy.sh` works locally and tests pass.
+**Checkpoint**: `python3 -m homelab_proxmox_orchestrator.cli plan --environment lab --service ntfy --runner-script-path python/tests/orchestrator/fixtures/fake_pve_service_deploy.sh` works locally and tests pass.
 
 ---
 
@@ -137,8 +137,8 @@ These slices are the intended shipping order while keeping workflow UX stable.
 **Independent Test**: Manually dispatch the nightly workflow and confirm it uploads artifacts and reports a clear overall status.
 
 - [X] T029 [P] [US4] Add mutmut configuration in python/mutmut.ini (paths-to-mutate=python/src/homelab_proxmox_orchestrator; test-command=python3 -m pytest -c python/pytest.ini)
-- [X] T030 [P] [US4] Add Molecule scenario files for AdGuard role in ansible/roles/adguard/molecule/default/{molecule.yml,converge.yml,verify.yml}
-- [X] T031 [US4] Add nightly workflow .github/workflows/nightly-deeper-verification.yml (schedule + workflow_dispatch) running: mutmut + molecule test (adguard)
+- [X] T030 [P] [US4] Add Molecule scenario files for a service role in ansible/roles/<role>/molecule/default/{molecule.yml,converge.yml,verify.yml}
+- [X] T031 [US4] Add nightly workflow .github/workflows/nightly-deeper-verification.yml (schedule + workflow_dispatch) running: mutmut + molecule test
 - [X] T032 [US4] Upload nightly artifacts (mutmut results, molecule logs) in .github/workflows/nightly-deeper-verification.yml
 
 **Checkpoint**: Nightly runs succeed on main and provide actionable artifacts on failure.

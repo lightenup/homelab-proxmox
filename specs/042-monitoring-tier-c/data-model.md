@@ -20,7 +20,6 @@ A public-facing URL tested by the blackbox exporter. Defined statically in Prome
 - `https://immich.hus-sky.no`
 - `https://nextcloud.hus-sky.no`
 - `https://jellyfin.hus-sky.no`
-- `https://adguard.hus-sky.no`
 
 **Metrics produced per target** (via blackbox exporter):
 | Metric | Type | Labels | Unit |

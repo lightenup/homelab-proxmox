@@ -27,13 +27,12 @@ Defines the routing table for the reverse proxy. Each entry maps a public subdom
 | `immich.hus-sky.no` | `192.168.1.213` | `2283` | Yes | Existing proxy target, domain change |
 | `grafana.hus-sky.no` | `192.168.1.214` | `3000` | Yes | New proxy target (FR-010) |
 | `jellyfin.hus-sky.no` | `192.168.1.215` | `8096` | Yes | New proxy target (FR-010) |
-| `adguard.hus-sky.no` | `192.168.1.210` | `3000` | Yes | New proxy target (FR-010); port TBD — AdGuard Home default web UI is 3000 (see R-004) |
 | `ha.hus-sky.no` | `192.168.1.212` | `8123` | No | Future placeholder (FR-015, A-009) |
 
 **Source variables** (in `ansible/group_vars/`):
 - `nextcloud_ip`, `immich_ip`, `monitoring_ip` — already defined in `services/vars.yml`
 - `reverse_proxy_ip` — already defined in `services/vars.yml`
-- New variables needed: `jellyfin_ip`, `adguard_ip`, `homeassistant_ip`, and corresponding ports
+- New variables needed: `jellyfin_ip`, `homeassistant_ip`, and corresponding ports
 
 ---
 
@@ -55,29 +54,6 @@ Represents a Let's Encrypt certificate. Managed automatically by Caddy.
 - Individual certificates per subdomain (research R-007)
 - Caddy stores certificate data in `/var/lib/caddy/.local/share/caddy/` by default
 - No manual certificate files to manage
-
----
-
-### E-003: DNS Rewrite Rule (AdGuard)
-
-Split-horizon DNS entries so LAN clients resolve `*.hus-sky.no` to the reverse proxy LAN IP instead of going through the public DNS.
-
-| Field | Type | Description |
-|---|---|---|
-| `domain` | string | The FQDN to rewrite (e.g., `nextcloud.hus-sky.no`) |
-| `answer` | IPv4 | Target IP (`192.168.1.211` — reverse proxy) |
-
-**Instances**:
-
-| Domain | Answer |
-|---|---|
-| `nextcloud.hus-sky.no` | `192.168.1.211` |
-| `immich.hus-sky.no` | `192.168.1.211` |
-| `grafana.hus-sky.no` | `192.168.1.211` |
-| `jellyfin.hus-sky.no` | `192.168.1.211` |
-| `adguard.hus-sky.no` | `192.168.1.211` |
-
-**Configuration method**: Manual via AdGuard Home web UI (decision D-002, research R-004)
 
 ---
 
@@ -154,8 +130,6 @@ Encrypted credentials for the Domeneshop DNS API.
 | `grafana_protocol` | `https` | `ansible/group_vars/monitoring/vars.yml` | FR-009 |
 | `jellyfin_ip` | `192.168.1.215` | `ansible/group_vars/services/vars.yml` | A-007, FR-010 |
 | `jellyfin_port` | `8096` | `ansible/group_vars/services/vars.yml` | A-007, FR-010 |
-| `adguard_ip` | `192.168.1.210` | `ansible/group_vars/services/vars.yml` | A-005, FR-010 |
-| `adguard_web_port` | `3000` | `ansible/group_vars/services/vars.yml` | FR-010 |
 | `homeassistant_ip` | `192.168.1.212` | `ansible/group_vars/services/vars.yml` | FR-015 |
 | `homeassistant_port` | `8123` | `ansible/group_vars/services/vars.yml` | FR-015 |
 | `go_version` | `1.22.0` | `ansible/roles/reverse_proxy/defaults/main.yml` | R-002 |

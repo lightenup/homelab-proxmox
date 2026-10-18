@@ -10,7 +10,7 @@ def test_render_inventory_strips_cidr_and_sets_defaults() -> None:
     yaml_text = render_inventory_yaml(
         services={
             "immich": "10.0.0.10/24",
-            "adguard": "10.0.0.11/24",
+            "ntfy": "10.0.0.11/24",
         },
         ssh_private_key_file=None,
     )

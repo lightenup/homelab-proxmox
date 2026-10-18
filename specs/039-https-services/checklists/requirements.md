@@ -44,6 +44,6 @@
 - Decision Log contains 7 resolved ambiguities with rationale.
 - FR-005, FR-006 reference specific IP addresses — these are infrastructure facts (existing LXC addresses), not implementation choices.
 - FR-012 mentions "custom build" of Caddy — this is a requirement (the stock binary lacks the needed capability), not an implementation directive. The plan phase will determine the specific build approach.
-- A-007 now enumerates all backend IPs and ports, including a note that AdGuard's web UI port needs confirmation during planning.
+- A-007 now enumerates all backend IPs and ports.
 - A-010 corrected to clarify that public DNS resolvers DO serve the records (valid DNS), but the IP is only routable from LAN/Tailscale.
 - Key Entity "Registrar DNS Record" corrected to distinguish A records (routing) from TXT records (DNS-01 validation).

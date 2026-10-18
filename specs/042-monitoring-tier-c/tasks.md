@@ -42,7 +42,7 @@ Not applicable. Phase 3 (HTTPS probing) and Phase 4 (fail2ban) are independently
 
   **Done-condition**: File exists. `grep 'https_2xx' ansible/roles/monitoring_stack/templates/blackbox.yml.j2` returns 1 match. `grep 'follow_redirects: true' ansible/roles/monitoring_stack/templates/blackbox.yml.j2` returns 1 match.
 
-- [X] T002 [P] [US1/US2] Add blackbox exporter variables to `ansible/roles/monitoring_stack/defaults/main.yml` (append `blackbox_exporter_version: "v0.28.0"`, `blackbox_exporter_port: 9115`, `blackbox_config_path: "{{ monitoring_install_dir }}/blackbox"` — uses `monitoring_install_dir` matching existing path pattern in defaults) and to `ansible/group_vars/monitoring/vars.yml` (append `blackbox_exporter_version: "v0.28.0"`, `blackbox_exporter_port: 9115`, plus `blackbox_https_targets` list with 5 entries: `https://grafana.hus-sky.no`, `https://immich.hus-sky.no`, `https://nextcloud.hus-sky.no`, `https://jellyfin.hus-sky.no`, `https://adguard.hus-sky.no` — do NOT add `blackbox_config_path` to vars.yml, the default is sufficient, same pattern as `telegraf_config_path`)
+- [X] T002 [P] [US1/US2] Add blackbox exporter variables to `ansible/roles/monitoring_stack/defaults/main.yml` (append `blackbox_exporter_version: "v0.28.0"`, `blackbox_exporter_port: 9115`, `blackbox_config_path: "{{ monitoring_install_dir }}/blackbox"` — uses `monitoring_install_dir` matching existing path pattern in defaults) and to `ansible/group_vars/monitoring/vars.yml` (append `blackbox_exporter_version: "v0.28.0"`, `blackbox_exporter_port: 9115`, plus `blackbox_https_targets` list with 4 entries: `https://grafana.hus-sky.no`, `https://immich.hus-sky.no`, `https://nextcloud.hus-sky.no`, `https://jellyfin.hus-sky.no` — do NOT add `blackbox_config_path` to vars.yml, the default is sufficient, same pattern as `telegraf_config_path`)
 
   **Done-condition**: `grep -c 'blackbox' ansible/roles/monitoring_stack/defaults/main.yml` returns 3. `grep -c 'hus-sky.no' ansible/group_vars/monitoring/vars.yml` returns 5.
 
@@ -172,13 +172,13 @@ Not applicable. Phase 3 (HTTPS probing) and Phase 4 (fail2ban) are independently
 
   **Done-condition**: No plaintext credential values found. `git diff --name-only -- ansible/group_vars/*/vault.yml` returns empty (vault files unmodified).
 
-- [X] T019 [P] Verify monitoring contract port and job-name uniqueness — confirm port 9191 (fail2ban-exporter) does not conflict with existing ports (9100=node_exporter, 9180=caddy, 8081/8082=immich, 9618=adguard, 9205=nextcloud, 9594=jellyfin, 9090=prometheus, 3000=grafana, 9273=telegraf, 9093=alertmanager); confirm port 9115 (blackbox-exporter) does not conflict; confirm 3 new job names (`fail2ban-exporter-reverse-proxy`, `fail2ban-exporter-nextcloud`, `fail2ban-exporter-jellyfin`) are unique across all monitoring contracts
+- [X] T019 [P] Verify monitoring contract port and job-name uniqueness — confirm port 9191 (fail2ban-exporter) does not conflict with existing ports (9100=node_exporter, 9180=caddy, 8081/8082=immich, 9205=nextcloud, 9594=jellyfin, 9090=prometheus, 3000=grafana, 9273=telegraf, 9093=alertmanager); confirm port 9115 (blackbox-exporter) does not conflict; confirm 3 new job names (`fail2ban-exporter-reverse-proxy`, `fail2ban-exporter-nextcloud`, `fail2ban-exporter-jellyfin`) are unique across all monitoring contracts
 
   **Done-condition**: Port 9191 and 9115 appear only in new fail2ban/blackbox config files. `grep 'fail2ban-exporter' ansible/host_vars/*.yml` returns exactly 3 matches. No job name collisions across `ansible/host_vars/*.yml`.
 
-- [X] T020 Verify file manifest — run `git diff --name-only` and confirm output includes the 23 expected files (11 created + 3 host_vars + 9 modifications); verify 4 files are unchanged: `ansible/host_vars/immich.yml`, `ansible/host_vars/adguard.yml`, `ansible/playbooks/monitoring.yml`, `scripts/lab/service-scope-allowlist.json`
+- [X] T020 Verify file manifest — run `git diff --name-only` and confirm output includes the 23 expected files (11 created + 3 host_vars + 9 modifications); verify 3 files are unchanged: `ansible/host_vars/immich.yml`, `ansible/playbooks/monitoring.yml`, `scripts/lab/service-scope-allowlist.json`
 
-  **Done-condition**: `git diff --name-only -- ansible/host_vars/immich.yml ansible/host_vars/adguard.yml ansible/playbooks/monitoring.yml scripts/lab/service-scope-allowlist.json` returns empty (these files must not change).
+  **Done-condition**: `git diff --name-only -- ansible/host_vars/immich.yml ansible/playbooks/monitoring.yml scripts/lab/service-scope-allowlist.json` returns empty (these files must not change).
 
 ---
 
@@ -358,7 +358,6 @@ T009: "playbooks/fail2ban.yml" (needs T008 complete)
 | `ansible/roles/monitoring_stack/handlers/main.yml` | Existing handlers (Reload prometheus, Restart monitoring stack) sufficient |
 | `ansible/playbooks/monitoring.yml` | Already includes monitoring_stack role; no playbook changes needed |
 | `ansible/host_vars/immich.yml` | Immich contract unchanged; must not regress |
-| `ansible/host_vars/adguard.yml` | AdGuard contract unchanged; must not regress |
 | `scripts/lab/service-scope-allowlist.json` | All affected services already in allowlist |
 
 ---

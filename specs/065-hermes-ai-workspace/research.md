@@ -119,7 +119,7 @@ would be complexity without a consumer (Constitution IV).
 
 ## R-007 — Address and sizing
 
-**Decision**: `192.168.1.221`. `.210`–`.220` are allocated, `.221` is next free.
+**Decision**: `192.168.1.221`. `.211`–`.220` are allocated, `.221` is next free.
 
 Sizing is deferred to implementation and must be **measured, not guessed** — the footprint depends
 on whether retrieval runs in-container (it does not, per R-002) and on document volume. Start from

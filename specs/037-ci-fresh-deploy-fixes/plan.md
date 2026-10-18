@@ -17,7 +17,7 @@ The CI pipeline (`pve-service-deploy apply`) cannot create a brand-new LXC conta
 **Project Type**: Infrastructure-as-Code — bash orchestrator with Python test harness
 **Performance Goals**: Deploy key injection <10s (NFR-001), network check <15s (NFR-002), combined overhead <30s (NFR-003)
 **Constraints**: No Terraform changes, no tfvars changes, no workflow YAML changes (per spec Out of Scope)
-**Scale/Scope**: 7 services (adguard, homeassistant, immich, jellyfin, monitoring, nextcloud, reverse_proxy)
+**Scale/Scope**: 6 services (homeassistant, immich, jellyfin, monitoring, nextcloud, reverse_proxy)
 
 ## Constitution Check
 

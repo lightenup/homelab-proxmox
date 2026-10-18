@@ -54,7 +54,7 @@ variable "service_ips" {
 
 variable "nameserver" {
   type        = string
-  description = "LXC DNS nameserver(s) as a space-separated string (e.g. '192.168.1.210 1.1.1.1'). If null, provider defaults apply."
+  description = "LXC DNS nameserver(s) as a space-separated string (e.g. '1.1.1.1 9.9.9.9'). If null, provider defaults apply."
   default     = null
 }
 

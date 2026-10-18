@@ -25,7 +25,7 @@ roles that must preserve every current route and probe (no service interruption)
 **Project Type**: Infrastructure-as-Code (Ansible roles), not an application — maps to existing `ansible/roles/` layout, no `src/`/`tests/` scaffold
 **Performance Goals**: Page is static; first paint < 1s on LAN. Health poll is a single same-origin request returning the `probe_success` vector (small JSON). Health latency bounded by the existing 30s `blackbox-https` scrape interval (see research Q-001)
 **Constraints**: No new LXC, no new daemon (D-006); page MUST render with cards+links even when Prometheus is down (FR-010); `/api/status` MUST NOT expose arbitrary PromQL (FR-009); dual-provisioning parity CI + laptop (FR-013); preserve all existing routes/probes during the refactor (D-008)
-**Scale/Scope**: 4 active services (Immich, Jellyfin, Nextcloud, Grafana); AdGuard unused (`enabled: false`, dead route removed) and Home Assistant disabled; 2 roles touched (`reverse_proxy`, `monitoring_stack`); 1 new shared var list
+**Scale/Scope**: 4 active services (Immich, Jellyfin, Nextcloud, Grafana) and Home Assistant disabled; 2 roles touched (`reverse_proxy`, `monitoring_stack`); 1 new shared var list
 
 ## Constitution Check
 
@@ -81,7 +81,7 @@ ansible/
 │   │   │   ├── service.caddy.j2         # NEW generic per-service block (replaces the six)
 │   │   │   ├── apex.caddy.j2            # NEW hus-sky.no block: file_server + /api/status
 │   │   │   ├── index.html.j2            # NEW landing page generated from caddy_services
-│   │   │   └── (DELETE immich/nextcloud/grafana/jellyfin/adguard/homeassistant .caddy.j2)
+│   │   │   └── (DELETE immich/nextcloud/grafana/jellyfin/homeassistant .caddy.j2)
 │   │   └── defaults/main.yml            # ADD caddy_landing_root, caddy_status_query, etc.
 │   └── monitoring_stack/
 │       └── (no template change needed)  # blackbox_https_targets becomes a generated var,

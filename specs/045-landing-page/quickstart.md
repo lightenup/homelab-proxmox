@@ -14,7 +14,7 @@ exist (features `039-https-services`, `042-monitoring-tier-c`).
 The wildcard `*.hus-sky.no` does **not** cover the bare apex. Add a **public DNS A record at
 Domeneshop**: `hus-sky.no → 192.168.1.211`, parallel to the existing wildcard. DNS is public-only and
 resolves to the LAN IP for both LAN and Tailscale clients (per `docs/network-layout.md`; split-horizon
-not used). AdGuard is unused and plays no role in DNS — do not rely on an AdGuard rewrite.
+not used).
 
 Verify before deploying: `dig +short hus-sky.no` returns `192.168.1.211` from both a LAN client and a
 Tailscale client.

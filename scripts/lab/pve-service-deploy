@@ -1222,7 +1222,7 @@ cmd_apply() {
     mkdir -p "${EVIDENCE_ROOT}/reports/healthcheck"
 
     # Ensure any Ansible Galaxy dependencies (roles/collections) are present on PVE.
-    # This is required for services like AdGuard which use geerlingguy.docker and community.docker.
+    # This is required for services like ntfy which use geerlingguy.docker and community.docker.
     ensure_ansible_galaxy_requirements
 
     emit_phase_start "${RUN_ID}" "apply"

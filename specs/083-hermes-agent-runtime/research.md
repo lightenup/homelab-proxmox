@@ -336,7 +336,7 @@ PROD check in [quickstart.md](./quickstart.md). Facts marked
   |---|---|---|---|
   | 1 | established/related | accept | replies |
   | 2 | dst = `agent` network subnet | accept | SearXNG, and replies to Open WebUI (bridge traffic traverses FORWARD with br_netfilter) |
-  | 3 | ~~dst `adguard_ip` udp/tcp 53~~ | removed | No AdGuard is installed (owner, 2026-10-18). DNS reaches the LXC's public resolver 1.1.1.1 as ordinary internet traffic (Q-L6) |
+  | 3 | (no DNS rule) | — | DNS reaches the LXC's public resolver 1.1.1.1 as ordinary internet traffic (Q-L6) |
   | 4 | dst `llm_router_ip:llm_router_port` tcp | accept | gateway |
   | 5 | dst each `hermes_mcp_servers` host:port tcp | accept | tool services (rendered from the same list) |
   | 6 | dst `reverse_proxy_ip:443` tcp | accept | ntfy via Caddy. **Owner's choice**: this opens every Caddy vhost at L4, and each keeps its own auth. Recorded in the accepted risk. |

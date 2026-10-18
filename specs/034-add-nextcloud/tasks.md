@@ -84,7 +84,7 @@
 **Independent Test**: Re-run `ansible-playbook playbooks/nextcloud.yml` on a running instance → verify no unnecessary changes (0 changed tasks, 0 failed). Reboot LXC → verify Nextcloud responds within 3 minutes.
 
 - [X] T013 [P] [US6] Create `ansible/playbooks/nextcloud.yml` with two plays: (1) `hosts: nextcloud, roles: [lxc_base]`; (2) `hosts: nextcloud, vars: {nextcloud_require_nas_mount: "{{ (deploy_environment | default('prod')) != 'lab' }}"}, roles: [geerlingguy.docker, nextcloud, nextcloud_backup]`
-- [X] T014 [P] [US6] Create `ansible/playbooks/services.yml` aggregating confirmed-existing service playbooks: import adguard.yml (tags: adguard), import immich.yml (tags: immich), import jellyfin.yml (tags: jellyfin), import nextcloud.yml (tags: nextcloud) — this file resolves the missing import referenced in site.yml
+- [X] T014 [P] [US6] Create `ansible/playbooks/services.yml` aggregating confirmed-existing service playbooks: import immich.yml (tags: immich), import jellyfin.yml (tags: jellyfin), import nextcloud.yml (tags: nextcloud) — this file resolves the missing import referenced in site.yml
 - [X] T015 [US6] Verify `ansible/playbooks/site.yml` already contains `import_playbook: services.yml` and will correctly chain through the newly created services.yml → nextcloud.yml — no modification to site.yml expected; run `ansible-playbook --syntax-check playbooks/site.yml` to confirm
 
 **Checkpoint**: Full deployment chain works. US6 acceptance: idempotent re-deploy and auto-start after reboot confirmed.

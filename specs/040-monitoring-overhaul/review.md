@@ -5,7 +5,7 @@
 ## Test Gate
 - **Result**: PASS
 - **Command**: `source adapter/test-config.sh && run_project_tests && run_project_lint`
-- **Summary**: 74 Python tests passed (89.85% coverage, ≥80% required). Terraform validates successfully. `ansible-lint` passes with 0 errors on 199/212 files — pre-existing `adguard.yml` syntax warning (missing `adguard` role, unchanged by this feature) is excluded from this feature's scope. `promtool check rules infrastructure_alerts.yml synology_alerts.yml` → SUCCESS (5 rules + 3 rules).
+- **Summary**: 74 Python tests passed (89.85% coverage, ≥80% required). Terraform validates successfully. `ansible-lint` passes with 0 errors on 199/212 files. `promtool check rules infrastructure_alerts.yml synology_alerts.yml` → SUCCESS (5 rules + 3 rules).
 
 ---
 
@@ -13,7 +13,7 @@
 
 | User Story | Acceptance Criteria | Status | Evidence |
 |------------|-------------------|--------|----------|
-| US-1 | AC-1: All 7 containers in infrastructure dashboard (CPU/memory/disk/network ≤60s) | PASS | `groups['services']` in `prod/hosts.yml` includes adguard (192.168.1.210), reverse_proxy, immich, monitoring, jellyfin, nextcloud (6 hosts; homeassistant excluded per A-006). `prometheus.yml.j2` node-exporter job iterates `groups['services']`; 30s scrape + 30s eval = ≤60s |
+| US-1 | AC-1: All 7 containers in infrastructure dashboard (CPU/memory/disk/network ≤60s) | PASS | `groups['services']` in `prod/hosts.yml` includes reverse_proxy, immich, monitoring, jellyfin, nextcloud (5 hosts; homeassistant excluded per A-006). `prometheus.yml.j2` node-exporter job iterates `groups['services']`; 30s scrape + 30s eval = ≤60s |
 | US-1 | AC-2: Elevated CPU reflected within 60s | PASS | `prometheus_scrape_interval: 30s` + `evaluation_interval: 30s` in `prometheus.yml.j2` |
 | US-1 | AC-3: Disk >86% triggers alert within 5m | PASS | `DiskSpaceWarning` expr `>85% for: 5m` in `infrastructure_alerts.yml:36-46` |
 | US-1 | AC-4: Memory >85% for 5m triggers warning | PASS | `HighMemoryUsage` expr `>85% for: 5m` in `infrastructure_alerts.yml:27-35` |
@@ -31,7 +31,7 @@
 | US-4 | AC-1: Contract in service role drives scrape/alerts/dashboard without editing monitoring role | PASS | `prometheus.yml.j2` iterates `hostvars[*].monitoring_contract`; `service_alerts.yml.j2` aggregates alert_rules; `provision_dashboards.yml` copies dashboard_file references |
 | US-4 | AC-2: Two services' monitoring contracts independently present | PASS | Caddy and Immich both have monitoring_contracts; independent scrape targets and dashboards verified |
 | US-4 | AC-3: Disabled contract removes service's targets/rules/dashboard | PASS | All templates check `contract.enabled \| default(false)` before generating entries |
-| US-4 | AC-4: Zero-touch onboarding — monitoring role has no service-name references | PASS | `grep -r "caddy\|immich\|jellyfin\|nextcloud\|adguard" ansible/roles/monitoring_stack/` → zero hits (SC-005 verified) |
+| US-4 | AC-4: Zero-touch onboarding — monitoring role has no service-name references | PASS | `grep -r "caddy\|immich\|jellyfin\|nextcloud" ansible/roles/monitoring_stack/` → zero hits (SC-005 verified) |
 | US-5 | AC-1: defaults/main.yml version pins match group_vars | PASS | `monitoring_stack/defaults/main.yml`: `prometheus_version: v3.8.1`, `grafana_version: 12.3.1`, `telegraf_version: 1.37.0`, `alertmanager_version: v0.30.0` |
 | US-5 | AC-2: No Prometheus 3.x config compatibility errors | PASS | `promtool check rules infrastructure_alerts.yml synology_alerts.yml` → SUCCESS; `source_matchers`/`target_matchers` Alertmanager v0.30.0 syntax verified (`grep "source_match:" alertmanager.yml.j2` → empty) |
 | US-5 | AC-3: Dashboards render on Grafana 12.x | PASS | All 3 dashboards: `timeseries`/`stat`/`gauge`/`bargauge` panels only — no deprecated `graph`/`singlestat` panels; `${DS_PROMETHEUS}` template variable used throughout |
@@ -90,6 +90,5 @@ None.
 
 None — the implementation is approved. See Observations above for optional improvements to consider in future iterations.
 
-The two blocking issues cited in the previous review.md were incorrect:
-- **B-1 was invalid**: `adguard` IS present in the `services` inventory group (`ansible/inventories/prod/hosts.yml` — verified via YAML parsing). The node-exporter job correctly includes all 6 service containers.
+The blocking issue cited in the previous review.md was incorrect:
 - **B-2 was invalid**: `service_alerts.yml.j2` DOES use YAML `|-` block scalars for both `summary` and `description` fields, which eliminates all YAML quoting issues regardless of content. No double-quoted string scalars are present.

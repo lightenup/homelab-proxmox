@@ -22,10 +22,6 @@
 
 ## 2. Inventory Remediation
 
-- [x] **2.1 Remediate AdGuard** <!-- id: 2.1 -->
-    - Modify `ansible/host_vars/adguard.yml`.
-    - Add `healthcheck_enabled: false`.
-    - Add `healthcheck_reason: "Service not yet installed"`.
 - [x] **2.2 Remediate Home Assistant** <!-- id: 2.2 -->
     - Modify `ansible/host_vars/homeassistant.yml`.
     - Add `healthcheck_enabled: false`.
@@ -49,5 +45,5 @@
     - Run `ansible-playbook ansible/playbooks/healthcheck_automation.yml`.
 - [x] **4.2 Verify Execution** <!-- id: 4.2 -->
     - Run `ansible monitoring -m shell -a "/opt/healthcheck/run.sh --profile lan"`.
-    - Verify output shows `SKIP` for AdGuard and Home Assistant.
+    - Verify output shows `SKIP` for Home Assistant.
     - Verify exit code is 0.

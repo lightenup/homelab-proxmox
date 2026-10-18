@@ -54,7 +54,7 @@ As a homelab operator, I want the CI pipeline to detect network unreachability e
 
 As a homelab operator, I want the fresh-deploy fixes to leave all existing deployed services completely unaffected, so that fixing the new-container path carries zero risk of breaking running workloads.
 
-**Why this priority**: Equal to P1 because regression on live services (Immich, Jellyfin, AdGuard, etc.) is unacceptable. The changes must be additive — they apply only to the deploy flow, not to existing container configurations.
+**Why this priority**: Equal to P1 because regression on live services (Immich, Jellyfin, etc.) is unacceptable. The changes must be additive — they apply only to the deploy flow, not to existing container configurations.
 
 **Independent Test**: Run the CI pipeline for an existing service (e.g., Jellyfin). The pipeline must complete identically to its behaviour before this change — same SSH connectivity, same result.
 

@@ -208,7 +208,7 @@ As a homelab administrator, I want all alerts to continue being delivered via em
 ## Dependencies
 
 - **D-001**: Feature 040 (Monitoring Overhaul) — the unified alerting framework, Alertmanager configuration template, email receiver, and all infrastructure alert rules. Must be merged.
-- **D-002**: Feature 041 (Monitoring Tier B) — external exporter alerts (AdGuard, Caddy, Nextcloud) and vault preflight assertion pattern. Must be merged.
+- **D-002**: Feature 041 (Monitoring Tier B) — external exporter alerts (Caddy, Nextcloud) and vault preflight assertion pattern. Must be merged.
 - **D-003**: Feature 042 (Monitoring Tier C) — security alerts (EndpointDown, TLSCert*, Fail2ban*), which complete the full set of 18 alert rules that will be routed to push. Must be merged.
 - **D-004**: Pushover account and application — operator must have signed up for Pushover, installed the mobile app, created an application, and obtained the user key and API token. This is a manual prerequisite performed outside the IaC workflow.
 - **D-005**: Outbound internet access from the monitoring LXC (192.168.1.214) to `api.pushover.net` over HTTPS (port 443).

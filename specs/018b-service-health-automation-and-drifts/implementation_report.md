@@ -59,14 +59,13 @@ The healthcheck correctly identified the status of all services:
 ```text
 HOSTNAME             STATUS     DETAILS
 --------------------------------------------------------------------------------
-adguard              FAIL       Connection error: [Errno 111] Connection refused
 homeassistant        FAIL       Connection error: [Errno 111] Connection refused
 immich               PASS
 monitoring           PASS
 proxmox              PASS
 reverse_proxy        PASS
 ```
-*Note: The failures for AdGuard and HomeAssistant are valid findings (ports closed) and confirm the detection logic is working.*
+*Note: The failure for HomeAssistant is a valid finding (port closed) and confirm the detection logic is working.*
 
 ## 5. Architectural Refactor
 During implementation, we shifted from a "run-in-place" model (executing scripts from the git repo) to an "install" model.
@@ -74,5 +73,5 @@ During implementation, we shifted from a "run-in-place" model (executing scripts
 -   **Solution**: The Ansible role now pre-calculates the inventory and ships a self-contained package to `/opt/healthcheck`. This ensures the service is robust and independent of the git repository state on the monitoring node.
 
 ## 6. Next Steps
--   Investigate and resolve the "Connection refused" errors for AdGuard and HomeAssistant.
+-   Investigate and resolve the "Connection refused" error for HomeAssistant.
 -   Monitor the service over 24 hours to ensure email notifications are sent correctly on state changes.

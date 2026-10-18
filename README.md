@@ -5,7 +5,7 @@ Infrastructure-as-code for my Proxmox-based homelab.
 - **Terraform** manages Proxmox resources (VMs, LXCs, networks, disks).
 - **Ansible** configures the Proxmox host and services inside LXCs.
 - **GitHub Actions** runs on a self-hosted runner (Raspberry Pi) to apply changes.
-- Services are split into **one LXC per service** (Immich, AdGuard, Home Assistant, reverse proxy).
+- Services are split into **one LXC per service** (Immich, Home Assistant, reverse proxy, and more).
 
 See:
 
@@ -80,7 +80,7 @@ ansible-playbook playbooks/site.yml
 
 - `site.yml` - Apply all configurations to all hosts (bootstrap + services + host config)
 - `bootstrap.yml` - Initial setup of LXC containers (run after Terraform provision)
-- `services.yml` - Configure LXC services (Immich, AdGuard, Home Assistant, reverse proxy)
+- `services.yml` - Configure LXC services (Immich, Home Assistant, reverse proxy, and more)
 - `host_proxmox.yml` - Configure Proxmox host-specific settings
 - `backup_proxmox.yml` - Deploy Proxmox configuration backup system
 - `tailscale.yml` - Configure Tailscale subnet router for remote access

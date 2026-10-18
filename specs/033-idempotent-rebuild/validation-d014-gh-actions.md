@@ -31,7 +31,6 @@ The validation confirmed:
 ### Symlink Structure (Verified)
 ```
 /var/lib/homelab-proxmox/state/services/
-├── adguard -> /mnt/nas/homelab_ci/infra_state/lab/adguard
 ├── homeassistant -> /mnt/nas/homelab_ci/infra_state/lab/homeassistant
 ├── immich -> /mnt/nas/homelab_ci/infra_state/lab/immich
 ├── jellyfin -> /mnt/nas/homelab_ci/infra_state/lab/jellyfin
@@ -51,7 +50,6 @@ The validation confirmed:
 ```
 Service       Size    Modified         Owner/Group  Path
 ------------- ------- ---------------- ------------ ----------------------------------------
-adguard       181B    Jan 18 16:54     1024/users   /var/lib/.../state/services/adguard/terraform.tfstate
 immich        3.6K    Feb  4 10:59     1024/users   /var/lib/.../state/services/immich/terraform.tfstate
 jellyfin      3.7K    Jan 12 19:09     1024/users   /var/lib/.../state/services/jellyfin/terraform.tfstate
 monitoring    3.7K    Feb  4 20:02     1024/users   /var/lib/.../state/services/monitoring/terraform.tfstate

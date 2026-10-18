@@ -4,7 +4,7 @@ from homelab_proxmox_orchestrator.models import EvidencePointer, RunResponse, Ru
 def test_run_response_json_shape():
     resp = RunResponse(
         run_id="r1",
-        service="adguard",
+        service="ntfy",
         environment="lab",
         action="plan",
         status="succeeded",

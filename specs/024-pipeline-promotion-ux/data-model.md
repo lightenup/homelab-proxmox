@@ -436,7 +436,6 @@ on:
         required: true
         type: choice
         options:
-          - adguard
           - homeassistant
           - immich
           - jellyfin
@@ -482,7 +481,6 @@ on:
         required: true
         type: choice
         options:
-          - adguard
           - homeassistant
           - immich
           - jellyfin
@@ -524,7 +522,6 @@ Workflow Run (Promote)
             └── prod.tfvars.sha256
 
 Service Allowlist
-├── Service: adguard
 ├── Service: homeassistant
 ├── Service: immich
 ├── Service: jellyfin

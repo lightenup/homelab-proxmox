@@ -6,7 +6,6 @@ exclude_paths:
   - docs/
   - scripts/
   - terraform/
-  - ansible/playbooks/adguard.yml
   - ansible/playbooks/services.yml
   - ansible/playbooks/tailscale.yml
   - ansible/playbooks/verify_tailscale.yml

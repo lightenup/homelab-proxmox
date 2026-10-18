@@ -136,7 +136,7 @@ ls /Volumes/nas/homelab_ci/infra_state/
 # Test 2: Lab state accessible
 ls /Volumes/nas/homelab_ci/infra_state/lab/
 
-# Expected: 6+ directories (adguard, homeassistant, immich, jellyfin, monitoring, reverse_proxy, ansible)
+# Expected: 6+ directories (homeassistant, immich, jellyfin, monitoring, reverse_proxy, ansible)
 ```
 
 ```bash

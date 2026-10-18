@@ -16,7 +16,7 @@ The single source of truth for one service. A list of these lives in
 | `port` | string — Jinja ref to central var (`"{{ <svc>_port }}"`) resolving to a port | yes | — | Caddy `reverse_proxy` upstream port | references the existing central port var |
 | `title` | string | no | `host` (capitalized) | card heading | fallback prevents broken card (edge case) |
 | `desc` | string | no | `""` | card description line | omitted cleanly if empty |
-| `enabled` | bool | yes | — | route + probe + card inclusion | read directly by the filters — must be present; `false` ⇒ omitted from all three (Home Assistant disabled; AdGuard unused) |
+| `enabled` | bool | yes | — | route + probe + card inclusion | read directly by the filters — must be present; `false` ⇒ omitted from all three (Home Assistant disabled) |
 | `user_facing` | bool | yes | — | card inclusion + probe-eligibility | read directly by the filters — must be present; `false` ⇒ internal endpoint, no card, not a user health probe (e.g. metrics) |
 
 ### Validation rules (derived from FR-002, FR-006, edge cases)

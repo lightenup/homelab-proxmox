@@ -40,15 +40,13 @@ A plan-only dry run was executed against PVE to validate the full path:
 **Evidence directory (local)**: `tmp/e2e-dryrun-pve-20260109-125807`
 
 **Run IDs**:
-- LAB: `lab-adguard-unknown-20260109-125748`
-- PROD: `prod-adguard-unknown-20260109-125759`
+- LAB: `lab-<service>-unknown-20260109-125748`
+- PROD: `prod-<service>-unknown-20260109-125759`
 
 **Key confirmations from evidence**:
-- PROD tfvars proof was **PASS** with `secret_source=existing_file`:
-  - [tmp/e2e-dryrun-pve-20260109-125807/evidence/prod/prod-adguard-unknown-20260109-125759/reports/prod-tfvars/provisioning.txt](../../tmp/e2e-dryrun-pve-20260109-125807/evidence/prod/prod-adguard-unknown-20260109-125759/reports/prod-tfvars/provisioning.txt)
-  - [tmp/e2e-dryrun-pve-20260109-125807/evidence/prod/prod-adguard-unknown-20260109-125759/reports/prod-tfvars/validation.json](../../tmp/e2e-dryrun-pve-20260109-125807/evidence/prod/prod-adguard-unknown-20260109-125759/reports/prod-tfvars/validation.json)
+- PROD tfvars proof was **PASS** with `secret_source=existing_file` (the PROD run's `reports/prod-tfvars/provisioning.txt` and `validation.json`).
 - Plans were non-destructive (`destructive=false`).
-- PROD plan requested a single in-place update for `adguard`:
+- PROD plan requested a single in-place update for the service's LXC:
   - LXC `nameserver` `192.168.1.1` → `1.1.1.1`
 
 ## Notes / Operational Implications

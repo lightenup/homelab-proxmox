@@ -1,6 +1,0 @@
----
-# Handlers for adguard role
-- name: Restart adguard exporter
-  community.docker.docker_compose_v2:
-    project_src: "{{ adguard_install_dir }}"
-    state: restarted
