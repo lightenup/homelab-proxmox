@@ -1,6 +1,7 @@
 # Backlog: `market-model` and `eurooffice` are missing from the prod monitoring inventory
 
-**Status**: Backlog — found during `064-llm-router` implementation, not yet fixed.
+**Status**: **RESOLVED 2026-10-18** — both hosts added to the prod inventory. See
+[Resolution](#resolution-2026-10-18) at the end.
 **Source**: `specs/064-llm-router/research.md` § D-107.
 
 ## The gap
@@ -46,3 +47,27 @@ deliberately suppressed) rather than a drive-by two-line diff.
 ## Dependencies
 
 None. Independent, low-risk, doc-and-inventory-only change once verified.
+
+## Resolution (2026-10-18)
+
+Found again while investigating a burst of `EndpointDown` alerts: the `eurooffice` liveness job
+and `EuroOfficeDown` rule were missing from the live rule set.
+
+1. **Verified on live Prometheus, not assumed.** Over 30 days there was no `up{job="eurooffice"}`,
+   no `market-model-api` probe, no `EuroOfficeDown`/`MarketModelDown` rule, and `.218`/`.219` were
+   absent from the `node-exporter` job. The only coverage either service had was the shared
+   `blackbox-https` probe (`EndpointDown`), which comes from `caddy_services`, not the inventory.
+   Nothing depended on their absence; no alert had been deliberately suppressed.
+2. **Root cause, more precisely than above:** per-service deploys build their own single-host
+   inventory, so both services deploy and run fine. Only the `monitoring` deploy layers in the
+   committed `inventories/prod/hosts.yml` (`scripts/lab/pve-service-deploy`) to see every other
+   host's `monitoring_contract`, so a host missing from that file is invisible to monitoring alone.
+3. **Fix:** both added to the `services` group (`market-model` `192.168.1.218`, `eurooffice`
+   `192.168.1.219`). Before adding them, checked that nothing would fire on the first scrape:
+   node_exporter answers on `:9100` on both, `/healthz` and `/healthcheck` return 200, and
+   memory (12% / 19%) and root disk (51% / 64%) are well under the 85% thresholds.
+4. **Audit of all 12 running LXCs** (`pct list`) against the inventory: no other gap.
+   `homeassistant` (LXC 104, `.212`) is also absent and should stay so for now. The LXC is
+   empty (no containers, no node_exporter), and `host_vars` says "Service not yet installed".
+   Adding it would page `ServiceDown`, because the `node-exporter` job includes any host whose
+   `monitoring_contract` is not explicitly disabled. Add it when the service is installed.
