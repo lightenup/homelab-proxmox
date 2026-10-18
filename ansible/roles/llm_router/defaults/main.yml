@@ -54,6 +54,12 @@ llm_router_cooldown_time: 60
 # traffic, not a health probe, so it sits outside SC-011's probe budget.
 llm_router_canary_alias: hermes-fast
 llm_router_canary_interval_minutes: 60
+# The backend the canary alias resolves to, for the reachability check that runs when
+# every attempt has failed (added 2026-10-18). Derived from the alias's first deployment so
+# it follows llm_router_aliases rather than repeating the Mac's address. The canary runs on
+# the HOST, which resolves the .local name through avahi (see tasks/main.yml).
+llm_router_canary_backend_host: "{{ (llm_router_aliases | selectattr('name', 'equalto', llm_router_canary_alias) | first).deployments[0].api_base | urlsplit('hostname') }}"
+llm_router_canary_backend_port: "{{ (llm_router_aliases | selectattr('name', 'equalto', llm_router_canary_alias) | first).deployments[0].api_base | urlsplit('port') }}"
 
 # Retry budget for one canary run (added 2026-09-22). A single attempt made the canary a
 # noise generator rather than a signal: oMLX's prefill memory guard returns 400 whenever the
