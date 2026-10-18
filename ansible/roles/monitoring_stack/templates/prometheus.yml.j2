@@ -93,6 +93,9 @@ scrape_configs:
           - '{{ target.address }}'
         labels:
           instance: '{{ target.instance }}'
+{% if not (target.alert_on_down | default(true) | bool) %}
+          no_down_alert: 'true'
+{% endif %}
     metrics_path: {{ target.path | default('/metrics') }}
 {% endfor %}
 

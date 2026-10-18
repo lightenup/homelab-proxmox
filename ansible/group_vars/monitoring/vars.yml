@@ -88,6 +88,9 @@ prometheus_external_scrape_targets:
     address: "192.168.1.177:9464"
     instance: "llm-mac"
     scrape_interval: "15s"
+    # The Mac is a laptop that sleeps: without this, generic ServiceDown paged at critical
+    # 55 times in 3 days (2026-10-18). Mac-away is reported silently by LlmRouterLocalTierDown.
+    alert_on_down: false
 
 # Blackbox exporter configuration
 # Feature: 042-monitoring-tier-c (FR-001, FR-003)
