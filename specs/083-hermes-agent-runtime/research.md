@@ -391,6 +391,13 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
 - **Observed on PROD (2026-10-17)**: the pre-disable check found one active automation, "Daglig
   nyhetsdigest (ukedager 07:30)" (`hermes-deep`, weekdays 07:30, never run). Owner decision: delete it
   without a replacement. The row was deleted by hand before the US3 deploy, and `automation` is now empty.
+- **Startup race (observed 2026-10-18, T031)**: after the PROD apply, `hermes-agent` was missing from
+  the model picker. Open WebUI's one startup `get_all_models()` ran at 03:27:37 and got `Connect call
+  failed ('172.30.83.10', 8642)`, because the agent's API was not listening yet. The owner's admin
+  setting `models.base_models_cache = true` then kept that list. Fixed by two handlers listening on
+  `Restart hermes`: wait until the agent is healthy, then restart Open WebUI alone. A compose
+  `condition: service_healthy` was rejected because it would keep plain chat down while the agent
+  is broken.
 - **MCP single source (T030, FR-011)** [repo]: the agent config, the egress script and Open WebUI's
   `hermes_tool_server_connections` all iterate `hermes_mcp_servers`. The agent and the egress chain
   take `selectattr('enabled')`. Open WebUI registers every entry with `config.enable: item.enabled`,
