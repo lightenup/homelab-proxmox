@@ -2,7 +2,7 @@
 
 **Feature Branch**: `083-hermes-agent-runtime`
 **Created**: 2026-10-16
-**Status**: **In progress** — specified and partly live on PROD since 2026-10-17 ([`specs/083-hermes-agent-runtime/`](../../specs/083-hermes-agent-runtime/), branch `083-hermes-agent-runtime`, [PR #247](https://github.com/lightenup/homelab-proxmox/pull/247)). Live: agent runtime, model scout, heartbeat job. Pending deploy: second Open WebUI connection, Automations retirement, agent backup leg. Its dependency [`082`](./082-ntfy-push-service.md) (push channel) is live since 2026-10-17. Amends [`065`](./065-hermes-service.md).
+**Status**: **Implemented** — live on PROD since 2026-10-18 ([`specs/083-hermes-agent-runtime/`](../../specs/083-hermes-agent-runtime/), [PR #247](https://github.com/lightenup/homelab-proxmox/pull/247)). Open follow-ups: one-time router check Q-P6 (T047) and the two-week review Q-P10 (T050, ~2026-11-01). Depends on [`082`](./082-ntfy-push-service.md); amends [`065`](./065-hermes-service.md).
 **Input**: Add the upstream **Hermes Agent** (Nous Research) to the Hermes LXC as a second backend
 behind the existing Open WebUI, so that (a) chats can use a full agent with terminal, tools and
 memory, and (b) **any scheduled job is one script plus one `hermes cron create` line**, delivered

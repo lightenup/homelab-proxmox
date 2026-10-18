@@ -174,7 +174,7 @@ one run succeeds, no phone message (Q-P8).
 ## Phase 8: Polish & cross-cutting
 
 - [x] T045 [P] Amend `specs/065-hermes-ai-workspace/spec.md` (FR-022): FR-025 → scheduled prompts are delivered by the 083 agent scheduler to the phone, failures delivered; FR-026 → job scripts are content, not application code; US-1 wording → reachable on LAN + tailnet only, "public" means routed by the reverse proxy; and add to `specs/065-hermes-ai-workspace/research.md` the agent-runtime question 065 did not ask, with 083 as the answer
-- [ ] T046 [P] Update `docs/backlog/083-hermes-agent-runtime.md` status (specified → in progress → done) with links to the spec and PR
+- [x] T046 [P] Update `docs/backlog/083-hermes-agent-runtime.md` status (specified → in progress → done) with links to the spec and PR
 - [ ] T047 Perform the one-time manual router check (Q-P6): no port forward to `reverse_proxy_ip` (or any) on 80/443; record date, router model and screenshot reference in `specs/083-hermes-agent-runtime/quickstart.md` § Q-P6 (FR-017)
 - [x] T048 [P] Run `ansible-playbook --syntax-check` for `ansible/playbooks/hermes.yml`, `ansible/playbooks/hermes-restore-drill.yml` and the llm-router playbook, plus `ansible-lint` on `ansible/roles/hermes` and `ansible/roles/hermes_backup`, and `bash -n`/`shellcheck` on the rendered `hermes-agent-egress.sh`, `heartbeat.sh`, `backup_hermes.sh`, `restore_hermes.sh`
 - [x] T049 Bring `specs/083-hermes-agent-runtime/spec.md` (Status), `plan.md`, `research.md` (every [doc] fact now observed or corrected), `data-model.md` and `contracts/*.md` up to date with what was delivered
