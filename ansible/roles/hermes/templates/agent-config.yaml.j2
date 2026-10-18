@@ -23,7 +23,11 @@ model:
   default: {{ hermes_agent_default_model }}
   provider: custom
   base_url: "{{ hermes_gateway_base_url }}"
-  key_env: LLM_ROUTER_CLIENT_HERMES_AGENT_KEY
+  # Not the router-side name (LLM_ROUTER_CLIENT_HERMES_AGENT_KEY): upstream scrubs a child's env
+  # only of names it knows, and AUXILIARY_*_API_KEY is one of them, so job scripts and terminal
+  # commands cannot read this key (research R-004 key-scope finding). "HERMES" is no auxiliary
+  # task, so the name activates nothing.
+  key_env: AUXILIARY_HERMES_API_KEY
   # The gateway does not expose /v1/models context data, so the agent would otherwise assume
   # 256k. Taken from the alias definition, so the two cannot drift (smallest deployment wins).
   context_length: {{ (llm_router_aliases | selectattr('name', 'equalto', hermes_agent_default_model) | first).deployments | map(attribute='context_window') | min }}

@@ -41,8 +41,8 @@ Further rules:
 - Scripts live in `$HERMES_HOME/scripts/` (`/opt/data/scripts/`). `.sh`/`.bash` run under bash, and
   anything else under the image's Python (3.14).
 - The environment is sanitised: upstream provider credentials, `API_SERVER_KEY` and `NTFY_TOKEN`
-  are stripped. **Exception**: the agent's own gateway key `LLM_ROUTER_CLIENT_HERMES_AGENT_KEY` is
-  visible to scripts and terminal commands (research R-004 key-scope finding). A secret is exposed by name through
+  are stripped, and so is the agent's own gateway key, which the agent reads from
+  `AUXILIARY_HERMES_API_KEY` for exactly this reason (research R-004 key-scope finding). A secret is exposed by name through
   `terminal.env_passthrough` plus a vault entry, which is the one case that needs a deploy change.
 - Scripts may write state under `$HERMES_HOME`. It is backed up.
 - Outbound network access follows `egress-allowlist.md`.
