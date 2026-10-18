@@ -253,7 +253,7 @@ answer with a citation.
 
 - The Mac remains the sole inference host, session-scoped, and its absence is normal rather than
   exceptional. Hermes is built around that, not in spite of it.
-- `192.168.1.221` is the next free service address (`.210`–`.220` are allocated).
+- `192.168.1.221` is the next free service address (`.211`–`.220` are allocated).
 - The account owner is the only user. Multi-user is not designed for, though the application supports
   it if that changes.
 - The `hermes` client key in `064` will need its `models` scope extended to cover the new embedding

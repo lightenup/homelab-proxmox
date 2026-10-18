@@ -39,7 +39,6 @@ ansible-playbook playbooks/update_monthly.yml
 **What happens**:
 1. Preflight connectivity check to all hosts
 2. Services group (LXCs) updated serially (one at a time):
-   - adguard
    - homeassistant
    - immich
    - reverse_proxy
@@ -61,7 +60,7 @@ For non-security updates (features, bugfixes), use the manual upgrade playbook w
 ansible-playbook playbooks/upgrade_manual.yml --check
 
 # Upgrade specific host
-ansible-playbook playbooks/upgrade_manual.yml --limit adguard
+ansible-playbook playbooks/upgrade_manual.yml --limit ntfy
 
 # Upgrade all services (skip confirmation pause with --skip-tags pause)
 ansible-playbook playbooks/upgrade_manual.yml --limit services --skip-tags pause
@@ -90,10 +89,10 @@ To patch only specific hosts:
 
 ```bash
 # Single host
-ansible-playbook playbooks/update_monthly.yml --limit adguard
+ansible-playbook playbooks/update_monthly.yml --limit ntfy
 
 # Multiple hosts
-ansible-playbook playbooks/update_monthly.yml --limit adguard,immich
+ansible-playbook playbooks/update_monthly.yml --limit ntfy,immich
 
 # Services only
 ansible-playbook playbooks/update_monthly.yml --limit services
@@ -112,8 +111,8 @@ Start Time: 2025-01-05T10:00:00Z
 End Time: 2025-01-05T10:12:34Z
 Total Execution Time: 754s (12.6m)
 
-Hosts Updated: 4
-  adguard, homeassistant, immich, reverse_proxy
+Hosts Updated: 3
+  homeassistant, immich, reverse_proxy
 
 Hosts Rebooted: 2
   homeassistant, immich
@@ -146,7 +145,6 @@ After patching completes:
    - Immich: http://192.168.1.213:2283
    - Home Assistant: http://192.168.1.212:8123
    - Reverse Proxy: http://192.168.1.211:80
-   - AdGuard: http://192.168.1.210:3000
 
 3. **Verify Docker Containers**
    ```bash

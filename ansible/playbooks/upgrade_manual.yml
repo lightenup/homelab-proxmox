@@ -10,7 +10,7 @@
 #   ansible-playbook playbooks/upgrade_manual.yml --check
 #
 #   # Upgrade single host
-#   ansible-playbook playbooks/upgrade_manual.yml --limit adguard
+#   ansible-playbook playbooks/upgrade_manual.yml --limit ntfy
 #
 #   # Upgrade all services (one at a time for safety)
 #   ansible-playbook playbooks/upgrade_manual.yml --limit services

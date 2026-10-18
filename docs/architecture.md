@@ -37,7 +37,6 @@ Goals:
 
 - **LXCs (one per service)**
   - `immich-lxc` – Immich photo service, data on Synology via NFS.
-  - `adguard-lxc` – AdGuard DNS.
   - `homeassistant-lxc` – Home Assistant.
   - `reverse-proxy-lxc` – Caddy/Traefik or similar.
   - `hermes-lxc` – Open WebUI + SearXNG, a self-hosted AI workspace on local models only,

@@ -15,6 +15,5 @@
       - reverse_proxy
       - homeassistant
       - jellyfin
-      - adguard
   roles:
     - proxmox_state_symlinks

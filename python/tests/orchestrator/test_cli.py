@@ -16,7 +16,7 @@ def test_cli_plan_parses_and_emits_json(tmp_path):
             "--environment",
             "lab",
             "--service",
-            "adguard",
+            "ntfy",
             "--evidence-root",
             str(evidence_root),
             "--runner-script-path",
@@ -29,7 +29,7 @@ def test_cli_plan_parses_and_emits_json(tmp_path):
 
     assert p.stdout.strip(), p.stderr
     doc = json.loads(p.stdout)
-    assert doc["service"] == "adguard"
+    assert doc["service"] == "ntfy"
     assert doc["environment"] == "lab"
     assert doc["action"] == "plan"
     assert "summary" in doc

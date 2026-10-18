@@ -40,7 +40,7 @@ Every provisioning and deployment operation MUST be executable through **both** 
 - Do not rewrite Terraform to `bpg/proxmox` resources unless a spec explicitly requests a migration.
 
 ### Networking
-- Core service LXCs (Immich, AdGuard, Home Assistant, reverse proxy) must have **static IPs** + gateway.
+- Core service LXCs (Immich, Home Assistant, reverse proxy, and the rest) must have **static IPs** + gateway.
 - Avoid scattering IP strings across files: define them centrally (variables/locals) and pass into modules.
 - Target network is eventually segmented (Management, Services, LAN, IoT, VPN egress).
 

@@ -15,7 +15,6 @@ docker_compose_package_state: present
 # Service versions
 nextcloud_version: "34"
 nextcloud_exporter_version: "0.9.0"
-adguard_exporter_version: "1.2.1"
 immich_version: "v3.0.2"
 financial_scenario_version: "0.2.2"
 market_model_version: "0.3.0"
@@ -438,10 +437,6 @@ nextcloud_port: 8080
 jellyfin_ip: "192.168.1.215"
 jellyfin_port: 8096
 
-# AdGuard Configuration
-adguard_ip: "192.168.1.210"
-adguard_web_port: 3000
-
 # Home Assistant Configuration
 homeassistant_ip: "192.168.1.212"
 homeassistant_port: 8123
@@ -556,13 +551,6 @@ caddy_services:
     # user_facing: true creates the route, the landing-page card AND the blackbox HTTPS
     # probe (R-007). web-root must stay at the upstream default "/" so the front-page
     # probe of https://ntfy.hus-sky.no/ gets a 200 (contracts/server-config.md).
-    user_facing: true
-  - host: adguard
-    ip: "{{ adguard_ip }}"
-    port: "{{ adguard_web_port }}"
-    title: "AdGuard"
-    desc: "DNS ad blocking"
-    enabled: false
     user_facing: true
   - host: ha
     ip: "{{ homeassistant_ip }}"

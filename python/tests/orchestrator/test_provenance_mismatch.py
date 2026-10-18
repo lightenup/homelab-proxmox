@@ -12,7 +12,7 @@ def _call_apply(*, evidence_root: Path, plan_run_id: str, source_ref: str | None
         "--environment",
         "lab",
         "--service",
-        "adguard",
+        "ntfy",
         "--evidence-root",
         str(evidence_root),
         "--runner-script-path",
@@ -41,14 +41,14 @@ def test_unknown_plan_id_fails_fast(tmp_path):
 
 
 def test_missing_identity_file_fails_fast(tmp_path):
-    plan_run_id = "lab-adguard-PLAN123"
+    plan_run_id = "lab-ntfy-PLAN123"
     plan_dir = tmp_path / "runs" / plan_run_id
     plan_dir.mkdir(parents=True)
     (plan_dir / "provenance.json").write_text(
         json.dumps(
             {
                 "environment": "lab",
-                "service": "adguard",
+                "service": "ntfy",
                 "action": "plan",
                 "source_ref": "abc",
                 "started_at": "2026-01-01T00:00:00Z",
@@ -108,7 +108,7 @@ def test_service_mismatch_fails_fast(tmp_path):
 
 
 def test_source_ref_mismatch_fails_fast(tmp_path):
-    plan_run_id = "lab-adguard-PLAN123"
+    plan_run_id = "lab-ntfy-PLAN123"
     plan_dir = tmp_path / "runs" / plan_run_id
     (plan_dir / "reports" / "plan").mkdir(parents=True)
 
@@ -126,7 +126,7 @@ def test_source_ref_mismatch_fails_fast(tmp_path):
         json.dumps(
             {
                 "environment": "lab",
-                "service": "adguard",
+                "service": "ntfy",
                 "action": "plan",
                 "source_ref": "abc",
                 "started_at": "2026-01-01T00:00:00Z",

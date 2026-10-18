@@ -36,7 +36,6 @@
     - reverse_proxy
     - homeassistant
     - jellyfin
-    - adguard
 
 - name: Create service state directories for prod environment
   ansible.builtin.file:

@@ -1,7 +1,4 @@
 {
-  "adguard": [
-    "module.adguard_lxc"
-  ],
   "eurooffice": [
     "module.eurooffice_lxc"
   ],

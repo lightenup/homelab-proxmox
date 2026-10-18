@@ -53,11 +53,11 @@ This shows available upgrades without applying them.
 Test on non-critical host first:
 
 ```bash
-# Upgrade adguard (test host)
-ansible-playbook playbooks/upgrade_manual.yml --limit adguard
+# Upgrade ntfy (test host)
+ansible-playbook playbooks/upgrade_manual.yml --limit ntfy
 
-# Verify adguard is functioning
-# Check DNS resolution, web UI, logs
+# Verify ntfy is functioning
+# Check the web UI, a test publish, logs
 ```
 
 ### Step 3: Upgrade Remaining Services
@@ -107,7 +107,6 @@ After each upgrade, verify:
 # Check HTTP endpoints
 curl -I http://192.168.1.213:2283  # immich
 curl -I http://192.168.1.212:8123  # homeassistant
-curl -I http://192.168.1.210:3000  # adguard
 curl -I http://192.168.1.211:80    # reverse_proxy
 ```
 

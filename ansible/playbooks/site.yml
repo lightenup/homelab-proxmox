@@ -9,7 +9,7 @@
 
 - name: Configure Services
   import_playbook: services.yml
-  # Purpose: Deploy application services (Immich, AdGuard, Home Assistant)
+  # Purpose: Deploy application services (Immich, Home Assistant, and the rest)
   # Dependencies: Proxmox host configured, LXCs provisioned via Terraform
 
 - name: Configure Monitoring

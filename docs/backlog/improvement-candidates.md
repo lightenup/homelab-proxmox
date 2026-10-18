@@ -76,8 +76,6 @@ Sparse backlog of operability / monitoring / security improvements, carried over
   bouncer; add exporter to monitoring. *Open*
 - **PVE HTTPS via Caddy** — `pve.hus-sky.no` → `reverse_proxy https://192.168.1.112:8006`
   (`tls_insecure_skip_verify`), DNS rewrite, add to blackbox HTTPS probes. *Open*
-- **AdGuard LXC provisioning** — module `adguard_lxc` is defined but never applied to prod (no
-  container, `adguard.hus-sky.no` probe + exporter have no host). Provision + DNS rewrites. *Open*
 - **fail2ban in `site.yml`** — `fail2ban.yml` is not imported by `site.yml`. *Partially done (PR #195):*
   the `fail2ban` role is now in the reverse_proxy/nextcloud/jellyfin service playbooks, so the gated
   per-service pipeline (Promote→Apply) deploys and keeps it in sync — a rebuild via the pipeline no

@@ -50,7 +50,6 @@ service_mountpoints = {
 }
 
 service_ips = {
-  adguard        = "192.168.1.210/24"
   reverse_proxy  = "192.168.1.211/24"
   homeassistant  = "192.168.1.212/24"
   immich         = "192.168.1.213/24"

@@ -13,7 +13,6 @@ SERVICES=(
   "reverse_proxy"
   "homeassistant"
   "jellyfin"
-  "adguard"
 )
 
 echo "======================================"

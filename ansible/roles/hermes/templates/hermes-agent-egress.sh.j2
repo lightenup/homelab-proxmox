@@ -56,8 +56,7 @@ iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -m state --state ESTABLISHED,RELAT
 # 2. The agent's own compose subnet (SearXNG, and bridge traffic to Open WebUI).
 iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${AGENT_SUBNET}" -j ACCEPT
 # 3. DNS needs no rule: the LXC resolves through a public resolver (1.1.1.1), which the
-#    private-range rejects below do not cover. There is no AdGuard in this estate; the
-#    earlier accept rule for adguard_ip pointed at an unused address (Q-L6, 2026-10-18).
+#    private-range rejects below do not cover (Q-L6, 2026-10-18).
 # 4. The 064 gateway.
 iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${ROUTER_IP}/32" -p tcp --dport "${ROUTER_PORT}" -j ACCEPT
 # 5. Each enabled MCP server (derived, FR-011).
