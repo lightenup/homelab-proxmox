@@ -18,6 +18,21 @@ groups:
           summary: "HTTPS endpoint {{ $labels.instance }} is down"
           description: "Endpoint {{ $labels.instance }} has been unreachable for more than 2 minutes"
 
+      # Public DNS for the estate's names. EndpointDown no longer depends on it (the blackbox
+      # container pins the names in /etc/hosts), so this is the only alert for it. warning
+      # with 5m: the 2–3 minute blips seen on 2026-10-15/16 stay quiet; a sustained outage,
+      # which also breaks the LXCs' own outbound lookups (they use only this resolver), fires once.
+      - alert: PublicDnsResolutionFailing
+        expr: |
+          probe_success{job="blackbox-dns"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: availability
+        annotations:
+          summary: "Public DNS lookup via {{ $labels.instance }} is failing"
+          description: "Resolving the base domain via {{ $labels.instance }} has failed for more than 5 minutes (timeout, bad rcode, or an A record that is not the reverse proxy). Sites still answer on the LAN; WAN-side clients and the LXCs' outbound lookups are affected."
+
       # FR-018: TLS certificate expiry warning (US-2)
       - alert: TLSCertExpiringSoon
         expr: |

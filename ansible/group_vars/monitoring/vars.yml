@@ -105,3 +105,23 @@ blackbox_https_targets: >-
      | map(attribute='host')
      | map('regex_replace', '^(.+)$', 'https://\1.' ~ caddy_base_domain)
      | list }}
+# Every Caddy name (all ENABLED services, not only user_facing, plus the apex) pinned to the
+# reverse proxy in the blackbox container's /etc/hosts. Public DNS answers 192.168.1.211 for
+# all of them anyway, but resolving that meant a round trip to 1.1.1.1 over the WAN: three
+# 2–3 minute DNS blips on 2026-10-15/16 paged EndpointDown at critical for every site at
+# once while Caddy was serving normally. Probes now test Caddy -> TLS -> backend over the
+# LAN; public DNS is covered on its own by the blackbox-dns job (PublicDnsResolutionFailing).
+# Also covers the contract liveness probes that use public names (hermes, ntfy-health, ...).
+blackbox_static_hosts: >-
+  {{ ([caddy_base_domain]
+      + (caddy_services
+         | selectattr('enabled')
+         | map(attribute='host')
+         | map('regex_replace', '^(.+)$', '\1.' ~ caddy_base_domain)
+         | list))
+     | map('regex_replace', '$', ':' ~ reverse_proxy_ip)
+     | list }}
+# Resolvers the blackbox-dns job queries. Mirrors the LXCs' `nameserver` (Terraform), so
+# this alerts on the same DNS the services themselves depend on.
+blackbox_dns_resolvers:
+  - "1.1.1.1"
