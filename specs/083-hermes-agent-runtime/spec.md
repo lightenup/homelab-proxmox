@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-17
 
-**Status**: Draft
+**Status**: Implemented. Live on PROD since 2026-10-17/18; every user story verified (quickstart "Results so far"). Open: Q-P6 router check (T047) and the two-week review Q-P10 (T050). Accepted deviations: research R-004 (flagged commands from chat are held as pending, not BLOCKED) and R-004 key-scope finding
 
 **Input**: User description: "083-hermes-agent-runtime.md" — the backlog entry
 [`docs/backlog/083-hermes-agent-runtime.md`](../../docs/backlog/083-hermes-agent-runtime.md): add the

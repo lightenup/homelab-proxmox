@@ -8,8 +8,14 @@
 - **Model**: `GET /v1/models` lists `hermes-agent`.
 - **Sessions**: Chat Completions is stateless; Open WebUI resends history. Long-term memory is
   the agent's own.
-- **Approvals**: every request is an unattended session. A flagged command is refused at once with a
-  readable message (SC-008: < 5 s) and never waits for the 300 s timeout.
+- **Approvals** [observed v0.21.6, Q-L4]: a flagged command never runs and never waits for the 300 s
+  timeout. The gate answers in ≈0.01 s with `status: pending_approval`, and the model relays this
+  readably ("queued for your approval"). Nothing on this endpoint can approve it: the only resolver
+  is `POST /v1/runs/{id}/approval`, for runs started on `/v1/runs`. It is not `BLOCKED` through
+  `unattended_mode`, because the gateway sets `HERMES_EXEC_ASK=1` (research R-004).
+- **Model list**: Open WebUI caches its model list ("cache base model list"). After a stack restart
+  the role waits until the agent is healthy, then restarts Open WebUI, so `hermes-agent` is listed
+  (handlers, T031).
 - **Health**: `GET /health` → `{"status":"ok"}`, inside the compose network only.
 - **Failure**: with the inference host away, the agent returns a readable error within seconds
   (US-2 #3), the same as the gateway contract in `065/contracts/gateway-usage.md`.
@@ -34,7 +40,9 @@ docker exec -it -u hermes hermes_agent hermes cron <list|create|run|runs|pause|r
 Further rules:
 - Scripts live in `$HERMES_HOME/scripts/` (`/opt/data/scripts/`). `.sh`/`.bash` run under bash, and
   anything else under the image's Python (3.14).
-- The environment is sanitised: no provider credentials. A secret is exposed by name through
+- The environment is sanitised: upstream provider credentials, `API_SERVER_KEY` and `NTFY_TOKEN`
+  are stripped. **Exception**: the agent's own gateway key `LLM_ROUTER_CLIENT_HERMES_AGENT_KEY` is
+  visible to scripts and terminal commands (research R-004 key-scope finding). A secret is exposed by name through
   `terminal.env_passthrough` plus a vault entry, which is the one case that needs a deploy change.
 - Scripts may write state under `$HERMES_HOME`. It is backed up.
 - Outbound network access follows `egress-allowlist.md`.
@@ -50,7 +58,10 @@ As `082/contracts/publisher-interface.md`: topic `hermes`, bearer token, markdow
 PROD only:
 - The adapter's own subscription is refused by the server, because the token is write-only.
 - `NTFY_ALLOWED_USERS` is unset, so nothing inbound is ever acted on (FR-012).
-- The refused subscription MUST NOT stop delivery. This is checked on the first PROD deploy (Q-P2).
+- The refused subscription MUST NOT stop delivery. Confirmed (Q-P2): it settles at one retry per
+  minute and delivery is unaffected.
+- Delivery is one-way. Upstream's messages end with "send me a new message to stop", but a reply on
+  the phone reaches nothing. Jobs are managed from `hermes-agent` chat or `hermes cron` on the LXC.
 
 ## 4. Heartbeat (scheduler → monitoring)
 

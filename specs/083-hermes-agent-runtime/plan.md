@@ -113,7 +113,8 @@ ansible/
     │   ├── tasks/preflight.yml        # pin, aliases, secrets, DNS exposure, LAB-no-token, MCP URL parse
     │   ├── tasks/main.yml             # agent dirs, config/.env, egress unit, heartbeat (PROD), probes,
     │   │                              #   Open WebUI connection reconcile, automations check
-    │   ├── handlers/main.yml
+    │   ├── handlers/main.yml          # + wait for agent health, then restart Open WebUI (model list)
+    │   ├── files/reconcile_config.py  # new: shared PersistentConfig reconcile (managed keys + connections)
     │   └── templates/
     │       ├── docker-compose.yml.j2      # + hermes-agent service, `agent` network, OPENAI_API_BASE_URLS
     │       ├── agent-config.yaml.j2       # new
@@ -123,8 +124,8 @@ ansible/
     └── hermes_backup/templates/
         ├── backup_hermes.sh.j2        # + agent dir with SQLite snapshots
         └── restore_hermes.sh.j2       # + agent dir, UID 10000 ownership
-specs/065-hermes-ai-workspace/spec.md  # amendments (FR-022)
-docs/backlog/083-hermes-agent-runtime.md # status → specified
+specs/065-hermes-ai-workspace/{spec,research}.md  # amendments (FR-022)
+docs/backlog/083-hermes-agent-runtime.md # status → in progress → done
 ```
 
 **Structure Decision**: extend the existing `hermes` and `hermes_backup` roles. The agent is part of

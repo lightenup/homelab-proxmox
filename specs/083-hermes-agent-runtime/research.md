@@ -1,7 +1,9 @@
 # Research: Hermes Agent behind Hermes (083)
 
-Facts marked **[doc]** come from upstream documentation read 2026-10-17 and are not yet observed in
-this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md). Facts marked
+Facts marked **[doc]** come from upstream documentation read 2026-10-17. Where the pinned image has
+since confirmed or corrected one, it is marked **[observed]** or **[corrected]** with the evidence (T049,
+2026-10-18). Facts still marked **[doc]** were never exercised in this estate. Each fact has a LAB or
+PROD check in [quickstart.md](./quickstart.md). Facts marked
 **[repo]** were read from this repository.
 
 ## R-001 — Image and pin
@@ -19,7 +21,9 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
 - **Upgrade procedure**: the same as Open WebUI (065). Bump the pin, deploy through LAB, run the
   quickstart LAB checks Q-L1…Q-L10, promote, then deploy PROD. Read the upstream changelog for
   `approvals`, `cron` and `ntfy` changes before bumping, because those three carry this feature's
-  security and delivery guarantees. Job definitions survive upgrades **[doc]**.
+  security and delivery guarantees. Job definitions survive upgrades **[doc; not yet exercised by a
+  version bump]**. They survived container recreation on every deploy, and the restore drill
+  (Q-P8) **[observed]**.
 
 ## R-002 — How the runtime runs
 
@@ -27,7 +31,7 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   data bind-mounted at `/opt/data` from `{{ hermes_data_dir }}/agent`. No `ports:`. Not privileged,
   no Docker socket, no other host mounts except the heartbeat file (R-007) and the read-only config
   (R-004).
-- **Facts [doc]**:
+- **Facts [observed v0.21.6]** (entrypoint read for T043; `entrypoint-dispatch.sh` → `/init` → `main-wrapper.sh`):
   - The entrypoint is s6-overlay `/init`. It starts as root to fix volume ownership, then drops to user
     `hermes` (UID 10000).
   - `gateway run` hosts the cron scheduler (a tick every 60 s) and, with `API_SERVER_ENABLED=true`,
@@ -39,7 +43,7 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   - Two gateways must never share one data directory. This matters for the restore drill (R-009).
 - **API server**: `API_SERVER_ENABLED=true`, `API_SERVER_HOST=0.0.0.0` (inside the container's own
   network namespace only, with nothing published), `API_SERVER_KEY` from vault (≥ 8 chars). The
-  advertised model is `hermes-agent` for the default profile **[doc]**, which is the name the spec
+  advertised model is `hermes-agent` for the default profile **[observed: `GET /v1/models` → `['hermes-agent']`, 2026-10-18]**, which is the name the spec
   uses.
 - **Memory**: upstream asks for 1 GB minimum and recommends 2–4 GB. The LXC has 6 GB, shared with Open
   WebUI's in-container Whisper and TTS. Set `mem_limit: 3g` on the agent so a runaway turn cannot
@@ -133,9 +137,21 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   - `NTFY_*` (R-006)
   - MCP bearer tokens, when any exist
 
-  Cron scripts do not inherit provider credentials **[doc]**. A job secret is exposed by name through
-  `terminal.env_passthrough`, which is the one case where a new job needs a deploy change (spec Edge
-  Cases).
+  Cron scripts do not inherit provider credentials **[doc; corrected]**. A job secret is exposed by
+  name through `terminal.env_passthrough`, which is the one case where a new job needs a deploy
+  change (spec Edge Cases).
+  - **Key-scope finding [observed v0.21.6, T049, 2026-10-18]**: a throwaway no-agent script that
+    printed credential-like variable *names* saw `LLM_ROUTER_CLIENT_HERMES_AGENT_KEY`. `API_SERVER_KEY`
+    and `NTFY_TOKEN` were stripped. `build_subprocess_env` → `_sanitize_subprocess_env` strips only
+    names from upstream's provider registry, its tool/messaging settings, and fixed patterns
+    (`AUXILIARY_*_API_KEY`, `GATEWAY_RELAY_*`). A custom `model.key_env` name matches none of
+    them, and the agent's terminal goes through the same factory. So job scripts and terminal commands
+    can read the agent's gateway key.
+  - Impact: bounded. It is the agent's own identity (5.00 / 30 d, 20 rpm, FR-009). The gateway is
+    LAN/tailnet only, so the key is useless off the estate. But a prompt-injected terminal command
+    could print it, and egress to the internet is open.
+  - Not fixed by renaming to `OPENAI_API_KEY`, which is on the blocklist: upstream could then treat
+    OpenAI as configured and send the key to api.openai.com. Owner decision pending (see quickstart).
 
 ## Observed in the pinned image (2026-10-17, local run of `nousresearch/hermes-agent:v0.21.6` with the rendered config mounted read-only)
 
@@ -232,8 +248,8 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
 - **Unknown (now answered above for LAB)**: how the adapter behaves when its subscription is refused. The observed backoff is
   bounded (`[2, 5, 10, 30, 60]` s, `RECONNECT_BACKOFF`), so a refused subscription should settle into
   the 60 s retry cadence rather than a tight loop — to be confirmed by Q-L7. Cron delivery uses a
-  standalone sender that opens its own HTTP connection **[doc]**, so delivery should not depend on
-  the subscription, but this is not stated outright.
+  standalone sender that opens its own HTTP connection **[observed: delivery works while the
+  subscription is refused with 403, Q-P2/Q-P3/T035]**.
 - **LAB (owner's choice, 2026-10-17)**: the adapter is configured with **no token**. Subscribe and
   publish are then both refused by ntfy's deny-all default (082). That exercises the refused path
   before PROD and still cannot reach the phone (FR-014).
@@ -252,13 +268,12 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   `success: true`, ntfy message id returned). The refused subscription does not stop delivery. The CLI
   form is `hermes send --to <platform> "<text>"` (an earlier draft had `hermes send ntfy "<text>"`,
   which the CLI rejects).
-- **Size**: the adapter truncates at 4096 characters and logs a warning **[doc]**. That is below
+- **Size**: the adapter truncates at 4096 characters and logs a warning **[doc; not exercised]**. That is below
   ntfy's 32 KB limit, so 082's 413 cannot happen through this adapter. The spec's size edge case is
   satisfied by truncation.
 - **Failure delivery**: script-only jobs deliver an error alert to the job's `deliver` target on a
-  non-zero exit or a timeout **[doc]**. For agent jobs, verify on LAB whether failures go to
-  `deliver` or need a separate failure target (Q-L5). Either way, the job validation rule in
-  [data-model.md](./data-model.md) requires a phone-reaching target for failures.
+  non-zero exit or a timeout **[observed: Q-P5, `exit 3` reached the phone]**. Agent jobs do the
+  same (Q-L5, T035, below), so no separate failure target is needed.
 
 - **Agent-job failures [observed v0.21.6, Q-L5, 2026-10-18]**: the throwaway job `--model
   no-such-alias --deliver local` failed at the gateway with `HTTP 401: key not allowed to access
@@ -371,7 +386,8 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
     directory.
   - It has **no ntfy env and no `.env`**, so a drill can never message the phone.
   - It asserts that jobs `heartbeat` and `model-scout` exist, and runs one job (`heartbeat`, via
-    `hermes cron run` or `hermes cron tick`, settled by the upstream CLI read in tasks T002) with a success recorded in `hermes cron runs`.
+    `hermes cron run`). Success is the CLI's `Ran now: succeeded` plus the heartbeat file, not
+    `hermes cron runs`, which stays empty for manual runs. Implemented and passed (Q-P8).
 
 ## R-010 — Open WebUI: second connection and retiring Automations
 

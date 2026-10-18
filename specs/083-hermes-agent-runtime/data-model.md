@@ -90,5 +90,5 @@ order. Index 0 (the gateway) stays the default. Reconciled by `no_log` (R-010).
 2. `hermes-balanced` and any configured agent default exist in `llm_router_aliases`.
 3. The new vault variables are present (`no_log`).
 4. Exposure: no `hus-sky.no` name resolves to a public address (R-012), otherwise the deploy fails.
-5. LAB (`deploy_environment=lab`): no `NTFY_TOKEN` is rendered; a `lab_inventory` is never paired with a prod deploy.
+5. LAB (`deploy_environment=lab`): no `NTFY_TOKEN` is rendered; a `lab_inventory` is never paired with a prod deploy. Only on the LAB rig (`lab_inventory`) the deploy also asserts that no `heartbeat` job exists. The pipeline's LAB stage runs on the production machine, where the job legitimately exists (LAB deploy 39092898788).
 6. Every `hermes_mcp_servers` URL parses to host:port, which the egress rules need.
