@@ -48,6 +48,11 @@ the provisioning path list, and how a skipped suite maps through the existing ga
    > `scripts/lab/profiles.d/` and the `lxc_service` module are already covered by `^scripts/lab/`
    > and `^terraform/` respectively; no separate regex branch needed.
 
+> **Superseded**: this inline "Provisioning-relevant paths" regex is replaced by the
+> `scripts/ci/confidence-suite-paths.txt` path list read with `grep -qEf`. See
+> `specs/086-confidence-suite-trim/contracts/confidence-suite-paths.md`. All other parts of
+> this contract stay in force.
+
 **Outputs**:
 - `run` — `"true"` | `"false"` (see data-model derivation rules).
 

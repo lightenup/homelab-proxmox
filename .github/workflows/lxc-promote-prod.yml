@@ -180,12 +180,16 @@ jobs:
             fi
           fi
 
-          # Provisioning-relevant paths — see specs/063-ci-confidence-path-gate/spec.md
-          # (keep conservative: prefer false-run over false-skip).
-          if printf '%s\n' "${diff}" | grep -qE '^terraform/|^scripts/lab/|^ansible/playbooks/lab_.*\.ya?ml$|^ansible/inventories/|^ansible/roles/lxc_base/'; then
-            decide true "provisioning paths changed"
+          # Paths the confidence suite reads — specs/086-confidence-suite-trim (prefer false-run over false-skip).
+          patterns="$(mktemp)"
+          grep -vE '^[[:space:]]*(#|$)' scripts/ci/confidence-suite-paths.txt >"${patterns}" 2>/dev/null || true
+          if [[ ! -s "${patterns}" ]]; then
+            decide true "confidence-suite path list missing or empty"
+          fi
+          if printf '%s\n' "${diff}" | grep -qEf "${patterns}"; then
+            decide true "confidence-suite paths changed"
           else
-            decide false "no provisioning paths changed"
+            decide false "no confidence-suite paths changed"
           fi
 
   apply_lab:

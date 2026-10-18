@@ -106,6 +106,7 @@ runs despite the path gate saying skip.
 - **FR-002**: `run` MUST be true when the diff touches any provisioning-relevant path. Initial list:
   `terraform/**`, `scripts/lab/**`, `ansible/playbooks/lab_*.yml`, `ansible/inventories/**`,
   `scripts/lab/profiles.d/**`, `ansible/roles/lxc_base/**`, and the `lxc_service` Terraform module.
+  *(superseded by 086-confidence-suite-trim)*
 - **FR-003**: `run` MUST be true whenever `run_confidence_suite=true` is explicitly passed (operator
   override wins), and false only when both the path gate says skip **and** the input isn't forcing it.
 - **FR-004**: The confidence-suite job MUST depend on the gate job and run only when `run == true`;
@@ -122,6 +123,7 @@ runs despite the path gate saying skip.
   The gate writes its decision and reason to the step summary.
 - **FR-008**: There MUST be no change to what the suite itself does, to the destructive-plan gate, or
   to the LAB apply job (which stays unconditional and service-specific).
+  *(superseded by 086-confidence-suite-trim)*
 
 ## Success Criteria *(mandatory)*
 
