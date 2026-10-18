@@ -1,0 +1,43 @@
+# Confidence-suite path list — specs/086-confidence-suite-trim
+#
+# One POSIX ERE per line. Lines starting with '#' (after optional whitespace) and
+# blank lines are ignored. The confidence_gate job in .github/workflows/lxc-promote-prod.yml
+# reads this file with `grep -qEf` after stripping comments and blanks; the drift guard in
+# python/tests/workflows/test_confidence_gate_paths.py asserts the list is non-empty and that
+# every dependency it finds is covered.
+#
+# Prefer a false run over a false skip (FR-004).
+
+# Entrypoint
+^scripts/lab/pve-lab$
+
+# Libraries sourced directly by pve-lab (checks, jsonl, provenance, evidence, artifacts,
+# sudo, cleanup, rebuild) and state.sh (sourced by rebuild.sh and guardrails.sh)
+^scripts/lab/guardrails\.sh$
+^scripts/lab/lib/(checks|jsonl|provenance|evidence|artifacts|sudo|cleanup|rebuild|state)\.sh$
+
+# Sourced check definitions and profile/contract data
+^scripts/lab/(checks\.d|profiles\.d|contracts)/
+
+# Scripts run by the suite job itself
+^scripts/lab/(ci-verify\.sh|verify_evidence\.py|fetch_evidence_pack\.sh|render_failure_evidence\.sh|render_github_annotations\.sh|create_tier2_template\.sh)$
+
+# Lab playbooks
+^ansible/playbooks/lab_.*\.ya?ml$
+
+# Lab inventory (also grepped by guardrails.sh)
+^ansible/inventories/lab/
+
+# Group vars loaded through the ansible/playbooks/group_vars -> ../group_vars symlink.
+# The lab host is in the `lab` and `proxmox_hosts` groups; `all` is always loaded.
+^ansible/group_vars/(all|proxmox_hosts|lab)/
+
+# Roles included by the lab playbooks
+^ansible/roles/assertion_utils/
+
+# Ansible config and Galaxy requirements (conservative)
+^ansible/(ansible\.cfg|requirements\.yml)$
+
+# Changes to the gate itself
+^\.github/workflows/lxc-promote-prod\.yml$
+^scripts/ci/confidence-suite-paths\.txt$

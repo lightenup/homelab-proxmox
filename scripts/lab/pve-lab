@@ -1675,21 +1675,10 @@ cmd_confidence_suite() {
         exit 1
     fi
 
-    # 2. Bootstrap Profile
-    log_info "Confidence Suite: Running Bootstrap Profile..."
-    if ! cmd_run --profile bootstrap; then
-        log_error "Confidence Suite Failed at Bootstrap Profile."
-        exit 1
-    fi
-
-    # 3. Control Plane Profile
-    log_info "Confidence Suite: Running Hypervisor Control Plane Profile..."
-    if ! cmd_run --profile hypervisor-control-plane; then
-        log_error "Confidence Suite Failed at Control Plane Profile."
-        exit 1
-    fi
-
-    # 4. Nested Workload Profile
+    # 2. Hypervisor Nested Workload Profile
+    # The hypervisor-nested-workload profile is a superset of bootstrap and
+    # hypervisor-control-plane (see specs/086-confidence-suite-trim, research R1), so
+    # running only it covers all three tiers without the duplicated runs.
     log_info "Confidence Suite: Running Hypervisor Nested Workload Profile..."
     if ! cmd_run --profile hypervisor-nested-workload; then
         log_error "Confidence Suite Failed at Nested Workload Profile."
@@ -1777,7 +1766,7 @@ usage() {
     echo "  test            - Run tests against existing Lab VM"
     echo "  run             - Full workflow: destroy -> up -> test -> destroy"
     echo "  safety          - Run Safety Suite (Negative Tests)"
-    echo "  confidence      - Run Confidence Suite (Safety + All Profiles)"
+    echo "  confidence      - Run Confidence Suite (Safety + nested-workload profile)"
     echo "  suite <profile> - Run specific profile suite (019c1 primary interface)"
     echo "  rebuild         - Run Rebuild Orchestrator (Baseline + Suite) (019f)"
     echo "  verify-evidence <path> - Verify an evidence pack (019e)"
