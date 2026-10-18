@@ -178,7 +178,7 @@ one run succeeds, no phone message (Q-P8).
 - [x] T047 Perform the one-time manual router check (Q-P6): no port forward to `reverse_proxy_ip` (or any) on 80/443; record date, router model and screenshot reference in `specs/083-hermes-agent-runtime/quickstart.md` § Q-P6 (FR-017)
 - [x] T048 [P] Run `ansible-playbook --syntax-check` for `ansible/playbooks/hermes.yml`, `ansible/playbooks/hermes-restore-drill.yml` and the llm-router playbook, plus `ansible-lint` on `ansible/roles/hermes` and `ansible/roles/hermes_backup`, and `bash -n`/`shellcheck` on the rendered `hermes-agent-egress.sh`, `heartbeat.sh`, `backup_hermes.sh`, `restore_hermes.sh`
 - [x] T049 Bring `specs/083-hermes-agent-runtime/spec.md` (Status), `plan.md`, `research.md` (every [doc] fact now observed or corrected), `data-model.md` and `contracts/*.md` up to date with what was delivered
-- [ ] T050 After two weeks on PROD, run quickstart Q-P10: gateway metrics show no 429s for client `hermes` caused by `hermes_agent` (SC-006); zero LAB-origin or duplicate scout messages (SC-010); review `hermes_agent` rpm/budget against measured use (FR-009 — never raise first); record in quickstart.md
+- [ ] T050 After two weeks on PROD, run quickstart Q-P10: gateway metrics show no 429s for client `hermes` caused by `hermes_agent` (SC-006); zero LAB-origin or duplicate scout messages (SC-010); review `hermes_agent` rpm/budget against measured use (FR-009 — never raise first); record in quickstart.md — **Skipped (owner, 2026-10-18)**: no scheduled review; issues will surface in other work.
 
 ---
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-17
 
-**Status**: Implemented. Live on PROD since 2026-10-17/18; every user story verified (quickstart "Results so far"). Open: the two-week review Q-P10 (T050). Q-P6: the line is behind ISP Carrier-Grade NAT, so no inbound port forward is possible. Accepted deviations: research R-004 (flagged commands from chat are held as pending, not BLOCKED) and R-004 key-scope finding
+**Status**: Implemented. Live on PROD since 2026-10-17/18; every user story verified (quickstart "Results so far"). The two-week review Q-P10 (T050) was skipped by owner decision. Q-P6: the line is behind ISP Carrier-Grade NAT, so no inbound port forward is possible. Accepted deviations: research R-004 (flagged commands from chat are held as pending, not BLOCKED) and R-004 key-scope finding
 
 **Input**: User description: "083-hermes-agent-runtime.md" — the backlog entry
 [`docs/backlog/083-hermes-agent-runtime.md`](../../docs/backlog/083-hermes-agent-runtime.md): add the
