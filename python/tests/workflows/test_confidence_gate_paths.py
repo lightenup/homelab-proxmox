@@ -118,6 +118,9 @@ def test_gate_is_wired_to_path_list():
     assert "grep -qEf" in run_text, (
         "The decide step must match the diff against the path list with `grep -qEf`"
     )
+    assert re.search(
+        r'if \[\[ ! -s "\$\{patterns\}" \]\]; then\s+decide true ', run_text
+    ), "The decide step must fail safe (run) when the path list is missing or empty (FR-005)"
     assert "^ansible/roles/lxc_base/" not in run_text, (
         "The decide step must no longer inline the 063 lxc_base path"
     )
@@ -135,11 +138,16 @@ _BASH_SOURCE_RE = re.compile(r'(?:source|bash)\s+"\$\{(LIB_DIR|SCRIPT_DIR|REPO_R
 _BASH_FILES = [
     ("scripts/lab/pve-lab", "scripts/lab"),
     ("scripts/lab/guardrails.sh", "scripts/lab"),
-    ("scripts/lab/lib/rebuild.sh", "scripts/lab/lib"),
+    # rebuild.sh is sourced by pve-lab, so its LIB_DIR/SCRIPT_DIR are pve-lab's.
+    ("scripts/lab/lib/rebuild.sh", "scripts/lab"),
 ]
 
-_ROLE_RE = re.compile(r'(?:include_role|import_role|ansible\.builtin\.include_role|ansible\.builtin\.import_role):')
-_ROLE_NAME_RE = re.compile(r'^\s*name:\s*(\S+)')
+_ROLE_TASK_KEYS = {
+    "include_role",
+    "import_role",
+    "ansible.builtin.include_role",
+    "ansible.builtin.import_role",
+}
 
 
 def _resolve_bash_ref(var: str, tail: str, script_dir: str) -> str:
@@ -166,23 +174,53 @@ def test_bash_sourced_files_are_covered():
             _assert_covered(_resolve_bash_ref(var, tail, script_dir))
 
 
+def _playbook_roles(node: object) -> set[str]:
+    """Role names from play-level `roles:` and include_role/import_role tasks, at any depth."""
+    roles: set[str] = set()
+    if isinstance(node, list):
+        for item in node:
+            roles |= _playbook_roles(item)
+    elif isinstance(node, dict):
+        play_roles = node.get("roles")
+        for entry in play_roles if isinstance(play_roles, list) else []:
+            name = entry.get("role", entry.get("name")) if isinstance(entry, dict) else entry
+            if isinstance(name, str):
+                roles.add(name)
+        for key, value in node.items():
+            if key in _ROLE_TASK_KEYS and isinstance(value, dict) and isinstance(value.get("name"), str):
+                roles.add(value["name"])
+            else:
+                roles |= _playbook_roles(value)
+    return roles
+
+
+def test_playbook_role_extractor_handles_play_roles_and_late_name():
+    plays = yaml.safe_load(
+        """
+- hosts: lab
+  roles:
+    - play_role
+    - role: dict_role
+  tasks:
+    - block:
+        - include_role:
+            tasks_from: report
+            name: late_name_role
+"""
+    )
+    assert _playbook_roles(plays) == {"play_role", "dict_role", "late_name_role"}
+
+
 def test_ansible_roles_are_covered():
+    roles: set[str] = set()
     for playbook in sorted(Path("ansible/playbooks").glob("lab_*.yml")):
-        lines = Path(playbook).read_text(encoding="utf-8").splitlines()
-        roles: set[str] = set()
-        for i, line in enumerate(lines):
-            if _ROLE_RE.search(line):
-                # The role name is on the `include_role:` line or the next line.
-                for candidate in (line, lines[i + 1] if i + 1 < len(lines) else ""):
-                    m = _ROLE_NAME_RE.search(candidate)
-                    if m:
-                        roles.add(m.group(1))
-                        break
-        for role in roles:
-            # Collection roles (names with dots) are ignored.
-            if "." in role:
-                continue
-            _assert_covered(f"ansible/roles/{role}/tasks/main.yml")
+        roles |= _playbook_roles(yaml.load(playbook.read_text(encoding="utf-8"), Loader=_Yaml12SafeLoader))
+    assert roles, "No roles found in ansible/playbooks/lab_*.yml (extractor may be wrong)"
+    for role in roles:
+        # Collection roles (names with dots) are ignored.
+        if "." in role:
+            continue
+        _assert_covered(f"ansible/roles/{role}/tasks/main.yml")
 
 
 def _inventory_groups() -> list[str]:
