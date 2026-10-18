@@ -90,6 +90,15 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
     `destructive_slash_confirm`.
   - `unattended_mode` covers "unattended programmatic platforms (webhook/msgraph_webhook/api_server)"
     (`tools/approval.py:764`) — i.e. every request from Open WebUI. `cron_mode` covers cron jobs.
+  - **Correction [observed v0.21.6, Q-L4, 2026-10-18]**: for `api_server` this does not apply. The gateway
+    sets `HERMES_EXEC_ASK=1` at startup, and `_presence()` deliberately keeps `is_ask` for unattended
+    platforms (for the `/v1/runs` approval bridge). A flagged command from `/v1/chat/completions`
+    (Open WebUI) therefore goes to `_human_decision`. With no notify callback, it returns
+    `pending_approval` immediately and queues an entry nothing on that path consumes. Net effect: the
+    command never runs, the gate is instant, and the reply is readable but says to approve in a UI
+    that does not exist. The only resolver is `POST /v1/runs/{id}/approval`, for runs started through
+    `/v1/runs`. That needs `API_SERVER_KEY`, which only Open WebUI holds, and the API server is not
+    published (FR-004). Accepted as fail-closed in substance. Revisit if a client of `/v1/runs` is ever added.
     Both default to `deny`; `mode` defaults to `smart`, so we set `manual` explicitly.
   - Approvals apply to the `local` terminal backend. Isolated backends such as Docker skip them
     (`terminal.backend: local` is therefore required for the control to hold).
