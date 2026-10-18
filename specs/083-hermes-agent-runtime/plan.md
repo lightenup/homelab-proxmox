@@ -72,7 +72,7 @@ Q-L1…Q-L10 and PROD checks Q-P1…Q-P10 ([quickstart.md](./quickstart.md)); re
 | III. Separation | Ansible configures inside the LXC (compose, netfilter, timers). Terraform is touched only if Q-L10 says memory must grow, as a sizing change. ✅ |
 | IV. Code economy | No new role: the `hermes` and `hermes_backup` roles, compose file, preflight, drill and `host_vars/hermes.yml` are extended. One new template each for agent config, `.env`, the egress script and the heartbeat script. The MCP list is rendered from the existing single source. No per-job Ansible (SC-001). ✅ |
 | V. Dual provisioning | Same service slug `hermes`, already in the workflow dropdowns. `deploy_environment` defaults to `prod`, and a laptop LAB run passes it explicitly (quickstart). ✅ |
-| Networking | Allowlist IPs come from existing central vars (`llm_router_ip`, `reverse_proxy_ip`, `adguard_ip`, `hermes_mcp_servers`). One new central var: `hermes_agent_ip`. ✅ |
+| Networking | Allowlist IPs come from existing central vars (`llm_router_ip`, `reverse_proxy_ip`, `hermes_mcp_servers`; no AdGuard rule, Q-L6). One new central var: `hermes_agent_ip`. ✅ |
 | Access control | Proxmox UI is not exposed; the agent is explicitly blocked from reaching it (egress rule 7). ✅ |
 
 **Post-design re-check**: still passes. One accepted deviation, recorded in research R-010: Open WebUI

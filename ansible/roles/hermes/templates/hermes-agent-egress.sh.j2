@@ -16,7 +16,6 @@ set -euo pipefail
 
 AGENT_SRC="{{ hermes_agent_ip }}"
 AGENT_SUBNET="{{ hermes_agent_subnet }}"
-ADGUARD_IP="{{ adguard_ip }}"
 ROUTER_IP="{{ llm_router_ip }}"
 ROUTER_PORT="{{ llm_router_port }}"
 PROXY_IP="{{ reverse_proxy_ip }}"
@@ -56,9 +55,9 @@ iptables -F HERMES-AGENT
 iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -m state --state ESTABLISHED,RELATED -j ACCEPT
 # 2. The agent's own compose subnet (SearXNG, and bridge traffic to Open WebUI).
 iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${AGENT_SUBNET}" -j ACCEPT
-# 3. DNS, if the embedded resolver forwards from the container's namespace.
-iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${ADGUARD_IP}/32" -p udp --dport 53 -j ACCEPT
-iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${ADGUARD_IP}/32" -p tcp --dport 53 -j ACCEPT
+# 3. DNS needs no rule: the LXC resolves through a public resolver (1.1.1.1), which the
+#    private-range rejects below do not cover. There is no AdGuard in this estate; the
+#    earlier accept rule for adguard_ip pointed at an unused address (Q-L6, 2026-10-18).
 # 4. The 064 gateway.
 iptables -A HERMES-AGENT -s "${AGENT_SRC}/32" -d "${ROUTER_IP}/32" -p tcp --dport "${ROUTER_PORT}" -j ACCEPT
 # 5. Each enabled MCP server (derived, FR-011).

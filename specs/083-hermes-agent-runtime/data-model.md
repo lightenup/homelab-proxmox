@@ -73,7 +73,7 @@ Derived, never hand-listed:
 - `llm_router_ip:llm_router_port`
 - each `hermes_mcp_servers[].url` host:port
 - `reverse_proxy_ip:443`
-- `adguard_ip:53`
+- DNS through the LXC's public resolver (1.1.1.1), with no rule needed. No AdGuard in this estate (Q-L6)
 - the `agent` subnet
 
 Everything else private or tailnet is rejected; the internet is allowed. Rule: adding an MCP server to
