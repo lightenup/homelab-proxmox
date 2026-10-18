@@ -48,7 +48,7 @@ Rules:
 | kind | `no_agent` (script) or agent prompt |
 | script | file in `$HERMES_HOME/scripts/`. Paths escaping that directory are rejected upstream |
 | deliver | MUST include a target that reaches the phone (`ntfy`) on PROD (FR-013) |
-| failure target | `deliver`, or a separate failure target if agent jobs need one (Q-L5). MUST reach the phone |
+| failure target | `deliver`: no separate target. A failed agent run produces a `(FAILED)` report that goes to the same target (Q-L5). MUST reach the phone |
 | model | agent jobs only; a gateway alias. Default `hermes-balanced` |
 
 State: `active ⇄ paused`, then `removed`. `failure_streak` counts consecutive failed runs and

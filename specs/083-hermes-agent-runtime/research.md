@@ -251,6 +251,13 @@ this estate. Each one has a LAB or PROD check in [quickstart.md](./quickstart.md
   `deliver` or need a separate failure target (Q-L5). Either way, the job validation rule in
   [data-model.md](./data-model.md) requires a phone-reaching target for failures.
 
+- **Agent-job failures [observed v0.21.6, Q-L5, 2026-10-18]**: the throwaway job `--model
+  no-such-alias --deliver local` failed at the gateway with `HTTP 401: key not allowed to access
+  model`. `hermes cron run` printed `Ran now: failed`, the last run was recorded as
+  `error: RuntimeError: …`, and `cron/output/<job-id>/` held a `# Cron Job: ql5-badmodel (FAILED)`
+  report. Failures follow `deliver`, so no separate failure target is needed (FR-013). Phone receipt
+  is confirmed on PROD (T035).
+
 ## R-007 — Scheduler heartbeat (FR-016)
 
 - **Decision** (owner, 2026-10-17): Ansible owns the heartbeat job **on PROD only**.

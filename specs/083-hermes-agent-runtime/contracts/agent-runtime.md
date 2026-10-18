@@ -39,6 +39,10 @@ Further rules:
 - Scripts may write state under `$HERMES_HOME`. It is backed up.
 - Outbound network access follows `egress-allowlist.md`.
 
+**Agent jobs.** A failed run (for example, the gateway refusing the model) is recorded as
+`error: …` on the job's last run. It writes a `# Cron Job: <name> (FAILED)` report, which goes to
+the same `deliver` target as a normal result. There is no separate failure target (Q-L5).
+
 ## 3. Delivery (agent → ntfy)
 
 As `082/contracts/publisher-interface.md`: topic `hermes`, bearer token, markdown on.
