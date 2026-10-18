@@ -99,7 +99,7 @@ Not applicable. The `monitoring_stack` Ansible role and all infrastructure (Aler
     tags: [compose, pushover]
   ```
 
-  `no_log: true` prevents credential values from appearing in Ansible output or CI logs (Constitution II Secrets Policy). `when: pushover_enabled | default(false) | bool` ensures the assert is skipped when Pushover is disabled — zero impact on the default deployment path (US-4 AC-4.1). `fail_msg` names both missing variables and the exact file where they must be added — satisfies US-4 AC-4.3. Follows the `ansible.builtin.assert` pattern used by the `adguard`, `jellyfin`, and `nextcloud` roles for vault preflight checks (Feature 041 pattern).
+  `no_log: true` prevents credential values from appearing in Ansible output or CI logs (Constitution II Secrets Policy). `when: pushover_enabled | default(false) | bool` ensures the assert is skipped when Pushover is disabled — zero impact on the default deployment path (US-4 AC-4.1). `fail_msg` names both missing variables and the exact file where they must be added — satisfies US-4 AC-4.3. Follows the `ansible.builtin.assert` pattern used by the `jellyfin` and `nextcloud` roles for vault preflight checks (Feature 041 pattern).
 
   **Traces to**: FR-012, US-4 AC-4.3
 

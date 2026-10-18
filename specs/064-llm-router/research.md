@@ -80,7 +80,7 @@ but neither has been exercised here. This is a first-deploy LAB check, and the f
 is `ALL_PROXY` with the SOCKS5 listener instead.
 
 **Alternatives considered**: a static `100.64.0.0/10` route on the LXC via the PVE host (works only
-while the PVE host forwards, and gives no MagicDNS resolution — the LXC's DNS is AdGuard on the LAN);
+while the PVE host forwards, and gives no MagicDNS resolution — the LXC's DNS is a public resolver);
 Tailscale installed in the LXC with TUN passthrough (rejected on the Tier-2 allowlist collision
 above); addressing the Mac by LAN IP (rejected — violates FR-013 and fails exactly when it matters).
 
@@ -232,7 +232,7 @@ the role never writes it to disk outside the container environment.
 **Decision**: allocate `192.168.1.220/24`, service name `llm-router`, Terraform module
 `module.llm_router_lxc`, Ansible role `llm_router`.
 
-`.220` is the next free address in `service_ips` (`.210`–`.219` are taken, with `.219` = eurooffice).
+`.220` is the next free address in `service_ips` (`.211`–`.219` are taken, with `.219` = eurooffice).
 
 **Pre-existing gap noticed, and deliberately not fixed here**: `ansible/inventories/prod/hosts.yml`
 lists services only up to `financial-scenario` (`.217`) — **`market-model` and `eurooffice` are

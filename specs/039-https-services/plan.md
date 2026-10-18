@@ -7,7 +7,7 @@
 
 ## Summary
 
-This feature enables HTTPS with valid Let's Encrypt certificates for all homelab services (Nextcloud, Immich, Grafana, Jellyfin, AdGuard) accessed via `<service>.hus-sky.no` subdomains. The approach replaces the stock Caddy binary with a custom xcaddy build including the Domeneshop DNS provider (via `caddy-dns/lego-deprecated`), configures DNS-01 ACME challenges for automatic certificate issuance and renewal, migrates existing services to their new HTTPS domains, and injects registrar API credentials securely via Ansible vault and systemd environment files. All work is Ansible-only — no Terraform changes.
+This feature enables HTTPS with valid Let's Encrypt certificates for all homelab services (Nextcloud, Immich, Grafana, Jellyfin) accessed via `<service>.hus-sky.no` subdomains. The approach replaces the stock Caddy binary with a custom xcaddy build including the Domeneshop DNS provider (via `caddy-dns/lego-deprecated`), configures DNS-01 ACME challenges for automatic certificate issuance and renewal, migrates existing services to their new HTTPS domains, and injects registrar API credentials securely via Ansible vault and systemd environment files. All work is Ansible-only — no Terraform changes.
 
 ## Technical Context
 
@@ -72,7 +72,6 @@ ansible/
 │       │   ├── nextcloud.caddy.j2      — MODIFIED: FQDN site address, https headers
 │       │   ├── grafana.caddy.j2        — NEW: Grafana HTTPS proxy
 │       │   ├── jellyfin.caddy.j2       — NEW: Jellyfin HTTPS proxy
-│       │   ├── adguard.caddy.j2        — NEW: AdGuard HTTPS proxy
 │       │   ├── homeassistant.caddy.j2  — NEW: Home Assistant HTTPS proxy (conditional)
 │       │   ├── domeneshop.env.j2       — NEW: systemd EnvironmentFile template
 │       │   └── caddy-domeneshop.conf.j2 — NEW: systemd drop-in override template
@@ -109,7 +108,6 @@ ansible/
 | Custom Binary Build | `xcaddy` on target LXC | Official Caddy build tool. Building on-target avoids cross-compilation. See R-002. |
 | Secrets Injection | systemd EnvironmentFile drop-in | Standard approach for extending APT-managed systemd units. Never exposes secrets in config files. See R-003. |
 | Certificate Strategy | Individual certs per subdomain | Caddy default behavior. Simpler config, easier debugging. See R-007. |
-| DNS Rewrites (LAN) | Manual via AdGuard web UI | Spec marks automation as out-of-scope (D-002). One-time 2-minute operation. See R-004. |
 | Global ACME Config | `acme_dns` Caddyfile directive | DRY — applies to all site blocks. See R-008. |
 
 ## Implementation Steps
@@ -117,12 +115,12 @@ ansible/
 ### Step 1: Add Service IP/Port Variables to Group Vars
 
 - **Files**:
-  - `ansible/group_vars/services/vars.yml` — add `jellyfin_ip`, `jellyfin_port`, `adguard_ip`, `adguard_web_port`, `homeassistant_ip`, `homeassistant_port`
+  - `ansible/group_vars/services/vars.yml` — add `jellyfin_ip`, `jellyfin_port`, `homeassistant_ip`, `homeassistant_port`
 - **Description**: Centralize all service IP addresses and ports referenced by the reverse proxy role. Some variables already exist (immich, nextcloud, monitoring); add the missing ones for services newly placed behind the proxy.
 - **Dependencies**: None
 - **Parallel-safe**: Yes
 - **Traces to**: FR-010 (new Caddy site blocks need backend addresses), constitution networking principle (IPs defined centrally)
-- **Done-condition**: `ansible-playbook --syntax-check` passes for playbooks referencing these variables. Variables `jellyfin_ip`, `jellyfin_port`, `adguard_ip`, `adguard_web_port`, `homeassistant_ip`, `homeassistant_port` are defined in `group_vars/services/vars.yml`.
+- **Done-condition**: `ansible-playbook --syntax-check` passes for playbooks referencing these variables. Variables `jellyfin_ip`, `jellyfin_port`, `homeassistant_ip`, `homeassistant_port` are defined in `group_vars/services/vars.yml`.
 
 ### Step 2: Add Domeneshop API Credentials to Vault
 
@@ -165,17 +163,16 @@ ansible/
 - **Traces to**: FR-001, FR-004, FR-005 (DNS records prerequisite documented in quickstart.md)
 - **Done-condition**: Templates use `{{ caddy_base_domain }}` for site addresses. No `http://` prefixes in site addresses. `X-Forwarded-Proto` is `https`.
 
-### Step 6: Create New Caddy Site Templates (Grafana, Jellyfin, AdGuard, Home Assistant)
+### Step 6: Create New Caddy Site Templates (Grafana, Jellyfin, Home Assistant)
 
 - **Files**:
   - `ansible/roles/reverse_proxy/templates/grafana.caddy.j2` — NEW
   - `ansible/roles/reverse_proxy/templates/jellyfin.caddy.j2` — NEW
-  - `ansible/roles/reverse_proxy/templates/adguard.caddy.j2` — NEW
   - `ansible/roles/reverse_proxy/templates/homeassistant.caddy.j2` — NEW
 - **Description**: Create Caddy site block templates for the three new services plus the Home Assistant placeholder. Follow the contract in `contracts/caddy-site-block.md`. Home Assistant template is conditional on `homeassistant_active`.
 - **Dependencies**: Step 1 (service IPs/ports), Step 3 (caddy_base_domain)
 - **Parallel-safe**: Yes (parallel with Steps 4-5)
-- **Traces to**: FR-010, FR-015, FR-006 (AdGuard DNS rewrites prerequisite documented in quickstart.md)
+- **Traces to**: FR-010, FR-015, FR-006
 - **Done-condition**: Four new `.caddy.j2` files exist. Each follows the contract pattern. Home Assistant template has conditional guard.
 
 ### Step 7: Create Systemd Override Templates
@@ -201,7 +198,7 @@ ansible/
   5. Create systemd override directory
   6. Deploy the domeneshop.env file (mode 0600)
   7. Deploy the systemd drop-in override
-  8. Deploy all site block templates (Grafana, Jellyfin, AdGuard, Home Assistant)
+  8. Deploy all site block templates (Grafana, Jellyfin, Home Assistant)
   9. Trigger handlers for daemon-reload and restart
 - **Dependencies**: Steps 3-7 (all templates and variables must exist)
 - **Parallel-safe**: No (this is the main integration step)
@@ -257,7 +254,6 @@ ansible/
 | Domeneshop API rate limiting during multiple DNS-01 challenges | Initial certificate issuance fails for some subdomains | Individual certs are issued sequentially by Caddy with built-in retry. 5-6 subdomains is well within any reasonable rate limit. |
 | DNS propagation delay causes ACME challenge timeout | Certificate issuance fails on first attempt | Caddy retries automatically. Domeneshop DNS typically propagates within 60 seconds. `lego` defaults to 120s propagation timeout. |
 | Nextcloud domain change breaks existing mobile app sessions | Users must re-authenticate | Dual-domain trust (D-004) allows gradual client migration. Document in quickstart.md. |
-| AdGuard DNS rewrites not configured before proxy deployment | LAN clients cannot resolve `*.hus-sky.no` to proxy | Document as prerequisite in quickstart.md. Rewrites are a manual one-time step. Public DNS still works (via Tailscale or direct). |
 | xcaddy build fails on the proxy LXC (Go dependency issues) | Custom binary not available | Pin Go version. Consider pre-building binary on CI as fallback approach. |
 
 ## Testing Strategy

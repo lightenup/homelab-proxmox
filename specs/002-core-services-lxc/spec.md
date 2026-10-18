@@ -91,8 +91,8 @@ all:
   children:
     services:
       hosts:
-        adguard:
-          ansible_host: 192.168.1.210
+        proxy:
+          ansible_host: 192.168.1.211
         # ... other hosts
       vars:
         ansible_user: ansible

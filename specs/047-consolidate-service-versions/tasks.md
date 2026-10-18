@@ -12,7 +12,6 @@
 Infrastructure-as-code repo. All edits are under `ansible/`:
 - `ansible/group_vars/services/vars.yml`
 - `ansible/roles/nextcloud/defaults/main.yml`
-- `ansible/roles/adguard/defaults/main.yml`
 
 ---
 
@@ -20,7 +19,7 @@ Infrastructure-as-code repo. All edits are under `ansible/`:
 
 **Purpose**: Capture a baseline so the relocation can be proven value-preserving.
 
-- [x] T001 Record baseline values by running `grep -rn "nextcloud_version\|nextcloud_exporter_version\|adguard_exporter_version\|immich_version\|financial_scenario_version" ansible/` and noting each current value (`nextcloud_version: "32"`, `nextcloud_exporter_version: "0.9.0"`, `adguard_exporter_version: "1.2.1"`, `immich_version: "v2.4.0"`, `financial_scenario_version: "0.1.0"`) for the final regression check.
+- [x] T001 Record baseline values by running `grep -rn "nextcloud_version\|nextcloud_exporter_version\|immich_version\|financial_scenario_version" ansible/` and noting each current value (`nextcloud_version: "32"`, `nextcloud_exporter_version: "0.9.0"`, `immich_version: "v2.4.0"`, `financial_scenario_version: "0.1.0"`) for the final regression check.
 
 ---
 
@@ -30,7 +29,7 @@ Infrastructure-as-code repo. All edits are under `ansible/`:
 
 **⚠️ CRITICAL**: T002 must complete before US1's role-default deletions (T003, T004).
 
-- [x] T002 Add a `# Service versions` block near the top of `ansible/group_vars/services/vars.yml` (after the docker preamble, mirroring the heading style in `ansible/group_vars/monitoring/vars.yml`) containing all five pins with exact values: `nextcloud_version: "32"`, `nextcloud_exporter_version: "0.9.0"`, `adguard_exporter_version: "1.2.1"`, `immich_version: "v2.4.0"`, `financial_scenario_version: "0.1.0"`. (Old scattered `immich_version` / `financial_scenario_version` lines are removed later in T007.)
+- [x] T002 Add a `# Service versions` block near the top of `ansible/group_vars/services/vars.yml` (after the docker preamble, mirroring the heading style in `ansible/group_vars/monitoring/vars.yml`) containing all four pins with exact values: `nextcloud_version: "32"`, `nextcloud_exporter_version: "0.9.0"`, `immich_version: "v2.4.0"`, `financial_scenario_version: "0.1.0"`. (Old scattered `immich_version` / `financial_scenario_version` lines are removed later in T007.)
 
 **Checkpoint**: All five version pins now resolvable from `group_vars/services/vars.yml`.
 
@@ -40,14 +39,13 @@ Infrastructure-as-code repo. All edits are under `ansible/`:
 
 **Goal**: The three outlier pins live only in `group_vars`; no role `defaults/` file holds a service version.
 
-**Independent Test**: `grep -rn "nextcloud_version\|nextcloud_exporter_version\|adguard_exporter_version" ansible/roles/` returns zero matches, and the nextcloud/adguard plays resolve those variables without "undefined variable" errors.
+**Independent Test**: `grep -rn "nextcloud_version\|nextcloud_exporter_version" ansible/roles/` returns zero matches, and the nextcloud play resolve those variables without "undefined variable" errors.
 
 ### Implementation for User Story 1
 
 - [x] T003 [US1] Delete the `nextcloud_version` and `nextcloud_exporter_version` lines entirely from `ansible/roles/nextcloud/defaults/main.yml` (no placeholder, no comment).
-- [x] T004 [P] [US1] Delete the `adguard_exporter_version` line entirely from `ansible/roles/adguard/defaults/main.yml` (no placeholder, no comment).
-- [x] T005 [US1] Verify removal: `grep -rn "nextcloud_version\|nextcloud_exporter_version\|adguard_exporter_version" ansible/roles/` returns zero matches (satisfies SC-001).
-- [x] T006 [US1] Verify resolution: <!-- requires live host — run manually: ansible-playbook --syntax-check && --check on nextcloud/adguard plays --> run `ansible-playbook --syntax-check` and a `--check` dry-run of the nextcloud and adguard plays (or `ansible <group> -m debug -a "var=nextcloud_version"` etc. for all three) — confirm no undefined-variable errors (satisfies SC-003).
+- [x] T005 [US1] Verify removal: `grep -rn "nextcloud_version\|nextcloud_exporter_version" ansible/roles/` returns zero matches (satisfies SC-001).
+- [x] T006 [US1] Verify resolution: <!-- requires live host — run manually: ansible-playbook --syntax-check && --check on nextcloud play --> run `ansible-playbook --syntax-check` and a `--check` dry-run of the nextcloud play (or `ansible <group> -m debug -a "var=nextcloud_version"` etc. for both) — confirm no undefined-variable errors (satisfies SC-003).
 
 **Checkpoint**: MVP complete — version pins are single-sourced; routine upgrades need no role-defaults edits.
 
@@ -96,7 +94,6 @@ Infrastructure-as-code repo. All edits are under `ansible/`:
 ```bash
 # After T002, the two role-default deletions can run together:
 Task: "Delete nextcloud_version & nextcloud_exporter_version from ansible/roles/nextcloud/defaults/main.yml"
-Task: "Delete adguard_exporter_version from ansible/roles/adguard/defaults/main.yml"
 ```
 
 ---

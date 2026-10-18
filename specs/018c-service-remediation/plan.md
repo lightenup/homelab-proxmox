@@ -35,7 +35,6 @@ The `healthcheck_automation` role needs to support the new configuration options
     *   Refine `send_email_notification` to respect new alerting rules.
 
 ### Phase 2: Inventory Updates (Remediation)
-*   **AdGuard**: Update `ansible/host_vars/adguard.yml`. Set `healthcheck_enabled: false`, `healthcheck_reason: "Service not yet installed"`.
 *   **Home Assistant**: Update `ansible/host_vars/homeassistant.yml`. Set `healthcheck_enabled: false`, `healthcheck_reason: "Service not yet installed"`.
 
 ### Phase 3: Automation Role Updates
@@ -45,7 +44,7 @@ The `healthcheck_automation` role needs to support the new configuration options
 ### Phase 4: Deployment & Verification
 *   Run playbook `ansible/playbooks/healthcheck_automation.yml`.
 *   Manually trigger healthcheck on monitoring host.
-*   Verify AdGuard and HA show as `SKIP`.
+*   Verify HA shows as `SKIP`.
 *   Verify exit code is 0 (PASS) if only SKIPs/PASSes exist.
 
 ## 3. Verification Plan
@@ -56,4 +55,4 @@ The `healthcheck_automation` role needs to support the new configuration options
 ### 3.2 Manual Verification
 *   **Deployment**: `ansible-playbook ...`
 *   **Runtime**: `systemctl start healthcheck.service`
-*   **Logs**: `journalctl -u healthcheck.service` should show "SKIP" for AdGuard/HA and no "Sending email" logs.
+*   **Logs**: `journalctl -u healthcheck.service` should show "SKIP" for HA and no "Sending email" logs.

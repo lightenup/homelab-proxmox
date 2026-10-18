@@ -59,7 +59,7 @@ The technical approach uses GitHub Actions workflow splits (separate LAB-only an
 - Service scope limited to allowlist in `scripts/lab/service-scope-allowlist.json`
 
 **Scale/Scope**:
-- 6 services in allowlist (adguard, homeassistant, immich, jellyfin, monitoring, reverse_proxy)
+- 5 services in allowlist (homeassistant, immich, jellyfin, monitoring, reverse_proxy)
 - Single Proxmox host with ~10-20 LXC containers total (LAB + PROD environments)
 - GitHub Actions workflow runs: ~5-20 per day (primarily LAB iterations)
 - Evidence pack size: ~500KB-2MB per run (logs, JSON reports, redacted configs)
@@ -384,7 +384,7 @@ File: `contracts/workflow-lab-deploy.schema.json`
   "properties": {
     "service": {
       "type": "string",
-      "enum": ["adguard", "homeassistant", "immich", "jellyfin", "monitoring", "reverse_proxy"],
+      "enum": ["homeassistant", "immich", "jellyfin", "monitoring", "reverse_proxy"],
       "description": "Service to deploy (from service-scope-allowlist.json)"
     },
     "apply": {
@@ -413,7 +413,7 @@ File: `contracts/workflow-promote.schema.json`
   "properties": {
     "service": {
       "type": "string",
-      "enum": ["adguard", "homeassistant", "immich", "jellyfin", "monitoring", "reverse_proxy"],
+      "enum": ["homeassistant", "immich", "jellyfin", "monitoring", "reverse_proxy"],
       "description": "Service to promote (from service-scope-allowlist.json)"
     },
     "confirm_destructive_lab": {

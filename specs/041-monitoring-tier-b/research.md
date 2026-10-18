@@ -2,30 +2,6 @@
 
 **Branch**: `041-monitoring-tier-b` | **Date**: 2026-03-01
 
-## R1: AdGuard Home Prometheus Exporter
-
-**Decision**: Use `henrywhitaker3/adguard-exporter` v1.2.1
-
-**Rationale**: Most popular (151 stars, 33 contributors), actively maintained (last release Sep 2025), Docker-first (`ghcr.io/henrywhitaker3/adguard-exporter`), covers all required metrics. Successor to the now-deleted `ebrianne/adguard-exporter`. AdGuard Home has no native `/metrics` endpoint (issue #516 still open).
-
-**Alternatives Considered**:
-
-| Exporter | Stars | Status | Why Not |
-|----------|-------|--------|---------|
-| `ebrianne/adguard-exporter` | N/A | Deleted | Repo removed/private — no longer available |
-| `JonanekDev/AdGuardHome-Exporter` | 4 | New | Node.js, default port 9100 conflicts with node_exporter |
-| `sfragata/adguardhome_exporter` | 8 | Stale | Only 1 release, fewer metrics |
-
-**Key Facts**:
-- Docker image: `ghcr.io/henrywhitaker3/adguard-exporter:latest`
-- Default port: **9618**
-- Auth: HTTP Basic (AdGuard Home admin username/password)
-- Config: `ADGUARD_SERVERS`, `ADGUARD_USERNAMES`, `ADGUARD_PASSWORDS`, `INTERVAL`
-- Key metrics: `adguard_queries`, `adguard_blocked_filtered`, `adguard_avg_processing_time_seconds`, `adguard_top_upstreams_avg_response_time_seconds`, `adguard_protection_enabled`, `adguard_running`
-- Includes companion Grafana dashboard
-
----
-
 ## R2: Nextcloud Prometheus Exporter
 
 **Decision**: Use `xperimental/nextcloud-exporter` v0.9.0
@@ -135,19 +111,3 @@ Use the Telegraf SNMP input `name` parameter to set measurement name per input b
 ### Memory Note
 
 UCD-SNMP-MIB memory values are in KB. Use PromQL in dashboard to convert: `snmp_memTotalReal * 1024`. Alternatively, use Synology System MIB `memUtilization` (1.3.6.1.4.1.6574.1.7.2) for direct percentage. Decision: keep existing UCD-SNMP fields for detailed breakdown, adjust dashboard queries to multiply by 1024.
-
----
-
-## R5: AdGuard Ansible Role Dependency
-
-**Decision**: Create a minimal `ansible/roles/adguard/` role that ONLY deploys the exporter Docker container. Do NOT deploy or configure AdGuard Home itself.
-
-**Rationale**: The `adguard` role doesn't exist, but the playbook (`ansible/playbooks/adguard.yml`) references it. Creating the role unblocks US-3 without scope creep. The role's only task is to deploy `henrywhitaker3/adguard-exporter` as a Docker container (Docker is already provisioned by `geerlingguy.docker` in the playbook). The full AdGuard Home configuration role remains a separate feature.
-
-**Alternatives Considered**:
-
-| Approach | Pros | Cons | Verdict |
-|----------|------|------|---------|
-| Create minimal exporter-only role | Unblocks US-3, minimal scope | Incomplete role | ✅ Chosen |
-| Block US-3 entirely | No new code | Loses P2 monitoring | Rejected |
-| Create full adguard role | Complete solution | Scope creep per spec | Rejected |

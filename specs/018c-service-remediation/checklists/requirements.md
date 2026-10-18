@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Service Regression Remediation (AdGuard + Home Assistant)
+# Specification Quality Checklist: Service Regression Remediation (Home Assistant)
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2025-12-29

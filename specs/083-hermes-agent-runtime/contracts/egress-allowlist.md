@@ -6,7 +6,7 @@ Open WebUI and SearXNG are unaffected.
 | Destination | Reachable | Purpose |
 |---|---|---|
 | `agent` compose network | yes | SearXNG, replies to Open WebUI |
-| public resolver :53 (LXC `resolv.conf`, 1.1.1.1) | yes, as public internet | DNS. No rule needed, and no AdGuard in this estate (Q-L6) |
+| public resolver :53 (LXC `resolv.conf`, 1.1.1.1) | yes, as public internet | DNS. No rule needed (Q-L6) |
 | `llm_router_ip:llm_router_port` | yes | model gateway |
 | each `hermes_mcp_servers` host:port | yes | tool services |
 | `reverse_proxy_ip:443` | yes | ntfy (and, accepted, every Caddy vhost behind its own auth) |

@@ -6,7 +6,7 @@ This plan outlines the steps to implement mDNS-based local naming across the hom
 
 - **Mechanism**: mDNS (Multicast DNS) via `avahi-daemon`.
 - **Domain**: `.local`.
-- **Scope**: Proxmox host (`pve`) and all Ansible-managed LXCs (`proxy`, `immich`, `adguard`, `homeassistant`).
+- **Scope**: Proxmox host (`pve`) and all Ansible-managed LXCs (`proxy`, `immich`, `homeassistant`).
 - **Management**: New Ansible role `mdns_base`.
 
 ## Phased Approach

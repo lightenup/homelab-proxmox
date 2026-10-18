@@ -55,9 +55,9 @@ This document records research decisions made for the implementation plan. Each 
 - Run mutation testing on every PR: likely too slow and noisy early.
 - Broaden scope to all scripts immediately: higher cost, lower signal until tests mature.
 
-## Decision 5: Molecule for Ansible roles (start with AdGuard)
+## Decision 5: Molecule for Ansible roles (start with one service role)
 
-**Decision**: Add Molecule coverage for selected Ansible roles, starting with the AdGuard role, using a Docker-based driver and an image that supports running Docker-in-Docker where needed.
+**Decision**: Add Molecule coverage for selected Ansible roles, starting with one service role, using a Docker-based driver and an image that supports running Docker-in-Docker where needed.
 
 **Rationale**:
 - Role regressions are common and are currently mostly caught in live LAB runs.

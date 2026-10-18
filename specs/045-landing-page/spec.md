@@ -36,8 +36,7 @@ each `<service>.hus-sky.no` URL individually. The landing page is the feature's 
 
 **Independent Test**: Open `https://hus-sky.no` in a browser on the LAN. Verify a card appears
 for each enabled, user-facing service (Immich, Jellyfin, Nextcloud, Grafana), each with a title,
-description, and a working link to the correct `<service>.hus-sky.no` URL. AdGuard (unused,
-`enabled: false`) and Home Assistant (disabled) MUST NOT appear.
+description, and a working link to the correct `<service>.hus-sky.no` URL. Home Assistant (disabled) MUST NOT appear.
 
 **Acceptance Scenarios**:
 
@@ -120,18 +119,12 @@ verified once US-1 is in place. US-3 on its own is testable via the route + prob
 - **Apex DNS record**: The existing wildcard `*.hus-sky.no` does NOT cover the bare apex, so
   `hus-sky.no` itself needs a **public DNS A record at Domeneshop** → `192.168.1.211`, parallel to the
   existing wildcard. DNS is public-only (per `docs/network-layout.md`: public DNS resolves to the LAN
-  IP; split-horizon not used), and AdGuard plays no role in resolution — it is unused in the current
-  setup. Both LAN and Tailscale clients resolve the apex via this public record.
+  IP; split-horizon not used). Both LAN and Tailscale clients resolve the apex via this public record.
 - **Service with no description/title**: A `caddy_services` entry missing display metadata must
   still render a usable card (fall back to the hostname) rather than breaking the page.
 - **Stale health data**: If the blackbox probe interval is long, a just-stopped service may still
   show "up" until the next probe. The indicator reflects the last successful probe, not real-time
   state; this is acceptable and should be understood as monitoring-derived, not live ping.
-- **AdGuard is unused**: AdGuard plays no role in the current setup — it serves no DNS, its blackbox
-  target is commented out, yet today's `adguard.caddy.j2` renders an unconditional (dead) route to an
-  unused backend. Its `caddy_services` entry is `enabled: false`, which removes that dead route and
-  keeps it off the probes and the landing page. The disabled entry is retained as a one-flag breadcrumb
-  for the future candidate #8 work, but it is inert now.
 
 ## Requirements *(mandatory)*
 
@@ -167,8 +160,7 @@ verified once US-1 is in place. US-3 on its own is testable via the route + prob
   *(traces to US-2)*
 - **FR-011**: The apex domain `hus-sky.no` MUST resolve to the reverse proxy LXC IP
   (`192.168.1.211`) for LAN and Tailscale clients, via a **public DNS A record at Domeneshop** for the
-  bare apex (the existing `*.hus-sky.no` wildcard does not cover it). Resolution is public-DNS only;
-  AdGuard is not involved (it is unused). *(traces to US-1)*
+  bare apex (the existing `*.hus-sky.no` wildcard does not cover it). Resolution is public-DNS only. *(traces to US-1)*
 - **FR-012**: The card-to-health join MUST be derived from the shared `caddy_services` source so
   that a card and its health metric cannot reference mismatched hostnames. *(traces to US-2, US-3)*
 - **FR-013**: All changes MUST be deployable from both CI/CD (GitHub Actions) and a developer
@@ -226,8 +218,7 @@ verified once US-1 is in place. US-3 on its own is testable via the route + prob
   exactly as it does for subdomains.
 - **A-004**: A public DNS A record for the bare apex `hus-sky.no → 192.168.1.211` can be added at
   Domeneshop (the `*.hus-sky.no` wildcard does not cover the apex). DNS is public-only and resolves to
-  the LAN IP for both LAN and Tailscale clients (per `docs/network-layout.md`); AdGuard is unused and
-  plays no role in resolution.
+  the LAN IP for both LAN and Tailscale clients (per `docs/network-layout.md`).
 - **A-005**: All current service backend IPs and ports remain unchanged; this feature changes only
   the reverse proxy (apex block + generated subdomain blocks), the blackbox target generation, and
   adds the landing assets.
@@ -269,7 +260,7 @@ verified once US-1 is in place. US-3 on its own is testable via the route + prob
 | D-004 | How the browser gets health data without exposing Prometheus | A same-origin `/api/status` handler on the apex that reverse-proxies a **pinned** query (`probe_success`) to Prometheus; the client cannot submit arbitrary PromQL. | Same-origin avoids CORS; pinning the query prevents the landing page from becoming an open Prometheus query proxy. If the apex is ever exposed beyond LAN/Tailscale, this endpoint should additionally be auth-gated. |
 | D-005 | Apex serving and port concerns | Add a `hus-sky.no` site block on the existing shared 443 listener; no special port handling. | Caddy routes by Host/SNI, so the apex coexists with subdomains. The user's "maybe not port 80" concern does not apply — port 80 simply auto-redirects to HTTPS as for subdomains. |
 | D-006 | Static page vs server-side app | Static `index.html` + minimal client-side JS for health polling, served by Caddy `file_server`. | No new long-running service, nothing to monitor or that can drift; the page loads even if the health source is down. Health is the only dynamic part and it degrades gracefully. |
-| D-007 | Disabled/internal services (Home Assistant, metrics `:9180`, AdGuard pre-provisioning) | Control inclusion with `enabled` and `user_facing` flags on each `caddy_services` entry. | Lets the declaration express intent — a not-yet-deployed or internal-only endpoint is omitted from page and probes consistently, which runtime discovery could not infer. |
+| D-007 | Disabled/internal services (Home Assistant, metrics `:9180`) | Control inclusion with `enabled` and `user_facing` flags on each `caddy_services` entry. | Lets the declaration express intent — a not-yet-deployed or internal-only endpoint is omitted from page and probes consistently, which runtime discovery could not infer. |
 | D-008 | Scope of the consolidation refactor | Fold the existing per-service `.caddy` templates and the `blackbox_https_targets` literal into the `caddy_services`-driven generation as part of this feature. | The refactor is what makes the page sound rather than a fourth duplicate list. It touches the `reverse_proxy` and `monitoring_stack` roles and is the bulk of the work; it must be sequenced to preserve current routes/probes (no service interruption). |
 
 ## Open Questions

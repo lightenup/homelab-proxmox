@@ -32,6 +32,6 @@ We will introduce new variables in `variables.tf` to abstract environment-specif
 ## Validation Steps
 1.  **Plan Check**: Run `terraform plan` and verify it proposes replacing the existing (wrong IP) containers with new ones on the correct subnet.
 2.  **Apply**: Run `terraform apply`.
-3.  **Ping Check**: `ping 192.168.1.210` (AdGuard), etc.
-4.  **SSH Check**: `ssh root@192.168.1.210` should succeed without a password prompt.
+3.  **Ping Check**: `ping 192.168.1.211` (reverse proxy), etc.
+4.  **SSH Check**: `ssh root@192.168.1.211` should succeed without a password prompt.
 5.  **Reboot Check**: Reboot one container (`pct reboot <vmid>`) and ensure it comes back up.

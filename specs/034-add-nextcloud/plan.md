@@ -129,7 +129,7 @@ Ansible → Inside LXC:
 
 3. **Jinja-rendered templates** (not `${VAR}` shell interpolation): Docker Compose and .env files are Ansible Jinja2 templates, following the exact Immich pattern where secrets like `POSTGRES_PASSWORD: {{ immich_db_password }}` are rendered at deploy time. The `.env` file (mode 0600) holds runtime environment variables for the containers via `env_file:`.
 
-4. **Caddy hostname-based routing**: The Nextcloud Caddy config uses `http://nextcloud.local` as the site address, coexisting with Immich's `:80` catch-all. Caddy merges imported site blocks into virtual hosts — requests with `Host: nextcloud.local` route to Nextcloud, all other `:80` traffic routes to Immich. **DNS resolution note**: mDNS from the Nextcloud LXC advertises `192.168.20.216` (the LXC IP). For proxy-routed access, AdGuard DNS rewrite or `/etc/hosts` entries are needed to resolve `nextcloud.local` → `192.168.20.211` (proxy IP). Direct access via `http://192.168.20.216:8080` always works as a fallback (FR-012 edge case in spec).
+4. **Caddy hostname-based routing**: The Nextcloud Caddy config uses `http://nextcloud.local` as the site address, coexisting with Immich's `:80` catch-all. Caddy merges imported site blocks into virtual hosts — requests with `Host: nextcloud.local` route to Nextcloud, all other `:80` traffic routes to Immich. **DNS resolution note**: mDNS from the Nextcloud LXC advertises `192.168.20.216` (the LXC IP). For proxy-routed access, a DNS entry or `/etc/hosts` entries are needed to resolve `nextcloud.local` → `192.168.20.211` (proxy IP). Direct access via `http://192.168.20.216:8080` always works as a fallback (FR-012 edge case in spec).
 
 5. **`features_mount` is informational**: The `features_mount = "nfs"` variable is declared in the `lxc_service` module but NOT applied in the Terraform resource block (the module comment says "mount feature is applied host-side by orchestrator via `pct set`"). It is included for documentation and future use. The actual NFS bind mount is handled by the `mountpoints` variable which creates `proxmox_lxc` mountpoint blocks.
 
@@ -250,7 +250,7 @@ Ansible → Inside LXC:
 ### Step 13: Ansible — Services Aggregator Playbook
 
 - **Files**: `ansible/playbooks/services.yml` (NEW)
-- **Description**: Create the aggregator playbook that `site.yml` already references via `import_playbook: services.yml`. Import all per-service playbooks with tags: `adguard.yml`, `immich.yml`, `jellyfin.yml`, `nextcloud.yml`. Only include playbooks confirmed to exist. **Note**: `reverse_proxy.yml` does NOT exist as a standalone playbook — excluded.
+- **Description**: Create the aggregator playbook that `site.yml` already references via `import_playbook: services.yml`. Import all per-service playbooks with tags: `immich.yml`, `jellyfin.yml`, `nextcloud.yml`. Only include playbooks confirmed to exist. **Note**: `reverse_proxy.yml` does NOT exist as a standalone playbook — excluded.
 - **Dependencies**: Step 12 (nextcloud playbook)
 - **Parallel-safe**: No
 - **Traces to**: FR-016
@@ -304,7 +304,7 @@ S-15 ──┘ (parallel, no deps)
 |------|--------|------------|
 | NFS mount unavailable at boot | Service fails to start, potential data path confusion | Preflight check in Ansible; `nextcloud_require_nas_mount` conditional; Docker `restart: always` retries |
 | MariaDB data corruption from NFS | Database corruption, data loss | DB data on local disk only (never NFS); documented in contracts and templates |
-| Caddy hostname routing requires DNS rewrite | `nextcloud.local` resolves to LXC IP, not proxy IP | Direct IP access as fallback; AdGuard DNS rewrite documented in quickstart; existing pattern for all services |
+| Caddy hostname routing requires DNS rewrite | `nextcloud.local` resolves to LXC IP, not proxy IP | Direct IP access as fallback; DNS entry documented in quickstart; existing pattern for all services |
 | Nextcloud first-install timeout | Ansible task fails on slow first-run | Extended `wait_for` timeout (300s); separate poll for `status.php` `"installed":true` |
 | `features_mount` not applied by Terraform | NFS mount feature not set on LXC | Document that host-side `pct set` handles this; Ansible preflight verifies mount availability |
 | Secrets exposed in git | Credential leak | Secrets as Ansible variables (runtime-supplied); .env mode 0600; no secrets in templates; constitution gate II |
@@ -357,7 +357,7 @@ Issues from the previous planning iteration and their resolutions:
 
 **Issue**: Immich's Caddy config uses `:80` (catch-all). Adding `http://nextcloud.local` requires DNS resolution to the proxy IP, not the Nextcloud LXC IP. mDNS from the LXC advertises the LXC's own IP.
 
-**Resolution**: Use `http://nextcloud.local` as the Caddy site address. Caddy correctly handles hostname-based virtual hosting: requests with `Host: nextcloud.local` route to Nextcloud; all other `:80` traffic falls through to Immich's catch-all. DNS resolution to the proxy IP is documented as a configuration step (AdGuard DNS rewrite or `/etc/hosts`). Direct access via `http://192.168.20.216:8080` always works as a fallback. This is an existing infrastructure pattern limitation, not a Nextcloud-specific issue.
+**Resolution**: Use `http://nextcloud.local` as the Caddy site address. Caddy correctly handles hostname-based virtual hosting: requests with `Host: nextcloud.local` route to Nextcloud; all other `:80` traffic falls through to Immich's catch-all. DNS resolution to the proxy IP is documented as a configuration step (a DNS entry or `/etc/hosts`). Direct access via `http://192.168.20.216:8080` always works as a fallback. This is an existing infrastructure pattern limitation, not a Nextcloud-specific issue.
 
 ### [RESOLVED — Medium] Docker Compose Env Var Pattern (was T-08)
 

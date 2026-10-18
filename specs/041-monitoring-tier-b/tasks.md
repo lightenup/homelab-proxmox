@@ -6,15 +6,15 @@
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
+- **[Story]**: Which user story this task belongs to (e.g., US1, US2, US4)
 - Include exact file paths in descriptions
 
 ## Summary
 
-- **Total tasks**: 22
+- **Total tasks**: 18
 - **Estimated complexity**: Medium
-- **Parallel tracks**: 4 independent tracks (Phases 3–6 run concurrently; Phase 6B partially parallel; validation is a serial gate)
-- **Task count by story**: US-1: 2, US-2: 1, US-3: 4, US-4: 3, US-5: 4, US-6: 4 (cross-cutting), Cross-cutting: 2 (T021 reload, T022 vault assertions), Validation: 6
+- **Parallel tracks**: 3 independent tracks (Phases 3, 5 and 6 run concurrently; Phase 6B partially parallel; validation is a serial gate)
+- **Task count by story**: US-1: 2, US-2: 1, US-4: 3, US-5: 4, US-6: 4 (cross-cutting), Cross-cutting: 2 (T021 reload, T022 vault assertions), Validation: 6
 
 ---
 
@@ -43,23 +43,6 @@ Not applicable. Each user story is independently implementable at the file level
 - [X] T003 [P] [US1] [US6] Rewrite `ansible/roles/monitoring_stack/files/grafana/dashboards/synology-nas.json` — replace malformed concatenated JSON with single valid object: `uid: "synology-nas-health"`, `schemaVersion: 39`, `DS_PROMETHEUS` datasource variable, panels using `snmp_synology_*` metric names from T001: storage capacity gauge per `raidName`, disk health table per `diskID` with value mappings (1=Normal/green), CPU timeseries (`snmp_synology_cpu_usage_percent`), memory timeseries (`snmp_memTotalReal * 1024` etc. for KB→bytes conversion), network throughput timeseries (`rate(snmp_synology_network_rx_bytes[5m])`) per `ifName`, system uptime stat (`snmp_sysUpTime / 100`), RAID status stat per `raidName`; all panel types `timeseries`/`stat`/`table`/`gauge` (no deprecated `graph`); Grafana 12.3.1 compatible (depends on T001, parallel with T002)
 
 **Checkpoint**: After T001–T003, run `ansible-playbook --syntax-check ansible/playbooks/monitoring.yml` (exit 0) and `jq . ansible/roles/monitoring_stack/files/grafana/dashboards/synology-nas.json` (exit 0). Addresses SC-001 (dashboard shows live data), SC-002 (SynologyNASDown alert fires), SC-003 (alert rules evaluate correctly) on deployment.
-
----
-
-## Phase 4: User Story 3 — AdGuard Home Application Metrics (Priority: P2)
-
-**Goal**: Deploy `henrywhitaker3/adguard-exporter` v1.2.1 as a Docker container on the AdGuard LXC (192.168.1.210:9618), create the AdGuard monitoring contract in host_vars, create the minimal adguard Ansible role, and provision an AdGuard Home DNS dashboard.
-
-**Independent Test**: Run `ansible-playbook ansible/playbooks/adguard.yml`. Verify `curl http://192.168.1.210:9618/metrics` returns `adguard_*` metrics. Open Grafana → "AdGuard Home DNS" dashboard → DNS query rate, blocked percentage, and upstream response times display live data.
-
-### Implementation
-
-- [X] T004 [P] [US3] Create `ansible/host_vars/adguard.yml` — healthcheck block (`scheme: http, port: 3000, path: /, profile: lan, expect_status: 200`); monitoring_contract block: `enabled: true`, scrape_targets list with `job_name: "adguard-exporter", port: 9618, path: "/metrics", scrape_interval: "30s"`, alert_rules list with `AdGuardHighBlockedRate` (`expr: adguard_blocked_filtered / adguard_queries > 0.5, for: "10m", severity: "warning"`, summary and description strings), `dashboard_file: "grafana/dashboards/adguard-home.json"` — follow exact YAML structure of `ansible/host_vars/reverse_proxy.yml`
-- [X] T005 [P] [US3] Create `ansible/roles/adguard/defaults/main.yml` (`adguard_exporter_version: "1.2.1"`, `adguard_exporter_port: 9618`, `adguard_install_dir: "/opt/adguard"`, `adguard_exporter_interval: "10s"`) and `ansible/roles/adguard/handlers/main.yml` (handler `Restart adguard exporter` using `community.docker.docker_compose_v2` with `project_src: "{{ adguard_install_dir }}"`, `state: restarted` — matching the nextcloud handler pattern in `ansible/roles/nextcloud/handlers/main.yml`)
-- [X] T006 [P] [US3] [US6] Create `ansible/roles/adguard/files/grafana/dashboards/adguard-home.json` — `uid: "adguard-home"`, `title: "AdGuard Home DNS"`, `schemaVersion: 39`, `DS_PROMETHEUS` datasource variable, 8 panels: DNS Queries Total stat (`adguard_queries`), Blocked Queries stat (`adguard_blocked_filtered`), Blocked Percentage stat (`adguard_blocked_filtered / adguard_queries * 100`, unit `percent`), Protection Status stat (`adguard_protection_enabled`, value mappings 0=Disabled/red 1=Enabled/green), Average Processing Time stat (`adguard_avg_processing_time_seconds`, unit `s`), DNS Query Rate timeseries (`rate(adguard_queries[5m])`), Blocked vs Allowed timeseries (blocked rate and allowed rate series), Top Upstream Response Times timeseries (`adguard_top_upstreams_avg_response_time_seconds` per `upstream` label)
-- [X] T007 [US3] Create `ansible/roles/adguard/tasks/main.yml` (three tasks: ensure `{{ adguard_install_dir }}` exists; deploy docker-compose template with `notify: Restart adguard exporter`; ensure container running via `community.docker.docker_compose_v2 state: present`) and `ansible/roles/adguard/templates/docker-compose.yml.j2` (single service `adguard-exporter`: `image: ghcr.io/henrywhitaker3/adguard-exporter:{{ adguard_exporter_version }}`, `container_name: adguard-exporter`, `network_mode: host`, `environment` with `ADGUARD_SERVERS=http://127.0.0.1:3000`, `ADGUARD_USERNAMES={{ adguard_admin_user }}`, `ADGUARD_PASSWORDS={{ adguard_admin_password }}`, `INTERVAL={{ adguard_exporter_interval }}`, `PORT={{ adguard_exporter_port }}`, `restart: unless-stopped`, healthcheck via wget on localhost:9618/metrics) — credentials must reference vault variables, no plaintext (depends on T005)
-
-**Checkpoint**: After T004–T007, run `ansible-playbook --syntax-check ansible/playbooks/adguard.yml` (exit 0) and `jq . ansible/roles/adguard/files/grafana/dashboards/adguard-home.json` (exit 0). Addresses SC-004 (AdGuard dashboard shows DNS metrics) on deployment.
 
 ---
 
@@ -101,9 +84,9 @@ Not applicable. Each user story is independently implementable at the file level
 **Goal**: Enable Prometheus hot-reload (no full stack restart on config changes) and add preflight assertions so missing vault credentials fail fast with clear messages.
 
 - [X] T021 [P] [FR-027] Enable Prometheus hot-reload — (1) add `'--web.enable-lifecycle'` to the Prometheus `command` list in `ansible/roles/monitoring_stack/templates/docker-compose.yml.j2`; (2) add new handler `Reload prometheus` to `ansible/roles/monitoring_stack/handlers/main.yml` using `ansible.builtin.uri url=http://localhost:{{ prometheus_port }}/-/reload method=POST status_code=200` (must be defined BEFORE `Restart monitoring stack` so flush order is correct); (3) update `ansible/roles/monitoring_stack/tasks/compose_stack.yml`: change `notify` on Prometheus config deploy, infrastructure alerts deploy, Synology alerts deploy, and service alerts deploy tasks from `Restart monitoring stack` to `Reload prometheus` — keep `Restart monitoring stack` on docker-compose deploy, Telegraf config deploy, and Alertmanager config deploy tasks
-- [X] T022 [FR-028] Add vault variable preflight assertions — (1) prepend `ansible.builtin.assert` block to `ansible/roles/adguard/tasks/main.yml` verifying `adguard_admin_user is defined` and `adguard_admin_password is defined` with `fail_msg: "Missing vault variable: adguard_admin_user/adguard_admin_password — run 'ansible-vault edit group_vars/services/vault.yml' to add them"`; (2) add assert block in `ansible/roles/nextcloud/tasks/main.yml` BEFORE the serverinfo token provisioning task (not at top of file) verifying `nextcloud_serverinfo_token is defined` with `fail_msg: "Missing vault variable: nextcloud_serverinfo_token — run 'ansible-vault edit group_vars/services/vault.yml' to add it"`; (3) add assert block in `ansible/roles/jellyfin/tasks/main.yml` BEFORE the exporter download task verifying `jellyfin_api_key is defined` with `fail_msg: "Missing vault variable: jellyfin_api_key — run 'ansible-vault edit group_vars/services/vault.yml' to add it"` (depends on T007, T010, T014)
+- [X] T022 [FR-028] Add vault variable preflight assertions — (1) add assert block in `ansible/roles/nextcloud/tasks/main.yml` BEFORE the serverinfo token provisioning task (not at top of file) verifying `nextcloud_serverinfo_token is defined` with `fail_msg: "Missing vault variable: nextcloud_serverinfo_token — run 'ansible-vault edit group_vars/services/vault.yml' to add it"`; (2) add assert block in `ansible/roles/jellyfin/tasks/main.yml` BEFORE the exporter download task verifying `jellyfin_api_key is defined` with `fail_msg: "Missing vault variable: jellyfin_api_key — run 'ansible-vault edit group_vars/services/vault.yml' to add it"` (depends on T010, T014)
 
-**Checkpoint**: After T021–T022, run `ansible-playbook --syntax-check ansible/playbooks/monitoring.yml` (exit 0); verify `--web.enable-lifecycle` in docker-compose template; verify assert blocks exist in adguard, nextcloud, jellyfin task files.
+**Checkpoint**: After T021–T022, run `ansible-playbook --syntax-check ansible/playbooks/monitoring.yml` (exit 0); verify `--web.enable-lifecycle` in docker-compose template; verify assert blocks exist in nextcloud, jellyfin task files.
 
 ---
 
@@ -112,11 +95,11 @@ Not applicable. Each user story is independently implementable at the file level
 **Purpose**: Mechanically verify all changes for correctness, idempotency, and constitution compliance before declaring the feature complete.
 
 - [X] T015 Validate Synology and infrastructure alert rules — run `docker run --rm --entrypoint promtool -v "$(pwd)/ansible/roles/monitoring_stack/files/prometheus/alerts:/rules" prom/prometheus:v3.8.1 check rules /rules/synology_alerts.yml /rules/infrastructure_alerts.yml` — both files must exit 0; confirms `SynologyNASDown` uses `job="telegraf-snmp"`, all expressions reference real metric names (depends on T002)
-- [X] T016 [P] Validate all four dashboard JSON files — `jq . ansible/roles/monitoring_stack/files/grafana/dashboards/synology-nas.json` AND `jq . ansible/roles/adguard/files/grafana/dashboards/adguard-home.json` AND `jq . ansible/roles/nextcloud/files/grafana/dashboards/nextcloud.json` AND `jq . ansible/roles/jellyfin/files/grafana/dashboards/jellyfin.json` — all exit 0; UIDs are unique (`synology-nas-health`, `adguard-home`, `nextcloud`, `jellyfin`); no `"graph"` panel type in any file; all have `schemaVersion: 39` (depends on T003, T006, T009, T012)
-- [X] T017 [P] Verify monitoring contract uniqueness across all host_vars files — parse `adguard.yml`, `nextcloud.yml`, `jellyfin.yml`, `reverse_proxy.yml`, `immich.yml` with `python3 -c "import yaml; ..."`; confirm 6 unique job_names (`caddy`, `immich-api`, `immich-microservices`, `adguard-exporter`, `nextcloud-exporter`, `jellyfin-exporter`); confirm all new exporter ports (9618, 9205, 9594) are unique and do not collide with node_exporter (9100) or any application port (depends on T004, T008, T011)
-- [X] T018 [P] Syntax-check all four affected playbooks — `ansible-playbook --syntax-check ansible/playbooks/monitoring.yml` AND `ansible/playbooks/adguard.yml` AND `ansible/playbooks/nextcloud.yml` AND `ansible/playbooks/jellyfin.yml` — all must exit 0 (depends on T001–T014)
-- [X] T019 [P] Verify monitoring_stack role changes are limited to Synology pipeline fixes and Prometheus reload handler — `git diff --name-only -- ansible/roles/monitoring_stack/` must output only: `templates/telegraf.conf.j2`, `files/prometheus/alerts/synology_alerts.yml`, `files/grafana/dashboards/synology-nas.json`, `templates/docker-compose.yml.j2`, `handlers/main.yml`, `tasks/compose_stack.yml` — no AdGuard/Nextcloud/Jellyfin exporter config in this role; verify `ansible/host_vars/reverse_proxy.yml` and `ansible/host_vars/immich.yml` are unmodified via `git diff -- ansible/host_vars/reverse_proxy.yml ansible/host_vars/immich.yml` (depends on T001–T022)
-- [X] T020 [P] Verify no plaintext secrets in any created or modified file — grep all new/modified files for literal credential values; confirm all credential references use Jinja2 substitution (`{{ adguard_admin_user }}`, `{{ adguard_admin_password }}`, `{{ nextcloud_serverinfo_token }}`, `{{ jellyfin_api_key }}`); confirm all tasks that handle secrets have `no_log: true`; confirm vault file `ansible/group_vars/services/vault.yml` has not been modified by this feature (depends on T001–T014)
+- [X] T016 [P] Validate all three dashboard JSON files — `jq . ansible/roles/monitoring_stack/files/grafana/dashboards/synology-nas.json` AND `jq . ansible/roles/nextcloud/files/grafana/dashboards/nextcloud.json` AND `jq . ansible/roles/jellyfin/files/grafana/dashboards/jellyfin.json` — all exit 0; UIDs are unique (`synology-nas-health`, `nextcloud`, `jellyfin`); no `"graph"` panel type in any file; all have `schemaVersion: 39` (depends on T003, T009, T012)
+- [X] T017 [P] Verify monitoring contract uniqueness across all host_vars files — parse `nextcloud.yml`, `jellyfin.yml`, `reverse_proxy.yml`, `immich.yml` with `python3 -c "import yaml; ..."`; confirm 5 unique job_names (`caddy`, `immich-api`, `immich-microservices`, `nextcloud-exporter`, `jellyfin-exporter`); confirm all new exporter ports (9205, 9594) are unique and do not collide with node_exporter (9100) or any application port (depends on T008, T011)
+- [X] T018 [P] Syntax-check all three affected playbooks — `ansible-playbook --syntax-check ansible/playbooks/monitoring.yml` AND `ansible/playbooks/nextcloud.yml` AND `ansible/playbooks/jellyfin.yml` — all must exit 0 (depends on T001–T014)
+- [X] T019 [P] Verify monitoring_stack role changes are limited to Synology pipeline fixes and Prometheus reload handler — `git diff --name-only -- ansible/roles/monitoring_stack/` must output only: `templates/telegraf.conf.j2`, `files/prometheus/alerts/synology_alerts.yml`, `files/grafana/dashboards/synology-nas.json`, `templates/docker-compose.yml.j2`, `handlers/main.yml`, `tasks/compose_stack.yml` — no Nextcloud/Jellyfin exporter config in this role; verify `ansible/host_vars/reverse_proxy.yml` and `ansible/host_vars/immich.yml` are unmodified via `git diff -- ansible/host_vars/reverse_proxy.yml ansible/host_vars/immich.yml` (depends on T001–T022)
+- [X] T020 [P] Verify no plaintext secrets in any created or modified file — grep all new/modified files for literal credential values; confirm all credential references use Jinja2 substitution (`{{ nextcloud_serverinfo_token }}`, `{{ jellyfin_api_key }}`); confirm all tasks that handle secrets have `no_log: true`; confirm vault file `ansible/group_vars/services/vault.yml` has not been modified by this feature (depends on T001–T014)
 
 ---
 
@@ -130,17 +113,14 @@ Not applicable. Each user story is independently implementable at the file level
   - T001 → T002 (alert metric names must match T001's output)
   - T001 → T003 (dashboard queries must match T001's metric names)
   - T002 ‖ T003 (parallel after T001)
-- **Phase 4 (US-3, P2)**: Independent of Phase 3
-  - T004 ‖ T005 ‖ T006 (different files, no dependencies between them)
-  - T004 + T005 → T007 (tasks need defaults/handlers; role must know port from contract)
-- **Phase 5 (US-4, P2)**: Independent of Phases 3–4
+- **Phase 5 (US-4, P2)**: Independent of Phase 3
   - T008 ‖ T009 (different files, no dependencies between them)
   - T008 → T010 (compose port must match contract port)
 - **Phase 6 (US-5, P3)**: Independent of Phases 3–5
   - T011 ‖ T012 (different files, no dependencies between them)
   - T011 → T013 (defaults reference port from contract)
   - T013 → T014 (tasks reference defaults/template/handler)
-- **Phase 6B (Reload + Assertions)**: T021 parallel with all phases; T022 after T007, T010, T014
+- **Phase 6B (Reload + Assertions)**: T021 parallel with all phases; T022 after T010, T014
 - **Phase 7 (Validation)**: Depends on ALL Phases 3–6B complete; T016–T020 can run in parallel with each other
 
 ### Dependency Graph
@@ -150,9 +130,6 @@ T001 → T002
 T001 → T003
 [T002 ‖ T003]
 
-[T004 ‖ T005 ‖ T006]
-[T004 + T005] → T007
-
 [T008 ‖ T009]
 T008 → T010
 
@@ -160,7 +137,7 @@ T008 → T010
 T011 → T013 → T014
 
 T021 (parallel — independent of T001–T014)
-T022 (after T007, T010, T014)
+T022 (after T010, T014)
 
 T015 (after T002)
 [T016 ‖ T017 ‖ T018 ‖ T019 ‖ T020] (after T001–T022)
@@ -169,9 +146,9 @@ T015 (after T002)
 ### Implementation Order
 
 1. T001 (no dependencies — start immediately) AND T021 (parallel — independent)
-2. T002, T003 (parallel after T001) AND T004, T005, T006, T008, T009, T011, T012 (parallel — independent stories)
-3. T007 (after T005), T010 (after T008), T013 (after T011)
-4. T014 (after T013), T022 (after T007, T010, T014)
+2. T002, T003 (parallel after T001) AND T008, T009, T011, T012 (parallel — independent stories)
+3. T010 (after T008), T013 (after T011)
+4. T014 (after T013), T022 (after T010, T014)
 5. T015–T020 (parallel validation after all code tasks complete)
 
 ---
@@ -192,9 +169,8 @@ Task: "T003 - Rewrite synology-nas.json dashboard"
 ### Cross-Story Parallelism (Phases 3–6 are fully independent)
 
 ```bash
-# All four phases can run simultaneously:
+# All three phases can run simultaneously:
 Task: "Phase 3 - Synology SNMP fix (T001→T002+T003)"
-Task: "Phase 4 - AdGuard monitoring (T004+T005+T006→T007)"
 Task: "Phase 5 - Nextcloud monitoring (T008+T009→T010)"
 Task: "Phase 6 - Jellyfin monitoring (T011+T012→T013→T014)"
 ```
@@ -212,19 +188,17 @@ Task: "Phase 6 - Jellyfin monitoring (T011+T012→T013→T014)"
 ### Incremental Delivery
 
 1. Phase 3 (Synology fix) → Deploy and validate → SC-001, SC-002, SC-003 ✓
-2. Phase 4 (AdGuard) → Deploy and validate → SC-004 ✓
-3. Phase 5 (Nextcloud) → Deploy and validate → SC-005 ✓
-4. Phase 6 (Jellyfin) → Deploy and validate → SC-006 ✓
-5. Phase 7 (Validation) → Confirm SC-007 (no monitoring_stack regression), SC-008 (idempotency), SC-009 (Feature 040 monitoring still working)
+2. Phase 5 (Nextcloud) → Deploy and validate → SC-005 ✓
+3. Phase 6 (Jellyfin) → Deploy and validate → SC-006 ✓
+4. Phase 7 (Validation) → Confirm SC-007 (no monitoring_stack regression), SC-008 (idempotency), SC-009 (Feature 040 monitoring still working)
 
 ### Parallel Team Strategy
 
 With multiple implementers working simultaneously:
 
 - **Implementer A**: Phase 3 (touches only `monitoring_stack` role)
-- **Implementer B**: Phase 4 (touches only `adguard` role + `host_vars/adguard.yml`)
-- **Implementer C**: Phase 5 (touches only `nextcloud` role + `host_vars/nextcloud.yml`)
-- **Implementer D**: Phase 6 (touches only `jellyfin` role + `host_vars/jellyfin.yml`)
+- **Implementer B**: Phase 5 (touches only `nextcloud` role + `host_vars/nextcloud.yml`)
+- **Implementer C**: Phase 6 (touches only `jellyfin` role + `host_vars/jellyfin.yml`)
 
 All phases are fully independent at the file level. No merge conflicts expected.
 
@@ -232,16 +206,10 @@ All phases are fully independent at the file level. No merge conflicts expected.
 
 ## File Manifest
 
-### Files CREATED (9)
+### Files CREATED (3)
 
 | File | Task | Story |
 |------|------|-------|
-| `ansible/host_vars/adguard.yml` | T004 | US-3 |
-| `ansible/roles/adguard/defaults/main.yml` | T005 | US-3 |
-| `ansible/roles/adguard/handlers/main.yml` | T005 | US-3 |
-| `ansible/roles/adguard/tasks/main.yml` | T007 | US-3 |
-| `ansible/roles/adguard/templates/docker-compose.yml.j2` | T007 | US-3 |
-| `ansible/roles/adguard/files/grafana/dashboards/adguard-home.json` | T006 | US-3, US-6 |
 | `ansible/roles/nextcloud/files/grafana/dashboards/nextcloud.json` | T009 | US-4, US-6 |
 | `ansible/roles/jellyfin/templates/jellyfin-exporter.service.j2` | T013 | US-5 |
 | `ansible/roles/jellyfin/files/grafana/dashboards/jellyfin.json` | T012 | US-5, US-6 |
@@ -273,10 +241,8 @@ All phases are fully independent at the file level. No merge conflicts expected.
 | `ansible/roles/monitoring_stack/templates/service_alerts.yml.j2` | Alert rules auto-aggregated from contracts; no manual changes needed |
 | `ansible/roles/monitoring_stack/tasks/provision_dashboards.yml` | Dashboard provisioning auto-discovers from contracts; no manual changes needed |
 | `ansible/playbooks/monitoring.yml` | Already contains monitoring role; no playbook changes needed |
-| `ansible/playbooks/adguard.yml` | Already references adguard role; no playbook changes needed |
 | `ansible/playbooks/nextcloud.yml` | Already references nextcloud role; no playbook changes needed |
 | `ansible/playbooks/jellyfin.yml` | Already references jellyfin role; no playbook changes needed |
-| `scripts/lab/service-scope-allowlist.json` | `adguard` entry already present; no changes needed |
 | `ansible/host_vars/reverse_proxy.yml` | Caddy contract from Feature 040; must not regress |
 | `ansible/host_vars/immich.yml` | Immich contract from Feature 040; must not regress |
 
@@ -288,11 +254,11 @@ All phases are fully independent at the file level. No merge conflicts expected.
 
 | # | Principle | Status | Evidence |
 |---|-----------|--------|----------|
-| I | Spec-Driven Workflow | ✅ PASS | All 22 tasks trace to FR/US from spec.md. File lives at `specs/041-monitoring-tier-b/tasks.md`. Requirement traceability table covers all 28 FRs. |
-| II | Secrets Policy | ✅ PASS | T020 verifies no plaintext secrets. All credentials use Jinja2 vars from vault (`{{ adguard_admin_password }}`, `{{ nextcloud_serverinfo_token }}`, `{{ jellyfin_api_key }}`). Tasks with secrets have `no_log: true`. |
+| I | Spec-Driven Workflow | ✅ PASS | All 18 tasks trace to FR/US from spec.md. File lives at `specs/041-monitoring-tier-b/tasks.md`. Requirement traceability table covers all 24 FRs. |
+| II | Secrets Policy | ✅ PASS | T020 verifies no plaintext secrets. All credentials use Jinja2 vars from vault (`{{ nextcloud_serverinfo_token }}`, `{{ jellyfin_api_key }}`). Tasks with secrets have `no_log: true`. |
 | III | Separation of Concerns | ✅ PASS | Terraform unchanged. All changes are Ansible roles/templates (configuration inside machines). |
-| IV | Code Economy (YAGNI) | ✅ PASS | Minimal adguard role (4 files, exporter only). No abstraction layers. Each new file has ≥2 consumers (dashboard + alert/scrape config). No unused scaffolding. |
-| V | Dual-Provisioning Parity | ✅ PASS | All changes deploy via existing playbooks. No new scripts, no CI-only paths. `adguard` already in `service-scope-allowlist.json`. |
+| IV | Code Economy (YAGNI) | ✅ PASS | No abstraction layers. Each new file has ≥2 consumers (dashboard + alert/scrape config). No unused scaffolding. |
+| V | Dual-Provisioning Parity | ✅ PASS | All changes deploy via existing playbooks. No new scripts, no CI-only paths. |
 
 ---
 
@@ -307,24 +273,20 @@ All phases are fully independent at the file level. No merge conflicts expected.
 | FR-005 | T001 | SNMP agent address uses `{{ synology_nas_ip }}` variable (not hardcoded) |
 | FR-006 | T001 | SNMPv3 auth params reference vault variables (not hardcoded) |
 | FR-007 | T003 | Dashboard has panels for storage/disk/CPU/memory/network/uptime; `jq .` exits 0 |
-| FR-008 | T007 | adguard role tasks.yml deploys `henrywhitaker3/adguard-exporter` Docker container on port 9618 |
 | FR-009 | T010 | nextcloud docker-compose.yml.j2 contains `nextcloud_exporter` sidecar service on port 9205 |
 | FR-010 | T014 | jellyfin tasks.yml downloads and deploys `rebelcore/jellyfin_exporter` binary + systemd service on port 9594 |
-| FR-011 | T004, T008, T011 | Each of adguard.yml, nextcloud.yml, jellyfin.yml has monitoring_contract block in host_vars |
-| FR-012 | T004, T008, T011 | All three contracts declare scrape_targets, alert_rules, dashboard_file |
-| FR-013 | T004 | `ansible/host_vars/adguard.yml` exists with non-empty scrape_targets |
+| FR-011 | T008, T011 | Each of nextcloud.yml, jellyfin.yml has monitoring_contract block in host_vars |
+| FR-012 | T008, T011 | Both contracts declare scrape_targets, alert_rules, dashboard_file |
 | FR-014 | T008 | `ansible/host_vars/nextcloud.yml` has populated monitoring_contract |
 | FR-015 | T011 | `ansible/host_vars/jellyfin.yml` has populated monitoring_contract |
-| FR-016 | T006 | `ansible/roles/adguard/files/grafana/dashboards/adguard-home.json` exists and is valid JSON |
 | FR-017 | T009 | `ansible/roles/nextcloud/files/grafana/dashboards/nextcloud.json` exists and is valid JSON |
 | FR-018 | T012 | `ansible/roles/jellyfin/files/grafana/dashboards/jellyfin.json` exists and is valid JSON |
-| FR-019 | T006, T009, T012, T016 | All dashboards provisioned via contract `dashboard_file`; `jq .` exits 0 on each |
+| FR-019 | T009, T012, T016 | All dashboards provisioned via contract `dashboard_file`; `jq .` exits 0 on each |
 | FR-020 | T003 | Synology dashboard panel exprs reference only metrics from T001; no "No Data" when NAS is reachable |
 | FR-021 | T015 | `infrastructure_alerts.yml` still passes promtool; generic `up == 0` rule covers new exporters |
-| FR-022 | T004 | `AdGuardHighBlockedRate` alert defined in adguard.yml monitoring_contract |
-| FR-023 | T018 | All four playbooks pass `--syntax-check` |
+| FR-023 | T018 | All three playbooks pass `--syntax-check` |
 | FR-024 | T020 | No plaintext credential values in any file; all use Jinja2 vault refs |
 | FR-025 | T018 | Playbooks pass `--syntax-check`; idempotency verified by re-running after initial deploy |
 | FR-026 | T019 | `git diff --name-only -- ansible/roles/monitoring_stack/` shows only Synology fixes + reload handler files |
 | FR-027 | T021 | `--web.enable-lifecycle` in docker-compose.yml.j2; `Reload prometheus` handler in handlers/main.yml; Prometheus config tasks notify `Reload prometheus` |
-| FR-028 | T022 | `ansible.builtin.assert` blocks in adguard, nextcloud, jellyfin task files verify vault variables are defined with clear `fail_msg` |
+| FR-028 | T022 | `ansible.builtin.assert` blocks in nextcloud, jellyfin task files verify vault variables are defined with clear `fail_msg` |

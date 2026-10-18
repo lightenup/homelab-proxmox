@@ -7,7 +7,7 @@
 
 ## Overview
 
-The homelab currently has zero security monitoring. Features 040 (Monitoring Overhaul) and 041 (Monitoring Tier B) built the monitoring foundation — infrastructure metrics on every container, application metrics for Caddy/Immich/AdGuard/Nextcloud/Jellyfin, unified alerting, and the self-registration pattern. Both tiers explicitly deferred security monitoring to Tier C. This feature introduces HTTPS endpoint probing with TLS certificate lifecycle monitoring, brute-force detection and blocking via fail2ban, a consolidated security overview dashboard, and corresponding alert rules with inhibition hygiene — closing the security observability gap.
+The homelab currently has zero security monitoring. Features 040 (Monitoring Overhaul) and 041 (Monitoring Tier B) built the monitoring foundation — infrastructure metrics on every container, application metrics for Caddy/Immich/Nextcloud/Jellyfin, unified alerting, and the self-registration pattern. Both tiers explicitly deferred security monitoring to Tier C. This feature introduces HTTPS endpoint probing with TLS certificate lifecycle monitoring, brute-force detection and blocking via fail2ban, a consolidated security overview dashboard, and corresponding alert rules with inhibition hygiene — closing the security observability gap.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -21,12 +21,12 @@ As a homelab administrator, I want all my public-facing HTTPS services continuou
 
 **Acceptance Scenarios**:
 
-1. **Given** the HTTPS probe service is deployed on the monitoring host, **When** the operator checks the monitoring target list, **Then** 5 probe targets appear (one per public HTTPS endpoint: `grafana.hus-sky.no`, `immich.hus-sky.no`, `nextcloud.hus-sky.no`, `jellyfin.hus-sky.no`, `adguard.hus-sky.no`) and each shows a successful probe result.
+1. **Given** the HTTPS probe service is deployed on the monitoring host, **When** the operator checks the monitoring target list, **Then** 4 probe targets appear (one per public HTTPS endpoint: `grafana.hus-sky.no`, `immich.hus-sky.no`, `nextcloud.hus-sky.no`, `jellyfin.hus-sky.no`) and each shows a successful probe result.
 2. **Given** all HTTPS probes are running, **When** a backend service (e.g., Jellyfin) is stopped and the endpoint becomes unreachable for 2 minutes, **Then** the operator receives an email alert (EndpointDown, critical severity) identifying the specific endpoint URL within 5 minutes.
 3. **Given** an EndpointDown alert has fired, **When** the backend service is restored and the next probe succeeds, **Then** the operator receives a recovery email within 3 minutes.
 4. **Given** one endpoint is experiencing slow responses (response time above 5 seconds sustained for 5 minutes), **When** the alert evaluation runs, **Then** the operator receives a warning email (HighProbeLatency) identifying the slow endpoint and its response time.
 5. **Given** the monitoring host reboots, **When** the probe service restarts automatically, **Then** probing resumes within 2 minutes of host startup without manual intervention.
-6. **Given** an endpoint returns an HTTP redirect (302) — as Nextcloud and AdGuard are expected to do, **When** the probe follows the redirect, **Then** the probe reports success (not failure), and the response latency includes the redirect follow time.
+6. **Given** an endpoint returns an HTTP redirect (302) — as Nextcloud is expected to do, **When** the probe follows the redirect, **Then** the probe reports success (not failure), and the response latency includes the redirect follow time.
 
 ---
 
@@ -106,7 +106,7 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 
 ### Edge Cases
 
-- **What happens if DNS does not resolve `*.hus-sky.no` from the monitoring LXC to the Caddy reverse proxy IP?** The HTTPS probes fail for all endpoints. EndpointDown alerts fire for every domain. The operator investigates DNS resolution on the monitoring host. This is a prerequisite that must be verified before or during deployment — if AdGuard DNS rewrites or split-horizon DNS are not configured, all probes will fail.
+- **What happens if DNS does not resolve `*.hus-sky.no` from the monitoring LXC to the Caddy reverse proxy IP?** The HTTPS probes fail for all endpoints. EndpointDown alerts fire for every domain. The operator investigates DNS resolution on the monitoring host. This is a prerequisite that must be verified before or during deployment — if split-horizon or public DNS is not configured, all probes will fail.
 - **What happens if Caddy is down but the backend services are healthy?** All probes fail simultaneously because they go through Caddy. EndpointDown fires for every endpoint. The operator sees a correlated failure pattern (all endpoints down at once) which indicates a reverse proxy issue rather than individual service failures.
 - **What happens if the HTTPS probe service itself crashes?** All probe metrics stop updating. The monitoring system's generic ServiceDown alert (from Feature 040) fires for the probe service's scrape target. Certificate expiry and response latency data go stale. Whether EndpointDown alerts also fire for individual endpoints depends on how the monitoring system handles stale probe data — the implementation should ensure that a probe service outage produces only the ServiceDown alert, not a cascade of 5 EndpointDown alerts for every probed endpoint. The operator receives a single alert about the probe service being down.
 - **What happens if fail2ban bans a legitimate user?** The user is locked out for the configured ban duration. The operator can see the ban in the fail2ban dashboard panel (active bans by host and jail) and manually unban the IP. This is standard fail2ban operational procedure. The monitoring feature does not provide automated unbanning.
@@ -123,9 +123,9 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 
 - **FR-001**: System MUST deploy an HTTPS probe service on the monitoring host (192.168.1.214) that performs synthetic HTTPS requests against target URLs and exposes the results as metrics. *(traces to US-1)*
 - **FR-002**: The HTTPS probe service MUST be deployed as a container in the existing monitoring Docker Compose stack, following the same pattern as the existing Telegraf container. *(traces to US-1)*
-- **FR-003**: System MUST probe 5 active public HTTPS endpoints: `https://grafana.hus-sky.no`, `https://immich.hus-sky.no`, `https://nextcloud.hus-sky.no`, `https://jellyfin.hus-sky.no`, `https://adguard.hus-sky.no`. *(traces to US-1)*
+- **FR-003**: System MUST probe 5 active public HTTPS endpoints: `https://grafana.hus-sky.no`, `https://immich.hus-sky.no`, `https://nextcloud.hus-sky.no`, `https://jellyfin.hus-sky.no`. *(traces to US-1)*
 - **FR-004**: For each probed endpoint, the system MUST collect: probe success/failure (boolean), HTTP response status code, TLS certificate expiry timestamp, total probe response duration, and DNS resolution time. *(traces to US-1, US-2)*
-- **FR-005**: The HTTPS probe MUST follow HTTP redirects (302/301) and report success if the final response is successful — because Nextcloud, AdGuard, and Grafana redirect unauthenticated users to login pages. *(traces to US-1, AC-1.6)*
+- **FR-005**: The HTTPS probe MUST follow HTTP redirects (302/301) and report success if the final response is successful — because Nextcloud and Grafana redirect unauthenticated users to login pages. *(traces to US-1, AC-1.6)*
 - **FR-006**: The HTTPS probe configuration MUST be defined as static scrape configuration in the central monitoring configuration (not via the monitoring contract self-registration pattern) because the probe targets are external URLs — not per-service exporter endpoints. *(traces to US-1)*
 
 #### TLS Certificate Monitoring
@@ -220,7 +220,7 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 - **SC-006**: Operator can view fail2ban activity (active bans, ban rate trend, failed auth attempts, jail status) across all 3 fail2ban-enabled hosts on the Security Overview dashboard.
 - **SC-007**: When an HTTPS endpoint goes down, only the EndpointDown alert fires — TLSCertExpiringSoon, TLSCertExpiryCritical, and HighProbeLatency are suppressed for that endpoint (verified by stopping a backend service and confirming only one email is received).
 - **SC-008**: When the fail2ban exporter goes down on a host, only the Fail2banDown alert fires — both Fail2banHighBanRate and the generic ServiceDown alert are suppressed for that host (verified by stopping the fail2ban exporter and confirming only one email is received).
-- **SC-009**: Existing monitoring from Features 040 and 041 continues to function: infrastructure metrics, Caddy/Immich application metrics, external exporters (AdGuard/Nextcloud/Jellyfin), Synology SNMP metrics, and the unified alerting framework remain operational after this feature is deployed.
+- **SC-009**: Existing monitoring from Features 040 and 041 continues to function: infrastructure metrics, Caddy/Immich application metrics, external exporters (Nextcloud/Jellyfin), Synology SNMP metrics, and the unified alerting framework remain operational after this feature is deployed.
 - **SC-010**: Re-running the monitoring Ansible playbook after all changes produces an idempotent result (no unexpected changes on the second run).
 - **SC-011**: The Security Overview dashboard loads within 5 seconds when displaying a 24-hour time range.
 - **SC-012**: No component introduced by this feature (probe service, fail2ban, exporters) requires manual configuration on any host — everything is deployed and configured by Ansible.
@@ -228,7 +228,7 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 ## Assumptions
 
 - **A-001**: Features 040 (Monitoring Overhaul) and 041 (Monitoring Tier B) are fully merged and operational. The monitoring stack (Prometheus, Grafana, Alertmanager), self-registration pattern, monitoring contracts, infrastructure metrics agents, and application exporters are all deployed.
-- **A-002**: DNS resolution of `*.hus-sky.no` domains from the monitoring LXC (192.168.1.214) resolves to the Caddy reverse proxy IP (192.168.1.211). This is likely already configured via AdGuard Home DNS rewrites or split-horizon DNS for LAN access. If this is not the case, the HTTPS probes will all fail and the issue must be resolved before this feature delivers value.
+- **A-002**: DNS resolution of `*.hus-sky.no` domains from the monitoring LXC (192.168.1.214) resolves to the Caddy reverse proxy IP (192.168.1.211). This is likely already configured via public or split-horizon DNS for LAN access. If this is not the case, the HTTPS probes will all fail and the issue must be resolved before this feature delivers value.
 - **A-003**: The Caddy reverse proxy (192.168.1.211) is serving all 5 public HTTPS endpoints with valid TLS certificates managed via DNS-01 ACME (Domeneshop DNS plugin). Certificates are automatically renewed by Caddy.
 - **A-004**: The existing monitoring Docker Compose stack supports adding new containers alongside the current services (Prometheus, Grafana, Alertmanager, Telegraf, and any exporter containers from Tier B).
 - **A-005**: The monitoring system's alert rules auto-loading mechanism (glob pattern for alert files) supports adding new alert rule files without modifying the main configuration file.
@@ -252,7 +252,6 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 
 ## Out of Scope
 
-- **DNS anomaly detection** — AdGuard Home metrics from Tier B provide query/block rates, but correlating DNS anomalies requires recording rules and baseline data that does not yet exist. Deferred to a future iteration once baseline data is established.
 - **Log aggregation / centralized logging** — Loki, Promtail, or similar. Entirely separate architecture concern. Out of scope for all monitoring tiers.
 - **Network intrusion detection** — Suricata, Zeek, or similar. Requires dedicated hardware/resources beyond the homelab scope.
 - **Proxmox VE host metrics** — Deferred since Tier A. The hypervisor itself (as opposed to its LXC guests) requires a different collection approach. Separate feature.
@@ -269,7 +268,7 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 ## Constraints
 
 - **C-001**: Must follow existing IaC patterns — Ansible roles and playbooks for all configuration, secrets in Ansible vault, idempotent deployments.
-- **C-002**: Must not break any monitoring established by Features 040 or 041 — infrastructure metrics, application metrics (Caddy, Immich, AdGuard, Nextcloud, Jellyfin), Synology SNMP metrics, unified alerting, and self-registration pattern must continue to function.
+- **C-002**: Must not break any monitoring established by Features 040 or 041 — infrastructure metrics, application metrics (Caddy, Immich, Nextcloud, Jellyfin), Synology SNMP metrics, unified alerting, and self-registration pattern must continue to function.
 - **C-003**: Must not expose the HTTPS probe service, fail2ban exporters, or any metrics endpoints via the public HTTPS reverse proxy — all metrics traffic is internal LAN-only.
 - **C-004**: Must comply with the constitution's separation of concerns: Terraform owns container existence, Ansible owns configuration inside containers. All fail2ban and exporter deployment is Ansible-managed.
 - **C-005**: Must comply with the constitution's secrets policy: no plaintext secrets in the repository.
@@ -280,7 +279,7 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 ## Dependencies
 
 - **D-001**: Feature 040 (Monitoring Overhaul) — the monitoring stack, self-registration pattern, monitoring contracts, infrastructure metrics, unified alerting, and alert inhibition framework. Must be merged.
-- **D-002**: Feature 041 (Monitoring Tier B) — external exporters (AdGuard, Nextcloud, Jellyfin), Synology SNMP fix, Prometheus hot-reload via `--web.enable-lifecycle`, vault preflight assertions pattern. Must be merged.
+- **D-002**: Feature 041 (Monitoring Tier B) — external exporters (Nextcloud, Jellyfin), Synology SNMP fix, Prometheus hot-reload via `--web.enable-lifecycle`, vault preflight assertions pattern. Must be merged.
 - **D-003**: Caddy reverse proxy (Feature 039) — HTTPS endpoints served by Caddy with valid TLS certificates. Required for HTTPS probing to function.
 - **D-004**: Network connectivity — monitoring LXC must reach all `*.hus-sky.no` domains via HTTPS (port 443) and all fail2ban-enabled LXCs on the exporter port.
 - **D-005**: DNS resolution — `*.hus-sky.no` must resolve to the Caddy reverse proxy IP (192.168.1.211) from the monitoring LXC (192.168.1.214).
@@ -293,7 +292,7 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 | DL-01 | Should `ha.hus-sky.no` (Home Assistant) be included in the HTTPS probe list? | No — excluded until HA is deployed. | Home Assistant is not yet deployed (confirmed in Feature 040 DL-04). Probing a non-existent endpoint would generate a permanent EndpointDown alert, creating noise. The probe list will be updated when HA is deployed in a future feature. |
 | DL-02 | Should HTTPS probes run from inside the LAN or from an external location? | Inside the LAN (from the monitoring LXC). | LAN probing tests the full request path through Caddy (DNS → TLS → backend) without requiring external infrastructure. The homelab has no external monitoring endpoint. LAN probing is simpler, avoids firewall/NAT complexity, and still validates the critical path. External probing would additionally test DNS propagation and firewall rules, but this is lower value for a homelab and requires infrastructure that does not exist. |
 | DL-03 | Which fail2ban metrics exporter implementation should be used (dedicated Go binary, Python-based, or textfile collector via node_exporter)? | Not prescribed — this is an implementation decision for the planning phase. | The specification requires fail2ban metrics to be exposed (FR-014) and integrated via monitoring contracts (FR-015). The choice between a dedicated exporter binary, a Python script, or a cron-based textfile collector is an implementation detail with trade-offs (real-time vs. simplicity, extra process vs. reuse of existing node_exporter). The planning phase should evaluate options based on the existing node_exporter deployment and operational simplicity. |
-| DL-04 | Does DNS resolve `*.hus-sky.no` to the Caddy IP from the monitoring LXC? | Assumed yes (A-002), but verification is required during deployment. | AdGuard Home DNS rewrites or split-horizon DNS likely handle this for LAN access. The spec includes this as an assumption (A-002) and the edge cases section documents the failure mode if it does not resolve correctly. Verification during implementation is a prerequisite step, not a specification question. |
+| DL-04 | Does DNS resolve `*.hus-sky.no` to the Caddy IP from the monitoring LXC? | Assumed yes (A-002), but verification is required during deployment. | Public or split-horizon DNS likely handles this for LAN access. The spec includes this as an assumption (A-002) and the edge cases section documents the failure mode if it does not resolve correctly. Verification during implementation is a prerequisite step, not a specification question. |
 | DL-05 | Can fail2ban parse Nextcloud authentication failure logs from the containerized deployment? | Assumed yes (A-010), based on Nextcloud's well-defined auth failure log format. The Nextcloud jail is a MUST requirement (FR-011) with a contingency clause. | The reference document states Nextcloud has a "well-defined auth failure log format." The containerized deployment may require log path mapping (Docker volume or host-accessible log file). The requirement includes a contingency: if auth logs are not accessible, the jail requirement is waived. The sshd jail still provides SSH protection. |
 | DL-06 | Can fail2ban parse Jellyfin authentication failure logs? | Uncertain — the Jellyfin jail is a SHOULD (conditional) requirement (FR-012). | The reference document notes "Jellyfin auth logs may not be in standard fail2ban format — investigate during implementation." Rather than blocking the feature on this uncertainty, the Jellyfin-specific auth jail is a conditional requirement. The sshd jail (MUST) provides SSH protection regardless. If Jellyfin auth logs are parseable, the jail is added; if not, it is documented as a known limitation and descoped. |
 | DL-07 | What threshold for Fail2banHighBanRate (bans per hour)? | 10 bans per hour. | This is a conservative starting threshold from the reference document. In a homelab with limited external exposure, 10 bans in an hour indicates a targeted brute-force attack rather than random internet noise. The threshold can be tuned after baseline data is collected. |

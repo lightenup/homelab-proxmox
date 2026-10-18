@@ -233,8 +233,7 @@ resolvable inside the container. Note that `ansible/playbooks/llm-router.yml` do
 include `mdns_base` at all today.
 
 **The decision: deploy LAB with the local tier configured and unreachable.** The options
-considered were an AdGuard DNS rewrite (AdGuard is not deployed and not in use — ruled out),
-a compose `extra_hosts` entry pinning the Mac's IP (reintroduces the literal IP FR-013
+considered were a compose `extra_hosts` entry pinning the Mac's IP (reintroduces the literal IP FR-013
 exists to prevent), and this. LAB-without-the-Mac is a faithful rehearsal of the state
 SC-001 is written about: the Mac is *supposed* to be absent, and every alias must still
 answer. That is the property most worth proving, and LAB proves it for free.

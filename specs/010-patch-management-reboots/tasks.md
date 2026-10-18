@@ -248,7 +248,7 @@ These tasks incorporate the following specification clarifications:
   - Verify apt update runs
   - Verify packages upgrade if available
   - Verify no reboot occurs if not required
-  - **Completed**: Full execution successful - all 5 hosts patched (adguard, homeassistant, immich, reverse_proxy, proxmox). Execution time 105s (1.8m). Proxmox updated 2 packages. All verifications passed. DNS fix on immich (VMID 101) resolved prior apt cache failure.
+  - **Completed**: Full execution successful - all 4 hosts patched (homeassistant, immich, reverse_proxy, proxmox). Execution time 105s (1.8m). Proxmox updated 2 packages. All verifications passed. DNS fix on immich (VMID 101) resolved prior apt cache failure.
 
 - [ ] **T024** [US1] Simulate reboot-required condition and verify auto-start (clarified):
   - Manually create `/var/run/reboot-required` on test LXC
@@ -279,7 +279,7 @@ These tasks incorporate the following specification clarifications:
 - [ ] **T027a** [US1] Verify LXC auto-start configuration (clarified requirement):
   - Check all production LXCs have `onboot: 1` in Proxmox config
   - Command: `pct config <VMID> | grep onboot`
-  - Verify for: adguard (210), proxy (211), homeassistant (212), immich (213)
+  - Verify for: proxy (211), homeassistant (212), immich (213)
   - If not set, update via Terraform or `pct set <VMID> -onboot 1`
 
 **Phase 2 Verification**:

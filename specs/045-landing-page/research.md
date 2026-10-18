@@ -21,13 +21,13 @@ include is needed. This matches spec decision D-002.
   `services/vars.yml` already holds the per-service `*_ip`/`*_port` vars this list supersedes, so
   co-locating is more coherent. Rejected (prefer modifying existing file).
 
-## R-002 — Replacing six per-service `.caddy.j2` templates with one
+## R-002 — Replacing five per-service `.caddy.j2` templates with one
 
 **Decision**: One generic `service.caddy.j2` rendered with a `loop` over the enabled, user-facing
-entries of `caddy_services`; delete the six per-service templates and their six template tasks.
+entries of `caddy_services`; delete the five per-service templates and their five template tasks.
 
-**Rationale**: Direct diff of `immich/nextcloud/grafana/jellyfin/adguard.caddy.j2` shows they are
-identical except for `host`, `ip`, and `port`; all five use the same three `header_up` lines.
+**Rationale**: Direct diff of `immich/nextcloud/grafana/jellyfin.caddy.j2` shows they are
+identical except for `host`, `ip`, and `port`; all four use the same three `header_up` lines.
 `homeassistant.caddy.j2` differs only by an outer `{% if homeassistant_active %}` guard, which the
 `enabled` flag now expresses generically. A single template with a loop therefore reproduces every
 current site block byte-for-byte (modulo the variable substitution), satisfying D-008's "preserve
@@ -117,9 +117,7 @@ routes by SNI, so the apex block coexists with subdomain blocks — no port hand
 at Domeneshop, with public DNS resolving to the LAN IP (split-horizon not used). The wildcard does
 **not** cover the bare apex, so `hus-sky.no` needs its own **public DNS A record at Domeneshop**
 → 192.168.1.211, parallel to the wildcard. This is a one-time manual step in quickstart (FR-011);
-DNS records at the registrar are not Ansible-managed in this repo. **AdGuard plays no role** — it is
-unused in the current setup and serves no DNS; the earlier "AdGuard rewrite" idea was a wrong
-assumption and has been removed.
+DNS records at the registrar are not Ansible-managed in this repo.
 
 ## R-008 — Static page, graceful degradation
 

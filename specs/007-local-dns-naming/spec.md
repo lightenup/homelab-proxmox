@@ -39,7 +39,7 @@ As a service running in an LXC (e.g., Home Assistant), I want to be able to reso
 **Acceptance Scenarios**:
 
 1. **Given** I am logged into the `homeassistant` LXC, **When** I run `ping immich.local`, **Then** it resolves to `192.168.1.213`.
-2. **Given** I am logged into the `proxy` LXC, **When** I run `getent hosts adguard.local`, **Then** it returns the correct IP `192.168.1.210`.
+2. **Given** I am logged into the `proxy` LXC, **When** I run `getent hosts immich.local`, **Then** it returns the correct IP `192.168.1.213`.
 
 ---
 
@@ -60,7 +60,7 @@ As an administrator, I want the mDNS configuration to be applied automatically v
 
 ## Functional Requirements
 
-- **FR-001**: All managed hosts (Proxmox host `pve` and LXCs `proxy`, `immich`, `adguard`, `homeassistant`) MUST broadcast their hostname via mDNS (`.local` domain).
+- **FR-001**: All managed hosts (Proxmox host `pve` and LXCs `proxy`, `immich`, `homeassistant`) MUST broadcast their hostname via mDNS (`.local` domain).
 - **FR-002**: The solution MUST NOT require any changes to the central router or DHCP server.
 - **FR-003**: The configuration MUST be managed via a reusable Ansible role (`mdns_base`).
 - **FR-004**: The solution MUST support standard mDNS clients (Bonjour on macOS/Windows, Avahi on Linux).
@@ -85,7 +85,7 @@ As an administrator, I want the mDNS configuration to be applied automatically v
 
 ## Out of Scope
 
-- Configuring a central DNS server (AdGuard) to resolve these names for the whole network (requires router change).
+- Configuring a central DNS server to resolve these names for the whole network (requires router change).
 - Configuring public domain names or SSL certificates (Feature 005/Future).
 - Android client support (Android does not natively support `.local` mDNS resolution without specific apps).
 

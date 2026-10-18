@@ -57,7 +57,7 @@
   - [X] Execute: `DRY_RUN=false ENVIRONMENT=lab bash scripts/lab/migrate-state-to-nas.sh`
   - [X] Verify: Compare checksums of legacy vs NAS state files
     ```bash
-    # All 4 services migrated: adguard (181 bytes), immich (3683 bytes), jellyfin (3691 bytes), monitoring (3698 bytes)
+    # All 3 services migrated: immich (3683 bytes), jellyfin (3691 bytes), monitoring (3698 bytes)
     ```
 
 ### Symlink Deployment
@@ -243,7 +243,7 @@ If critical issues are discovered during any phase:
 3. **Copy NAS state back to legacy location** (if symlinks removed):
    ```bash
    ssh pve "
-   for service in immich monitoring jellyfin adguard reverse_proxy homeassistant; do
+   for service in immich monitoring jellyfin reverse_proxy homeassistant; do
      mkdir -p /var/lib/homelab-proxmox/state/services/\$service
      rsync -av /mnt/nas/homelab_ci/infra_state/lab/\$service/ \
        /var/lib/homelab-proxmox/state/services/\$service/

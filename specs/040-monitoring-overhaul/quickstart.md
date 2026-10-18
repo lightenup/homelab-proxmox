@@ -22,7 +22,7 @@ ansible-playbook playbooks/reverse_proxy.yml --tags base
 ansible-playbook playbooks/immich.yml --tags base
 ansible-playbook playbooks/jellyfin.yml --tags base
 ansible-playbook playbooks/nextcloud.yml --tags base
-# Note: adguard and homeassistant playbooks also need running if those LXCs exist
+# Note: the homeassistant playbook also needs running if that LXC exists
 ```
 
 **Verify**: `curl http://192.168.1.211:9100/metrics` should return Prometheus metrics from each LXC.

@@ -79,7 +79,7 @@
 **Decision**: Replace all real infrastructure values in `.tfvars.example` files with clearly marked generic placeholders and add instructional comments.
 
 **Rationale**:
-- Current `.tfvars.example` files contain real IP addresses (192.168.1.112, 192.168.1.1, 192.168.1.210–216), real SSH public keys, and real infrastructure details. This violates the documentation-example role defined by the spec (FR-003).
+- Current `.tfvars.example` files contain real IP addresses (192.168.1.112, 192.168.1.1, 192.168.1.211–216), real SSH public keys, and real infrastructure details. This violates the documentation-example role defined by the spec (FR-003).
 - Placeholder format: `<descriptive-name>` (e.g., `<pve-api-url>`, `<gateway-ip>`, `<your-ssh-public-key>`). This format is human-readable and clearly distinct from real values.
 - Each placeholder includes a comment explaining what value to use and where to find it.
 - The token secret placeholder is `<your-token-secret>` (not the sentinel format), making it clear this is documentation, not a CI template.

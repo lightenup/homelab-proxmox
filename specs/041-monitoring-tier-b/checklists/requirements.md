@@ -52,5 +52,4 @@ Self-critique pass performed 2026-03-01. Found and resolved:
 
 - All items pass validation. Spec is ready for `/speckit.clarify` or `/speckit.plan`.
 - DL-04 (Jellyfin exporter viability) is intentionally left as a conditional requirement (SHOULD-level) rather than a mandatory one — this is by design, not an incomplete requirement.
-- DL-06 (AdGuard role dependency) is documented as a blocking dependency for US-3 only — other user stories are independently implementable.
 - Decision Log contains 11 entries resolving all identified ambiguities.

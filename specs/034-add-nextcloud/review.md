@@ -12,8 +12,8 @@
 | `terraform validate` (root) | `cd terraform && terraform validate` | ✅ PASS |
 | `terraform validate` (service) | `cd terraform/services/nextcloud && terraform validate` | ✅ PASS |
 | `ansible-playbook --syntax-check` (nextcloud.yml) | `ansible-playbook --syntax-check playbooks/nextcloud.yml` | ✅ PASS (warnings: no inventory match, expected) |
-| `ansible-playbook --syntax-check` (services.yml) | `ansible-playbook --syntax-check playbooks/services.yml` | ❌ FAIL — pre-existing `adguard` role missing (not introduced by this feature) |
-| `ansible-playbook --syntax-check` (site.yml) | `ansible-playbook --syntax-check playbooks/site.yml` | ❌ FAIL — same pre-existing `adguard` role issue |
+| `ansible-playbook --syntax-check` (services.yml) | `ansible-playbook --syntax-check playbooks/services.yml` | ❌ FAIL — pre-existing issue, not introduced by this feature |
+| `ansible-playbook --syntax-check` (site.yml) | `ansible-playbook --syntax-check playbooks/site.yml` | ❌ FAIL — same pre-existing issue |
 | `ansible-lint` (nextcloud + backup roles + playbook) | `ansible-lint roles/nextcloud/ roles/nextcloud_backup/ playbooks/nextcloud.yml` | ✅ PASS (production profile) |
 | `ansible-lint` (reverse_proxy role) | `ansible-lint roles/reverse_proxy/` | ✅ PASS (production profile) |
 
@@ -148,8 +148,6 @@ None.
 1. **plan.md and tasks.md modified during/after planning stage** — Both files show `AM` git status (staged then modified in working directory). The `plan.md` has ~589 lines of diff vs. its staged version; `tasks.md` was substantially restructured (T-01..T-12 format → T001-T023 format). Core design decisions and architecture are unchanged. This is a process concern (per persona guidelines, plan.md should not be modified during implementation), but the changes are refinements rather than redesigns. Consider committing plan/tasks artifacts earlier to lock them before implementation begins.
 
 2. **`spreed` (Talk) and `mail` absent from `nextcloud_apps_disable`** — FR-020 requires Talk and the email client be "disabled or not installed". The research.md explicitly documents that these apps are not bundled in Nextcloud 30 Docker by default, so the "not installed" clause is satisfied in practice. However, adding them to the disable list would provide a defensive safety net for cases where a future image revision bundles them. Low risk as-is, but easy to harden.
-
-3. **T015 syntax check failure (pre-existing issue)** — `ansible-playbook --syntax-check playbooks/site.yml` and `services.yml` fail because the `adguard` role referenced in `adguard.yml` does not exist in the current working tree (it existed in an older commit but is absent on `main`). This is a **pre-existing gap** not introduced by this feature. The `.ansible-lint` config excludes `services.yml` and `adguard.yml` to suppress lint noise from this. T015 is marked `[X]` because its primary intent — verifying `site.yml` already references `import_playbook: services.yml` — was satisfied.
 
 4. **`occ` commands run as root** — `docker exec nextcloud_app php occ ...` does not pass `--user www-data`. Nextcloud documentation recommends running occ as `www-data`. This is consistent with the rest of the project (no other role uses `--user www-data`) and is a known homelab trade-off. If occ creates files as root, file permissions could diverge from web-server-owned files over time.
 

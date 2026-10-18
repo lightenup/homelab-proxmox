@@ -24,21 +24,7 @@ Deploys: Updated Telegraf config, fixed alert rules, corrected dashboard.
 
 **Verify**: Open Grafana → Synology NAS Health dashboard → all panels show live data.
 
-### Step 2: AdGuard Home Exporter (adguard playbook)
-
-```bash
-# First: add AdGuard API credentials to vault
-ansible-vault edit group_vars/services/vault.yml
-# Add: adguard_admin_user, adguard_admin_password
-
-ansible-playbook -i inventories/prod/hosts.yml playbooks/adguard.yml --diff
-```
-
-Deploys: AdGuard exporter container on the adguard LXC.
-
-**Verify**: `curl http://192.168.1.210:9618/metrics` returns adguard_* metrics.
-
-### Step 3: Nextcloud Exporter (nextcloud playbook)
+### Step 2: Nextcloud Exporter (nextcloud playbook)
 
 ```bash
 # First: generate and vault the serverinfo token
@@ -53,7 +39,7 @@ Deploys: Nextcloud exporter sidecar in the Nextcloud docker-compose.
 
 **Verify**: `curl http://192.168.1.216:9205/metrics` returns nextcloud_* metrics.
 
-### Step 4: Jellyfin Exporter (jellyfin playbook)
+### Step 3: Jellyfin Exporter (jellyfin playbook)
 
 ```bash
 # First: create Jellyfin API key via admin UI and vault it
@@ -67,7 +53,7 @@ Deploys: Jellyfin exporter as systemd service on the Jellyfin LXC.
 
 **Verify**: `curl http://192.168.1.215:9594/metrics` returns jellyfin_* metrics.
 
-### Step 5: Monitoring Stack Redeploy (picks up new contracts)
+### Step 4: Monitoring Stack Redeploy (picks up new contracts)
 
 ```bash
 ansible-playbook -i inventories/prod/hosts.yml playbooks/monitoring.yml --diff
@@ -77,14 +63,13 @@ Deploys: Updated Prometheus scrape targets, service alert rules, provisioned das
 
 **Verify**:
 - Prometheus targets page: all new scrape targets show "UP"
-- Grafana dashboard list: AdGuard Home, Nextcloud, Jellyfin dashboards present
+- Grafana dashboard list: Nextcloud, Jellyfin dashboards present
 - Each dashboard shows live data
 
 ## Smoke Test Checklist
 
 - [ ] Synology NAS dashboard: all panels show live data
 - [ ] `SynologyNASDown` alert references `job="telegraf-snmp"` (check Prometheus alerts page)
-- [ ] AdGuard Home dashboard: DNS query rate, blocked %, upstream response times visible
 - [ ] Nextcloud dashboard: active users, storage usage, health status visible
 - [ ] Jellyfin dashboard: media library stats, session count visible
 - [ ] All new Prometheus targets show "UP" status

@@ -14,7 +14,7 @@ These are the intended checks to be easy to run locally during implementation.
 - Ansible:
   - `ansible-lint` (where configured)
   - `ansible-playbook --syntax-check ...`
-  - `molecule test` (starting with `ansible/roles/adguard`)
+  - `molecule test` (starting with one service role)
 
 - Python automation runner:
   - `PYTHONPATH=python/src .venv/bin/python -m pytest -c python/pytest.ini` (unit + golden + workflow contract tests)

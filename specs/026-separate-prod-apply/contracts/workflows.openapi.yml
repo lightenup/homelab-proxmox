@@ -46,7 +46,7 @@ components:
     Service:
       type: string
       description: Service slug; must be allowlisted.
-      enum: [adguard, homeassistant, immich, jellyfin, monitoring, reverse_proxy]
+      enum: [homeassistant, immich, jellyfin, monitoring, reverse_proxy]
 
     LabPromoteRequest:
       type: object

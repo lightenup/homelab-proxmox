@@ -95,7 +95,7 @@ tests/
     test_*.py
 
 ansible/roles/
-  adguard/
+  <service role>/
     molecule/
       default/
         molecule.yml

@@ -28,7 +28,7 @@
 - [x] T007 Run `terraform fmt -recursive` and `terraform validate` in [terraform/](terraform/)
 - [x] T008 Run `terraform plan` and review resource replacements (STOP POINT: Ensure IPs match 192.168.1.x)
 - [x] T009 Run `terraform apply` to provision updated containers
-- [x] T010 Verify SSH access to new container IPs (e.g. `ssh root@192.168.1.210`)
+- [x] T010 Verify SSH access to new container IPs (e.g. `ssh root@192.168.1.211`)
 
 ## Dependencies
 - US1 depends on Phase 2 (Module Updates)

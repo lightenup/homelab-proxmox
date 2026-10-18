@@ -1,9 +1,9 @@
-# Feature Specification: Service Regression Remediation (AdGuard + Home Assistant)
+# Feature Specification: Service Regression Remediation (Home Assistant)
 
 **Feature Branch**: `018c-service-remediation`
 **Created**: 2025-12-29
 **Status**: Draft
-**Input**: User description: "Service Regression Remediation (AdGuard + Home Assistant)"
+**Input**: User description: "Service Regression Remediation (Home Assistant)"
 
 ## Clarifications
 
@@ -27,26 +27,11 @@ As an operator, I need Home Assistant to either be reachable on the expected end
 
 ---
 
-### User Story 2 - AdGuard Healthcheck Remediation (Priority: P1)
-
-As an operator, I need AdGuard to either be reachable on the expected endpoint and return a stable health response, or be marked as intentionally disabled (SKIP) with a documented reason.
-
-**Why this priority**: Critical to eliminate false positives in the monitoring system.
-
-**Independent Test**: Can be tested by running the healthcheck script against the AdGuard host and verifying the status is either PASS or SKIP.
-
-**Acceptance Scenarios**:
-
-1. **Given** AdGuard is intended to be running, **When** the healthcheck runs, **Then** it reports `adguard PASS` consistently.
-2. **Given** AdGuard is intentionally disabled, **When** the healthcheck runs, **Then** it reports `adguard SKIP (disabled: reason)` and does not count as a failure.
-
----
-
 ### User Story 3 - Inventory Metadata for Service Intent (Priority: P1)
 
 As an operator, I want to express service intent in inventory metadata (host_vars/group_vars) so the healthcheck system can distinguish between failures, intentional skips, and coverage gaps.
 
-**Why this priority**: Foundation for US1 and US2, enabling the system to understand operator intent.
+**Why this priority**: Foundation for US1, enabling the system to understand operator intent.
 
 **Independent Test**: Can be tested by modifying host variables and verifying `healthcheck.py` output reflects the changes (PASS/FAIL/SKIP/GAP).
 
@@ -78,7 +63,7 @@ As an operator, I want email alerts only when a service transitions from PASS to
 
 - **FR-001**: Healthcheck runner must support `SKIP` state via inventory metadata (e.g., `healthcheck_enabled: false` + `healthcheck_reason`).
 - **FR-002**: For enabled services, healthcheck must validate endpoint with configurable scheme, host, port, path, expected status code, and optional body match.
-- **FR-003**: For AdGuard and Home Assistant, remediation must be implemented by either enabling the service deployment or explicitly disabling monitoring (SKIP).
+- **FR-003**: For Home Assistant, remediation must be implemented by either enabling the service deployment or explicitly disabling monitoring (SKIP).
 - **FR-004**: Drift detection must continue to find "coverage gaps" for services group members lacking healthcheck metadata.
 - **FR-005**: Email notifications must ignore SKIP states and must not alert on GAP unless configured via `--alert-on-gap` CLI argument (default: off).
 
@@ -99,7 +84,7 @@ As an operator, I want email alerts only when a service transitions from PASS to
 
 - The network environment (flat LAN) remains unchanged for this iteration.
 - Secrets are managed via existing Ansible Vault mechanisms.
-- AdGuard and Home Assistant installation issues (if any) can be resolved via standard Ansible tasks or Docker Compose adjustments.
+- Home Assistant installation issues (if any) can be resolved via standard Ansible tasks or Docker Compose adjustments.
 - **[Entity 2]**: [What it represents, relationships to other entities]
 
 ## Success Criteria *(mandatory)*
