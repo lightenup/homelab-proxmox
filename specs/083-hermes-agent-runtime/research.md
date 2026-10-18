@@ -155,7 +155,7 @@ PROD check in [quickstart.md](./quickstart.md). Facts marked
   - **Decision (owner, 2026-10-18)**: the agent reads the key from `AUXILIARY_HERMES_API_KEY`, which
     `_is_hermes_internal_secret` strips from every child. Upstream bridges `AUXILIARY_<TASK>_*` only
     for `vision`, `approval` and plugin tasks, so the name activates nothing. The router side keeps
-    `LLM_ROUTER_CLIENT_HERMES_AGENT_KEY` (vault naming convention). To be verified after the next deploy.
+    `LLM_ROUTER_CLIENT_HERMES_AGENT_KEY` (vault naming convention). Verified on PROD 2026-10-18 (quickstart).
 
 ## Observed in the pinned image (2026-10-17, local run of `nousresearch/hermes-agent:v0.21.6` with the rendered config mounted read-only)
 
