@@ -1,6 +1,9 @@
 # Backlog: Hermes assesses each promising model against the lineup's roles
 
-**Status**: Backlog — raised 2026-10-19. Spec only; the script side is built in `local-llm` (PR #3).
+**Status**: In progress — raised 2026-10-19.
+- The script side is merged in `local-llm` (PR #3).
+- The job is installed on PROD.
+- The probe key is in the `scout-probe-key` branch.
 **Order**: After `083` (the agent runtime it runs on). Independent of everything else.
 
 ## Why this exists
@@ -32,6 +35,12 @@ the Mac on its own:
   model call** (`cron/scheduler_prompt.py:315`, `cron/scheduler.py:2307`). Non-empty stdout
   becomes "## Script Output" in the prompt.
 - `last_run_at` is stamped when a run completes (`cron/jobs.py:2372`).
+- **Job scripts get a cleaned environment** (`build_subprocess_env`, `cron/scheduler_script.py`).
+  - `AUXILIARY_HERMES_API_KEY` is stripped on purpose (R-004), so a script cannot use the agent's
+    gateway key.
+  - Found the hard way: the first two PROD ticks (2026-10-19 08:45, 09:00) probed with an empty
+    key and got 401 from the router. The gate failed safe (silent), so nothing ran.
+  - A test with `docker exec` had passed, because that gets the full container environment.
 - `hermes cron create` and `edit` have no toolset option. The job's `enabled_toolsets` can only be
   set in `jobs.json`, so an agent job gets the `hermes-cron` bundle by default, shell and web
   included.
@@ -49,6 +58,10 @@ the Mac on its own:
   answers a 1-token probe through the router within 20 s. While the Mac is away, every tick is
   silent.
 - **FR-004** The first tick after the Mac answers is the retry. There is no daily window to miss.
+- **FR-008** The probe uses its own router client, `scout_probe`:
+  - rpm 2 and $1 per 30 days, so a leaked copy is worth little; the agent's terminal sees it too.
+  - The key reaches the script through `hermes_agent_env_passthrough` (R-004).
+  - The installed wrapper sets `SCOUT_ROUTER_KEY_ENV=LLM_ROUTER_CLIENT_SCOUT_PROBE_KEY`.
 - **FR-005** One family per run, so one phone message per candidate. A family is assessed once:
   - It is marked done when the job's next completed run is `ok`.
   - Otherwise it is handed over again, and given up after 3 attempts, so a broken path cannot
@@ -60,6 +73,8 @@ the Mac on its own:
 
 ## Success criteria
 
+- **SC-000** The probe succeeds from a real cron tick, not from `docker exec`. The router logs a
+  200 for the `scout_probe` key.
 - **SC-001** With the Mac asleep, `hermes cron runs scout-assess` shows only silent ticks, and
   the router logs no `hermes-deep` traffic from the agent beyond the probe.
 - **SC-002** After the Mac wakes with a family pending, one assessment reaches the phone within
