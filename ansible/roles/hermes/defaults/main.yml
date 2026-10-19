@@ -46,9 +46,11 @@ hermes_agent_default_model: "hermes-balanced"
 hermes_agent_heartbeat_dir: "/var/lib/hermes-agent-heartbeat"
 # Names of job secrets exposed to cron scripts through terminal.env_passthrough (R-004).
 # Each name's value is read from the vault variable `name | lower` (the llm_router_clients
-# key_env convention). Empty today — a job that needs a secret is the one case where adding
-# a job costs a deploy change (spec Edge Cases).
-hermes_agent_env_passthrough: []
+# key_env convention). A job that needs a secret is the one case where adding a job costs a
+# deploy change (spec Edge Cases).
+hermes_agent_env_passthrough:
+  # Backlog 088: the scout-assess gate's router probe (llm_router_clients alias scout_probe).
+  - LLM_ROUTER_CLIENT_SCOUT_PROBE_KEY
 # R-011: operational when the deploy says PROD. The pipeline's LAB stage runs against the
 # SAME inventory as PROD (backlog 067), passing only `-e deploy_environment=lab`, so that flag
 # is the signal; `lab_inventory` (the 10.99.x rig) can only ever make it false. Gates the

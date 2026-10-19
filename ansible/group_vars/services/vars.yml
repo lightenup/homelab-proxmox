@@ -209,6 +209,16 @@ llm_router_clients:
     max_budget: 5.00
     budget_duration: "30d"
     rpm_limit: 20
+  # Backlog 088: the scout-assess cron script's 1-token "is the Mac answering" probe. Its own
+  # key because Hermes strips the agent's gateway key from job scripts by design (083 R-004);
+  # it reaches the script through hermes_agent_env_passthrough. The agent's terminal sees it
+  # too, so it is sized so a leaked copy is worth little: 2 rpm and $1 per 30 days, while one
+  # probe per 15-min tick needs far less.
+  - alias: scout_probe
+    key_env: LLM_ROUTER_CLIENT_SCOUT_PROBE_KEY
+    max_budget: 1.00
+    budget_duration: "30d"
+    rpm_limit: 2
 
 # Gateway-wide backstop (FR-010, SC-012). Two caps with OPPOSITE sizing rules — see below.
 llm_router_gateway_budget:
@@ -227,16 +237,16 @@ llm_router_gateway_budget:
   # inside this band, which the preflight asserts:
   #
   #     max(client rpm_limit)  <=  gateway rpm_limit  <  sum(client rpm_limit)
-  #            60              <=          65         <         90
+  #            60              <=          65         <         92
   #
   # Lower bound: at least the largest single client, so one compliant client is never
   # refused by the GATEWAY cap — its own limit should always bind first, otherwise the
   # two levels are indistinguishable in practice and the error tells the operator nothing.
   #
   # Upper bound: strictly below the sum, so clients COMBINING can trip it. That is the
-  # scenario this exists for: `hermes` (60), `canary` (10) and `hermes_agent` (20, spec
-  # 083) are each well-behaved and together are 90 requests/minute of real inference
-  # against a single Mac.
+  # scenario this exists for: `hermes` (60), `canary` (10), `hermes_agent` (20, spec 083)
+  # and `scout_probe` (2, backlog 088) are each well-behaved and together are 92
+  # requests/minute of real inference against a single Mac.
   #
   # 65 rather than 60 deliberately: at exactly 60, a fully-loaded `hermes` would consume
   # the entire gateway allowance and starve the synthetic canary (FR-018), blinding the
