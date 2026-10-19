@@ -38,8 +38,17 @@ monitoring_contract:
       summary: !unsafe "llm-router is down on {{ $labels.instance }}"
       description: !unsafe "The llm-router gateway (or its database) has been unreachable for more than 5 minutes (instance: {{ $labels.instance }})."
     - alert: LlmRouterLocalTierDown
+      # `litellm_model_name!~"hermes-.*"`, added 2026-10-19: LiteLLM 1.83.3 writes this gauge
+      # under two label sets for one deployment. A cooldown sets 2 under the ROUTER model name
+      # (hermes-fast; router_utils/cooldown_callbacks.py:67), while requests set 1 on failure
+      # and 0 on success under the UPSTREAM name (fast; integrations/prometheus.py:2000,2175).
+      # Nothing ever writes 0 to the cooldown series, so it latched at 2 from the first
+      # cooldown until a router restart and fired continuously 2026-10-17 10:50 -> 10-19.
+      # Backtest over 3 days: the 32-38 h latched episodes go; Mac-away episodes stay. They
+      # still clear only on the next successful request (the hourly canary at the latest),
+      # so an episode can outlast the Mac's absence by up to about an hour.
       expr: |
-        litellm_deployment_state{model_id=~".*-local"} != 0
+        litellm_deployment_state{model_id=~".*-local", litellm_model_name!~"hermes-.*"} != 0
       # 11m, raised from 5m on 2026-09-22 alongside llm_router_health_check_interval going
       # 60s -> 300s. The gauge only refreshes when a health check runs, so at the new cadence
       # ONE failed check holds it at 1 for a full 300s — which met the old `for: 5m` exactly
