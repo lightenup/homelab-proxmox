@@ -42,7 +42,7 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Restart/flapping + reboot detection** — cAdvisor for `container_start_time_seconds`
   (`changes(...[10m]) > 2`) and `changes(node_boot_time_seconds[1h]) > 0`. *Open*
 - **Backup job monitoring** — Pushgateway (or node textfile collector) + `BackupStale` alert
-  (`time() - backup_last_success_timestamp > 48h`). *Open*
+  (`time() - backup_last_success_timestamp > 48h`). *Specified in [`090`](./090-backup-coverage-and-staleness.md)*
 - **NFS mount health alerting** — `node_filesystem_readonly{mountpoint=~"/mnt/.*"} == 1` and
   `absent(node_filesystem_avail_bytes{mountpoint="…"})` per known mount. *Open*
 - **Alertmanager config validation in CI** — `amtool check-config` in `validate_alerts.yml`. *Open*
@@ -51,7 +51,10 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Application-level error/log alerting** — Promtail/Alloy → Loki; alert on app error-rate spikes,
   stack traces, and OOM-kills (`kernel: Out of memory`) per service. Current alerting is host/infra +
   endpoint only, so a wedged app that still answers its port and doesn't saturate CPU/disk is invisible
-  (only Caddy 5xx rate covers app correctness today). Highest-value gap alongside backup monitoring. *Open*
+  (only Caddy 5xx rate covers app correctness today). Highest-value gap alongside backup monitoring. *Specified in [`089`](./089-log-aggregation.md)*
+- **LXC base Debian 12 → 13** — Debian 12 left regular security support on 2026-07-11 (LTS until
+  2028-06-30); the PVE host is already on Debian 13 and lab templates exist (`lab-tpl-debian-13-*`).
+  Template change plus rolling LXC rebuilds. Not urgent before 2028. *Open*
 - **Per-container liveness** — cAdvisor (or docker exporter) `up`/health per container, not just host
   node_exporter + blackbox endpoint probes; catches a crashed/wedged container whose port still listens
   or whose host is otherwise healthy. Overlaps with the restart/flapping candidate above. *Open*
@@ -71,7 +74,7 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Proxmox firewall baseline** — datacenter/node/container deny-inbound default + per-service allow
   rules; integrate with Terraform container defs. *Open*
 - **Login anomaly alerting** — Promtail/Alloy → Loki; alert on successful SSH from non-whitelisted IP,
-  unexpected `sudo`, off-hours login. *Open*
+  unexpected `sudo`, off-hours login. *Specified in [`089`](./089-log-aggregation.md)*
 - **CrowdSec** — replace/supplement fail2ban with shared ban lists + community blocklists + Caddy
   bouncer; add exporter to monitoring. *Open*
 - **PVE HTTPS via Caddy** — `pve.hus-sky.no` → `reverse_proxy https://192.168.1.112:8006`
