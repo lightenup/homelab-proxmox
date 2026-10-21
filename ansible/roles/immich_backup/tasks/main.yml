@@ -15,6 +15,7 @@
     mode: '0755'
     owner: root
     group: root
+  when: immich_require_nas_mount | default(true) | bool
 
 - name: Deploy backup script
   ansible.builtin.template:
@@ -23,6 +24,7 @@
     mode: '0755'
     owner: root
     group: root
+  when: immich_require_nas_mount | default(true) | bool
 
 - name: Create systemd service for Immich backup
   ansible.builtin.copy:
@@ -38,6 +40,7 @@
       User=root
     mode: '0644'
   notify: Reload systemd
+  when: immich_require_nas_mount | default(true) | bool
 
 - name: Create systemd timer for Immich backup
   ansible.builtin.copy:
@@ -54,9 +57,11 @@
       WantedBy=timers.target
     mode: '0644'
   notify: Reload systemd
+  when: immich_require_nas_mount | default(true) | bool
 
 - name: Enable and start Immich backup timer
   ansible.builtin.systemd:
     name: immich-backup.timer
     state: started
     enabled: true
+  when: immich_require_nas_mount | default(true) | bool
