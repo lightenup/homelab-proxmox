@@ -1,10 +1,13 @@
 # Backlog: backups that fail silently, and the coverage nobody wrote down
 
-**Status**: Backlog — raised 2026-10-21 while measuring for [`089`](./089-log-aggregation.md).
+**Status**: Backlog — raised 2026-10-21 while measuring for [`092`](./092-log-aggregation.md).
 Spec only. **High priority**: the PVE host's configuration backup has not succeeded since at least
 2026-01-19, and nothing noticed.
-**Order**: Before [`091`](./091-monitoring-stack-version-currency.md), which wants a monitoring
-backup in place before it upgrades Grafana. Independent of `089`.
+**Order**: After [`089`](./089-backup-and-log-rotation-quick-fixes.md) (which fixes the PVE and immich backups) and
+[`090`](./090-monitoring-stack-version-currency.md). Do it **together with
+[`073`](./073-consolidate-backup-roles.md)**: FR-004 adds a timestamp to every backup role, which
+is cheaper to write once in the consolidated role. Before [`092`](./092-log-aggregation.md), which
+reuses the path this item creates for an agent on the PVE host.
 
 ## Why this exists
 
@@ -46,16 +49,13 @@ not the Synology's address in the inventory.
   and proxy, decide whether their local state is rebuildable. If not, they get a backup. For
   example: are llm-router's virtual keys reconciled from vault on deploy, or only created once?
   Can losing Jellyfin's library database (watch history, users) be accepted?
-- **FR-003 — Every backup that should run, runs.**
-  - PVE host: the lock path is writable under the unit's sandboxing.
-  - monitoring: the NAS share is mounted, or monitoring is declared rebuildable and the script
-    and cron are removed.
-  - immich: the backup is installed by the playbook the pipeline runs, not by a playbook nothing
-    runs.
+- **FR-003 — Every backup that should run, runs.** The PVE configuration backup and immich are
+  fixed in [`089`](./089-backup-and-log-rotation-quick-fixes.md). What remains here is monitoring: either the NAS share is mounted, or monitoring
+  is declared rebuildable and the script and cron are removed.
 - **FR-004 — Every backup reports success as a metric.** Each backup writes a
   last-success timestamp. Prometheus can read it from every host that runs a backup, including
-  the PVE host, which needs a scrape target for it (node_exporter's textfile collector, as the
-  `improvement-candidates` "`pve` node_exporter" item proposes). The `hermes_backup` pattern is
+  the PVE host, which needs a scrape target for it (node_exporter's textfile collector, part of the
+  `improvement-candidates` "Proxmox host/guest + storage health" item). The `hermes_backup` pattern is
   the model.
 - **FR-005 — One staleness rule covers all backups.** A single `BackupStale` rule (constitution
   IV, not one copy per service) raises `warning` when any backup's last success is older than
@@ -70,8 +70,8 @@ not the Synology's address in the inventory.
   `BackupStale` is quiet.
 - **SC-002**: Breaking one backup on purpose (on a test target) raises `BackupStale` for that
   backup only, within its window. Removing its timestamp file raises it too (FR-006).
-- **SC-003**: The PVE configuration backup runs to completion from its timer, and its archive
-  decrypts.
+- **SC-003**: The PVE configuration backup and immich (fixed in `089`) still succeed once their
+  timestamps are wired in, and stay quiet in `BackupStale`.
 - **SC-004**: One restore per backup class is exercised and recorded: the existing
   `restore-drill.yml` for immich, plus the PVE configuration archive. Other classes are recorded
   as not drilled.
@@ -84,13 +84,13 @@ not the Synology's address in the inventory.
 - Should backup timestamps reach Prometheus through node_exporter's textfile collector on each
   host (the PVE host needs node_exporter first), or a Pushgateway?
   `improvement-candidates` lists both.
-- Do this with [`073`](./073-consolidate-backup-roles.md) (consolidate the backup roles) or
-  before it? FR-004 and FR-005 touch every backup role anyway.
 
 ## Dependencies
 
-- **Closes** the "Backup job monitoring" item in `improvement-candidates.md`, and most of the
-  "`pve` node_exporter" item.
-- **Related**: [`073`](./073-consolidate-backup-roles.md), and [`089`](./089-log-aggregation.md),
+- **Closes** the "Backup job monitoring" item in `improvement-candidates.md`, and the node_exporter part of
+  the "Proxmox host/guest + storage health" item.
+- **After [`089`](./089-backup-and-log-rotation-quick-fixes.md)**, which makes the PVE and immich backups run.
+- **With [`073`](./073-consolidate-backup-roles.md)** (consolidate the backup roles).
+- **Related**: [`092`](./092-log-aggregation.md),
   whose collector on the PVE host would have made these failures searchable but would not have
   alerted on them.

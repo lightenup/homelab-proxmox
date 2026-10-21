@@ -1,9 +1,11 @@
 # Feature Specification: log aggregation and log-based alerting
 
-**Feature Branch**: `089-log-aggregation`
+**Feature Branch**: `092-log-aggregation`
 **Created**: 2026-10-21
-**Status**: Draft — ready for `/speckit-specify`, raised 2026-10-21. Nothing blocks it; best after
-[`091`](./091-monitoring-stack-version-currency.md). Assumptions were checked against the repo, upstream docs and the live estate on 2026-10-21 (see
+**Status**: Draft — ready for `/speckit-specify`, raised 2026-10-21. Last of the four items raised
+on 2026-10-21: after [`089`](./089-backup-and-log-rotation-quick-fixes.md), [`090`](./090-monitoring-stack-version-currency.md)
+and [`091`](./091-backup-coverage-and-staleness.md). US-4 (login) also waits for
+[`079`](./079-sshd-password-auth-enabled-estate-wide.md). Assumptions were checked against the repo, upstream docs and the live estate on 2026-10-21 (see
 [Measured state](#measured-state-2026-10-21) and [Research notes](#research-notes-for-speckit-plan)).
 **Input**: Collect the logs of every host the estate manages into one store next to Prometheus,
 make them searchable in Grafana, and alert on them through the existing Alertmanager → Pushover +
@@ -46,19 +48,19 @@ Read-only, from the PVE host (`pct exec`), Prometheus and the repo.
 |---|---|---|
 | Hosts | 11 LXCs in the PROD inventory (`services` group) plus the PVE host. `homeassistant` exists in Terraform but is **not in the inventory** and runs nothing | Scope is those 11 LXCs and the PVE host |
 | Docker | Runs on 9 LXCs. **`proxy` (Caddy from apt) and `jellyfin` (apt) have no Docker** | Collection cannot assume Docker; Jellyfin logs to `/var/log/jellyfin/*.log` |
-| Docker log rotation | **None anywhere.** No `daemon.json` (`docker_daemon_options: {}`), no compose `logging:`. Every container uses `json-file` with no `max-size`. Current json logs: nextcloud 245 MB, financial-scenario 149 MB, market-model 73 MB, immich 57 MB, eurooffice 57 MB | A disk-fill risk today, independent of this feature. FR-003 |
+| Docker log rotation | **None anywhere.** No `daemon.json` (`docker_daemon_options: {}`), no compose `logging:`. Every container uses `json-file` with no `max-size`. Current json logs: nextcloud 245 MB, financial-scenario 149 MB, market-model 73 MB, immich 57 MB, eurooffice 57 MB | A disk-fill risk today, independent of this feature. Fixed first, in [`089`](./089-backup-and-log-rotation-quick-fixes.md) |
 | Log volume | Journals 12–48 KB/day per LXC. Docker output ~6.3 MB/day in total (monitoring 2.8 MB, hermes 1.1 MB). **About 7 MB/day for the estate** | Storage is not the constraint: 14 days is about 100 MB before compression. Upstream sizes monolithic Loki for up to ~20 GB/day |
 | Journald | Persistent (`/var/log/journal`) on every LXC and on the PVE host; 16–122 MB per LXC, 95 MB on PVE. No repo management of `journald.conf` | The journal can act as the buffer while the store is down (FR-011) |
 | Kernel messages in LXCs | **Zero** kernel lines in any LXC's journal over 7 days. An unprivileged LXC cannot read the kernel ring buffer | **OOM kills are visible only in the PVE host's journal.** US-2 reads the host |
 | OOM history | `node_vmstat_oom_kill` (already scraped) is 0 on every LXC over 30 days. Inside an LXC this counter is **host-wide** (LXCFS does not virtualise `/proc/vmstat`), so it cannot say which LXC | A metric backstop exists, but only the host's kernel log names the container |
-| PVE host | PVE 9.2.3 on **Debian 13**. **No node_exporter, not scraped by Prometheus.** Managed by `playbooks/host_proxmox.yml` (`proxmox_host`, `tailscale_host`) | The collector would be the first agent on the hypervisor; nothing monitors it yet |
+| PVE host | PVE 9.2.3 on **Debian 13**. **No node_exporter, not scraped by Prometheus.** Managed by `playbooks/host_proxmox.yml` (`proxmox_host`, `tailscale_host`) | [`091`](./091-backup-coverage-and-staleness.md) adds node_exporter there first; the collector follows the same path |
 | Monitoring LXC | 2 cores, 4 GiB RAM, 32 GB rootfs (all data on rootfs), 25.9 GB free. Minimum available memory over 7 days: 90%. Prometheus TSDB 1.1 GB, 15 days | Disk needs no resize. Memory is the budget to watch (FR-004) |
 | Smallest LXCs | `ntfy` 512 MiB (minimum 7-day headroom ~80%), `proxy` 1 GiB | The collector's fixed cost matters most here (FR-010) |
-| Grafana | 12.3.1 live (security support ended 2026-08-19), pinned in `group_vars/monitoring/vars.yml`. One provisioned data source; each provisioning file has its own copy task | FR-006; upgrade in [`091`](./091-monitoring-stack-version-currency.md) |
+| Grafana | 12.3.1 live (security support ended 2026-08-19), pinned in `group_vars/monitoring/vars.yml`. One provisioned data source; each provisioning file has its own copy task | FR-006; upgrade in [`090`](./090-monitoring-stack-version-currency.md) |
 | Alertmanager grouping | `group_by: ['alertname', 'severity']` | Alerts are grouped by rule, not by host |
 | SSH logins (7 days) | Accepted logins on hermes 191, llm-router 38, monitoring 32, ntfy 22, proxy 7, others 0. `sudo` on hermes 2,679, llm-router 444, ntfy 249, proxy 74 | Deploys produce most logins and `sudo`. A login rule has to tell them apart by identity, not by count |
 | Access paths (repo) | The pipeline runs on `pi-runner`, SSHes to `pve` as `ci`, and from `pve` into each LXC as `root` (deploy key injected via `pct exec`) or `ansible` (passwordless `sudo`). The owner logs in with a personal key. Tailscale SSH is off; tailnet traffic to LXCs is subnet-routed by `pve` and probably source-NATed to `pve`'s address | Source address alone cannot separate the pipeline from the owner on the tailnet. FR-009 uses source **and** key |
-| Monitoring backup | Has never succeeded in its log (since 2026-07-09): the NAS mount is disabled | Out of scope here; raised as [`090`](./090-backup-coverage-and-staleness.md). FR-014 does not rely on it |
+| Monitoring backup | Has never succeeded in its log (since 2026-07-09): the NAS mount is disabled | Out of scope here; raised as [`091`](./091-backup-coverage-and-staleness.md). FR-014 does not rely on it |
 | Rule validation | `promtool check rules` runs only at deploy, on the monitoring host. CI does not lint rule files (pre-commit excludes `roles/*/files` and `templates`). Nothing tests `monitoring_contract` | Log rules need their own validation (FR-008) |
 
 ## Decisions recorded (2026-10-21)
@@ -69,7 +71,7 @@ Read-only, from the PVE host (`pct exec`), Prometheus and the repo.
 | Where the store runs | **In `monitoring_stack`**, a sixth container on the `monitoring` LXC | Constitution IV, "consolidate before adding". Disk has room (25.9 GB free for ~100 MB of logs). Memory needs explicit limits (FR-004). |
 | Alert delivery | **Existing Alertmanager**, existing severity routes | Log alerts reach Pushover and ntfy exactly like metric alerts. No new receiver. |
 | Hosts in scope | **The 11 inventory LXCs and the PVE host** | The PVE host is the only place OOM kills are logged (Measured state), and it is where the pipeline and the owner log in. |
-| Docker log rotation | **In scope, done first** (FR-003) | Unbounded json-file logs are an existing risk, and the collector reads them. Rotation applies only to containers created afterwards, so it has to be rolled out deliberately. |
+| Docker log rotation | **Prerequisite, moved to [`089`](./089-backup-and-log-rotation-quick-fixes.md)** | Unbounded json-file logs are a risk today and should not wait for this feature. The collector reads the rotated files (FR-003). |
 | The Mac | **Out of scope** | Managed from the `local-llm` repo, employer-managed, and its logs can contain prompt metadata. |
 | Log data backup | **None** | Logs are diagnostic and bounded by retention, as `082`'s message cache is. The monitoring backup it would ride on is probably not working (Measured state). |
 | First delivery | **All four capabilities** (US-1 to US-4) | Collection alone has no consumer (constitution IV). Each alert class is a consumer that justifies it. |
@@ -157,8 +159,7 @@ a critical alert reaches Pushover through Prometheus, not through the store.
 
 **Acceptance Scenarios**:
 1. **Given** an in-scope host that has sent no log lines for the declared window, **When**
-   that is evaluated, **Then** a `warning` names the host. This includes the PVE host, which
-   has no node_exporter to show it is up.
+   that is evaluated, **Then** a `warning` names the host. This includes the PVE host.
 2. **Given** the store down, refusing writes, or failing to evaluate or deliver rules, **When**
    that persists for 5 minutes, **Then** Prometheus raises an alert from the store's own
    metrics. It must not depend on the store's ruler.
@@ -197,11 +198,9 @@ a critical alert reaches Pushover through Prometheus, not through the store.
   `jellyfin` also ships `/var/log/jellyfin/*.log`. Every entry is labelled with environment,
   host, service and, for containers, container name. Labels MUST be low-cardinality: no request
   IDs, users or paths.
-- **FR-003 — Docker log rotation.** Every Docker host MUST set `json-file` rotation
-  (`max-size`, `max-file`) through `docker_daemon_options`. Rotation applies only to containers
-  created afterwards, so the rollout recreates each service's containers in its normal deploy,
-  and the oversized existing logs are dealt with once. This lands before collection is switched
-  on.
+- **FR-003 — Rotated logs.** Collection MUST NOT be switched on for a Docker host until `089`'s
+  rotation is live there. The rotated files bound what the collector reads after an outage
+  (FR-011).
 - **FR-004 — Store limits.** Memory MUST be bounded explicitly, not left to defaults that assume
   a larger machine: the WAL replay ceiling (default 4 GB, the whole LXC), the embedded caches
   (switched on automatically at 100 MB each), and query limits. There is also a container
@@ -322,8 +321,6 @@ a critical alert reaches Pushover through Prometheus, not through the store.
   by the store, the store's and the collectors' peak memory (on `ntfy` in particular), and the
   `monitoring` LXC's remaining memory headroom. FR-004's retention and limits are then confirmed
   or changed.
-- **SC-008**: After FR-003, no container on any Docker host has a json-file log larger than the
-  configured `max-size` × `max-file`.
 
 ## Assumptions
 
@@ -352,11 +349,15 @@ a critical alert reaches Pushover through Prometheus, not through the store.
 
 ## Dependencies
 
-- **None blocking.**
-- **[`091`](./091-monitoring-stack-version-currency.md)** (soft): upgrade the monitoring stack
+- **After [`089`](./089-backup-and-log-rotation-quick-fixes.md)**: Docker log rotation (FR-003).
+- **After [`091`](./091-backup-coverage-and-staleness.md)** (soft): it puts node_exporter on the
+  PVE host, and this feature reuses the same path for its collector there.
+- **US-4 after [`079`](./079-sshd-password-auth-enabled-estate-wide.md)**: turn off SSH password
+  authentication before alerting on logins. US-1 to US-3 do not wait for it.
+- **After [`090`](./090-monitoring-stack-version-currency.md)** (soft): upgrade the monitoring stack
   first, so Loki is not added to Grafana 12.3 and Prometheus 3.8, both past support. Grafana 13.x may
   also be what Logs Drilldown needs.
-- **[`081`](./081-externalise-prod-topology.md)**: FR-009's allowed sources are topology. If
+- **[`081`](./081-externalise-prod-topology.md)** (US-4 only): FR-009's allowed sources are topology. If
   `081` has landed, they come from its source; if not, from `group_vars` beside the other
   addresses, and they move with `081`.
 - **[`067`](./067-lab-prod-same-address-space.md) / [`072`](./072-lab-monitoring-deploy-wipes-prod.md)**:
@@ -364,9 +365,6 @@ a critical alert reaches Pushover through Prometheus, not through the store.
 - **`082`**: log alerts reach ntfy through its existing `alerts` publisher. Nothing changes there.
 - **Closes** the "Application-level error/log alerting" and "Login anomaly alerting" items in
   `improvement-candidates.md`. **Amends** `042`'s out-of-scope entry for log aggregation.
-- **Related, not required**: the "`pve` node_exporter" candidate in `improvement-candidates.md`.
-  This feature puts the first agent on the PVE host; installing node_exporter there through the
-  same play costs little.
 
 ## Research notes (for `/speckit-plan`)
 
@@ -401,8 +399,8 @@ Collected 2026-10-21 against Loki v3.7.9 and Alloy v1.21.0. Re-check versions at
 
 1. **R-001 — Tooling.** Confirm Loki + Alloy. The case for VictoriaLogs is memory on the 4 GiB
    LXC. Decide after measuring Loki with FR-004's limits.
-2. **Docker rotation values and rollout** (FR-003): `max-size` and `max-file`, how containers are
-   recreated host by host, and what happens to the existing 245 MB logs.
+2. **Logs on disk as the buffer**: with `089`'s rotation values, how long an outage can the
+   collector catch up from on the busiest host (monitoring, ~2.8 MB/day of container output)?
 3. **Docker log source**: Docker API (`loki.source.docker`, needs the socket) or json-file
    tailing (still needs the socket for container-name labels). Either way the collector is
    root-equivalent on Docker hosts. Record the choice.

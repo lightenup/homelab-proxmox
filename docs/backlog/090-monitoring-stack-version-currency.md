@@ -1,10 +1,10 @@
 # Backlog: the monitoring stack runs unsupported versions, and nothing keeps pins current
 
-**Status**: Backlog — raised 2026-10-21 while preparing [`089`](./089-log-aggregation.md). Spec
+**Status**: Backlog — raised 2026-10-21 while preparing [`092`](./092-log-aggregation.md). Spec
 only.
-**Order**: After [`090`](./090-backup-coverage-and-staleness.md) (or with a one-off snapshot of the
-`monitoring` LXC, because its own backup does not work), **before `089`**. `089` adds Loki to the
-same compose file and role, and should start from supported versions.
+**Order**: After [`089`](./089-backup-and-log-rotation-quick-fixes.md), **before [`091`](./091-backup-coverage-and-staleness.md) and `092`**. It
+needs only a one-off snapshot of the `monitoring` LXC for rollback (FR-005), not `091`'s backup
+work. `092` adds Loki to the same compose file and role, and should start from supported versions.
 
 ## Why this exists
 
@@ -48,8 +48,9 @@ its own upgrade).
   over `group_vars/**/vars.yml`, or a scheduled check that posts to ntfy like the model scout.
   The mechanism is chosen at plan time. It must cover the services block in
   `group_vars/services/vars.yml` as well, even if those upgrades stay manual.
-- **FR-005 — Rollback.** Before the upgrade, the `monitoring` LXC's state is captured (by `090`'s
-  backup or a one-off snapshot), and the previous pins are recorded, so a failed upgrade can be
+- **FR-005 — Rollback.** Before the upgrade, the `monitoring` LXC's state is captured with a
+  one-off snapshot (its own backup does not work; `091` decides its future), and the previous
+  pins are recorded, so a failed upgrade can be
   reverted by a pin change and a restore.
 
 ## Success criteria
@@ -62,13 +63,15 @@ its own upgrade).
 
 ## Open questions
 
-- Grafana 12.4 or 13.2? 13.x may be what Logs Drilldown needs for `089`. That is a reason to
+- Grafana 12.4 or 13.2? 13.x may be what Logs Drilldown needs for `092`. That is a reason to
   choose 13.2 if its breaking changes are harmless here.
 - Prometheus: stay on LTS lines (yearly upgrades) or follow the six-weekly minors?
 - Renovate (a new tool and GitHub App), or a scout-style scheduled check?
 
 ## Dependencies
 
-- **After [`090`](./090-backup-coverage-and-staleness.md)**, or a one-off snapshot (FR-005).
-- **Before [`089`](./089-log-aggregation.md)**: soft. `089` can proceed on the current versions,
+- **After [`089`](./089-backup-and-log-rotation-quick-fixes.md)**: no technical dependency, but the quick fixes come first.
+- **Not after [`091`](./091-backup-coverage-and-staleness.md)**: a one-off snapshot is enough for
+  rollback (FR-005).
+- **Before [`092`](./092-log-aggregation.md)**: soft. `092` can proceed on the current versions,
   but would then add Loki to an unsupported base.
