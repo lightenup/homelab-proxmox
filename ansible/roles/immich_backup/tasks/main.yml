@@ -13,8 +13,6 @@
     path: "{{ immich_backup_path }}"
     state: directory
     mode: '0755'
-    owner: root
-    group: root
   when: immich_require_nas_mount | default(true) | bool
 
 - name: Deploy backup script
