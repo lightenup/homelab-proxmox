@@ -561,7 +561,7 @@ ls -l /usr/local/sbin/proxmox-config-backup
 
 # If missing, redeploy via Ansible:
 cd /root/homelab-proxmox/ansible
-ansible-playbook -i inventories/static/hosts.yml playbooks/backup_proxmox.yml \
+ansible-playbook -i inventories/prod/hosts.yml playbooks/backup_proxmox.yml \
   --vault-password-file ~/.ansible_vault_pass \
   -e PROXMOX_BACKUP_AGE_PUBLIC_KEY="age1..."
 
@@ -612,7 +612,7 @@ echo "New public key: $NEW_PUBLIC_KEY"
 
 # 5. Redeploy backup configuration
 export PROXMOX_BACKUP_AGE_PUBLIC_KEY="$NEW_PUBLIC_KEY"
-ansible-playbook -i inventories/static/hosts.yml playbooks/backup_proxmox.yml \
+ansible-playbook -i inventories/prod/hosts.yml playbooks/backup_proxmox.yml \
   --vault-password-file ~/.ansible_vault_pass
 
 # 6. Test new key with backup

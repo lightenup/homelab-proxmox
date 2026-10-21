@@ -12,6 +12,14 @@ docker_install_compose_plugin: true
 docker_compose_package: docker-compose-plugin
 docker_compose_package_state: present
 
+# Container log rotation for every Docker host, monitoring included (089, FR-008/FR-009).
+# Applies only to containers created after the change; see specs/089-*/quickstart.md.
+docker_daemon_options:
+  log-driver: json-file
+  log-opts:
+    max-size: "10m"
+    max-file: "3"
+
 # Service versions
 nextcloud_version: "34"
 nextcloud_exporter_version: "0.9.0"

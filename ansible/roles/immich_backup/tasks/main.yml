@@ -1,4 +1,13 @@
 ---
+- name: Assert Immich backup location is on the NAS mount
+  ansible.builtin.assert:
+    that: (immich_backup_path | dirname) in (ansible_mounts | map(attribute='mount') | list)
+    fail_msg: >-
+      The NAS bind mount for {{ immich_backup_path | dirname }} is missing;
+      the backup would write to the container's local disk.
+    quiet: true
+  when: immich_require_nas_mount | default(true) | bool
+
 - name: Ensure backup directory exists
   ansible.builtin.file:
     path: "{{ immich_backup_path }}"

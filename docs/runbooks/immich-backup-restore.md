@@ -24,10 +24,10 @@ It executes `/usr/local/bin/backup_immich.sh`.
 
 ### Manual Backup
 
-You can trigger a backup manually via Ansible:
+Trigger a backup now (on the Immich host):
 
 ```bash
-ansible-playbook ansible/playbooks/backup.yml -i ansible/inventories/generated/hosts.yml
+sudo systemctl start immich-backup.service
 ```
 
 Or directly on the host:

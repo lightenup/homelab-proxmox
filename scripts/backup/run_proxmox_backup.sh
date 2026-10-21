@@ -29,7 +29,7 @@ fi
 
 # Run Ansible playbook with inventory
 echo "==> Running Ansible playbook..."
-ANSIBLE_ROLES_PATH="${REPO_ROOT}/ansible/roles" ansible-playbook -i ansible/inventories/static/hosts.yml ansible/playbooks/backup_proxmox.yml "$@"
+ANSIBLE_ROLES_PATH="${REPO_ROOT}/ansible/roles" ansible-playbook -i ansible/inventories/prod/hosts.yml ansible/playbooks/backup_proxmox.yml "$@"
 
 echo ""
 echo "==> Deployment complete!"
