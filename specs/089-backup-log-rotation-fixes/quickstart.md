@@ -127,8 +127,8 @@ for d in /var/lib/docker/containers/*/; do du -cb "$d"*-json.log* 2>/dev/null | 
 | PVE archive < 24 h on NAS, decrypts (SC-001) | | |
 | PVE timer run 1 / 2 / 3 (SC-002) | | |
 | Immich lab deploy (backup installed, NAS assert skipped) | | |
-| Immich timer enabled + active after pipeline deploy (SC-003) | | |
-| Immich run succeeds + restore drill `failed=0` (SC-004) | | |
+| Immich timer enabled + active after pipeline deploy (SC-003) | pass | 2026-10-21; run 39625646532, timer enabled+active, NAS mount present |
+| Immich run succeeds + restore drill `failed=0` (SC-004) | **partial** | 2026-10-21; backup run `Result=success`, new archive created. Restore drill failed: `immich_db_password` undefined (pre-existing issue). |
 
 ### Rollout record (FR-011, SC-005, SC-007)
 
@@ -137,15 +137,15 @@ tasks T021–T029: immich goes first, together with Fix 2.
 
 | # | Host | Deploy run id | Recreated (date) | All containers limited | Verified ≤ 30 MB | Notes |
 |---|------|---------------|------------------|------------------------|------------------|-------|
-| 1 | ntfy | | | | | |
-| 2 | market-model | | | | | |
-| 3 | financial-scenario | | | | | |
-| 4 | eurooffice | | | | | |
-| 5 | llm-router | | | | | |
-| 6 | hermes | | | | | |
-| 7 | monitoring | | | | | |
-| 8 | immich | | | | | Done with Fix 2 |
-| 9 | nextcloud | | | | | Largest logs (245 MB); do last |
+| 1 | ntfy | 39627481394 | 2026-10-21 | yes | | |
+| 2 | market-model | 39629799440 | 2026-10-21 | no (GHCR pull denied, pre-existing) | | |
+| 3 | financial-scenario | 39631272045 | 2026-10-21 | yes | | GHCR pull denied (pre-existing) |
+| 4 | eurooffice | 39632627592 | 2026-10-21 | yes | | |
+| 5 | llm-router | 39633680758 | 2026-10-21 | yes | | |
+| 6 | hermes | 39635116408 | 2026-10-21 | yes | | |
+| 7 | monitoring | 39636383434 | 2026-10-21 | yes | | LAB failed (pre-existing) |
+| 8 | immich | 39625646532 | 2026-10-21 | yes | | Done with Fix 2 |
+| 9 | nextcloud | 39637718089 | 2026-10-21 | yes | | LAB failed (pre-existing) |
 
 A row is `verified` when both yes/no columns are yes. SC-005 holds when all 9 rows are verified.
 
