@@ -522,7 +522,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
   Make guard test 4 pass, and remove its `xfail` marker if T012 added one. Run `act -l` and
   `act -n -W .github/workflows/version-currency.yml workflow_dispatch`. If `act` or Docker is not
   available on the Mac, record why in quickstart §0, as the constitution allows.
-- [ ] T031 [US4] Run the full guard file
+- [x] T031 [US4] Run the full guard file
   `.venv/bin/python -m pytest -c python/pytest.ini --no-cov python/tests/guardrails/test_version_pins.py`
   and confirm all 5 tests pass with no `xfail` markers left. Run the local dry run from the repo
   root: `GITHUB_TOKEN=$(gh auth token) PYTHONPATH=python/src .venv/bin/python -m homelab_proxmox_orchestrator.version_currency --dry-run`.

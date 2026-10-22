@@ -291,7 +291,7 @@ Delete the test branch afterwards.
 
 | Check | Result |
 |---|---|
-| Dry run: no monitoring findings | |
+| Dry run: no monitoring findings | 2026-10-22, `8612d8b`, from a temp clone on `pve` (the workflow can't be dispatched until it is on `main`): exit 0, **no monitoring pin** in the findings. Six service pins behind: `nextcloud_exporter_version` 0.9.0→0.9.2, `immich_version` v3.0.2→v3.3.5, `eurooffice_version` v9.3.2→v9.3.5, `llm_router_version` v1.83.3-stable→v1.106.2, `hermes_version` 0.11.3→0.12.3, `hermes_agent_version` v0.21.6→v0.22.4. Five pins `unchecked`. Without `GITHUB_TOKEN` every GitHub call returned HTTP 403 (anonymous rate limit on the shared IP) while endoflife.date worked; the workflow passes its token. |
 | Lowered pin reported (SC-005) | |
 | Error case fails the run | |
 | First scheduled Monday run (date, outcome) | |
