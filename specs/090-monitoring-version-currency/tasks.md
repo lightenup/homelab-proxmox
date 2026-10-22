@@ -246,7 +246,7 @@ is not a rollback.
   - Add a closing step: `pct delsnapshot` once verified.
 
   Leave the "Update Version Pins" section for T021 (same file; do T013 first).
-- [ ] T014 [US2] Live, as root on `pve`, after T012's PR CI is green and immediately before T015:
+- [x] T014 [US2] Live, as root on `pve`, after T012's PR CI is green and immediately before T015:
   run quickstart §4 (take the `pre-090` snapshot). Nothing else should happen between this task
   and T015, because anything written after the snapshot is lost on rollback. Fill in the §4 row (VMID, snapshot, time taken in UTC) and confirm the
   previous-pins line matches the values T004 and T005 replaced.
@@ -267,13 +267,15 @@ quickstart §7 table shows every LXC on the new node_exporter.
 
 ### Implementation for User Story 1 (rollout)
 
-- [ ] T015 [US1] Live: production deploy of `monitoring` from the branch (quickstart §5). Run
-  `gh workflow run lxc-promote-prod.yml --ref 090-monitoring-version-currency -f service=monitoring -f allow_override_failed_lab_gate=true`.
-  After it passes and is approved, run the same with `lxc-apply-prod.yml`. Confirm in the
+- [x] T015 [US1] Live: production deploy of `monitoring` from the branch (quickstart §5). Run
+  `gh workflow run lxc-promote-prod.yml -f ref=090-monitoring-version-currency -f service=monitoring -f allow_override_failed_lab_gate=true`.
+  After it passes and is approved, run `lxc-apply-prod.yml` with `-f promotion_run_id=<promote run id>
+  -f allow_override_failed_lab_gate=true -f confirm_apply_prod=deploy-prod` (the apply takes the
+  promote run's id, not a service or branch). Confirm in the
   run log that the three validators ran **before** `Start monitoring stack`, and that `verify.yml`
   passed. If a validator fails, the old stack is still running: fix it on the branch and
   re-run. Do not roll back.
-- [ ] T016 [US1] Live: run quickstart §6 (after snapshot and comparison).
+- [x] T016 [US1] Live: run quickstart §6 (after snapshot and comparison).
   - Fill in the §6 table: running versions (SC-001); the three diffs (only `health` changes on
     targets that were already down before are allowed); 8 dashboards open at
     `https://grafana.hus-sky.no` without panel errors; the history query pinned to the deploy

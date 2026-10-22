@@ -80,9 +80,10 @@ Deploy from the branch; no merge to `main` is needed. Do not run `ansible-playbo
 host directly.
 
 ```bash
-gh workflow run lxc-promote-prod.yml --ref <branch> -f service=monitoring -f allow_override_failed_lab_gate=true
+gh workflow run lxc-promote-prod.yml -f ref=<branch> -f service=monitoring -f allow_override_failed_lab_gate=true
 # after it passes and is approved:
-gh workflow run lxc-apply-prod.yml --ref <branch> -f service=monitoring -f allow_override_failed_lab_gate=true
+gh workflow run lxc-apply-prod.yml -f promotion_run_id=<promote run id> \
+  -f allow_override_failed_lab_gate=true -f confirm_apply_prod=deploy-prod
 ```
 
 The role runs `promtool check config`, `promtool check rules` and `amtool check-config` with the

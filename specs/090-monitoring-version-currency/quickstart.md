@@ -172,7 +172,7 @@ pct listsnapshot "$VMID"
 
 | VMID | Snapshot | Taken (UTC) | Deleted (UTC) |
 |---|---|---|---|
-| | `pre-090` | | |
+| 103 | `pre-090` (LV `snap_vm-103-disk-0_pre-090`) | 2026-10-22 17:09:48Z (19:09:48 CEST on `pve`) | |
 
 Previous pins: Grafana `12.3.1`, Prometheus `v3.8.1`, Alertmanager `v0.30.0`, blackbox `v0.28.0`,
 Telegraf `1.37.0`, node_exporter `1.10.2`.
@@ -182,9 +182,10 @@ Telegraf `1.37.0`, node_exporter `1.10.2`.
 Use the prod path only. The lab half refuses `monitoring` by design (the 072 guard).
 
 ```bash
-gh workflow run lxc-promote-prod.yml --ref <branch> -f service=monitoring -f allow_override_failed_lab_gate=true
+gh workflow run lxc-promote-prod.yml -f ref=<branch> -f service=monitoring -f allow_override_failed_lab_gate=true
 # after it passes:
-gh workflow run lxc-apply-prod.yml --ref <branch> -f service=monitoring -f allow_override_failed_lab_gate=true
+gh workflow run lxc-apply-prod.yml -f promotion_run_id=<promote run id> \
+  -f allow_override_failed_lab_gate=true -f confirm_apply_prod=deploy-prod
 ```
 
 Expected: the play validates the configs with the new images **before** `docker compose up -d`
@@ -195,7 +196,23 @@ Record the time the stack restarted. Use the Prometheus container start time:
 
 | Deploy run | `DEPLOY_EPOCH` (Prometheus restart, Unix s) |
 |---|---|
-| | |
+| Promote [39821394937](https://github.com/lightenup/homelab-proxmox/actions/runs/39821394937) (LAB refused by the 072 guard, override set); apply [39824128609](https://github.com/lightenup/homelab-proxmox/actions/runs/39824128609), `8612d8b`, 2026-10-22 | `1792690656` (2026-10-22 17:37:36Z) |
+
+Run log, apply 39824128609:
+
+- The three validators (`promtool check rules` on 4 files, `promtool check config`, `amtool
+  check-config`) ran before `Start monitoring stack`, all `ok`.
+- `Start monitoring stack` (17:37:24Z) recreated the containers on the new images, and
+  `verify.yml` (17:37:32Z) passed against them.
+- The `Restart monitoring stack` handler then restarted the stack again (17:37:35Z), so the final
+  state was covered only by the post-deploy healthcheck: FAIL (Grafana connection refused) at 0 s,
+  PASS at 5 s.
+- Running afterwards: `grafana/grafana:13.2.4`, `prom/prometheus:v3.13.5`,
+  `prom/alertmanager:v0.34.1`, `telegraf:1.40.2`, `prom/blackbox-exporter:v0.29.1`, all healthy;
+  node_exporter 1.12.1.
+- Follow-ups, both predating 090: `Start monitoring stack` reports `ok` even when it recreates
+  containers, because its `changed_when` reads stdout while `docker compose` writes progress to
+  stderr. And the handler restart runs after `verify.yml`.
 
 ## 6. After snapshot and comparison (FR-007 to FR-010, SC-001 to SC-003)
 
@@ -223,11 +240,11 @@ ssh root@$MON 'docker exec alertmanager amtool --alertmanager.url=http://localho
 
 | Check | Result |
 |---|---|
-| Versions running (SC-001) | |
-| Targets / rules / dashboards identical (SC-002) | |
-| Dashboards open without panel errors | / 8 |
-| History before the upgrade is queryable (FR-010) | |
-| Test alert on Pushover / ntfy within 5 min (SC-003) | / |
+| Versions running (SC-001) | 2026-10-22 17:39:52Z: Prometheus 3.13.5, Grafana 13.2.4, Alertmanager 0.34.1, Telegraf 1.40.2, blackbox_exporter 0.29.1 (each from its own API or binary); node_exporter 1.12.1 on `monitoring` |
+| Targets / rules / dashboards identical (SC-002) | identical / identical / identical: 41/41 targets up, 33 rules, 8 dashboards; Grafana auth 200 |
+| Dashboards open without panel errors | 8 / 8 (owner checked, 2026-10-22) |
+| History before the upgrade is queryable (FR-010) | `count(count_over_time(up[1h] @ 1792690356))` = 41 |
+| Test alert on Pushover / ntfy within 5 min (SC-003) | yes / yes (owner confirmed both): `Test090` added 19:05:05Z (amtool warned about the new matcher parser, the classic fallback parsed it); the owner confirmed the ntfy message |
 
 **Rollback** (any blocking failure): `pct rollback "$VMID" pre-090` on `pve`, then revert the pins
 on the branch. Changing the Grafana pin back alone is **not** a rollback (research R-02).
