@@ -184,15 +184,15 @@ all 8 dashboards.
   - run guard test 5 (`-k validates_before_compose_up`) and confirm it now **passes**.
 
   Fix any new lint findings in the touched files only. Record the results in quickstart §0.
-- [ ] T009 [US1] Live, from the operator machine: run quickstart §1 (pull the five target tags on
+- [x] T009 [US1] Live, from the operator machine: run quickstart §1 (pull the five target tags on
   the monitoring LXC). Record "no MISSING" or the missing tag. If a tag is missing, stop and
   re-check T002.
-- [ ] T010 [US1] Live: run quickstart §2 (before snapshot) on the monitoring LXC. Pass the Grafana
+- [x] T010 [US1] Live: run quickstart §2 (before snapshot) on the monitoring LXC. Pass the Grafana
   admin password as `GF_PW` through the environment, taken from
   `ansible/group_vars/monitoring/vault.yml` by the operator, and never echo it. Fill in the §2
   table: targets up/total, rule count, dashboard count (expect 8). Keep `/root/090/*.before.json`
   on the host.
-- [ ] T011 [US1] Live: run quickstart §3 (side-by-side rehearsal).
+- [x] T011 [US1] Live: run quickstart §3 (side-by-side rehearsal).
   - First confirm the real volume and network names with `docker volume ls` and
     `docker network ls`, and use them in place of `monitoring_grafana_data` and
     `monitoring_default`.

@@ -5,8 +5,10 @@ inline: dates, counts and versions, as the 089 quickstart does. The data shapes 
 [data-model.md](./data-model.md), and the check's interface is in
 [contracts/currency-check.md](./contracts/currency-check.md).
 
-Conventions: `MON=192.168.1.214`. Run the `ssh root@…` commands from an operator machine on the LAN.
-The Mac cannot reach Docker Hub or the tailnet (Zscaler); see `AGENTS.md`.
+Conventions: `MON=192.168.1.214` (VMID 103). Run the `ssh root@…` commands from an operator machine
+on the LAN; the Mac works (root SSH to the LXC, Docker Hub reachable). The Mac cannot reach the
+tailnet (Zscaler); see `AGENTS.md`. The monitoring LXC has no `jq` or `bc`: keep raw JSON on the
+host and normalise it with `jq` on the operator machine rather than installing packages.
 
 ## 0. Static checks (PR CI, before any deploy)
 
@@ -46,67 +48,98 @@ Prometheus 3.13 is still the newest LTS line (3.15 is non-LTS, eol 2026-11-06).
 
 ```bash
 ssh root@$MON 'for i in grafana/grafana:13.2.4 prom/prometheus:v3.13.5 prom/alertmanager:v0.34.1 \
-  prom/blackbox-exporter:v0.29.1 telegraf:1.40.2; do docker pull -q "$i" || echo "MISSING $i"; done'
+  prom/blackbox-exporter:v0.29.1 telegraf:1.40.2 alpine:latest; do docker pull -q "$i" >/dev/null && echo "ok $i" || echo "MISSING $i"; done'
 ```
 
 Expected: no `MISSING`. If a newer patch of the same line exists, use it and update research R-01.
-Pre-pulling also shortens the outage during deploy.
+Pre-pulling also shortens the outage during deploy. `alpine` is for the §3 data copy, so live
+Grafana is not paused while an image downloads.
+
+**Result (T009, 2026-10-22):** all five target images pulled, no `MISSING`.
 
 ## 2. Before snapshot (FR-006)
 
+The Grafana password is read from the live container's environment **on the LXC** and never
+printed, so it does not pass through the operator's shell or history. Raw JSON stays on the host;
+it is normalised on the operator machine (the LXC has no `jq`).
+
 ```bash
 ssh root@$MON 'mkdir -p /root/090 && cd /root/090 &&
-  curl -s localhost:9090/api/v1/targets | jq -S "[.data.activeTargets[] | {job:.labels.job, instance:.labels.instance, health}] | sort_by(.job,.instance)" > targets.before.json &&
-  curl -s localhost:9090/api/v1/rules   | jq -S "[.data.groups[] | .name as \$g | .rules[] | \$g + \"/\" + .name] | sort" > rules.before.json &&
-  curl -s -u admin:"$GF_PW" localhost:3000/api/search?type=dash-db | jq -S "[.[] | {uid, title}] | sort_by(.uid)" > dashboards.before.json &&
-  wc -l *.before.json && jq length rules.before.json dashboards.before.json'
+  curl -s localhost:9090/api/v1/targets > targets.before.raw.json &&
+  curl -s localhost:9090/api/v1/rules   > rules.before.raw.json &&
+  GF_PW="$(docker exec grafana printenv GF_SECURITY_ADMIN_PASSWORD)" &&
+  echo "grafana auth: $(curl -s -o /dev/null -w "%{http_code}" -u admin:"$GF_PW" localhost:3000/api/user)" &&
+  curl -s -u admin:"$GF_PW" "localhost:3000/api/search?type=dash-db" > dashboards.before.raw.json'
+for f in targets rules dashboards; do scp -q root@$MON:/root/090/$f.before.raw.json .; done
+jq -S '[.data.activeTargets[] | {job:.labels.job, instance:.labels.instance, health}] | sort_by(.job,.instance)' targets.before.raw.json > targets.before.json
+jq -S '[.data.groups[] | .name as $g | .rules[] | $g + "/" + .name] | sort' rules.before.raw.json > rules.before.json
+jq -S '[.[] | {uid, title}] | sort_by(.uid)' dashboards.before.raw.json > dashboards.before.json
+echo "targets up/total: $(jq '[.[]|select(.health=="up")]|length' targets.before.json) / $(jq length targets.before.json)"
+jq length rules.before.json dashboards.before.json
+scp -q targets.before.json rules.before.json dashboards.before.json root@$MON:/root/090/
 ```
 
-`GF_PW` is the Grafana admin password from `group_vars/monitoring/vault.yml`. Pass it through the
-environment; do not put it on the command line in shell history.
+`grafana auth` must be `200`. A `401` means the admin password was changed in the UI after the
+database was created (`GF_SECURITY_ADMIN_PASSWORD` only applies at first start); stop and resolve.
+If more than about a day passes before §5, re-run this section just before §4.
 
 | Item | Count before | Recorded |
 |---|---|---|
-| Targets (up / total) | | |
-| Alert rules | | |
-| Dashboards | | (expected 8) |
+| Targets (up / total) | 41 / 41 | 2026-10-22 14:57 local, T010 |
+| Alert rules | 33 | |
+| Dashboards | 8 | `caddy-proxy`, `immich-photos`, `infra-overview`, `jellyfin`, `llm-router`, `nextcloud`, `security-overview`, `synology-nas-health` |
 
 ## 3. Side-by-side rehearsal on the monitoring LXC (research R-06)
 
-The running stack is not touched.
+The running stack is not restarted. Volume `monitoring_grafana_data`, network `monitoring_default`
+(compose project `monitoring`; confirm with `docker volume ls` / `docker network ls`).
 
 ```bash
+# validators: target images against the live rendered config (check config also checks the rule files)
 ssh root@$MON 'cd /opt/monitoring &&
-  # validators: target images against the live rendered config
   docker run --rm --entrypoint promtool -v $PWD/prometheus:/etc/prometheus:ro prom/prometheus:v3.13.5 check config /etc/prometheus/prometheus.yml &&
-  docker run --rm --entrypoint amtool  -v $PWD/alertmanager:/etc/alertmanager:ro prom/alertmanager:v0.34.1 check-config /etc/alertmanager/alertmanager.yml &&
-  # Grafana 13.2 against a copy of its data
-  docker volume create grafana_rehearsal &&
-  docker run --rm -v monitoring_grafana_data:/from:ro -v grafana_rehearsal:/to alpine sh -c "cp -a /from/. /to/" &&
-  docker run -d --name grafana-rehearsal -p 3999:3000 \
+  docker run --rm --entrypoint amtool  -v $PWD/alertmanager:/etc/alertmanager:ro prom/alertmanager:v0.34.1 check-config /etc/alertmanager/alertmanager.yml'
+
+# Grafana 13.2 against a consistent copy of its data. `docker pause` freezes (does not restart)
+# live Grafana so the SQLite copy is consistent; alpine must already be pulled (§1).
+ssh root@$MON 'docker volume create grafana_rehearsal &&
+  docker pause grafana &&
+  docker run --rm -v monitoring_grafana_data:/from:ro -v grafana_rehearsal:/to alpine sh -c "cp -a /from/. /to/";
+  docker unpause grafana &&
+  docker run -d --name grafana-rehearsal -p 127.0.0.1:3999:3000 \
     -v grafana_rehearsal:/var/lib/grafana \
-    -v $PWD/grafana/provisioning:/etc/grafana/provisioning:ro \
-    -v $PWD/grafana/dashboards:/var/lib/grafana/dashboards:ro \
+    -v /opt/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro \
+    -v /opt/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro \
+    -e GF_SERVER_ROOT_URL=http://localhost:3999/ \
+    -e GF_UNIFIED_ALERTING_EXECUTE_ALERTS=false \
+    -e GF_USERS_ALLOW_SIGN_UP=false -e TZ=Europe/Copenhagen \
     --network monitoring_default grafana/grafana:13.2.4'
 ```
 
-Check the Docker volume and network names with `docker volume ls` and `docker network ls` first.
-The compose project name may not be `monitoring`.
+- `GF_SERVER_ROOT_URL` makes login redirects work through the tunnel below;
+  `GF_UNIFIED_ALERTING_EXECUTE_ALERTS=false` stops the copy from evaluating any Grafana-managed
+  alert rules and notifying a second time.
+- `docker logs grafana-rehearsal` shows "Unified storage migrations completed successfully" and a
+  `Count validation` line for dashboards with `legacy_count` = `unified_count`; no
+  `database is locked`, `malformed` or migration errors. Two `level=error` lines about missing
+  `provisioning/plugins` and `provisioning/alerting` directories are pre-existing (live 12.3.1
+  logs them too) and harmless.
+- The dashboard list from `localhost:3999/api/search?type=dash-db` equals `dashboards.before.json`.
+- Open each dashboard through a tunnel: `ssh -N -L 3999:localhost:3999 root@$MON`, then
+  `http://localhost:3999/d/<uid>`, and confirm there are no panel errors.
 
-Then:
+Clean up: `ssh root@$MON 'docker rm -f grafana-rehearsal && docker volume rm grafana_rehearsal'`.
 
-- `docker logs grafana-rehearsal` shows the unified-storage migration completing, with no `database is locked` or migration errors.
-- `curl -s -u admin:$GF_PW localhost:3999/api/search?type=dash-db | jq length` equals the before count.
-- Open each dashboard at `http://$MON:3999` (LAN) and confirm there are no panel errors. The data source resolves to the live Prometheus over the compose network.
-
-Clean up: `docker rm -f grafana-rehearsal && docker volume rm grafana_rehearsal`.
-
-| Check | Result |
+| Check | Result (T011, 2026-10-22) |
 |---|---|
-| `promtool check config` (3.13.5) | |
-| `amtool check-config` (0.34.1) | |
-| Grafana 13.2.4 migration clean | |
-| Dashboards listed / opened without errors | / 8 |
+| `promtool check config` (3.13.5), incl. 4 rule files | PASS |
+| `amtool check-config` (0.34.1) | PASS (8 inhibit rules, 3 receivers) |
+| Grafana 13.2.4 migration clean | PASS: dashboards 8 → 8, database `ok`, 0 restarts, data source healthy; 0 Grafana-managed alert rules |
+| Dashboards listed / opened without errors | 8 / 8 (API list identical; owner opened all 8, no panel errors) |
+
+Rehearsal container and volume removed; live stack untouched (all five containers up throughout).
+Note: on this run `alpine` was not pre-pulled, so live Grafana stayed paused for a few seconds
+while it downloaded; §1 now pulls it.
 
 If Grafana fails and the cause cannot be fixed in this feature, fall back to 12.4.13 (spec
 FR-001), record why here, and repeat this section with `grafana/grafana:12.4.13`.
