@@ -1,11 +1,10 @@
 ---
-# Validate Prometheus alert rule syntax before stack restart
-# Feature: 040-monitoring-overhaul
-# Traces to: FR-030, US-4
+# Validate rendered configuration before the stack restarts
+# Feature: 090-monitoring-version-currency (FR-008)
 #
-# Runs promtool check rules on all deployed alert files. If any rule file has
-# invalid syntax, the task fails with a clear error identifying the file.
-# This prevents an invalid config from being activated on the monitoring stack.
+# Runs promtool check config, promtool check rules, and amtool check-config
+# with the target images. A failure stops the play while the old containers
+# are still running.
 
 - name: Find deployed alert rule files
   ansible.builtin.find:
@@ -22,3 +21,18 @@
   changed_when: false
   register: promtool_result
   failed_when: promtool_result.rc != 0
+
+- name: Validate Prometheus configuration with promtool
+  ansible.builtin.command:
+    cmd: "docker run --rm --entrypoint promtool -v {{ prometheus_config_path }}:/etc/prometheus:ro prom/prometheus:{{ prometheus_version }} check config /etc/prometheus/prometheus.yml"
+  changed_when: false
+  register: promtool_config_result
+  failed_when: promtool_config_result.rc != 0
+
+- name: Validate Alertmanager configuration with amtool
+  ansible.builtin.command:
+    cmd: "docker run --rm --entrypoint amtool -v {{ alertmanager_config_path }}:/etc/alertmanager:ro prom/alertmanager:{{ alertmanager_version }} check-config /etc/alertmanager/alertmanager.yml"
+  changed_when: false
+  register: amtool_result
+  failed_when: amtool_result.rc != 0
+  no_log: true  # alertmanager.yml holds SMTP/Pushover/ntfy credentials; on failure, run amtool by hand

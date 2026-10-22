@@ -3,13 +3,6 @@
 # Feature: 017-synology-metrics
 # Purpose: Version pins, ports, paths for Prometheus, Grafana, SNMP Exporter, Alertmanager
 
-# Service versions (pinned per plan.md — aligned with group_vars/monitoring/vars.yml)
-# Feature: 040-monitoring-overhaul (FR-026)
-prometheus_version: "v3.8.1"
-grafana_version: "12.3.1"
-telegraf_version: "1.37.0"
-alertmanager_version: "v0.30.0"
-
 # Monitoring LXC
 monitoring_ip: "192.168.1.214"
 monitoring_hostname: "monitoring"
@@ -55,7 +48,6 @@ alertmanager_config_path: "{{ monitoring_install_dir }}/alertmanager"
 
 # Blackbox exporter configuration
 # Feature: 042-monitoring-tier-c (FR-001, FR-002)
-blackbox_exporter_version: "v0.28.0"
 blackbox_exporter_port: 9115
 blackbox_config_path: "{{ monitoring_install_dir }}/blackbox"
 

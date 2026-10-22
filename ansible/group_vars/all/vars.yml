@@ -9,6 +9,9 @@ synology_nas_ip: "192.168.1.109"
 lan_router_ip: "192.168.1.1"
 proxmox_host_ip: "192.168.1.112"
 
+# node_exporter on every LXC (role node_exporter via lxc_base). Single pin (spec 090).
+node_exporter_version: "1.12.1"
+
 # Tailscale Configuration
 tailscale_tailnet_name: "-" # Use "-" to automatically detect tailnet from API key
 tailscale_safe_mode: true

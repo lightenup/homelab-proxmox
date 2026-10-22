@@ -4,10 +4,11 @@
 # Purpose: Default configuration for Prometheus, Grafana, SNMP Exporter, Alertmanager
 
 # Service versions
-prometheus_version: "v3.8.1"  # Upgraded from v2.48.0 (2024-12-28)
-grafana_version: "12.3.1"  # Upgraded from 10.2.0 (2024-12-28)
-telegraf_version: "1.37.0"  # Upgraded from 1.28 (2024-12-28) - Stable SNMP abstraction layer
-alertmanager_version: "v0.30.0"  # Upgraded from v0.26.0 (2024-12-28)
+prometheus_version: "v3.13.5"  # Upgraded from v3.8.1 (2026-10-22, spec 090)
+grafana_version: "13.2.4"  # Upgraded from 12.3.1 (2026-10-22, spec 090)
+telegraf_version: "1.40.2"  # Upgraded from 1.37.0 (2026-10-22, spec 090)
+alertmanager_version: "v0.34.1"  # Upgraded from v0.30.0 (2026-10-22, spec 090)
+blackbox_exporter_version: "v0.29.1"  # Upgraded from v0.28.0 (2026-10-22, spec 090)
 
 # Monitoring LXC
 monitoring_ip: "192.168.1.214"
@@ -94,7 +95,6 @@ prometheus_external_scrape_targets:
 
 # Blackbox exporter configuration
 # Feature: 042-monitoring-tier-c (FR-001, FR-003)
-blackbox_exporter_version: "v0.28.0"
 blackbox_exporter_port: 9115
 # Generated from caddy_services (group_vars/services/vars.yml) — the single source of truth.
 # Add/remove services there; this list follows automatically.
