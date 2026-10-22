@@ -69,7 +69,7 @@ do_request() {
   else
     # POST /<topic> with a tagged body
     url="${NTFY_URL}/${topic}"
-    curl_args+=(-X POST -d "acl-check $(date -Is)" -H "Tags: acl-check" -H "Priority: min")
+    curl_args+=(-X POST -d "acl-check $(date -u +%Y-%m-%dT%H:%M:%SZ)" -H "Tags: acl-check" -H "Priority: min")
   fi
 
   if [[ -n "$token" ]]; then
