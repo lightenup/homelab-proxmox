@@ -6,6 +6,17 @@
     restore_dir: "/tmp/immich-restore-drill"
 
   tasks:
+    - name: Assert the Immich database password is loaded
+      ansible.builtin.assert:
+        that:
+          - immich_db_password is defined
+          - immich_db_password | length > 0
+        fail_msg: >-
+          immich_db_password is undefined. It lives in group_vars/services/secrets.yml, which is
+          gitignored; on PVE pass it with
+          -e @/var/lib/homelab-proxmox/vault/group_vars/services/secrets.yml
+          (docs/runbooks/immich-backup-restore.md).
+
     - name: Find latest backup
       ansible.builtin.shell: "ls -t {{ immich_backup_path }}/immich-backup-*.tar.gz | head -n 1"
       register: latest_backup_cmd

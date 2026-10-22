@@ -8,7 +8,7 @@
     fail_msg: >-
       ntfy_version must be a pinned tag (e.g. "v2.28.0"), not empty or "latest".
 
-- name: Assert the six vault secrets are defined and non-empty
+- name: Assert the eight vault secrets are defined and non-empty
   ansible.builtin.assert:
     that:
       - lookup('ansible.builtin.vars', item, default='') | length > 0
@@ -17,7 +17,8 @@
       Run 'ansible-vault edit group_vars/services/vault.yml' and add:
       ntfy_owner_password_hash, ntfy_owner_token,
       ntfy_alertmanager_password_hash, ntfy_alertmanager_token,
-      ntfy_hermes_password_hash, ntfy_hermes_token.
+      ntfy_hermes_password_hash, ntfy_hermes_token,
+      ntfy_pve_backup_password_hash, ntfy_pve_backup_token.
   loop:
     - ntfy_owner_password_hash
     - ntfy_owner_token
@@ -25,6 +26,8 @@
     - ntfy_alertmanager_token
     - ntfy_hermes_password_hash
     - ntfy_hermes_token
+    - ntfy_pve_backup_password_hash
+    - ntfy_pve_backup_token
   no_log: true
 
 - name: Assert tokens match the ntfy token format (tk_ + 29 chars)
@@ -38,6 +41,7 @@
     - "{{ ntfy_owner_token }}"
     - "{{ ntfy_alertmanager_token }}"
     - "{{ ntfy_hermes_token }}"
+    - "{{ ntfy_pve_backup_token }}"
   no_log: true
 
 - name: Assert password hashes are bcrypt with cost >= 10
@@ -51,6 +55,7 @@
     - "{{ ntfy_owner_password_hash }}"
     - "{{ ntfy_alertmanager_password_hash }}"
     - "{{ ntfy_hermes_password_hash }}"
+    - "{{ ntfy_pve_backup_password_hash }}"
   no_log: true
 
 - name: Assert topic names in ntfy_users are unique

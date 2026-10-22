@@ -27,12 +27,12 @@ services:
 
   redis:
     container_name: immich_redis_restore
-    image: redis:6.2-alpine
+    image: {{ immich_redis_image }}
     restart: no
 
   database:
     container_name: immich_postgres_restore
-    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    image: {{ immich_postgres_image }}
     environment:
       POSTGRES_PASSWORD: {{ immich_db_password }}
       POSTGRES_USER: postgres
@@ -41,6 +41,7 @@ services:
     volumes:
       - immich-postgres-restore:/var/lib/postgresql/data
     restart: no
+    shm_size: 128mb
 
 volumes:
   immich-postgres-restore:

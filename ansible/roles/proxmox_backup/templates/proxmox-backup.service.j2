@@ -19,8 +19,8 @@ Group=root
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths={{ proxmox_backup_staging_base }} {{ proxmox_backup_nas_mount_point }}
+ProtectHome=read-only
+ReadWritePaths={{ proxmox_backup_staging_base }} {{ proxmox_backup_nas_mount_point }} /run/lock
 
 # Logging
 StandardOutput=journal

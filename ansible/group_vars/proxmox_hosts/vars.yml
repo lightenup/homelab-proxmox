@@ -50,20 +50,11 @@ proxmox_backup_age_private_key: !vault |
 proxmox_backup_retention_daily: 30
 proxmox_backup_retention_monthly: 12
 
-# Email Notifications - Postfix SMTP relay via Gmail
+# Notifications (spec 089): failures are published to ntfy (spec 082 publisher contract).
+# The account, topic and token belong to ntfy's `pve_backup` entry in
+# roles/ntfy/defaults/main.yml; the token is in group_vars/services/vault.yml and read
+# here through the ntfy host so it is defined once. Empty token = notifications off.
 proxmox_backup_notify_on_success: false
-
-# Gmail SMTP credentials (from feature 011 monitoring setup)
-# Note: smtp_user and smtp_password are defined in ansible/host_vars/monitoring/vault.yml
-# and are reused here for Proxmox backup notifications
-
-# Email configuration
-proxmox_backup_smtp_host: "{{ smtp_host | default('smtp.gmail.com') }}"
-proxmox_backup_smtp_port: "{{ smtp_port | default(587) }}"
-proxmox_backup_smtp_user: "{{ smtp_user | default('') }}"
-proxmox_backup_smtp_password: "{{ smtp_password | default('') }}"
-proxmox_backup_email_from: "{{ smtp_from | default('homelab-backup@gmail.com') }}"
-proxmox_backup_email_to: "jacobsen.andreas@gmail.com"
-
-# Note: Requires mailutils package on Proxmox host
-# Note: SMTP credentials should be configured in monitoring vault (ansible/group_vars/monitoring/vault.yml)
+proxmox_backup_ntfy_url: "https://ntfy.{{ hostvars['ntfy'].caddy_base_domain }}"
+proxmox_backup_ntfy_topic: "pve-backup"
+proxmox_backup_ntfy_token: "{{ hostvars['ntfy']['ntfy_pve_backup_token'] | default('') }}"

@@ -260,6 +260,18 @@ ansible-playbook playbooks/site.yml --tags backup
 ssh root@192.168.1.112 "ls -lh /usr/local/sbin/proxmox-config-backup /etc/proxmox-backup.conf"
 ```
 
+### Deploy path and CI limitation
+
+The Proxmox backup system is deployed **only from an operator machine** with root SSH to the
+Proxmox host (`192.168.1.112`) and `ansible/.vault-pass.txt`. Use `task ansible:backup` from the
+repo root, or `ansible-playbook -i inventories/prod/hosts.yml playbooks/backup_proxmox.yml` from
+`ansible/`.
+
+CI cannot run this deploy: the `ci` account on `pve` has no root SSH to the host, and its
+passwordless sudo is limited to `qm`/`pct`/`systemctl` by design of the constitution's privilege
+tiers. A CI path would require a privilege-model change and is tracked as a follow-up in
+`specs/089-backup-log-rotation-fixes/plan.md`.
+
 ### Run Manual Backup
 
 ```bash
@@ -469,10 +481,10 @@ mkdir -p /root/.age
 **Solution**:
 ```bash
 # Check inventory exists
-ls -l ansible/inventories/static/hosts.yml
+ls -l ansible/inventories/prod/hosts.yml
 
 # Verify proxmox_hosts group defined
-grep -A 5 'proxmox_hosts:' ansible/inventories/static/hosts.yml
+grep -A 5 'proxmox_hosts:' ansible/inventories/prod/hosts.yml
 
 # If missing, add to inventory:
 proxmox_hosts:

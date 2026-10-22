@@ -1,11 +1,19 @@
 ---
+- name: Assert Immich backup location is on the NAS mount
+  ansible.builtin.assert:
+    that: (immich_backup_path | dirname) in (ansible_mounts | map(attribute='mount') | list)
+    fail_msg: >-
+      The NAS bind mount for {{ immich_backup_path | dirname }} is missing;
+      the backup would write to the container's local disk.
+    quiet: true
+  when: immich_require_nas_mount | default(true) | bool
+
 - name: Ensure backup directory exists
   ansible.builtin.file:
     path: "{{ immich_backup_path }}"
     state: directory
     mode: '0755'
-    owner: root
-    group: root
+  when: immich_require_nas_mount | default(true) | bool
 
 - name: Deploy backup script
   ansible.builtin.template:
@@ -14,6 +22,7 @@
     mode: '0755'
     owner: root
     group: root
+  when: immich_require_nas_mount | default(true) | bool
 
 - name: Create systemd service for Immich backup
   ansible.builtin.copy:
@@ -29,6 +38,7 @@
       User=root
     mode: '0644'
   notify: Reload systemd
+  when: immich_require_nas_mount | default(true) | bool
 
 - name: Create systemd timer for Immich backup
   ansible.builtin.copy:
@@ -45,9 +55,11 @@
       WantedBy=timers.target
     mode: '0644'
   notify: Reload systemd
+  when: immich_require_nas_mount | default(true) | bool
 
 - name: Enable and start Immich backup timer
   ansible.builtin.systemd:
     name: immich-backup.timer
     state: started
     enabled: true
+  when: immich_require_nas_mount | default(true) | bool

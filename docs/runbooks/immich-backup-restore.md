@@ -24,10 +24,10 @@ It executes `/usr/local/bin/backup_immich.sh`.
 
 ### Manual Backup
 
-You can trigger a backup manually via Ansible:
+Trigger a backup now (on the Immich host):
 
 ```bash
-ansible-playbook ansible/playbooks/backup.yml -i ansible/inventories/generated/hosts.yml
+sudo systemctl start immich-backup.service
 ```
 
 Or directly on the host:
@@ -52,8 +52,17 @@ A "Restore Drill" is an automated test that verifies the integrity of the backup
 
 ### Running the Drill
 
+As `ci@pve`, from the pipeline's checkout, with `ANSIBLE_VAULT_PASSWORD_FILE` pointing at a
+temporary password file (see `specs/089-backup-log-rotation-fixes/quickstart.md`,
+Prerequisites). `immich_db_password` is in
+`group_vars/services/secrets.yml`, which is gitignored and kept only in the PVE vault store, so
+pass it explicitly. The playbook stops with a clear error if it is missing.
+
 ```bash
-ansible-playbook ansible/playbooks/restore-drill.yml -i ansible/inventories/generated/hosts.yml
+cd /home/ci/homelab-proxmox/ansible
+ansible-playbook -i inventories/prod/hosts.yml playbooks/restore-drill.yml \
+  --private-key ~/.ssh/id_lxc_deploy \
+  -e @/var/lib/homelab-proxmox/vault/group_vars/services/secrets.yml
 ```
 
 ## Disaster Recovery (Manual Restore)

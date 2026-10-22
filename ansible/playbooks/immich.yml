@@ -13,3 +13,4 @@
   roles:
     - geerlingguy.docker
     - immich
+    - immich_backup
