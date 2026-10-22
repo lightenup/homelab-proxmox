@@ -130,8 +130,8 @@ for d in /var/lib/docker/containers/*/; do du -cb "$d"*-json.log* 2>/dev/null | 
 | PVE manual run `Result=success` | pass | 2026-10-22 07:03:45; deployed with `--skip-tags prerequisites` (apt on `pve` fails on HashiCorp's repo key, unrelated). Earlier runs: 2026-10-21 aborted by the secret scan (T034), failure mail hung 10 min (T035). Scan of `/mnt/nas/homelab_ci/infra_state` as root: no hits |
 | PVE archive < 24 h on NAS, decrypts (SC-001) | pass | 2026-10-22; `proxmox-backup-20261022-070345.tar.zst.age`, lists `proxmox-config/` and `iac-artifacts/nas-state/` |
 | PVE timer armed: enabled, active, NEXT set (SC-002) | pass | 2026-10-22; enabled, active, NEXT 2026-10-23 00:02. The timer also fired the missed run at 07:03:37 (`proxmox-backup-20261022-070338`) |
-| ntfy `pve_backup` publisher: ACL check 35/35, test message received (FR-016) | pass (phone receipt: owner to confirm) | 2026-10-22; ntfy promote 39731922976 + apply 39733902488, PVE redeployed. ACL check 35/35 PASS. Test publish from `pve` with `/etc/proxmox-backup.conf` to `pve-backup` → 200; same token to `alerts` → 403 |
-| Immich lab deploy (backup installed, NAS assert skipped) | | |
+| ntfy `pve_backup` publisher: ACL check 35/35, test message received (FR-016) | pass | 2026-10-22; ntfy promote 39731922976 + apply 39733902488, PVE redeployed. ACL check 35/35 PASS. Test publish from `pve` with `/etc/proxmox-backup.conf` to `pve-backup` → 200; same token to `alerts` → 403. Owner confirmed receipt on the phone |
+| Immich lab deploy (backup installed, NAS assert skipped) | pass, amended | 2026-10-21; run 39622632981 (39617192746 failed first). `c1d8eb4` skips all `immich_backup` tasks in the lab, which has no NAS mount, so no timer is installed there; the lab check proves only that the deploy is not broken |
 | Immich timer enabled + active after pipeline deploy (SC-003) | pass | 2026-10-21; run 39625646532, timer enabled+active, NAS mount present |
 | Immich run succeeds + restore drill `failed=0` (SC-004) | pass | 2026-10-22; drill `failed=0` against the scheduled `immich-backup-20261022-043007.tar.gz`. Two fixes (T036): pass `secrets.yml`, and restore into the service's own database image (the drill used `pgvecto-rs` without VectorChord, so Immich v3 exited) |
 
@@ -142,16 +142,16 @@ tasks T021–T029: immich goes first, together with Fix 2.
 
 | # | Host | Deploy run id | Recreated (date) | All containers limited | Verified ≤ 30 MB | Notes |
 |---|------|---------------|------------------|------------------------|------------------|-------|
-| 1 | ntfy | 39627481394 | 2026-10-21 | yes | | |
-| 2 | market-model | 39629799440 | 2026-10-21 | no (GHCR pull denied, pre-existing) | | |
-| 3 | financial-scenario | 39631272045 | 2026-10-21 | yes | | GHCR pull denied (pre-existing) |
-| 4 | eurooffice | 39632627592 | 2026-10-21 | yes | | |
-| 5 | llm-router | 39633680758 | 2026-10-21 | yes | | |
-| 6 | hermes | 39635116408 | 2026-10-21 | yes | | |
-| 7 | monitoring | 39636383434 | 2026-10-21 | yes | | LAB failed (pre-existing) |
-| 8 | immich | 39625646532 | 2026-10-21 | yes | | Done with Fix 2 |
-| 9 | nextcloud | 39637718089 | 2026-10-21 | yes | | LAB failed (pre-existing) |
+| 1 | ntfy | 39627481394 | 2026-10-21 | yes | yes (0.4 MB) | |
+| 2 | market-model | 39629799440 | 2026-10-21 | yes (re-checked 2026-10-22: 2/2 limited) | yes (0.9 MB) | |
+| 3 | financial-scenario | 39631272045 | 2026-10-21 | yes | yes (0.9 MB) | GHCR pull denied (pre-existing) |
+| 4 | eurooffice | 39632627592 | 2026-10-21 | yes | yes (0.5 MB) | |
+| 5 | llm-router | 39633680758 | 2026-10-21 | yes | yes (0.9 MB) | |
+| 6 | hermes | 39635116408 | 2026-10-21 | yes | yes (0.8 MB) | |
+| 7 | monitoring | 39636383434 | 2026-10-21 | yes | yes (2.1 MB) | LAB failed (pre-existing); `dnswatch` (hand-made `alpine` debug container, stopped since 2026-08, empty log, not in IaC) predates rotation, left for the owner to remove |
+| 8 | immich | 39625646532 | 2026-10-21 | yes | yes (0.2 MB) | Done with Fix 2 |
+| 9 | nextcloud | 39637718089 | 2026-10-21 | yes | yes (1.9 MB) | LAB failed (pre-existing) |
 
 A row is `verified` when both yes/no columns are yes. SC-005 holds when all 9 rows are verified.
 
-Final sweep, largest per-container total across all hosts (SC-006): ____
+Final sweep, largest per-container total across all hosts (SC-006): 2083836 bytes (2.1 MB, monitoring), 2026-10-22. Limit 31457280.

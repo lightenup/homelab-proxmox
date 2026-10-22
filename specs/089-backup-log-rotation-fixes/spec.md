@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-21
 
-**Status**: Draft
+**Status**: Implemented (2026-10-22)
 
 **Input**: User description: "089-backup-and-log-rotation-quick-fixes.md Prompt me" — source backlog item
 [`docs/backlog/089-backup-and-log-rotation-quick-fixes.md`](../../docs/backlog/089-backup-and-log-rotation-quick-fixes.md).

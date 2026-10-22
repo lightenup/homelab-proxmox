@@ -1,7 +1,10 @@
 # Backlog: three quick fixes found while measuring for 090–092
 
-**Status**: Backlog — raised 2026-10-21. Spec only. **Do first**: each fix is small, and two of
-them are backups that are not running today.
+**Status**: **Delivered 2026-10-22** — see [`specs/089-backup-log-rotation-fixes/`](../../specs/089-backup-log-rotation-fixes/).
+Raised 2026-10-21. Implementing it found four more defects behind the first: the backup's secret
+scan aborted on non-secrets, its failure mail hung under the sandbox (now ntfy, topic
+`pve-backup`), and the Immich restore drill lacked its database password and used a database
+image Immich v3 cannot start on.
 **Order**: Before [`090`](./090-monitoring-stack-version-currency.md),
 [`091`](./091-backup-coverage-and-staleness.md) and [`092`](./092-log-aggregation.md). They were
 split out of `091` and `092` so they do not wait behind feature work.
@@ -53,13 +56,13 @@ defaults, never overridden), and no compose file sets `logging:`. Every containe
 - **SC-3.1**: No container on any Docker host has a json-file log larger than `max-size` ×
   `max-file`.
 
-## Open questions
+## Open questions (answered)
 
-- Rotation values: `max-size` and `max-file`. At the measured ~7 MB/day for the whole estate,
-  `10m` × `3` per container is generous. `092` reads these files, so they also set how long the
-  logs on disk can stand in while Loki is down.
-- Does changing `daemon.json` restart the Docker daemon, and so every container on the host, at
-  deploy? If so, roll it out in a quiet window, or together with each host's container recreation.
+- Rotation values: **`10m` × `3`** per container (contract C3 in the spec). The largest
+  per-container total after rollout was 2.1 MB.
+- Changing `daemon.json` **does restart the Docker daemon** at deploy, and containers keep their
+  old log settings until they are recreated. The rollout did an explicit recreate per host right
+  after its deploy (quickstart, Fix 3).
 
 ## Dependencies
 
