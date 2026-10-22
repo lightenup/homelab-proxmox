@@ -190,6 +190,15 @@ rotation limit, and confirm no log file on it exceeds the cap. Repeat per host.
   no privilege escalation) stays.
 - **FR-003**: The fix MUST be applied through the existing Proxmox host configuration and deploy
   path, not by hand on the host.
+- **FR-015** (added 2026-10-22, owner decision): The backup's plaintext-secret check MUST NOT fail
+  on values that are not secrets: empty, null, boolean or numeric values, variable or vault
+  references, and SSH or age public keys. It MUST still abort the backup on a literal credential
+  value, and it MUST log only the file and key name, never the value.
+- **FR-016** (added 2026-10-22, owner decision): A failed backup MUST notify the owner through ntfy,
+  as a new publisher under the `082` publisher contract (its own account, token and topic
+  `pve-backup`), instead of mail. Mail cannot be queued under the unit's read-only system and
+  stalled the failed run for 10 minutes. The publish MUST be bounded in time and MUST NOT fail or
+  stall the unit when ntfy is unreachable.
 
 **Fix 2 — Immich database backup**
 
@@ -202,7 +211,9 @@ rotation limit, and confirm no log file on it exceeds the cap. Repeat per host.
   MUST be updated in the same change to start the backup service instead. Completed historical
   specs are records and are left unchanged.
 - **FR-007**: The existing restore drill MUST be usable unchanged against archives produced by the
-  scheduled backup.
+  scheduled backup. Its documented command MUST load the Immich database password, which lives in
+  the gitignored `group_vars/services/secrets.yml`, and the drill MUST stop with a clear message if
+  the password is missing (amended 2026-10-22).
 
 **Fix 3 — Container log rotation**
 
@@ -246,9 +257,11 @@ rotation limit, and confirm no log file on it exceeds the cap. Repeat per host.
 
 ### Measurable Outcomes
 
-- **SC-001**: The Proxmox configuration backup completes from its schedule, and a NAS archive newer
+- **SC-001**: The Proxmox configuration backup service completes a run, and a NAS archive newer
   than 24 hours exists and decrypts with the backup key.
-- **SC-002**: The Proxmox configuration backup succeeds on 3 consecutive scheduled runs after deploy.
+- **SC-002** (amended 2026-10-22, owner decision): After deploy, the backup timer is enabled and
+  active and shows a next run time. The timer only starts the same service SC-001 ran. Watching
+  several nights is replaced by `091`'s backup-staleness alert, which detects a later failure.
 - **SC-003**: The Immich backup schedule is active on the Immich container after a normal pipeline
   deploy, with no manual steps on the container.
 - **SC-004**: An Immich backup run succeeds and the existing restore drill passes against its

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -135,3 +136,80 @@ def test_docker_log_rotation_defaults() -> None:
         assert "docker_daemon_options" not in monitoring_vars, (
             "docker_daemon_options must not be defined in monitoring/vars.yml (single definition)"
         )
+
+
+def _scan_function(repo_root: Path) -> str:
+    script = (repo_root / "ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2").read_text()
+    start = script.index("scan_plaintext_secrets() {")
+    end = script.index("\n}\n", start) + 3
+    return script[start:end]
+
+
+def _run_scan(repo_root: Path, tmp_path: Path, files: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    for name, content in files.items():
+        (tmp_path / name).write_text(content)
+    return subprocess.run(
+        ["bash", "-c", f'{_scan_function(repo_root)}\nscan_plaintext_secrets "$1"', "scan", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_pve_backup_secret_scan_ignores_non_secrets(tmp_path: Path) -> None:
+    """Spec 089 T034: null/boolean values, public keys and references are not secrets."""
+    repo_root = _find_repo_root(Path(__file__).resolve())
+    result = _run_scan(repo_root, tmp_path, {
+        "terraform.tfstate": (
+            '{"keyctl": false, "password": null, "ssh_public_keys": "ssh-ed25519 AAAAC3Nza u@h",'
+            ' "token_ttl": 3600, "api_key": ""}\n'
+        ),
+        "vars.yml": (
+            'db_password: "{{ vault_db_password }}"\n'
+            "tailscale_auth_key: !vault |\n"
+            'age_public_key: "age19c6zxca9h88ru2szv0hqvahml6e0a524gu20t7juwhsvnjg6pyes4gn4k6"\n'
+        ),
+    })
+    assert result.returncode == 0, f"false positives: {result.stdout}"
+    assert result.stdout == ""
+
+
+def test_pve_backup_secret_scan_catches_literal_secret_without_logging_it(tmp_path: Path) -> None:
+    """Spec 089 T034: a literal value fails the scan; only file and key are printed."""
+    repo_root = _find_repo_root(Path(__file__).resolve())
+    result = _run_scan(repo_root, tmp_path, {
+        "terraform.tfstate": '{"password": "hunter2-real", "keyctl": false}\n',
+        "x.tfvars": 'api_token = "pve!ci=0f1e2d"\n',
+    })
+    assert result.returncode == 1
+    assert "terraform.tfstate: password" in result.stdout
+    assert "x.tfvars: api_token" in result.stdout
+    assert "hunter2-real" not in result.stdout + result.stderr
+    assert "0f1e2d" not in result.stdout + result.stderr
+
+
+def test_pve_backup_notifies_through_ntfy_not_mail() -> None:
+    """Spec 089 T035: mail hangs under ProtectSystem=strict; failures go to ntfy, bounded."""
+    repo_root = _find_repo_root(Path(__file__).resolve())
+    script = (repo_root / "ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2").read_text()
+    conf = (repo_root / "ansible/roles/proxmox_backup/templates/proxmox-backup.conf.j2").read_text()
+
+    assert "| mail " not in script, "the backup script must not call mail"
+    assert "SMTP_HOST" not in conf and "EMAIL_TO" not in conf
+    assert "--max-time" in script, "the ntfy publish must have a timeout"
+    assert "?auth=" not in script, "the token must not go in the URL (082 publisher contract)"
+
+    ntfy_users = yaml.safe_load((repo_root / "ansible/roles/ntfy/defaults/main.yml").read_text())["ntfy_users"]
+    pve_vars = (repo_root / "ansible/group_vars/proxmox_hosts/vars.yml").read_text()
+    entry = next(u for u in ntfy_users if u["name"] == "pve_backup")
+    assert f'proxmox_backup_ntfy_topic: "{entry["topic"]}"' in pve_vars
+
+
+def test_immich_restore_drill_uses_the_service_images() -> None:
+    """Spec 089 T036: the drill restores into the same database and cache images as the service."""
+    repo_root = _find_repo_root(Path(__file__).resolve())
+    service = (repo_root / "ansible/roles/immich/templates/docker-compose.yml.j2").read_text()
+    restore = (repo_root / "ansible/roles/immich_backup/templates/docker-compose.restore.yml.j2").read_text()
+    for var in ("immich_postgres_image", "immich_redis_image"):
+        assert f"image: {{{{ {var} }}}}" in service, f"service compose must use {var}"
+        assert f"image: {{{{ {var} }}}}" in restore, f"restore compose must use {var}"

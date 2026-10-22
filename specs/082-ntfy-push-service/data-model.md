@@ -8,14 +8,14 @@ disposable (FR-014).
 
 | Field | Values | Source |
 |---|---|---|
-| `name` | `owner`, `alertmanager`, `hermes` | `ntfy_users` in role defaults |
-| `role` | `user` (all three; no `admin`) | role defaults |
+| `name` | `owner`, `alertmanager`, `hermes`, `pve_backup` (`089`) | `ntfy_users` in role defaults |
+| `role` | `user` (all accounts; no `admin`) | role defaults |
 | `password_hash` | bcrypt, cost ≥ 10 (validated by ntfy at startup) | vault `ntfy_<name>_password_hash` |
 | `token` | `tk_` + 29 chars, one per account | vault `ntfy_<name>_token` |
 
 **Rules**
 - Exactly one token per account. Tokens are never shared between accounts (FR-007).
-- Publisher accounts (`alertmanager`, `hermes`) authenticate by token only. ntfy rejects an
+- Publisher accounts (`alertmanager`, `hermes`, `pve_backup`) authenticate by token only. ntfy rejects an
   `auth-users` line without a valid bcrypt hash (`parseUsers` → `ValidPasswordHash`). Each
   publisher therefore gets a vault-stored hash of a random password that is discarded at
   generation. Generating the hash at render time is rejected: a fresh salt on every deploy changes
@@ -29,6 +29,7 @@ disposable (FR-014).
 |---|---|---|
 | `alerts` | `alertmanager` | `owner` |
 | `hermes` | `hermes` (`083`) | `owner` |
+| `pve-backup` | `pve_backup` (`089`) | `owner` |
 
 **Rules**
 - A topic has exactly one publisher. A new sending system gets a new topic, a new account and a
@@ -44,6 +45,7 @@ Derived from the two tables above and rendered as `auth-access` lines:
 | `owner` | `*` | `read-only` |
 | `alertmanager` | `alerts` | `write-only` |
 | `hermes` | `hermes` | `write-only` |
+| `pve_backup` | `pve-backup` | `write-only` |
 
 Everything not listed falls through to `auth-default-access: deny-all`. Anonymous access gets
 `deny-all` on every topic.
@@ -51,12 +53,13 @@ Everything not listed falls through to `auth-default-access: deny-all`. Anonymou
 **The access matrix the SC-002 check asserts** (✓ = allowed, everything else must be refused with
 401/403):
 
-| Credential ↓ / action → | read `alerts` | read `hermes` | write `alerts` | write `hermes` | write `other` |
-|---|---|---|---|---|---|
-| none | ✗ | ✗ | ✗ | ✗ | ✗ |
-| `owner` token | ✓ | ✓ | ✗ | ✗ | ✗ |
-| `alertmanager` token | ✗ | ✗ | ✓ | ✗ | ✗ |
-| `hermes` token | ✗ | ✗ | ✗ | ✓ | ✗ |
+| Credential ↓ / action → | read `alerts` | read `hermes` | read `pve-backup` | write `alerts` | write `hermes` | write `pve-backup` | write `other` |
+|---|---|---|---|---|---|---|---|
+| none | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| `owner` token | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| `alertmanager` token | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| `hermes` token | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| `pve_backup` token | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
 
 ## Message (runtime, disposable)
 

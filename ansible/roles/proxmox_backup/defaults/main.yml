@@ -33,11 +33,11 @@ proxmox_backup_retention_monthly: 12
 proxmox_backup_include_tailscale_state: false
 proxmox_backup_include_rclone_conf: false
 
-# Email notifications (optional)
+# Notifications (optional): ntfy, spec 082 publisher contract. Unset token = no notifications.
 proxmox_backup_notify_on_success: false
-# proxmox_backup_smtp_host: ""
-# proxmox_backup_email_from: ""
-# proxmox_backup_email_to: ""
+# proxmox_backup_ntfy_url: "https://ntfy.example.org"
+# proxmox_backup_ntfy_topic: "pve-backup"
+# proxmox_backup_ntfy_token: ""   # vault
 
 # Notification State Machine (Feature 014)
 # Modes: enabled (email only), disabled (no email), removed (packages purged)

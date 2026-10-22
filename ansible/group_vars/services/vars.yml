@@ -24,6 +24,10 @@ docker_daemon_options:
 nextcloud_version: "34"
 nextcloud_exporter_version: "0.9.0"
 immich_version: "v3.0.2"
+# Immich's database and cache images, shared by the service and its restore drill (spec 089:
+# the drill had drifted to an image without VectorChord, which Immich v3 needs).
+immich_postgres_image: "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23"
+immich_redis_image: "docker.io/valkey/valkey:9@sha256:fb8d272e529ea567b9bf1302245796f21a2672b8368ca3fcb938ac334e613c8f"
 financial_scenario_version: "0.2.2"
 market_model_version: "0.3.0"
 eurooffice_version: "v9.3.2"

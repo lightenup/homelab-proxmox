@@ -17,3 +17,7 @@ ntfy_users:
     topic: "hermes"
     password_hash: "{{ ntfy_hermes_password_hash }}"
     token: "{{ ntfy_hermes_token }}"
+  - name: "pve_backup"
+    topic: "pve-backup"
+    password_hash: "{{ ntfy_pve_backup_password_hash }}"
+    token: "{{ ntfy_pve_backup_token }}"

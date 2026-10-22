@@ -57,9 +57,12 @@ the guard test passes. For the `inventories/static` check, see tasks T008.
    → mtime under 24 h.
 6. **Decrypts** (SC-001): `age -d -i /root/.age/proxmox-backup.key <archive> | zstd -d | tar -t | head`
    → lists `proxmox/` configuration entries.
-7. **From the timer** (SC-001, SC-002): over the next 3 nights,
-   `systemctl list-timers proxmox-backup.timer` and `journalctl -u proxmox-backup.service --since -1d`
-   → each run is successful. Record the three dates.
+7. **Timer armed** (SC-002): `systemctl is-enabled proxmox-backup.timer; systemctl is-active proxmox-backup.timer; systemctl list-timers proxmox-backup.timer`
+   → `enabled`, `active`, and a NEXT time. Stopping the service during a run stops the timer as
+   well; re-run the deploy, or `systemctl start proxmox-backup.timer`, if it shows `inactive`.
+8. **Failure notification** (FR-016), once `ntfy_pve_backup_token` is in vault and ntfy is
+   deployed: `scripts/healthcheck/ntfy-acl-check.sh` passes all 35 cells, and a message published
+   with the `pve_backup` token to topic `pve-backup` arrives on the phone.
 
 ## Fix 2 — Immich database backup
 
@@ -76,7 +79,8 @@ the guard test passes. For the `inventories/static` check, see tasks T008.
 3. **One run** (SC-004): `systemctl start immich-backup.service; systemctl show immich-backup.service -p Result`
    → `success`; `ls -lt /mnt/immich/backups | head -2` shows a new `immich-backup-*.tar.gz`.
 4. **Restore drill** (SC-004), as `ci@pve` with `ANSIBLE_VAULT_PASSWORD_FILE` set (Prerequisites):
-   `cd /home/ci/homelab-proxmox/ansible && ansible-playbook -i inventories/prod/hosts.yml playbooks/restore-drill.yml --private-key ~/.ssh/id_lxc_deploy`
+   `cd /home/ci/homelab-proxmox/ansible && ansible-playbook -i inventories/prod/hosts.yml playbooks/restore-drill.yml --private-key ~/.ssh/id_lxc_deploy -e @/var/lib/homelab-proxmox/vault/group_vars/services/secrets.yml`
+   (`immich_db_password` is only in that gitignored file).
    → recap `failed=0`. The live Immich is untouched. Then `rm -f "$pwfile"`.
 
 ## Fix 3 — Container log rotation, one host at a time
@@ -121,14 +125,15 @@ for d in /var/lib/docker/containers/*/; do du -cb "$d"*-json.log* 2>/dev/null | 
 
 | Check | Result | Date / evidence |
 |-------|--------|-----------------|
-| Static checks and guard test | | |
-| PVE key present | | |
-| PVE manual run `Result=success` | | |
-| PVE archive < 24 h on NAS, decrypts (SC-001) | | |
-| PVE timer run 1 / 2 / 3 (SC-002) | | |
+| Static checks and guard test | pass | 2026-10-22; guardrails 12/12 |
+| PVE key present | pass | 2026-10-22; archive decrypts with `/root/.age/proxmox-backup.key` |
+| PVE manual run `Result=success` | pass | 2026-10-22 07:03:45; deployed with `--skip-tags prerequisites` (apt on `pve` fails on HashiCorp's repo key, unrelated). Earlier runs: 2026-10-21 aborted by the secret scan (T034), failure mail hung 10 min (T035). Scan of `/mnt/nas/homelab_ci/infra_state` as root: no hits |
+| PVE archive < 24 h on NAS, decrypts (SC-001) | pass | 2026-10-22; `proxmox-backup-20261022-070345.tar.zst.age`, lists `proxmox-config/` and `iac-artifacts/nas-state/` |
+| PVE timer armed: enabled, active, NEXT set (SC-002) | pass | 2026-10-22; enabled, active, NEXT 2026-10-23 00:02. The timer also fired the missed run at 07:03:37 (`proxmox-backup-20261022-070338`) |
+| ntfy `pve_backup` publisher: ACL check 35/35, test message received (FR-016) | **pending** | needs `ntfy_pve_backup_{token,password_hash}` in vault (owner), then an ntfy deploy |
 | Immich lab deploy (backup installed, NAS assert skipped) | | |
 | Immich timer enabled + active after pipeline deploy (SC-003) | pass | 2026-10-21; run 39625646532, timer enabled+active, NAS mount present |
-| Immich run succeeds + restore drill `failed=0` (SC-004) | **partial** | 2026-10-21; backup run `Result=success`, new archive created. Restore drill failed: `immich_db_password` undefined (pre-existing issue). |
+| Immich run succeeds + restore drill `failed=0` (SC-004) | pass | 2026-10-22; drill `failed=0` against the scheduled `immich-backup-20261022-043007.tar.gz`. Two fixes (T036): pass `secrets.yml`, and restore into the service's own database image (the drill used `pgvecto-rs` without VectorChord, so Immich v3 exited) |
 
 ### Rollout record (FR-011, SC-005, SC-007)
 
