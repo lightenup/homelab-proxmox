@@ -1,0 +1,92 @@
+---
+# Version pin sources for the currency check (spec 090).
+# One entry per pin in the three version blocks. Guard test: test_every_pin_has_a_source.
+pins:
+  # Monitoring (ansible/group_vars/monitoring/vars.yml)
+  - variable: prometheus_version
+    file: ansible/group_vars/monitoring/vars.yml
+    policy: lts
+    github: prometheus/prometheus
+    endoflife: prometheus
+  - variable: grafana_version
+    file: ansible/group_vars/monitoring/vars.yml
+    policy: latest
+    github: grafana/grafana
+    endoflife: grafana
+  - variable: telegraf_version
+    file: ansible/group_vars/monitoring/vars.yml
+    policy: latest
+    github: influxdata/telegraf
+    endoflife: telegraf
+  - variable: alertmanager_version
+    file: ansible/group_vars/monitoring/vars.yml
+    policy: latest
+    github: prometheus/alertmanager
+  - variable: blackbox_exporter_version
+    file: ansible/group_vars/monitoring/vars.yml
+    policy: latest
+    github: prometheus/blackbox_exporter
+
+  # Shared (ansible/group_vars/all/vars.yml)
+  - variable: node_exporter_version
+    file: ansible/group_vars/all/vars.yml
+    policy: latest
+    github: prometheus/node_exporter
+
+  # Services (ansible/group_vars/services/vars.yml)
+  - variable: nextcloud_version
+    file: ansible/group_vars/services/vars.yml
+    policy: support-only
+    endoflife: nextcloud
+  - variable: nextcloud_exporter_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: xperimental/nextcloud-exporter
+  - variable: immich_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: immich-app/immich
+  - variable: immich_postgres_image
+    file: ansible/group_vars/services/vars.yml
+    policy: unchecked
+    reason: digest-pinned; upgraded with Immich
+  - variable: immich_redis_image
+    file: ansible/group_vars/services/vars.yml
+    policy: unchecked
+    reason: digest-pinned; upgraded with Immich
+  - variable: financial_scenario_version
+    file: ansible/group_vars/services/vars.yml
+    policy: unchecked
+    reason: internal service; no public release feed
+  - variable: market_model_version
+    file: ansible/group_vars/services/vars.yml
+    policy: unchecked
+    reason: internal service; no public release feed
+  - variable: eurooffice_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: euro-office/documentserver
+  - variable: llm_router_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: BerriAI/litellm
+  - variable: llm_router_postgres_version
+    file: ansible/group_vars/services/vars.yml
+    policy: support-only
+    endoflife: postgresql
+  - variable: hermes_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: open-webui/open-webui
+  - variable: hermes_searxng_version
+    file: ansible/group_vars/services/vars.yml
+    policy: unchecked
+    reason: SearXNG version tracks a fork; no stable release feed
+  - variable: hermes_agent_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: NousResearch/hermes-agent
+  - variable: ntfy_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: binwiederhier/ntfy

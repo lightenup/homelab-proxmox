@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# ntfy ACL matrix check (spec 082, SC-002)
+# ntfy ACL matrix check (spec 082, SC-002; extended by spec 090)
 #
 # Asserts every cell in data-model.md § "The access matrix the SC-002 check asserts":
 #
-#   Credential ↓ / action → | read alerts | read hermes | read pve-backup | write alerts | write hermes | write pve-backup | write other
-#   ------------------------+-------------+-------------+-----------------+--------------+--------------+------------------+-------------
-#   none                    | ✗           | ✗           | ✗               | ✗            | ✗            | ✗                | ✗
-#   owner token             | ✓           | ✓           | ✓               | ✗            | ✗            | ✗                | ✗
-#   alertmanager token      | ✗           | ✗           | ✗               | ✓            | ✗            | ✗                | ✗
-#   hermes token            | ✗           | ✗           | ✗               | ✗            | ✓            | ✗                | ✗
-#   pve_backup token        | ✗           | ✗           | ✗               | ✗            | ✗            | ✓                | ✗
+#   Credential ↓ / action → | read alerts | read hermes | read pve-backup | read versions | write alerts | write hermes | write pve-backup | write versions | write other
+#   ------------------------+-------------+-------------+-----------------+---------------+--------------+--------------+------------------+----------------+-------------
+#   none                    | ✗           | ✗           | ✗               | ✗             | ✗            | ✗            | ✗                | ✗              | ✗
+#   owner token             | ✓           | ✓           | ✓               | ✓             | ✗            | ✗            | ✗                | ✗              | ✗
+#   alertmanager token      | ✗           | ✗           | ✗               | ✗             | ✓            | ✗            | ✗                | ✗              | ✗
+#   hermes token            | ✗           | ✗           | ✗               | ✗             | ✗            | ✓            | ✗                | ✗              | ✗
+#   pve_backup token        | ✗           | ✗           | ✗               | ✗             | ✗            | ✗            | ✓                | ✗              | ✗
+#   version_check token     | ✗           | ✗           | ✗               | ✗             | ✗            | ✗            | ✗                | ✓              | ✗
 #
 # ✓ = HTTP 200; ✗ = HTTP 401 or 403.
 #
@@ -20,7 +21,7 @@
 # Usage:
 #   NTFY_URL=http://192.168.1.222 \
 #   NTFY_OWNER_TOKEN=... NTFY_ALERTMANAGER_TOKEN=... NTFY_HERMES_TOKEN=... \
-#   NTFY_PVE_BACKUP_TOKEN=... \
+#   NTFY_PVE_BACKUP_TOKEN=... NTFY_VERSION_CHECK_TOKEN=... \
 #     scripts/healthcheck/ntfy-acl-check.sh
 #
 # Exits non-zero on any FAIL. Never echoes tokens.
@@ -36,13 +37,14 @@ Environment variables (all required):
   NTFY_ALERTMANAGER_TOKEN  Bearer token for the alertmanager account
   NTFY_HERMES_TOKEN        Bearer token for the hermes account
   NTFY_PVE_BACKUP_TOKEN    Bearer token for the pve_backup account (spec 089)
+  NTFY_VERSION_CHECK_TOKEN Bearer token for the version_check account (spec 090)
 
-Exit code: 0 if all 35 cells match, 1 otherwise.
+Exit code: 0 if all 49 cells match, 1 otherwise.
 EOF
   exit 0
 fi
 
-for var in NTFY_URL NTFY_OWNER_TOKEN NTFY_ALERTMANAGER_TOKEN NTFY_HERMES_TOKEN NTFY_PVE_BACKUP_TOKEN; do
+for var in NTFY_URL NTFY_OWNER_TOKEN NTFY_ALERTMANAGER_TOKEN NTFY_HERMES_TOKEN NTFY_PVE_BACKUP_TOKEN NTFY_VERSION_CHECK_TOKEN; do
   if [[ -z "${!var:-}" ]]; then
     echo "ERROR: ${var} is not set. See --help." >&2
     exit 2
@@ -94,6 +96,8 @@ do_request() {
     credential_label="alertmanager"
   elif [[ "$token" == "$NTFY_PVE_BACKUP_TOKEN" ]]; then
     credential_label="pve_backup"
+  elif [[ "$token" == "$NTFY_VERSION_CHECK_TOKEN" ]]; then
+    credential_label="version_check"
   else
     credential_label="hermes"
   fi
@@ -110,46 +114,67 @@ do_request() {
 do_request "" GET  alerts     deny
 do_request "" GET  hermes     deny
 do_request "" GET  pve-backup deny
+do_request "" GET  versions   deny
 do_request "" POST alerts     deny
 do_request "" POST hermes     deny
 do_request "" POST pve-backup deny
+do_request "" POST versions   deny
 do_request "" POST other      deny
 
 # --- Row: owner token (read *) ---
 do_request "$NTFY_OWNER_TOKEN" GET  alerts     allow
 do_request "$NTFY_OWNER_TOKEN" GET  hermes     allow
 do_request "$NTFY_OWNER_TOKEN" GET  pve-backup allow
+do_request "$NTFY_OWNER_TOKEN" GET  versions   allow
 do_request "$NTFY_OWNER_TOKEN" POST alerts     deny
 do_request "$NTFY_OWNER_TOKEN" POST hermes     deny
 do_request "$NTFY_OWNER_TOKEN" POST pve-backup deny
+do_request "$NTFY_OWNER_TOKEN" POST versions   deny
 do_request "$NTFY_OWNER_TOKEN" POST other      deny
 
 # --- Row: alertmanager token (write alerts only) ---
 do_request "$NTFY_ALERTMANAGER_TOKEN" GET  alerts     deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" GET  hermes     deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" GET  pve-backup deny
+do_request "$NTFY_ALERTMANAGER_TOKEN" GET  versions   deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST alerts     allow
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST hermes     deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST pve-backup deny
+do_request "$NTFY_ALERTMANAGER_TOKEN" POST versions   deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST other      deny
 
 # --- Row: hermes token (write hermes only) ---
 do_request "$NTFY_HERMES_TOKEN" GET  alerts     deny
 do_request "$NTFY_HERMES_TOKEN" GET  hermes     deny
 do_request "$NTFY_HERMES_TOKEN" GET  pve-backup deny
+do_request "$NTFY_HERMES_TOKEN" GET  versions   deny
 do_request "$NTFY_HERMES_TOKEN" POST alerts     deny
 do_request "$NTFY_HERMES_TOKEN" POST hermes     allow
 do_request "$NTFY_HERMES_TOKEN" POST pve-backup deny
+do_request "$NTFY_HERMES_TOKEN" POST versions   deny
 do_request "$NTFY_HERMES_TOKEN" POST other      deny
 
 # --- Row: pve_backup token (write pve-backup only) ---
 do_request "$NTFY_PVE_BACKUP_TOKEN" GET  alerts     deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" GET  hermes     deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" GET  pve-backup deny
+do_request "$NTFY_PVE_BACKUP_TOKEN" GET  versions   deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST alerts     deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST hermes     deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST pve-backup allow
+do_request "$NTFY_PVE_BACKUP_TOKEN" POST versions   deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST other      deny
+
+# --- Row: version_check token (write versions only) ---
+do_request "$NTFY_VERSION_CHECK_TOKEN" GET  alerts     deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" GET  hermes     deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" GET  pve-backup deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" GET  versions   deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST alerts     deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST hermes     deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST pve-backup deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST versions   allow
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST other      deny
 
 echo ""
 echo "=== ntfy ACL check: $((TOTAL - FAILURES))/${TOTAL} PASS, ${FAILURES} FAIL ==="
