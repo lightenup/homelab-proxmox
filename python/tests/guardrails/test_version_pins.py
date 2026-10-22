@@ -28,31 +28,31 @@ MONITORING_VARS = [
 ALL_VARS = ["node_exporter_version"]
 
 
-def _scan_yaml_for_var(repo_root: Path, var: str) -> list[Path]:
-    """Find all files under ansible/ that assign `var` (skip geerlingguy.* roles)."""
-    matches: list[Path] = []
-    ansible_dir = repo_root / "ansible"
-    pattern = re.compile(rf"^\s*{re.escape(var)}:\s")
-    for f in sorted(ansible_dir.rglob("*.yml")):
-        if "geerlingguy." in str(f.relative_to(repo_root)):
-            continue
-        for f2 in sorted(ansible_dir.rglob("*.yaml")):
-            pass
-    for f in sorted(set(ansible_dir.rglob("*.yml")) | set(ansible_dir.rglob("*.yaml"))):
-        rel = str(f.relative_to(repo_root))
-        if "geerlingguy." in rel:
-            continue
-        try:
-            lines = f.read_text().splitlines()
-        except (UnicodeDecodeError, OSError):
-            continue
-        for line in lines:
-            if line.lstrip().startswith("#"):
+_YAML_TEXT_CACHE: dict[Path, list[str]] = {}
+
+
+def _ansible_yaml_files(repo_root: Path) -> dict[Path, list[str]]:
+    """Read every YAML file under ansible/ once (skip vendored geerlingguy.* roles)."""
+    if not _YAML_TEXT_CACHE:
+        ansible_dir = repo_root / "ansible"
+        for f in sorted(set(ansible_dir.rglob("*.yml")) | set(ansible_dir.rglob("*.yaml"))):
+            if "geerlingguy." in str(f.relative_to(repo_root)):
                 continue
-            if pattern.match(line):
-                matches.append(f)
-                break
-    return matches
+            try:
+                _YAML_TEXT_CACHE[f] = f.read_text().splitlines()
+            except (UnicodeDecodeError, OSError):
+                continue
+    return _YAML_TEXT_CACHE
+
+
+def _scan_yaml_for_var(repo_root: Path, var: str) -> list[Path]:
+    """Find all files under ansible/ that assign `var`."""
+    pattern = re.compile(rf"^\s*{re.escape(var)}:\s")
+    return [
+        f
+        for f, lines in _ansible_yaml_files(repo_root).items()
+        if any(pattern.match(line) for line in lines if not line.lstrip().startswith("#"))
+    ]
 
 
 def test_monitoring_pins_assigned_once() -> None:
