@@ -65,6 +65,14 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Proxmox host/guest + storage health** — `pve` node_exporter/pve-exporter for per-VM/LXC state and
   ZFS/LVM pool health (degraded pool, failing disk); today only blackbox/self-metrics touch the PVE host. *Open; node_exporter on `pve` is
   part of [`091`](./091-backup-coverage-and-staleness.md)*
+- **Drifted monitoring role defaults** (2026-10-22, spec 090) — the non-version values in
+  `roles/monitoring_stack/defaults/main.yml` have drifted from `group_vars/monitoring/vars.yml`, e.g.
+  `monitoring_install_dir` vs `monitoring_base_path`, and `grafana_domain` (`monitoring.local` vs
+  `grafana.hus-sky.no`). Out of scope for 090 (research R-04). *Open*
+- **Exporter pins outside the currency check** (2026-10-22, spec 090) — move
+  `jellyfin_exporter_version` and `fail2ban_exporter_version` from role defaults into the
+  `# Service versions` block of `group_vars/services/vars.yml`, so the 090 currency check covers
+  them (spec 090 research R-10, out of scope there). *Open*
 
 ## Security hardening
 

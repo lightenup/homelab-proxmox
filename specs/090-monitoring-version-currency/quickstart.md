@@ -44,6 +44,22 @@ All R-01 targets confirmed as latest patch on their line:
 
 Prometheus 3.13 is still the newest LTS line (3.15 is non-LTS, eol 2026-11-06).
 
+### US4 static checks (T029–T031, 2026-10-22)
+
+- `bash scripts/ci/python-tests.sh`: 199 passed; total coverage 93%, `version_currency.py` 96%.
+- Mutation score of `version_currency.py` alone: 320 killed / 85 survived = **79.0%** (floor 41%).
+  Measured locally with mutmut 2.5.1 on Python 3.14 (2.5.1 does not run on 3.15), on a scratch copy
+  of the repo, runner limited to `python/tests/version_currency`. The PR mutation gate on `42cd558`
+  (whole package, on `pve`) passed at 42.07%.
+- Guard file `python/tests/guardrails/test_version_pins.py`: 5 passed, no `xfail` markers.
+- `actionlint .github/workflows/version-currency.yml`: clean. `act -l`: lists job `check`
+  (schedule, workflow_dispatch). `act -n`: not run, the Docker daemon (Colima) was not running
+  on the Mac.
+- Local dry run from the Mac: exit 1. Every source failed with `CERTIFICATE_VERIFY_FAILED` (CA
+  cert does not include key usage extension), which is the Zscaler TLS interception, so no
+  findings could be computed locally. The five `unchecked` pins were listed. The findings check
+  moves to the `pi-ci` dry run (§9 row 1).
+
 ## 1. Confirm target tags exist (from `pve` or the monitoring LXC)
 
 ```bash

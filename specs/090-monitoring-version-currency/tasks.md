@@ -204,7 +204,7 @@ all 8 dashboards.
     FR-001), and repeat this task with that image. If it is fixable, add a follow-up task here
     and do not mark this one done.
 
-- [ ] T012 [US1] Commit the work so far: T003–T008, plus T013 (runbook) and T018–T022 (US3) if
+- [x] T012 [US1] Commit the work so far: T003–T008, plus T013 (runbook) and T018–T022 (US3) if
   already done, and the quickstart and research edits. Do not commit `.specify/feature.json`.
   - Push the branch through the GitHub Git-Data API as described in `AGENTS.md`. `git push` is
     blocked; run the first `gh api` call in the background because of the ~2-minute cold-TLS
@@ -368,7 +368,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
 
 ### Tests for User Story 4 (write first, see them fail)
 
-- [ ] T023 [P] [US4] Create `python/tests/version_currency/test_version_currency.py`. Import from
+- [x] T023 [P] [US4] Create `python/tests/version_currency/test_version_currency.py`. Import from
   `homelab_proxmox_orchestrator.version_currency`. Fake every HTTP call by passing a fetch
   function or monkeypatching the module's single `_http_get_json(url, token)` and
   `_http_post(url, body, headers)` helpers: no network. Fix `today` by injection. Cases:
@@ -452,7 +452,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
   - `financial_scenario_version` / `market_model_version`: "own image; released by its own
     pipeline (no GitHub releases)";
   - `hermes_searxng_version`: "date-tagged image; no release source".
-- [ ] T028 [US4] Create `python/src/homelab_proxmox_orchestrator/version_currency.py`, following
+- [x] T028 [US4] Create `python/src/homelab_proxmox_orchestrator/version_currency.py`, following
   contract §1 and §4, data-model §3–§6, and research R-10 and R-11. Use only the stdlib plus
   `yaml`. Structure:
   - **HTTP helpers**: `_http_get_json(url, token=None)` and `_http_post(url, body, headers)`, each
@@ -481,7 +481,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
   - `if __name__ == "__main__": sys.exit(main())`.
 
   Fetch each GitHub repo and each endoflife product once per run. Make T023 pass.
-- [ ] T029 [US4] In `python/pytest.ini`, add `--cov=homelab_proxmox_orchestrator.version_currency`
+- [x] T029 [US4] In `python/pytest.ini`, add `--cov=homelab_proxmox_orchestrator.version_currency`
   to `addopts`. Run `bash scripts/ci/python-tests.sh` (the coverage gate is `--cov-fail-under=80`)
   and confirm the whole suite passes. If coverage of the new module pulls the total below 80%,
   add unit cases. Do not lower the threshold.
@@ -497,7 +497,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
   - If mutmut cannot run locally (it is not in the test lock), run it through
     `nightly-deeper-verification.yml` with `run_mutmut=true` on the branch, and record that
     instead.
-- [ ] T030 [US4] Create `.github/workflows/version-currency.yml` (contract §2):
+- [x] T030 [US4] Create `.github/workflows/version-currency.yml` (contract §2):
   - `name: Version currency`;
   - `on: schedule: [{cron: "0 6 * * 1"}]`, and `workflow_dispatch: inputs: dry_run: {type: boolean, default: false, description: "Print the report, do not publish"}`;
   - top-level `permissions: {contents: read}`;
@@ -559,7 +559,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
 - [ ] T034 Live, as root on `pve`, after T016 and T017 pass: `pct delsnapshot <vmid> pre-090`
   (FR-012). Record the deletion time in quickstart §4. On the monitoring LXC, remove the
   `/root/090` evidence files once their counts are in the quickstart.
-- [ ] T035 [P] Append an entry to `docs/backlog/improvement-candidates.md`: the
+- [x] T035 [P] Append an entry to `docs/backlog/improvement-candidates.md`: the
   `roles/monitoring_stack/defaults/main.yml` copies of non-version values have drifted from
   `group_vars/monitoring/vars.yml`, for example `monitoring_install_dir` vs `monitoring_base_path`,
   and `grafana_domain` (research R-04, out of scope for 090). Give the date and cite spec 090.

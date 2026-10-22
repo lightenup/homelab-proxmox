@@ -1,4 +1,4 @@
-name: Version currency check
+name: Version currency
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Print report without publishing to ntfy"
+        description: "Print the report, do not publish"
         type: boolean
         default: false
 
@@ -18,40 +18,44 @@ jobs:
     runs-on: [self-hosted]
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      - name: Validate system Python (self-hosted)
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 -c "import sys; assert sys.version_info[:2] >= (3, 11), sys.version"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies
-        run: pip install pyyaml
+        run: |
+          uv venv --python 3.11 --clear
+          uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt
+
+      - name: Read ntfy token
+        if: ${{ !inputs.dry_run }}
+        env:
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          f="$(mktemp)"
+          trap 'rm -f "$f"' EXIT
+          printf '%s' "$ANSIBLE_VAULT_PASSWORD" > "$f"
+          tok="$(.venv/bin/ansible-vault view --vault-password-file "$f" \
+            ansible/group_vars/services/vault.yml \
+            | .venv/bin/python -c 'import sys, yaml; print(yaml.safe_load(sys.stdin).get("ntfy_version_check_token") or "")')"
+          if [ -z "$tok" ]; then
+            echo "::error::ntfy_version_check_token not found in vault"
+            exit 2
+          fi
+          echo "::add-mask::$tok"
+          echo "NTFY_TOKEN=$tok" >> "$GITHUB_ENV"
 
       - name: Run version currency check
         env:
-          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PYTHONPATH: python/src
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          if [ "${DRY_RUN:-false}" = "true" ]; then
-            python -m homelab_proxmox_orchestrator.version_currency --dry-run
-            exit 0
-          fi
-          umask 077
-          pwfile="$(mktemp)"
-          trap 'rm -f "$pwfile"' EXIT
-          printf '%s' "$ANSIBLE_VAULT_PASSWORD" > "$pwfile"
-          NTFY_TOKEN="$(ansible-vault view --vault-password-file "$pwfile" \
-            ansible/group_vars/services/vault.yml \
-            | python -c 'import sys, yaml; print(yaml.safe_load(sys.stdin).get("ntfy_version_check_token", ""))')"
-          if [ -z "$NTFY_TOKEN" ]; then
-            echo "ntfy_version_check_token not found in vault" >&2
-            exit 2
-          fi
-          echo "::add-mask::$NTFY_TOKEN"
-          export NTFY_TOKEN
-          python -m homelab_proxmox_orchestrator.version_currency
+        run: .venv/bin/python -m homelab_proxmox_orchestrator.version_currency ${{ inputs.dry_run && '--dry-run' || '' }}
