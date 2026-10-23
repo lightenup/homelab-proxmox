@@ -1,0 +1,26 @@
+#!/bin/bash
+# Record that backup <name> just succeeded, for node_exporter's textfile collector.
+# Usage: backup-success-metric <name>
+set -euo pipefail
+
+NAME="${1:-}"
+if ! [[ "$NAME" =~ ^[a-z-]+$ ]]; then
+    echo "usage: backup-success-metric <name> (name must match ^[a-z-]+$)" >&2
+    exit 2
+fi
+
+DIR=/var/lib/node_exporter/textfile_collector
+if [ ! -d "$DIR" ]; then
+    echo "textfile directory $DIR is missing" >&2
+    exit 1
+fi
+
+TMP="$DIR/backup_${NAME}.prom.tmp"
+cat > "$TMP" <<METRICS
+# HELP backup_last_success_timestamp_seconds Unix time of the last successful backup run.
+# TYPE backup_last_success_timestamp_seconds gauge
+backup_last_success_timestamp_seconds{backup="${NAME}"} $(date +%s)
+METRICS
+chmod 0644 "$TMP"
+# Atomic rename so node_exporter never reads a half-written file.
+mv -f "$TMP" "$DIR/backup_${NAME}.prom"

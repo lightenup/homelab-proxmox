@@ -43,8 +43,8 @@ pct snapshot <vmid> pre-<change> --description "<change>: before upgrade"
 pct listsnapshot <vmid>
 ```
 
-The in-guest `backup-monitoring.sh` is not relied on for the rollback point: the monitoring
-backup was broken until spec 091. The snapshot covers the LXC root disk, including the Docker
+There is no in-guest backup of the monitoring stack (removed by spec 091; it had never
+succeeded). The snapshot covers the LXC root disk, including the Docker
 volumes `prometheus_data`, `grafana_data` and `alertmanager_data`.
 
 ### 2. Update Version Pins
@@ -252,5 +252,4 @@ ansible-playbook playbooks/monitoring.yml --tags grafana --ask-vault-pass
 ## See Also
 
 - [Restore Procedure](runbook-restore.md)
-- [Backup Script](../../../ansible/roles/monitoring_stack/templates/backup-monitoring.sh.j2)
 - [Synology SNMP Setup](synology-snmp-setup.md)

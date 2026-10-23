@@ -1,0 +1,41 @@
+# Financial-scenario snapshot. Sourced into backup.sh.j2; defines snapshot() and
+# snapshot_cleanup(). The destination check, archive, success record and pruning are shared.
+INSTALL_DIR="{{ financial_scenario_install_dir }}"
+API_CONTAINER="financial_scenario_api"
+
+snapshot_cleanup() {
+    # Remove any leftover snapshot sidecar from /app/data (idempotent)
+    docker exec "$API_CONTAINER" rm -f /app/data/.backup-snapshot.db 2>/dev/null || true
+}
+
+snapshot() {
+# Check whether the scenario store exists yet (fresh deploy with no saves → nothing to back up).
+DB_EXISTS=$(docker exec "$API_CONTAINER" python -c \
+    "import os; print('yes' if os.path.exists('/app/data/scenarios.db') else 'no')" 2>/dev/null || echo "no")
+
+if [ "$DB_EXISTS" != "yes" ]; then
+    echo "No scenarios.db found in container (fresh deploy, no saves yet). Nothing to back up."
+    exit 0
+fi
+
+# 1. Consistent online backup — NOT a raw cp (WAL-mode SQLite can be torn mid-copy).
+#    Uses sqlite3.Connection.backup(), which is atomic regardless of concurrent writes.
+echo "Taking consistent online backup of scenarios.db..."
+docker exec "$API_CONTAINER" python -c "
+import sqlite3, shutil
+src = sqlite3.connect('file:/app/data/scenarios.db?mode=ro', uri=True)
+dst = sqlite3.connect('/app/data/.backup-snapshot.db')
+src.backup(dst)
+dst.close()
+src.close()
+"
+
+# 2. Copy snapshot out of the container and remove it from /app/data.
+docker cp "${API_CONTAINER}:/app/data/.backup-snapshot.db" "$WORK_DIR/scenarios.db"
+docker exec "$API_CONTAINER" rm -f /app/data/.backup-snapshot.db
+
+# 3. Include the rendered compose file for reference.
+if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+    cp "$INSTALL_DIR/docker-compose.yml" "$WORK_DIR/"
+fi
+}

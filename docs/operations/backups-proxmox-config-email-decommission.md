@@ -6,7 +6,7 @@
 
 ## Overview
 
-This runbook details the procedure for managing Proxmox host backup email notifications. Backup monitoring is handled by Prometheus/Alertmanager via the `ServiceDown` alert on the `node-exporter` scrape target. Email notifications are an optional additional channel.
+This runbook details the procedure for managing Proxmox host backup email notifications. Backup monitoring is handled by Prometheus/Alertmanager: `BackupStale{backup="proxmox"}` fires 36 hours after the last verified run, or if none was ever recorded. Email notifications are an optional additional channel.
 
 ## State Machine
 
@@ -53,7 +53,7 @@ Ensure that Prometheus/Alertmanager is monitoring backup infrastructure:
 
 1.  Open Prometheus at `http://192.168.1.214:9090/targets`.
 2.  Verify the `node-exporter` job shows the Proxmox host target as `UP`.
-3.  Check Alertmanager at `http://192.168.1.214:9093` — no active `ServiceDown` alerts.
+3.  Check Alertmanager at `http://192.168.1.214:9093` — no active `BackupStale` alerts.
 
 ### 2. Enable Email (Optional)
 

@@ -51,6 +51,13 @@
     mode: '0644'
   notify: Reload prometheus
 
+- name: Deploy backup staleness alert rule
+  ansible.builtin.template:
+    src: backup_alerts.yml.j2
+    dest: "{{ prometheus_config_path }}/alerts/backup_alerts.yml"
+    mode: '0644'
+  notify: Reload prometheus
+
 - name: Deploy Telegraf configuration
   ansible.builtin.template:
     src: telegraf.conf.j2

@@ -1,5 +1,10 @@
 # Monitoring Stack Restore Procedure
 
+> **Superseded (spec 091).** The monitoring host is rebuilt from configuration and is no longer
+> backed up; the in-guest backup script and cron job were removed (they had never succeeded).
+> To recover, re-run the monitoring playbook. The procedure below applies only to a tarball
+> that already exists.
+
 **Feature**: 017-synology-metrics
 **Purpose**: Restore Prometheus TSDB and Grafana dashboards from backup
 **Requirement**: FR-027 (Disaster recovery procedure)
@@ -163,6 +168,5 @@ rm -rf /tmp/restore
 
 ## See Also
 
-- [Backup Script](../../../ansible/roles/monitoring_stack/templates/backup-monitoring.sh.j2)
 - [Upgrade Procedure](runbook-upgrades.md)
 - [Synology SNMP Setup](synology-snmp-setup.md)

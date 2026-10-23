@@ -337,60 +337,10 @@ Open in browser: http://192.168.1.214:9093
 
 Follow [Alert Testing Procedure](runbook-alert-testing.md) to trigger a test alert and verify email delivery.
 
-## Step 7: Configure Backup Destination (Optional)
+## Step 7: Backups
 
-**Time**: ~3 minutes
-
-If you want automated backups to NAS:
-**Automated:** The `nfs_mount` Ansible role handles this automatically during deployment.
-
-**Manual mount (for troubleshooting):**
-
-
-### 7.1: Create NFS Share on Synology
-
-1. DSM → Control Panel → Shared Folder
-2. Create folder: `backups`
-3. DSM → Control Panel → File Services → NFS
-4. Add NFS rule:
-   - Hostname: `192.168.1.214`
-   - Privilege: Read/Write
-   - Squash: Map all to admin
-
-### 7.2: Mount NFS on Monitoring LXC
-
-```bash
-ssh root@192.168.1.214
-
-# Install NFS client
-apt-get install nfs-common
-
-# Create mount point
-mkdir -p /mnt/nas/backups/monitoring
-
-# Test mount
-mount -t nfs 192.168.1.109:/volume1/backups /mnt/nas/backups
-
-# Verify mount
-df -h | grep /mnt/nas
-
-# Add to /etc/fstab for persistence
-echo "192.168.1.109:/volume1/backups /mnt/nas/backups nfs defaults,_netdev 0 0" >> /etc/fstab
-```
-
-### 7.3: Verify Backup Script
-
-```bash
-# Manually trigger backup (don't wait for 3 AM cron)
-/usr/local/sbin/backup-monitoring.sh
-
-# Check backup created
-ls -lh /mnt/nas/backups/monitoring/
-
-# Expected: monitoring_backup_YYYYMMDD_HHMMSS.tar.gz (several MB)
-```
-
-Backups will now run daily at 3:00 AM with 30-day retention.
+The monitoring host is rebuilt from configuration and is not backed up (see
+[architecture](../../architecture.md)). Prometheus keeps 15 days, and dashboards and rules are provisioned.
 
 ## Troubleshooting
 
@@ -460,10 +410,6 @@ Backups will now run daily at 3:00 AM with 30-day retention.
   - Validates Synology target scraping
   - Color-coded pass/fail output
 
-- **`ansible/roles/nfs_mount`**: NFS mount automation
-  - Installs NFS client
-  - Configures /etc/fstab
-  - Validates mount and write permissions
   - Idempotent and fully automated
 ## Next Steps
 
@@ -505,9 +451,6 @@ ssh root@192.168.1.214 'cd /opt/monitoring && docker-compose logs -f'
 
 # Run smoke test
 ./scripts/monitoring/smoke-test.sh
-
-# Manual backup
-ssh root@192.168.1.214 '/usr/local/sbin/backup-monitoring.sh'
 ```
 
 ## See Also

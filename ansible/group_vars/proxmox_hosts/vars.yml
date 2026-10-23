@@ -58,3 +58,7 @@ proxmox_backup_notify_on_success: false
 proxmox_backup_ntfy_url: "https://ntfy.{{ hostvars['ntfy'].caddy_base_domain }}"
 proxmox_backup_ntfy_topic: "pve-backup"
 proxmox_backup_ntfy_token: "{{ hostvars['ntfy']['ntfy_pve_backup_token'] | default('') }}"
+
+# node_exporter on the Proxmox host (091). Bare metal, so hwmon, thermal_zone, nvme, mdadm and
+# powersupplyclass stay on; only collectors for hardware this host does not have are off.
+node_exporter_disabled_collectors: [infiniband, fibrechannel, wifi]

@@ -29,7 +29,7 @@ a WAL-mode database can be torn mid-copy.
 
 ## Automated backup
 
-A systemd timer on the LXC, daily at `04:45` (`hermes_backup_schedule`), writing to the
+A systemd timer on the LXC, daily at `04:45` (`service_backups.hermes.schedule`, installed by the `service_backup` role), writing to the
 Synology via the host NFS mount + bind mount (`/mnt/hermes/backups`). GFS retention: 7 daily,
 4 weekly, 6 monthly.
 
@@ -38,9 +38,10 @@ systemctl list-timers hermes-backup.timer      # when it next runs, when it last
 journalctl -u hermes-backup.service -n 30      # what happened last time
 ```
 
-Staleness is alerted: `HermesBackupStale` (warning) fires when no successful run has been
-recorded for 36 hours. The metric comes from the backup script itself via node_exporter's
-textfile collector, so a timer that silently stops firing is visible.
+Staleness is alerted: `BackupStale{backup="hermes"}` (warning) fires when no successful run has
+been recorded for 36 hours, or none ever. The series `backup_last_success_timestamp_seconds{backup="hermes"}`
+comes from the backup script itself via node_exporter's textfile collector, so a timer that
+silently stops firing is visible.
 
 ### Manual backup
 

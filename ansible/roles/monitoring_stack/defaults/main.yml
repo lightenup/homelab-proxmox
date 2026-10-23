@@ -31,12 +31,6 @@ alertmanager_group_wait: "30s"
 alertmanager_group_interval: "5m"
 alertmanager_repeat_interval: "4h"
 
-# Backup configuration
-backup_retention_days: 30
-backup_schedule_hour: 3
-backup_schedule_minute: 0
-backup_path: "/mnt/nas/backups/monitoring"
-
 # Docker compose paths
 monitoring_install_dir: "/opt/monitoring"
 compose_file_path: "{{ monitoring_install_dir }}/docker-compose.yml"

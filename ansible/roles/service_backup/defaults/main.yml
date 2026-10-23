@@ -1,0 +1,6 @@
+---
+# One place for every service backup's retention (GFS: keep if age < days; or Sunday and
+# age < weeks * 7; or the 1st of the month and age < months * 30).
+service_backup_retention_days: 7
+service_backup_retention_weeks: 4
+service_backup_retention_months: 6

@@ -44,19 +44,3 @@ monitoring_contract:
       description: >-
         The Hermes agent scheduler has not run its heartbeat for more than an hour. Scheduled
         jobs are not running; this is a stopped scheduler, not a job that found nothing to report.
-    # Backup staleness (US-4, data-model.md § Workspace state). The metric comes from
-    # backup_hermes.sh via node_exporter's textfile collector, the same mechanism
-    # llm-router's canary uses — no scrape_targets entry needed, it rides the existing
-    # node-exporter job. 129600s = 36h: 1.5x the daily schedule, enough slack for one missed
-    # run's retry window without also missing a genuinely stopped timer.
-    - alert: HermesBackupStale
-      expr: |
-        time() - hermes_backup_last_success_timestamp_seconds > 129600
-      for: "0m"
-      severity: warning
-      summary: !unsafe "hermes: backup has not succeeded in over 36 hours"
-      description: !unsafe >-
-        A backup that stopped is invisible until a restore is attempted, which is the worst
-        moment to discover it (contracts/monitoring.md). Check
-        `systemctl status hermes-backup.timer` and `journalctl -u hermes-backup.service` on
-        the hermes host.

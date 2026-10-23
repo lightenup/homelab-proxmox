@@ -12,4 +12,5 @@
         fail_msg: "Invalid healthcheck configuration. See docs/operations/golden-paths-service-lifecycle.md"
   roles:
     - proxmox_host
+    - node_exporter
     - tailscale_host

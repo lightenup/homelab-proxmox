@@ -2,6 +2,8 @@
 - name: Immich Restore Drill
   hosts: immich
   become: true
+  vars_files:
+    - ../roles/immich/defaults/main.yml
   vars:
     restore_dir: "/tmp/immich-restore-drill"
 
@@ -18,7 +20,7 @@
           (docs/runbooks/immich-backup-restore.md).
 
     - name: Find latest backup
-      ansible.builtin.shell: "ls -t {{ immich_backup_path }}/immich-backup-*.tar.gz | head -n 1"
+      ansible.builtin.shell: "ls -t {{ service_backups['immich'].dir }}/immich-backup-*.tar.gz | head -n 1"
       register: latest_backup_cmd
       changed_when: false
       failed_when: latest_backup_cmd.stdout == ""
@@ -56,11 +58,13 @@
       ansible.builtin.set_fact:
         extracted_folder: "{{ restore_dir }}/{{ backup_basename }}"
 
-    - name: Copy .env from backup to restore root
-      ansible.builtin.copy:
-        src: "{{ extracted_folder }}/.env"
+    # The archive carries no .env (it holds the database password); render it from the
+    # same template the Immich deploy uses.
+    - name: Render .env into the restore root
+      ansible.builtin.template:
+        src: ../roles/immich/templates/.env.j2
         dest: "{{ restore_dir }}/.env"
-        remote_src: true
+        mode: '0600'
 
     - name: Create mock upload directories
       ansible.builtin.file:
@@ -90,7 +94,7 @@
 
     - name: Deploy restore docker-compose
       ansible.builtin.template:
-        src: ../roles/immich_backup/templates/docker-compose.restore.yml.j2
+        src: ../roles/service_backup/templates/restore/immich-compose.yml.j2
         dest: "{{ restore_dir }}/docker-compose.restore.yml"
 
     - name: Restore Drill Block

@@ -33,7 +33,10 @@ def test_pve_backup_unit_sandbox() -> None:
         if line.strip().startswith("ReadWritePaths=")
     ]
     assert len(rw_lines) == 1, f"Expected exactly one ReadWritePaths= line, found {len(rw_lines)}"
-    expected = "ReadWritePaths={{ proxmox_backup_staging_base }} {{ proxmox_backup_nas_mount_point }} /run/lock"
+    expected = (
+        "ReadWritePaths={{ proxmox_backup_staging_base }} {{ proxmox_backup_nas_mount_point }} /run/lock "
+        "{{ node_exporter_textfile_directory | default('/var/lib/node_exporter/textfile_collector') }}"
+    )
     assert rw_lines[0].strip() == expected, (
         f"ReadWritePaths must be exactly:\n  {expected}\n  got:\n  {rw_lines[0].strip()}"
     )
@@ -67,7 +70,7 @@ def test_pve_backup_doc_states_ci_limitation() -> None:
 
 
 def test_immich_playbook_applies_backup_role() -> None:
-    """FR-004: immich.yml must apply immich_backup after immich."""
+    """FR-004: immich.yml must apply service_backup (immich) after immich."""
     repo_root = _find_repo_root(Path(__file__).resolve())
     playbook = yaml.safe_load(
         (repo_root / "ansible/playbooks/immich.yml").read_text()
@@ -81,28 +84,14 @@ def test_immich_playbook_applies_backup_role() -> None:
 
     assert target_play is not None, "Play 'Configure Immich' not found in immich.yml"
     roles = target_play.get("roles", [])
-    assert "immich" in roles, "immich role missing"
-    assert "immich_backup" in roles, "immich_backup role missing"
-    assert roles.index("immich_backup") > roles.index("immich"), (
-        "immich_backup must come after immich in the roles list"
-    )
-
-
-def test_immich_backup_role_asserts_nas_mount() -> None:
-    """Spec edge case, research R5: first task in immich_backup must assert NAS mount."""
-    repo_root = _find_repo_root(Path(__file__).resolve())
-    tasks_file = (repo_root / "ansible/roles/immich_backup/tasks/main.yml").read_text()
-    tasks = yaml.safe_load(tasks_file)
-
-    assert isinstance(tasks, list) and len(tasks) > 0, "immich_backup/tasks/main.yml must have tasks"
-    first = tasks[0]
-    assert first.get("ansible.builtin.assert") is not None, (
-        f"First task must use ansible.builtin.assert, got: {list(first.keys())}"
-    )
-    when = first.get("when", "")
-    assert "immich_require_nas_mount" in when, (
-        f"First task 'when' must mention immich_require_nas_mount, got: {when}"
-    )
+    names = [r if isinstance(r, str) else r.get("role") for r in roles]
+    assert "immich" in names, "immich role missing"
+    backup = [
+        i for i, r in enumerate(roles)
+        if isinstance(r, dict) and r.get("role") == "service_backup" and r.get("service_backup_name") == "immich"
+    ]
+    assert backup, "service_backup role for immich missing"
+    assert backup[0] > names.index("immich"), "service_backup must come after immich in the roles list"
 
 
 def test_standalone_immich_backup_playbook_removed() -> None:
@@ -209,7 +198,7 @@ def test_immich_restore_drill_uses_the_service_images() -> None:
     """Spec 089 T036: the drill restores into the same database and cache images as the service."""
     repo_root = _find_repo_root(Path(__file__).resolve())
     service = (repo_root / "ansible/roles/immich/templates/docker-compose.yml.j2").read_text()
-    restore = (repo_root / "ansible/roles/immich_backup/templates/docker-compose.restore.yml.j2").read_text()
+    restore = (repo_root / "ansible/roles/service_backup/templates/restore/immich-compose.yml.j2").read_text()
     for var in ("immich_postgres_image", "immich_redis_image"):
         assert f"image: {{{{ {var} }}}}" in service, f"service compose must use {var}"
         assert f"image: {{{{ {var} }}}}" in restore, f"restore compose must use {var}"

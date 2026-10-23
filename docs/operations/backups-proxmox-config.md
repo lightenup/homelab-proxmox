@@ -239,7 +239,7 @@ showmount -e 192.168.1.109
 **Key Rotation**:
 - Run `./scripts/generate_backup_keys.sh` again (will require deleting old key file first)
 - Update Ansible variables
-- Redeploy: `ansible-playbook playbooks/site.yml --tags backup`
+- Redeploy: `task ansible:backup`
 
 ---
 
@@ -249,12 +249,19 @@ showmount -e 192.168.1.109
 
 ### Deploy Backup System
 
+`host_proxmox.yml` also installs node_exporter on the host (the backup's success record is read
+through it). Both playbooks are operator-only, for the same reason: they need root SSH to `pve`
+and `ansible/.vault-pass.txt`.
+
 ```bash
 # From repo root
-cd /Users/Andreas.Jacobsen/Development/private/homelab-proxmox/ansible
+cd ansible
+
+# Install node_exporter and the success-record writer on the Proxmox host
+ansible-playbook -i inventories/prod/hosts.yml playbooks/host_proxmox.yml --vault-password-file .vault-pass.txt
 
 # Deploy backup role to Proxmox host
-ansible-playbook playbooks/site.yml --tags backup
+task ansible:backup
 
 # Verify deployment
 ssh root@192.168.1.112 "ls -lh /usr/local/sbin/proxmox-config-backup /etc/proxmox-backup.conf"
@@ -376,10 +383,14 @@ Deployed by Ansible, sources variables from group_vars. Contains:
 
 ### Prometheus/Alertmanager (Primary)
 
-Backup infrastructure is monitored via the `node-exporter` scrape target on the Proxmox host. The `ServiceDown` alert fires when the host is unreachable for more than 2 minutes.
+The Proxmox host is scraped by the `node-exporter` job. After each verified run the backup script
+writes `backup_last_success_timestamp_seconds{backup="proxmox"}` through
+`/usr/local/bin/backup-success-metric`. `BackupStale{backup="proxmox"}` fires 36 hours after the last
+verified run, or if none was ever recorded.
 
 - **Prometheus targets**: `http://192.168.1.214:9090/targets` — verify the Proxmox host shows `UP`.
-- **Alertmanager**: `http://192.168.1.214:9093` — check for active `ServiceDown` alerts.
+- **Alertmanager**: `http://192.168.1.214:9093` — check for active `BackupStale` alerts.
+- **On the host**: `cat /var/lib/node_exporter/textfile_collector/backup_proxmox.prom`
 
 ### Backup Success/Failure Logs
 
@@ -494,7 +505,7 @@ proxmox_hosts:
       ansible_user: root
 
 # Re-run deployment
-ansible-playbook playbooks/site.yml --tags backup
+task ansible:backup
 ```
 
 ---

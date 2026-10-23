@@ -23,7 +23,7 @@
 
   tasks:
     - name: Find the latest backup
-      ansible.builtin.shell: "ls -t {{ hermes_backup_path }}/hermes-backup-*.tar.gz | head -n 1"
+      ansible.builtin.shell: "ls -t {{ service_backups['hermes'].dir }}/hermes-backup-*.tar.gz | head -n 1"
       register: hermes_latest_backup_cmd
       changed_when: false
       failed_when: hermes_latest_backup_cmd.stdout == ""
@@ -62,7 +62,7 @@
 
     - name: Deploy the restore-drill compose file
       ansible.builtin.template:
-        src: ../roles/hermes_backup/templates/docker-compose.restore.yml.j2
+        src: ../roles/service_backup/templates/restore/hermes-compose.yml.j2
         dest: "{{ hermes_restore_dir }}/docker-compose.restore.yml"
         mode: '0640'
 

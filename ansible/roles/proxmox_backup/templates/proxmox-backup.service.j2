@@ -20,7 +20,7 @@ PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths={{ proxmox_backup_staging_base }} {{ proxmox_backup_nas_mount_point }} /run/lock
+ReadWritePaths={{ proxmox_backup_staging_base }} {{ proxmox_backup_nas_mount_point }} /run/lock {{ node_exporter_textfile_directory | default('/var/lib/node_exporter/textfile_collector') }}
 
 # Logging
 StandardOutput=journal

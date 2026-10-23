@@ -1,0 +1,17 @@
+# Immich snapshot. Sourced into backup.sh.j2; defines snapshot(). The archive carries the
+# database dump and the compose file only. It does not carry the rendered environment file,
+# which holds the database password: a restore renders it again from the Immich role.
+INSTALL_DIR="{{ immich_install_dir }}"
+CONTAINER_NAME="{{ immich_db_container_name }}"
+
+snapshot() {
+echo "Starting database dump..."
+docker exec "$CONTAINER_NAME" pg_dump -U postgres immich > "$WORK_DIR/dump.sql"
+
+echo "Backing up configuration..."
+if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+    cp "$INSTALL_DIR/docker-compose.yml" "$WORK_DIR/"
+else
+    echo "Warning: docker-compose.yml not found at $INSTALL_DIR"
+fi
+}

@@ -16,7 +16,7 @@
 
 # Single bind-mounted volume, matching the upstream image's expectation of one DATA_DIR
 # (/app/backend/data): SQLite, uploaded documents and the vector index all live under it
-# (data-model.md § Workspace state), which is what makes hermes_backup's one bind-mount
+# (data-model.md § Workspace state), which is what makes the service_backup role's one bind-mount
 # sufficient for all three.
 - name: Ensure data directory exists
   ansible.builtin.file:

@@ -55,20 +55,6 @@ pushover_enabled: true
 # ntfy_alertmanager_token → group_vars/services/vault.yml
 ntfy_enabled: true
 
-# Backup configuration
-backup_retention_days: 30
-backup_schedule_hour: 3
-backup_schedule_minute: 0
-backup_path: "/mnt/nas/backups/monitoring"
-
-# NFS mount configuration
-monitoring_nfs_enabled: false  # Disable until NFS share is configured on Synology
-nfs_server: "{{ synology_nas_ip }}"
-nfs_export_path: "/volume1/backups"
-nfs_mount_point: "/mnt/nas/backups"
-nfs_mount_options: "defaults,_netdev,rw,hard,intr,timeo=600,retrans=2"
-backup_subdir: "monitoring"
-
 # Docker compose paths
 monitoring_base_path: "/opt/monitoring"
 compose_file_path: "{{ monitoring_base_path }}/docker-compose.yml"

@@ -23,6 +23,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-25
 - agent data on the LXC's local disk under `{{ hermes_data_dir }}/agent`. It holds SQLite (083-hermes-agent-runtime)
 - Ansible, Jinja2 systemd unit template, Bash + `geerlingguy.docker` (`docker_daemon_options`), `community.docker.docker_compose_v2` (089-backup-log-rotation-fixes)
 - Synology NAS over NFS: `/mnt/nas-backup` on `pve`, `/mnt/immich` bind mount on `immich` (089-backup-log-rotation-fixes)
+- YAML (Ansible 2.x), Jinja2, Bash, Prometheus rule YAML; HCL only in + existing `node_exporter` role (1.12.1 pin), `monitoring_stack` (Prometheus (091-backup-coverage-staleness)
+- Synology NAS over NFS, bind-mounted into each LXC. One new share, `homelab_jellyfin`. (091-backup-coverage-staleness)
 
 - HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy) + `telmate/proxmox` Terraform provider, `lxc_service` Terraform module, `geerlingguy.docker` Ansible role, `community.docker.docker_compose_v2` Ansible module (044-transcriber-proxmox-deploy)
 
@@ -42,9 +44,9 @@ tests/
 HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy): Follow standard conventions
 
 ## Recent Changes
+- 091-backup-coverage-staleness: Added YAML (Ansible 2.x), Jinja2, Bash, Prometheus rule YAML; HCL only in + existing `node_exporter` role (1.12.1 pin), `monitoring_stack` (Prometheus
 - 089-backup-log-rotation-fixes: PVE backup unit sandbox fix, immich_backup wired into immich.yml, Docker json-file log rotation via `docker_daemon_options`
 - 083-hermes-agent-runtime: Added YAML (Ansible 2.x), Jinja2, Bash; HCL only if LXC memory must grow. No
-- 082-ntfy-push-service: Added HCL (Terraform, `telmate/proxmox`), YAML (Ansible 2.x), Jinja2, Bash, Go + `modules/lxc_service`; `geerlingguy.docker` +
 
 
 <!-- MANUAL ADDITIONS START -->
