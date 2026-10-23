@@ -48,7 +48,7 @@ scrape_configs:
     scrape_interval: {{ prometheus_scrape_interval }}
     static_configs:
       - targets:
-{% for host in groups['services'] | default([]) %}
+{% for host in groups['services'] | default([]) + (groups['proxmox_hosts'] | default([]) if (deploy_environment | default('prod')) != 'lab' else []) %}
 {% if (hostvars[host].monitoring_contract | default({})).enabled | default(true) %}
           - '{{ hostvars[host].ansible_host }}:{{ node_exporter_port | default(9100) }}'
 {% endif %}

@@ -394,14 +394,6 @@ hermes_mcp_servers:
 # published to the LAN. Reached by Hermes over the compose network only.
 hermes_searxng_install_dir: "{{ hermes_install_dir }}/searxng"
 
-# Backup (US-4, data-model.md § Workspace state). Destination is the in-container path of
-# the host-NFS bind-mount, the same pattern as financial-scenario (see
-# service_mountpoints.hermes in the environment tfvars and proxmox_mounts).
-hermes_backup_path: "/mnt/hermes/backups"
-hermes_backup_retention_days: 7
-hermes_backup_retention_weeks: 4
-hermes_backup_retention_months: 6
-hermes_backup_schedule: "*-*-* 04:45:00"
 # Port for the non-destructive restore drill's throwaway instance
 # (playbooks/hermes-restore-drill.yml), mirroring immich_restore_test_port. Never published
 # through the reverse proxy — it exists only for the duration of a drill.
@@ -418,16 +410,6 @@ ntfy_metrics_port: 9090
 financial_scenario_ip: "192.168.1.217"
 financial_scenario_gui_port: 3000
 
-# Financial Scenario Backup Configuration
-# Destination is the in-container path of the host-NFS bind-mount (see
-# service_mountpoints.financial-scenario in the environment tfvars and the
-# /mnt/nas/homelab_financial_scenario host mount in the proxmox_mounts role).
-financial_scenario_backup_path: "/mnt/financial-scenario/backups"
-financial_scenario_backup_retention_days: 7
-financial_scenario_backup_retention_weeks: 4
-financial_scenario_backup_retention_months: 6
-financial_scenario_backup_schedule: "*-*-* 04:15:00"
-
 # Immich Configuration
 immich_vmid: 101
 immich_ip: "192.168.1.213"
@@ -439,12 +421,7 @@ immich_external_library_mounts:
     container_path: "/mnt/immich-external/photo"
     read_only: true
 
-# Immich Backup Configuration
-immich_backup_path: "/mnt/immich/backups"
-immich_backup_retention_days: 7
-immich_backup_retention_weeks: 4
-immich_backup_retention_months: 6
-immich_backup_schedule: "*-*-* 04:30:00"
+# Immich database container, used by the immich backup snapshot (service_backup)
 immich_db_container_name: "immich_postgres"
 immich_restore_test_port: 2284
 

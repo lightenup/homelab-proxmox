@@ -96,52 +96,6 @@ ssh root@192.168.1.214 '/opt/monitoring/smoke-test.sh'
 
 ## Ansible Roles
 
-### nfs_mount Role
-
-**Location:** `ansible/roles/nfs_mount/`
-
-**Purpose:** Automate NFS client setup and mount configuration.
-
-**What It Automates:**
-- Install `nfs-common` package
-- Create mount point directory
-- Verify NFS export is available (`showmount -e`)
-- Configure `/etc/fstab` entry
-- Mount NFS share
-- Validate mount is active
-- Test write permissions
-- Create backup subdirectory
-
-**Usage:**
-```yaml
-# In playbook or role
-- name: Configure NFS backup mount
-  ansible.builtin.include_role:
-    name: nfs_mount
-  when: monitoring_nfs_enabled | default(true)
-```
-
-**Configuration (group_vars/monitoring/vars.yml):**
-```yaml
-monitoring_nfs_enabled: true
-nfs_server: "192.168.1.109"
-nfs_export_path: "/volume1/backups"
-nfs_mount_point: "/mnt/nas/backups"
-nfs_mount_options: "defaults,_netdev,rw,hard,intr,timeo=600,retrans=2"
-backup_subdir: "monitoring"
-```
-
-**Idempotency:**
-- Re-running is safe - only applies changes if needed
-- Uses `ansible.posix.mount` module for /etc/fstab management
-
-**Verification:**
-- Tests mount with `mountpoint -q`
-- Tests write with temporary file creation
-- Fails if export doesn't exist or mount fails
-
----
-
 ## Automation Benefits
 
 **Before (Manual Steps):**

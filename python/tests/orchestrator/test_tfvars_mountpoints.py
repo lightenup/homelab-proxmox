@@ -134,7 +134,10 @@ def test_behavioral_equivalence_jellyfin():
     text = PROD_TFVARS_EXAMPLE.read_text(encoding="utf-8")
     result = parse_service_host_path_mounts(text, "jellyfin")
 
-    assert result == [{"mp": "/media/video", "volume": "/mnt/nas/video", "readonly": True}]
+    assert result == [
+        {"mp": "/media/video", "volume": "/mnt/nas/video", "readonly": True},
+        {"mp": "/mnt/jellyfin/backups", "volume": "/mnt/nas/homelab_jellyfin", "readonly": False},
+    ]
 
     pct_arg = format_pct_set_arg(result[0])
     assert pct_arg == "/mnt/nas/video,mp=/media/video,ro=1"

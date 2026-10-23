@@ -536,7 +536,11 @@ main() {
   
   # Step 7: Verify backup integrity
   verify_backup
-  
+
+  # Step 8: Record the verified success for BackupStale (091). Under set -e, a failed
+  # write fails the run.
+  /usr/local/bin/backup-success-metric proxmox
+
   log_info "Backup process complete"
 }
 

@@ -11,4 +11,6 @@
   roles:
     - geerlingguy.docker
     - hermes
-    - hermes_backup
+    - role: service_backup
+      service_backup_name: hermes
+      when: (deploy_environment | default('prod')) != 'lab'

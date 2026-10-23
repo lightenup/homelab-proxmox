@@ -9,6 +9,9 @@ Documentation=file:///usr/local/share/doc/proxmox-backup/README.md
 Requires=proxmox-backup.service
 
 [Timer]
+{% if proxmox_backup_time is defined %}
+OnCalendar=*-*-* {{ proxmox_backup_time }}:00
+{% else %}
 {% if proxmox_backup_schedule == "daily" %}
 OnCalendar=daily
 {% elif proxmox_backup_schedule == "weekly" %}
@@ -18,8 +21,6 @@ OnCalendar=hourly
 {% else %}
 OnCalendar={{ proxmox_backup_schedule }}
 {% endif %}
-{% if proxmox_backup_time is defined %}
-OnCalendar=*-*-* {{ proxmox_backup_time }}:00
 {% endif %}
 Persistent=true
 RandomizedDelaySec=300

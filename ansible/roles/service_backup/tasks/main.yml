@@ -1,0 +1,113 @@
+---
+# One backup role for every service (091). Which service is chosen by service_backup_name,
+# a key of service_backups (group_vars/all/vars.yml). The PVE host mounts the Synology share
+# and pve-service-deploy bind-mounts it into the LXC (service_mountpoints in the environment
+# tfvars); an unprivileged LXC cannot issue the NFS mount syscall itself. This role only
+# verifies the destination is that mount and installs the script and timer.
+- name: Resolve this backup's entry
+  ansible.builtin.set_fact:
+    _service_backup: "{{ service_backups[service_backup_name] }}"
+
+- name: Assert the backup belongs on this host
+  ansible.builtin.assert:
+    that: inventory_hostname == _service_backup.host
+    fail_msg: "{{ service_backup_name }} is declared for {{ _service_backup.host }}, not {{ inventory_hostname }}."
+    quiet: true
+
+- name: Verify the backup destination is an NFS mount
+  ansible.builtin.command: "findmnt --mountpoint {{ _service_backup.mount }} --types nfs,nfs4"
+  register: service_backup_findmnt
+  changed_when: false
+  failed_when: false
+
+- name: Fail if the backup destination is not the NAS bind mount
+  ansible.builtin.fail:
+    msg: >-
+      {{ _service_backup.mount }} is not an NFS mount, so the backup would land on the
+      container's local disk. The bind mount is missing: check
+      service_mountpoints.{{ _service_backup.host }} in the rendered prod.tfvars.
+  when: service_backup_findmnt.rc != 0
+
+# node_exporter runs as its own user and needs to traverse the mount point's parent to read
+# the filesystem metrics (node_filesystem_*). The parent is an LXC rootfs directory that can
+# be created 0700 root (hermes was, so its NAS mount was missing from the metrics).
+- name: Make the mount point's parent traversable
+  ansible.builtin.file:
+    path: "{{ _service_backup.mount | dirname }}"
+    state: directory
+    mode: '0755'
+  when: (_service_backup.mount | dirname) != '/mnt'
+
+- name: Check whether the backup directory exists
+  ansible.builtin.stat:
+    path: "{{ _service_backup.dir }}"
+  register: service_backup_dir
+
+# An existing directory keeps its owner and mode (Nextcloud's is 0777 today), so a
+# root-squashing export cannot fail the deploy on a mode change.
+- name: Create the backup directory
+  ansible.builtin.file:
+    path: "{{ _service_backup.dir }}"
+    state: directory
+    mode: '0750'
+  when: not service_backup_dir.stat.exists
+
+- name: Deploy backup script
+  ansible.builtin.template:
+    src: backup.sh.j2
+    dest: "/usr/local/bin/backup_{{ service_backup_name | replace('-', '_') }}.sh"
+    mode: '0750'
+    owner: root
+    group: root
+
+# Deployed alongside the backup, not left as a runbook paragraph: the moment a restore is
+# needed is the worst moment to be reconstructing the procedure from prose. There is no
+# timer for it — it is run by hand, and it replaces the live workspace.
+- name: Deploy hermes restore script
+  ansible.builtin.template:
+    src: restore/restore_hermes.sh.j2
+    dest: /usr/local/bin/restore_hermes.sh
+    mode: '0755'
+    owner: root
+    group: root
+  when: service_backup_name == 'hermes'
+
+- name: Create systemd service for the backup
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ service_backup_name }}-backup.service"
+    content: |
+      [Unit]
+      Description={{ service_backup_name }} Backup Service
+      After=docker.service network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/backup_{{ service_backup_name | replace('-', '_') }}.sh
+      User=root
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Create systemd timer for the backup
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ service_backup_name }}-backup.timer"
+    content: |
+      [Unit]
+      Description=Run {{ service_backup_name }} backup daily
+
+      [Timer]
+      OnCalendar={{ _service_backup.schedule }}
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Apply systemd changes before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the backup timer
+  ansible.builtin.systemd:
+    name: "{{ service_backup_name }}-backup.timer"
+    state: started
+    enabled: true

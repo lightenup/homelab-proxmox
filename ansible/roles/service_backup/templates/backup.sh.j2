@@ -1,0 +1,96 @@
+#!/bin/bash
+# Service backup for {{ service_backup_name }} (091). Rendered from service_backups in
+# group_vars/all/vars.yml; the per-service part is templates/snapshot/{{ service_backup_name }}.sh.j2.
+set -euo pipefail
+
+{% set _e = service_backups[service_backup_name] %}
+NAME={{ service_backup_name }}
+BACKUP_MOUNT={{ _e.mount }}
+BACKUP_DIR={{ _e.dir }}
+RETENTION_DAYS={{ service_backup_retention_days }}
+RETENTION_WEEKS={{ service_backup_retention_weeks }}
+RETENTION_MONTHS={{ service_backup_retention_months }}
+
+# Refuse a destination that is not the NAS share: writing to the LXC's own disk would look
+# like a backup and survive nothing.
+if ! findmnt --mountpoint "$BACKUP_MOUNT" --types nfs,nfs4 >/dev/null; then
+    echo "Error: $BACKUP_MOUNT is not an NFS mount; refusing to back up to local disk." >&2
+    exit 2
+fi
+
+# Create only, never chmod an existing directory (a root-squashing export may refuse it).
+[ -d "$BACKUP_DIR" ] || mkdir -m 0750 "$BACKUP_DIR"
+
+TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+BACKUP_NAME="${NAME}-backup-${TIMESTAMP}"
+
+TEMP_DIR=$(mktemp -d)
+WORK_DIR="$TEMP_DIR/$BACKUP_NAME"
+mkdir "$WORK_DIR"
+
+cleanup() {
+    if declare -F snapshot_cleanup >/dev/null; then
+        snapshot_cleanup || true
+    fi
+    rm -rf "$TEMP_DIR"
+    rm -f "$BACKUP_DIR/$BACKUP_NAME.tar.gz.partial"
+}
+trap cleanup EXIT
+
+{% include 'snapshot/' ~ service_backup_name ~ '.sh.j2' %}
+
+snapshot
+
+echo "Compressing backup..."
+tar -czf "$BACKUP_DIR/$BACKUP_NAME.tar.gz.partial" -C "$TEMP_DIR" "$BACKUP_NAME"
+mv "$BACKUP_DIR/$BACKUP_NAME.tar.gz.partial" "$BACKUP_DIR/$BACKUP_NAME.tar.gz"
+echo "Backup created successfully: $BACKUP_DIR/$BACKUP_NAME.tar.gz"
+
+/usr/local/bin/backup-success-metric "$NAME"
+
+# Prune old backups (GFS retention).
+echo "Pruning old backups..."
+
+get_date() {
+    echo "$1" | grep -oE '[0-9]{8}' | sed 's/\(....\)\(..\)\(..\)/\1-\2-\3/'
+}
+
+shopt -s nullglob
+for file in "$BACKUP_DIR"/"$NAME"-backup-*.tar.gz; do
+    FILENAME=$(basename "$file")
+    FILE_DATE_STR=$(get_date "$FILENAME")
+
+    if [ -z "$FILE_DATE_STR" ]; then
+        continue
+    fi
+
+    FILE_TIMESTAMP=$(date -d "$FILE_DATE_STR" +%s)
+    CURRENT_TIMESTAMP=$(date +%s)
+    AGE_DAYS=$(( (CURRENT_TIMESTAMP - FILE_TIMESTAMP) / 86400 ))
+
+    DAY_OF_WEEK=$(date -d "$FILE_DATE_STR" +%u)   # 1=Mon, 7=Sun
+    DAY_OF_MONTH=$(date -d "$FILE_DATE_STR" +%d)
+
+    DELETE=true
+
+    if [ "$AGE_DAYS" -lt "$RETENTION_DAYS" ]; then
+        DELETE=false
+    fi
+
+    if [ "$DELETE" = true ] && [ "$DAY_OF_WEEK" -eq 7 ] && [ "$AGE_DAYS" -lt $((RETENTION_WEEKS * 7)) ]; then
+        DELETE=false
+    fi
+
+    if [ "$DELETE" = true ] && [ "$DAY_OF_MONTH" -eq 01 ] && [ "$AGE_DAYS" -lt $((RETENTION_MONTHS * 30)) ]; then
+        DELETE=false
+    fi
+
+    if [ "$DELETE" = true ]; then
+        echo "Deleting old backup: $FILENAME (Age: $AGE_DAYS days)"
+        rm "$file"
+    else
+        echo "Keeping backup: $FILENAME (Age: $AGE_DAYS days)"
+    fi
+done
+
+echo "Backup process completed."

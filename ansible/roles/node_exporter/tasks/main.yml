@@ -83,6 +83,16 @@
     group: "{{ node_exporter_user }}"
     mode: '0755'
 
+# Plain file, literal path: node_exporter_textfile_directory is never overridden in the repo,
+# and roles outside this one cannot rely on it being defined (see llm_router defaults).
+- name: Install backup success-record writer
+  ansible.builtin.copy:
+    src: backup-success-metric
+    dest: /usr/local/bin/backup-success-metric
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Deploy node_exporter systemd unit
   ansible.builtin.template:
     src: node_exporter.service.j2

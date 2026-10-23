@@ -9,7 +9,7 @@ This document describes the backup strategy and restore procedures for the Immic
 - **Frequency**: Daily at 04:30 AM.
 - **Content**:
   - PostgreSQL Database Dump (using `pg_dump`).
-  - `docker-compose.yml` and `.env` files.
+  - `docker-compose.yml`. The archive no longer contains `.env` (it holds the database password); a restore re-renders it through the normal Immich deploy, and the restore drill renders it from `roles/immich/templates/.env.j2`. Archives made before 2026-10-23 still contain `.env` until retention removes them.
   - **Note**: The actual media library (`upload` volume) is backed up separately via NAS snapshots/replication (not covered by this script).
 - **Location**: `/mnt/immich/backups` (Mounted from Synology NAS).
 - **Retention Policy**:
@@ -87,10 +87,11 @@ In case of a total failure, follow these steps to restore the service.
    ```
 
 4. **Restore Configuration**:
-   Copy the `docker-compose.yml` and `.env` if they are missing or corrupted.
+   Copy the `docker-compose.yml` if it is missing or corrupted. The archive carries no `.env`:
+   re-render it by running the Immich deploy (`playbooks/immich.yml`), which writes
+   `/opt/immich/.env` from `roles/immich/templates/.env.j2`.
    ```bash
    cp /tmp/restore/docker-compose.yml /opt/immich/
-   cp /tmp/restore/.env /opt/immich/
    ```
 
 5. **Start the Database**:

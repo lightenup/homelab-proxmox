@@ -1,0 +1,51 @@
+# Nextcloud snapshot. Sourced into backup.sh.j2; defines snapshot() and snapshot_cleanup().
+# The destination check, archive, success record and pruning are shared.
+INSTALL_DIR="{{ nextcloud_install_dir }}"
+DB_CONTAINER="{{ nextcloud_db_container_name }}"
+APP_CONTAINER="{{ nextcloud_app_container_name }}"
+
+# Maintenance mode must be off again on every exit path, including a failed dump.
+snapshot_cleanup() {
+    echo "Disabling Nextcloud maintenance mode..."
+    docker exec "$APP_CONTAINER" php occ maintenance:mode --off || true
+}
+
+snapshot() {
+# Database credentials come from the rendered environment file on the host.
+if [ -f "$INSTALL_DIR/.env" ]; then
+    # Extract the MYSQL_* values only (avoid overriding shell env)
+    MYSQL_PASSWORD=$(grep '^MYSQL_PASSWORD=' "$INSTALL_DIR/.env" | cut -d'=' -f2-)
+    MYSQL_USER=$(grep '^MYSQL_USER=' "$INSTALL_DIR/.env" | cut -d'=' -f2-)
+    MYSQL_DATABASE=$(grep '^MYSQL_DATABASE=' "$INSTALL_DIR/.env" | cut -d'=' -f2-)
+else
+    echo "Error: .env file not found at $INSTALL_DIR/.env" >&2
+    exit 1
+fi
+
+# 1. Enable maintenance mode
+echo "Enabling Nextcloud maintenance mode..."
+docker exec "$APP_CONTAINER" php occ maintenance:mode --on
+
+# 2. Dump Database
+echo "Starting database dump..."
+docker exec "$DB_CONTAINER" \
+    mariadb-dump \
+    --single-transaction \
+    --default-character-set=utf8mb4 \
+    -u"$MYSQL_USER" \
+    -p"$MYSQL_PASSWORD" \
+    "$MYSQL_DATABASE" > "$WORK_DIR/dump.sql"
+
+# 3. Backup config.php
+echo "Backing up config.php..."
+if docker exec "$APP_CONTAINER" cat /var/www/html/config/config.php > "$WORK_DIR/config.php" 2>/dev/null; then
+    echo "config.php backed up successfully."
+else
+    echo "Warning: config.php not found in container."
+fi
+
+# 4. Backup docker-compose.yml for reference
+if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+    cp "$INSTALL_DIR/docker-compose.yml" "$WORK_DIR/"
+fi
+}

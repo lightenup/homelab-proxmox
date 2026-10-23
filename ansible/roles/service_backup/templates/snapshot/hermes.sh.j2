@@ -1,0 +1,125 @@
+# Hermes snapshot (open-webui + agent). Sourced into backup.sh.j2; defines snapshot() and
+# snapshot_cleanup(). The destination check, archive, success record and pruning are shared.
+DATA_DIR="{{ hermes_data_dir }}/open-webui"
+AGENT_DIR="{{ hermes_data_dir }}/agent"
+CONTAINER="hermes_open_webui"
+
+snapshot_cleanup() {
+    docker exec "$CONTAINER" rm -f /app/backend/data/.backup-snapshot.db 2>/dev/null || true
+}
+
+snapshot() {
+if [ ! -f "$DATA_DIR/webui.db" ]; then
+    echo "No webui.db found (fresh deploy, no accounts/conversations yet). Nothing to back up."
+    exit 0
+fi
+
+# Consistent online backup — NOT a raw cp (WAL-mode SQLite can be torn mid-copy). Uses
+# sqlite3.Connection.backup(), which is atomic regardless of concurrent writes. Run inside
+# the container (guaranteed Python + sqlite3) rather than assume a host-side sqlite3 binary
+# — the same reasoning the financial-scenario snapshot uses, even though this data dir is a host
+# bind mount and technically visible on the host too.
+echo "Taking consistent online backup of webui.db..."
+docker exec "$CONTAINER" python3 -c "
+import sqlite3
+src = sqlite3.connect('file:/app/backend/data/webui.db?mode=ro', uri=True)
+dst = sqlite3.connect('/app/backend/data/.backup-snapshot.db')
+src.backup(dst)
+dst.close()
+src.close()
+"
+
+# Archive everything ELSE under the data dir directly from the host (it's a bind mount, so
+# host and container see identical content) — uploaded documents and the vector index need
+# no special consistency handling, only the live SQLite file does. Substitute the snapshot
+# for the live db so the archive never contains a copy taken mid-write.
+#
+# A tar-pipe rather than `cp -a`, because of what the excludes below skip: copying it first
+# and deleting it after would move over a gigabyte for nothing.
+#
+#   cache/          Hugging Face model weights the app downloads at runtime —
+#                   AUDIO_TTS_ENGINE=transformers alone pulls ~1.2GB of SpeechT5 + HiFiGAN.
+#                   Measured 2026-09-21: the archive was 755MB, of which 99.8% was this, and
+#                   the irreplaceable state was ~2MB. It is re-downloadable by definition and
+#                   is NOT part of data-model.md's "Workspace state" (conversations,
+#                   accounts, settings, uploaded documents, vector index).
+#   webui.db-wal    The LIVE write-ahead log and shared-memory index. They belong to the
+#   webui.db-shm    running database, NOT to the point-in-time snapshot placed beside them,
+#                   so shipping them pairs a consistent db with a WAL from a different
+#                   moment. sqlite3.Connection.backup() output is self-contained; these add
+#                   only the chance of confusing a restore.
+mkdir -p "$WORK_DIR/open-webui"
+tar -cf - -C "$DATA_DIR" \
+    --exclude='./cache' \
+    --exclude='./webui.db' \
+    --exclude='./webui.db-wal' \
+    --exclude='./webui.db-shm' \
+    --exclude='./.backup-snapshot.db' \
+    . | tar -xf - -C "$WORK_DIR/open-webui"
+cp "$DATA_DIR/.backup-snapshot.db" "$WORK_DIR/open-webui/webui.db"
+
+# The agent (spec 083, R-009): jobs, scripts, memory, skills, the scout's clone and state.
+#
+#   .env, config.yaml   Rendered from vault/Ansible by the deploy; never restored (FR-010).
+#   logs/ cache/        Regenerated. audio_cache/ and image_cache/ likewise.
+#   audio_cache/ image_cache/
+#   *.lock              Runtime locks of the live process.
+#   *-wal *-shm         Belong to the live databases, as with webui.db above.
+#   *.db *.sqlite*      Copied separately below as consistent snapshots.
+#
+# The SQLite snapshots run with the HOST python3 (Ansible's own requirement on this LXC),
+# not inside hermes_agent: the agent being down is exactly when a backup must still work.
+# agent-manifest.sha256 records every other file, so the drill proves scripts, memory and
+# scout state byte-identical without knowing where any of them live.
+if [ -d "$AGENT_DIR" ]; then
+    echo "Archiving the agent directory..."
+    mkdir -p "$WORK_DIR/agent"
+    tar -cf - -C "$AGENT_DIR" \
+        --exclude='./.env' \
+        --exclude='./config.yaml' \
+        --exclude='./logs' \
+        --exclude='./cache' \
+        --exclude='./audio_cache' \
+        --exclude='./image_cache' \
+        --exclude='*.lock' \
+        --exclude='*-wal' \
+        --exclude='*-shm' \
+        --exclude='*.db' \
+        --exclude='*.sqlite' \
+        --exclude='*.sqlite3' \
+        . | tar -xf - -C "$WORK_DIR/agent"
+    (cd "$WORK_DIR/agent" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum) \
+        > "$WORK_DIR/agent-manifest.sha256"
+
+    python3 - "$AGENT_DIR" "$WORK_DIR/agent" <<'PY'
+import os, shutil, sqlite3, sys
+src_root, dst_root = sys.argv[1], sys.argv[2]
+skip = {'logs', 'cache', 'audio_cache', 'image_cache'}
+for dirpath, dirnames, filenames in os.walk(src_root):
+    if dirpath == src_root:
+        dirnames[:] = [d for d in dirnames if d not in skip]
+    for name in filenames:
+        if not name.endswith(('.db', '.sqlite', '.sqlite3')):
+            continue
+        src = os.path.join(dirpath, name)
+        dst = os.path.join(dst_root, os.path.relpath(src, src_root))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(src, 'rb') as f:
+            is_sqlite = f.read(16) == b'SQLite format 3\x00'
+        if not is_sqlite:
+            shutil.copy2(src, dst)
+            continue
+        con = sqlite3.connect('file:%s?mode=ro' % src, uri=True)
+        out = sqlite3.connect(dst)
+        con.backup(out)
+        out.close()
+        con.close()
+        print('  snapshot', os.path.relpath(src, src_root))
+PY
+fi
+
+# Include the rendered compose file for reference.
+if [ -f "{{ hermes_install_dir }}/docker-compose.yml" ]; then
+    cp "{{ hermes_install_dir }}/docker-compose.yml" "$WORK_DIR/"
+fi
+}

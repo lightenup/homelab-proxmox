@@ -33,6 +33,10 @@ service_mountpoints = {
       volume   = "/mnt/nas/video"
       readonly = true
     }
+    backups = {
+      mp     = "/mnt/jellyfin/backups"
+      volume = "/mnt/nas/homelab_jellyfin"
+    }
   }
   nextcloud = {
     data = {

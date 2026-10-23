@@ -21,11 +21,36 @@ Goals:
 
 ## Backup & Monitoring
 
+**Policy**: rebuild from configuration; back up only what cannot be rebuilt; no Proxmox guest
+backups. Every service backup is one entry in `service_backups`
+(`ansible/group_vars/all/vars.yml`), installed by the `service_backup` role, and refuses to write
+unless its destination is an NFS mount.
+
+| Host | Class | Reason |
+|------|-------|--------|
+| proxmox | Backed up | `/etc` and `/var/lib/pve-cluster`, age-encrypted to the NAS (`proxmox_backup`) |
+| immich | Backed up | Postgres database; the photos are on NFS. The archive carries no `.env` |
+| nextcloud | Backed up | MariaDB and `config.php`; the data is on NFS |
+| financial-scenario | Backed up | `scenarios.db` |
+| hermes | Backed up | SQLite, documents, vector index and agent state |
+| jellyfin | Backed up | `jellyfin.db` (users, watch history) and `/etc/jellyfin`; metadata and trickplay regenerate |
+| reverse_proxy | Rebuilt from configuration | The Caddyfile is templated; certificates reissue over DNS-01 |
+| monitoring | Rebuilt from configuration | Prometheus keeps 15 days; dashboards and rules are provisioned |
+| llm-router | Rebuilt from configuration | Virtual keys are generated with the vault value and re-applied on every deploy |
+| ntfy | Rebuilt from configuration | Declarative (spec 082) |
+| market-model | Disposable | A cache |
+| eurooffice | Disposable | Documents live in Nextcloud |
+| pi-runner | Not a Proxmox guest | Self-hosted runner; rebuilt from its own setup |
+| synology | Not a Proxmox guest | The NAS itself |
+
 - **Proxmox Configuration Backup**:
   - Automated daily backup of `/etc` and `/var/lib/pve-cluster`.
   - Encrypted with `age` and stored on NAS.
-  - Monitoring: Prometheus/Alertmanager `ServiceDown` alert on the `node-exporter` scrape target.
   - Controlled by `proxmox_backup_email_mode` Ansible variable (`disabled` by default).
+
+- **Monitoring**: `BackupStale` (36 h, and never-succeeded) on
+  `backup_last_success_timestamp_seconds`, one series per backup, written by
+  `/usr/local/bin/backup-success-metric` after a verified run.
 
 - **Synology NAS**
   - Provides storage (e.g. NFS) for services, especially Immich.

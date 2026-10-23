@@ -13,7 +13,9 @@
   roles:
     - geerlingguy.docker
     - nextcloud
-    - nextcloud_backup
+    - role: service_backup
+      service_backup_name: nextcloud
+      when: (deploy_environment | default('prod')) != 'lab'
     # fail2ban + metrics exporter (:9191). Deployed as part of this service so a
     # rebuild of the LXC doesn't silently drop it (previously only installed by the
     # standalone playbooks/fail2ban.yml, which the gated pipeline never runs).
