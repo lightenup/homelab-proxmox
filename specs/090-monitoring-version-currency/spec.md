@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-22
 
-**Status**: Draft
+**Status**: Implemented (2026-10-23)
 
 **Input**: User description: "090-monitoring-stack-version-currency.md prompt me" — source backlog item
 [`docs/backlog/090-monitoring-stack-version-currency.md`](../../docs/backlog/090-monitoring-stack-version-currency.md).

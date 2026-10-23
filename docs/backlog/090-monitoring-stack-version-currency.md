@@ -1,7 +1,7 @@
 # Backlog: the monitoring stack runs unsupported versions, and nothing keeps pins current
 
-**Status**: Backlog — raised 2026-10-21 while preparing [`092`](./092-log-aggregation.md). Spec
-only.
+**Status**: Delivered — `specs/090-monitoring-version-currency/` (2026-10-23). Raised 2026-10-21
+while preparing [`092`](./092-log-aggregation.md).
 **Order**: After [`089`](./089-backup-and-log-rotation-quick-fixes.md), **before [`091`](./091-backup-coverage-and-staleness.md) and `092`**. It
 needs only a one-off snapshot of the `monitoring` LXC for rollback (FR-005), not `091`'s backup
 work. `092` adds Loki to the same compose file and role, and should start from supported versions.
