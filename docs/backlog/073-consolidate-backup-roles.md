@@ -1,6 +1,7 @@
 # Backlog: consolidate the five near-identical backup roles into one
 
-**Status**: **Merged into [`091`](./091-backup-coverage-and-staleness.md)** (2026-10-23), which
+**Status**: **Delivered through [`091`](./091-backup-coverage-and-staleness.md)** (2026-10-23; see
+[`specs/091-backup-coverage-staleness/`](../../specs/091-backup-coverage-staleness/)), which
 re-measured the roles; its FR-002 is this item. Raised 2026-09-20 while closing spec
 `065-hermes-ai-workspace`. Kept for context; parts of the text below are superseded (four roles,
 not five; `proxmox_backup` stays separate; the snapshot methods are known).

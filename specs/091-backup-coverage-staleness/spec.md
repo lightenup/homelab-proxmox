@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-23
 
-**Status**: Draft
+**Status**: Implemented (2026-10-23)
 
 **Input**: User description: "docs/backlog/091-backup-coverage-and-staleness.md Prompt me" — source
 backlog item [`docs/backlog/091-backup-coverage-and-staleness.md`](../../docs/backlog/091-backup-coverage-and-staleness.md),

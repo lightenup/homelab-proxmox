@@ -1,6 +1,7 @@
 # Backlog: backups that fail silently, the coverage nobody wrote down, and five copies of one role
 
-**Status**: Backlog — raised 2026-10-21 while measuring for [`092`](./092-log-aggregation.md);
+**Status**: **Delivered 2026-10-23** — see [`specs/091-backup-coverage-staleness/`](../../specs/091-backup-coverage-staleness/)
+(results in its `quickstart.md` §5). The text below is the original item. Raised 2026-10-21 while measuring for [`092`](./092-log-aggregation.md);
 **revised 2026-10-23** after `089` and `090` landed, re-measured on the live estate, and merged
 with [`073`](./073-consolidate-backup-roles.md) (consolidate the backup roles), which is now part of
 this item. Spec only, ready for `/speckit-specify`.

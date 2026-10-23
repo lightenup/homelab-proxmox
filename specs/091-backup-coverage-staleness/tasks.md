@@ -188,24 +188,24 @@ corrected (FR-001, FR-002, FR-016, SC-005).
 **Purpose**: Merge once, then deploy host by host and record (FR-006, FR-018, SC-001–SC-004).
 Each task records its result in quickstart §5 before the next starts.
 
-- [ ] T041 Run quickstart §1 static checks (pre-commit, python tests, syntax checks, local render of `backup_alerts.yml` + `promtool check rules`, the two `grep`s). All pass. Open the PR (`gh pr create`; push through the GitHub API per `AGENTS.md`) and merge after CI is green.
-- [ ] T042 Re-render the runner's `prod.tfvars` from `prod.tfvars.template` so it contains `service_mountpoints.jellyfin.backups` (research R10: an existing rendered file is reused and nested drift is not detected). Confirm with `grep -n homelab_jellyfin /var/lib/homelab-proxmox/tfvars/prod.tfvars` as `ci@pve`.
-- [ ] T043 PVE (operator machine): run `host_proxmox.yml` then `task ansible:backup`; run quickstart §2 checks, including `verify_proxmox_backup.sh` exit 0 (SC-004). Record.
-- [ ] T044 financial-scenario: §0.3 baseline run of the old backup; pipeline deploy; quickstart §3 generic checks, file-list diff empty, manual restore check, and the destination-check refusal test (US2-3). Record.
-- [ ] T045 hermes: §0.3 baseline run of the old backup; pipeline deploy; new backup run immediately after; quickstart §3 checks, diff empty; `rm` the old `hermes_backup.prom`; run `playbooks/hermes-restore-drill.yml`; confirm `node_filesystem_avail_bytes{mountpoint="/mnt/hermes/backups"}` now exists (FR-015). Record.
-- [ ] T046 immich: §0.3 baseline run of the old backup; pipeline deploy; quickstart §3 checks, diff shows only `-.env`; `playbooks/restore-drill.yml` passes with `.env` rendered (SC-003, FR-008). Record.
-- [ ] T047 nextcloud: §0.3 baseline run of the old backup; pipeline deploy; quickstart §3 checks, diff empty, maintenance mode off afterwards, manual restore into a scratch MariaDB. Record.
-- [ ] T048 jellyfin: pipeline deploy (applies the bind mount, then `service_backup`); `findmnt --mountpoint /mnt/jellyfin/backups` is `nfs`; trigger the first run by hand now (`systemctl start jellyfin-backup.service`), before T049 adds jellyfin to monitoring's expected set (spec edge case "Backup never ran since deploy"); archive contents and `pragma integrity_check`; manual restore and swap back. Record.
-- [ ] T049 monitoring: confirm every backup in the expected set (five services plus `proxmox`) has a `backup_*.prom` file on its host, then pipeline deploy; quickstart §4 checks (PVE target up, six fresh series, no `BackupStale`, no new noise from PVE filesystem/hardware rules, cron gone). Remove the old cron entry, script and log by hand if still present. Record.
-- [ ] T050 Deliberate break, quickstart §4.1: absent branch and stale branch, each fires `BackupStale{backup="financial-scenario"}` only and reaches Pushover, then clears (SC-002). Record.
+- [X] T041 Run quickstart §1 static checks (pre-commit, python tests, syntax checks, local render of `backup_alerts.yml` + `promtool check rules`, the two `grep`s). All pass. Open the PR (`gh pr create`; push through the GitHub API per `AGENTS.md`) and merge after CI is green.
+- [X] T042 Re-render the runner's `prod.tfvars` from `prod.tfvars.template` so it contains `service_mountpoints.jellyfin.backups` (research R10: an existing rendered file is reused and nested drift is not detected). Confirm with `grep -n homelab_jellyfin /var/lib/homelab-proxmox/tfvars/prod.tfvars` as `ci@pve`.
+- [X] T043 PVE (operator machine): run `host_proxmox.yml` then `task ansible:backup`; run quickstart §2 checks, including `verify_proxmox_backup.sh` exit 0 (SC-004). Record.
+- [X] T044 financial-scenario: §0.3 baseline run of the old backup; pipeline deploy; quickstart §3 generic checks, file-list diff empty, manual restore check, and the destination-check refusal test (US2-3). Record.
+- [X] T045 hermes: §0.3 baseline run of the old backup; pipeline deploy; new backup run immediately after; quickstart §3 checks, diff empty; `rm` the old `hermes_backup.prom`; run `playbooks/hermes-restore-drill.yml`; confirm `node_filesystem_avail_bytes{mountpoint="/mnt/hermes/backups"}` now exists (FR-015). Record.
+- [X] T046 immich: §0.3 baseline run of the old backup; pipeline deploy; quickstart §3 checks, diff shows only `-.env`; `playbooks/restore-drill.yml` passes with `.env` rendered (SC-003, FR-008). Record.
+- [X] T047 nextcloud: §0.3 baseline run of the old backup; pipeline deploy; quickstart §3 checks, diff empty, maintenance mode off afterwards, manual restore into a scratch MariaDB. Record.
+- [X] T048 jellyfin: pipeline deploy (applies the bind mount, then `service_backup`); `findmnt --mountpoint /mnt/jellyfin/backups` is `nfs`; trigger the first run by hand now (`systemctl start jellyfin-backup.service`), before T049 adds jellyfin to monitoring's expected set (spec edge case "Backup never ran since deploy"); archive contents and `pragma integrity_check`; manual restore and swap back. Record.
+- [X] T049 monitoring: confirm every backup in the expected set (five services plus `proxmox`) has a `backup_*.prom` file on its host, then pipeline deploy; quickstart §4 checks (PVE target up, six fresh series, no `BackupStale`, no new noise from PVE filesystem/hardware rules, cron gone). Remove the old cron entry, script and log by hand if still present. Record.
+- [X] T050 Deliberate break, quickstart §4.1: absent branch and stale branch, each fires `BackupStale{backup="financial-scenario"}` only and reaches Pushover, then clears (SC-002). Record.
 
 ---
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T051 [P] Mark `docs/backlog/091-backup-coverage-and-staleness.md` and `docs/backlog/073-consolidate-backup-roles.md` delivered (Status line, link to `specs/091-backup-coverage-staleness/`). In `docs/backlog/improvement-candidates.md`, mark "Backup job monitoring" delivered and the node_exporter part of "Proxmox host/guest + storage health" delivered, leaving `pve-exporter` open.
-- [ ] T052 [P] Set `specs/091-backup-coverage-staleness/spec.md` Status to `Implemented (<date>)` and add the plan's Follow-ups (Nextcloud password on argv, `config.php` in archive, `pve-exporter`, PVE CI path, tfvars nested drift) to `docs/backlog/improvement-candidates.md` if not already there.
-- [ ] T053 Final `bash scripts/ci/python-tests.sh` and `pre-commit run --all-files` on `main` after merge; confirm quickstart §5 has every row filled.
+- [X] T051 [P] Mark `docs/backlog/091-backup-coverage-and-staleness.md` and `docs/backlog/073-consolidate-backup-roles.md` delivered (Status line, link to `specs/091-backup-coverage-staleness/`). In `docs/backlog/improvement-candidates.md`, mark "Backup job monitoring" delivered and the node_exporter part of "Proxmox host/guest + storage health" delivered, leaving `pve-exporter` open.
+- [X] T052 [P] Set `specs/091-backup-coverage-staleness/spec.md` Status to `Implemented (<date>)` and add the plan's Follow-ups (Nextcloud password on argv, `config.php` in archive, `pve-exporter`, PVE CI path, tfvars nested drift) to `docs/backlog/improvement-candidates.md` if not already there.
+- [X] T053 Final `bash scripts/ci/python-tests.sh` and `pre-commit run --all-files` on `main` after merge; confirm quickstart §5 has every row filled.
 
 ---
 
