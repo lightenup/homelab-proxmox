@@ -294,7 +294,7 @@ Done when the `count by (version)` query returns only `1.12.1`.
 |---|---|
 | ntfy deploy with `version_check` | 2026-10-23, promote 39899304462, apply 39899567390 |
 | Access matrix (`ntfy-acl-check.sh`, `https://ntfy.hus-sky.no`, from the dev Mac, tokens read from the vault) | 2026-10-23: **54/54 PASS**, 0 FAIL. `version_check` can write only `versions` and reads nothing |
-| Owner subscribed to `versions` | |
+| Owner subscribed to `versions` | 2026-10-23, in the ntfy app on `https://ntfy.hus-sky.no` as the owner account |
 
 ## 9. Currency check (SC-005, SC-006)
 

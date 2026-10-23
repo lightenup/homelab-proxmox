@@ -531,7 +531,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
   Expect exit 0 (or exit 1 with only network-caused check errors from the Mac behind Zscaler;
   record which). The output must have **no** monitoring pin among the findings, and must list the
   service pins that are behind and the five `unchecked` pins. Record this in quickstart §9.
-- [ ] T032 [US4] Commit T023–T031 (not `.specify/feature.json`). Push through the Git-Data API
+- [X] T032 [US4] Commit T023–T031 (not `.specify/feature.json`). Push through the Git-Data API
   as in T012, and confirm PR CI is green.
   - **Live**: deploy `ntfy` from the branch through the prod path (`lxc-promote-prod`, then
     `lxc-apply-prod`, `-f service=ntfy`).
