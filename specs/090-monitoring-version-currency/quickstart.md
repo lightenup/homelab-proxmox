@@ -172,7 +172,7 @@ pct listsnapshot "$VMID"
 
 | VMID | Snapshot | Taken (UTC) | Deleted (UTC) |
 |---|---|---|---|
-| 103 | `pre-090` (LV `snap_vm-103-disk-0_pre-090`) | 2026-10-22 17:09:48Z (19:09:48 CEST on `pve`) | |
+| 103 | `pre-090` (LV `snap_vm-103-disk-0_pre-090`) | 2026-10-22 17:09:48Z (19:09:48 CEST on `pve`) | 2026-10-23, by the owner after T017 (time not recorded) |
 
 Previous pins: Grafana `12.3.1`, Prometheus `v3.8.1`, Alertmanager `v0.30.0`, blackbox `v0.28.0`,
 Telegraf `1.37.0`, node_exporter `1.10.2`.
