@@ -538,7 +538,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
   - Then the owner runs `scripts/healthcheck/ntfy-acl-check.sh` with all tokens, including
     `NTFY_VERSION_CHECK_TOKEN`, and expects every cell to match.
   - The owner subscribes to `versions` in the ntfy app (quickstart §8). Record the result in §8.
-- [ ] T033 [US4] Live: SC-005 and FR-013a (quickstart §9).
+- [X] T033 [US4] Live: SC-005 and FR-013a (quickstart §9).
   1. Run `gh workflow run version-currency.yml --ref 090-monitoring-version-currency -f dry_run=true`
      and confirm it succeeds and prints the report.
   2. Create the throwaway branch `test/090-lowered-pin` from the 090 branch, with

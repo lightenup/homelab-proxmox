@@ -318,8 +318,8 @@ Delete the test branch afterwards.
 
 | Check | Result |
 |---|---|
-| Dry run: no monitoring findings | 2026-10-22, `8612d8b`, from a temp clone on `pve` (the workflow can't be dispatched until it is on `main`): exit 0, **no monitoring pin** in the findings. Six service pins behind: `nextcloud_exporter_version` 0.9.0→0.9.2, `immich_version` v3.0.2→v3.3.5, `eurooffice_version` v9.3.2→v9.3.5, `llm_router_version` v1.83.3-stable→v1.106.2, `hermes_version` 0.11.3→0.12.3, `hermes_agent_version` v0.21.6→v0.22.4. Five pins `unchecked`. Without `GITHUB_TOKEN` every GitHub call returned HTTP 403 (anonymous rate limit on the shared IP) while endoflife.date worked; the workflow passes its token. |
-| Lowered pin reported (SC-005) | |
-| Error case fails the run | |
+| Dry run: no monitoring findings | 2026-10-22, `8612d8b`, from a temp clone on `pve` (the workflow can't be dispatched until it is on `main`): exit 0, **no monitoring pin** in the findings. Six service pins behind: `nextcloud_exporter_version` 0.9.0→0.9.2, `immich_version` v3.0.2→v3.3.5, `eurooffice_version` v9.3.2→v9.3.5, `llm_router_version` v1.83.3-stable→v1.106.2, `hermes_version` 0.11.3→0.12.3, `hermes_agent_version` v0.21.6→v0.22.4. Five pins `unchecked`. Without `GITHUB_TOKEN` every GitHub call returned HTTP 403 (anonymous rate limit on the shared IP) while endoflife.date worked; the workflow passes its token. 2026-10-23, after merge: run 39941444584 on `main` (981130d), `dry_run=true`: success, **no monitoring pin**; seven service pins behind (adds `ntfy_version` v2.28.0→v2.33.1; `eurooffice_version` now →v9.3.6, `hermes_agent_version` →v0.22.5). |
+| Lowered pin reported (SC-005) | 2026-10-23, run 39941692717 on throwaway branch `test/090-lowered-pin` (c8de806, `grafana_version: "13.2.3"`), `dry_run=false`: success, report line `grafana_version 13.2.3 -> 13.2.4 (newer release)` published to `versions`. Owner confirmed it arrived on the phone |
+| Error case fails the run | 2026-10-23, run 39941905088 on the same branch (317ede0, `NTFY_URL: https://ntfy.invalid` on the run step): **failure**, `error: publish failed: unreachable: [Errno -2] Name or service not known`, exit 1. Test branch deleted afterwards |
 | First scheduled Monday run (date, outcome) | |
 | 4 weeks without a report for a current pin (SC-006) | |
