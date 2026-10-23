@@ -558,7 +558,7 @@ pin. A manual run on a branch with `grafana_version` lowered posts a `grafana_ve
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T034 Live, as root on `pve`, after T016 and T017 pass: `pct delsnapshot <vmid> pre-090`
+- [X] T034 Live, as root on `pve`, after T016 and T017 pass: `pct delsnapshot <vmid> pre-090`
   (FR-012). Record the deletion time in quickstart §4. On the monitoring LXC, remove the
   `/root/090` evidence files once their counts are in the quickstart.
 - [x] T035 [P] Append an entry to `docs/backlog/improvement-candidates.md`: the
