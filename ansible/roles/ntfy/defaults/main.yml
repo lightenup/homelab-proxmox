@@ -21,3 +21,7 @@ ntfy_users:
     topic: "pve-backup"
     password_hash: "{{ ntfy_pve_backup_password_hash }}"
     token: "{{ ntfy_pve_backup_token }}"
+  - name: "version_check"
+    topic: "versions"
+    password_hash: "{{ ntfy_version_check_password_hash }}"
+    token: "{{ ntfy_version_check_token }}"

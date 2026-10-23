@@ -67,6 +67,9 @@
   no_log: true  # Contains SMTP credentials
   notify: Restart monitoring stack
 
+- name: Validate rendered configuration before (re)starting the stack
+  ansible.builtin.include_tasks: validate_alerts.yml
+
 - name: Start monitoring stack
   ansible.builtin.command:
     cmd: docker compose up -d

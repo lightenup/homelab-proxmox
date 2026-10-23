@@ -94,10 +94,6 @@
   ansible.builtin.include_tasks: compose_stack.yml
   tags: [compose]
 
-- name: Validate alert rule syntax
-  ansible.builtin.include_tasks: validate_alerts.yml
-  tags: [validate_alerts]
-
 - name: Provision Grafana datasources and dashboards
   ansible.builtin.include_tasks: grafana_provision.yml
   tags: [grafana]

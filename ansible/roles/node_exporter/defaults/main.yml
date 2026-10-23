@@ -3,7 +3,6 @@
 # Feature: 040-monitoring-overhaul
 # Research: R-01, R-02
 
-node_exporter_version: "1.10.2"
 node_exporter_port: 9100
 node_exporter_user: "node_exporter"
 node_exporter_enabled: true
