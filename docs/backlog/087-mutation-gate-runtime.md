@@ -3,7 +3,10 @@
 **Status**: Backlog — raised 2026-10-18, while PR #259 (`086`) waited behind it. Spec only.
 **Revised 2026-10-22**: a trial of mutmut 3 (below) made the migration the main fix, and the owner
 decided the PR, results and regression behaviour.
-**Order**: Independent. Worth doing before the next Python-heavy feature.
+**Refreshed 2026-10-23**: re-checked against `main` (`a5bbe47`), the run history and the NAS. The cost
+is rising (a 133-minute run cancelled, then an 81-minute run cancelled, in two days) and the nightly
+job is still broken. See "Update 2026-10-23".
+**Order**: Independent. Worth doing before the next Python-heavy feature. Both `090` and `091` paid for it.
 
 ## Why this exists
 
@@ -39,13 +42,54 @@ mutation result.
   orchestrator, like the PR #259 example.
 - **The `main` baseline cache is three months old.**
   - `mutmut-cache/main` was last written on 2026-07-20, and new branches are seeded from it.
+    (Still true on 2026-10-23.)
   - PR runs write only their own branch's file.
   - The writer for `main` is `nightly-deeper-verification.yml`, and it has failed every night
     since at least 2026-10-14, after about a minute, with
-    `::error::Shared cache mount missing at /mnt/nas/homelab_ci`. The cause: on a `schedule` run,
+    `::error::Shared cache mount missing at /mnt/nas/homelab_ci`. (On 2026-10-23: 84 failed and 11
+    cancelled runs since the last success on 2026-07-20, which is every run after it.) The cause: on a
+    `schedule` run,
     `inputs.run_on_pve` is empty, because input defaults only apply to `workflow_dispatch`. So
     every step guarded by `!inputs.run_on_pve` runs on the Pi runner, which has no NAS mount.
-- **Stale per-branch cache files** pile up on the NAS: 11 files, some from June.
+- **Stale per-branch cache files** pile up on the NAS: 14 files on 2026-10-23 (11 when this was
+  written), some from June (`feat_mutation-testing-gate`, `chore_set-mutation-threshold`, `unknown`)
+  and one from February (`fix_nightly_ci`). Each is 0.3-0.4 MB, so this is clutter, not a space problem.
+
+## Update 2026-10-23
+
+Checked against the workflows on `main`, `gh run list` and `/mnt/nas/homelab_ci/mutmut-cache` on `pve`.
+
+- **Nothing in the design has changed.** `mutation.yml`, `nightly-deeper-verification.yml`,
+  `scripts/ci/mutmut-threshold.sh`, `python/mutmut.ini` and the 41.0 floor are as described above, and
+  `python/requirements-nightly.lock.txt` still pins `mutmut==2.5.1`.
+- **Real gate runs on PRs are long, and some never finish.** Runs over 5 minutes (the skip-as-pass
+  path takes 15-50 s):
+
+  | PR / branch | Duration | Result |
+  |---|---|---|
+  | `091-backup-coverage-staleness` (PR #270), run 39967025196 | 81 min | cancelled at the owner's request because it blocked the queue; PR #270 merged with no mutation result |
+  | `090-monitoring-version-currency`, run 39809297839 | 69 min | success |
+  | `090-monitoring-version-currency`, run 39797611674 | 58 min | success |
+  | `090-monitoring-version-currency`, run 39778644331 | 133 min | cancelled |
+  | `089-backup-log-rotation-fixes` (two runs) | 45 min each | success |
+  | `086-confidence-suite-trim` (three runs) | 34 min | one success; two cancelled at 33 and 18 min |
+
+  Four of these nine long runs were cancelled since 2026-10-18, and each cancellation leaves the PR
+  with no mutation result. The two newest features (`090`, `091`) added modules and tests, which
+  grow the mutant count, so the runs are not getting shorter on their own.
+- **The trigger is too broad.** `091`'s only Python change was a guard test
+  (`python/tests/guardrails/test_service_backup.py`) that reads repo files and imports nothing from
+  the package. It cannot kill a mutant, but it started the full run, the same shape as `#259`.
+  Guard tests are already point 4 of "What the migration needs".
+- **The nightly's failure is unchanged**, and the log confirms the mechanism: the non-PVE step
+  `Prepare mutmut shared cache` (`if: ${{ !inputs.run_on_pve }}`) fails with
+  `Shared cache mount missing at /mnt/nas/homelab_ci` on the Pi runner. The PVE variant of the mutmut
+  step is guarded by `inputs.run_on_pve` too, so on a `schedule` run it is skipped. Fixing the guard
+  (FR-002) is a small change that can land before the migration.
+- **The NAS is healthy.** `/volume1/homelab_ci` is mounted on `pve` (8.2 TB, 26% used), so storage
+  does not block FR-003 or FR-008.
+- **Nothing here has been implemented.** There is still no `specs/087-*` directory; this entry is the
+  only record.
 
 ## Measured 2026-10-22: mutmut 2.5.1 today vs mutmut 3.8.0
 
