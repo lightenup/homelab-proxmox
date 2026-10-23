@@ -119,8 +119,9 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **`host_proxmox.yml` fails at `tailscale_host`.** The role asserted `tailscale_advertise_routes` and
   `tailscale_advertise_tags`; `group_vars/proxmox_hosts` defines `tailscale_subnet_routes` and
   `tailscale_tags`. The role now uses those names (and passes the tags, as `tailscale_router` does).
-  `tailscale up` only runs when `tailscale status` fails, so a healthy host is unaffected. *Fixed
-  (code); not yet run live on `pve`*
+  `tailscale up` only runs when `tailscale status` fails, so a healthy host is unaffected. Verified live
+  on 2026-10-23: `host_proxmox.yml` ran with `changed=0 failed=0` and skipped `tailscale up`. The role's
+  `apt_repository` task is deprecated (use `deb822_repository`; removed in ansible-core 2.25). *Fixed*
 - **HashiCorp apt signing key on `pve`.** The keyring from Jan 2026 lacked HashiCorp's new key, so
   `apt update` failed (and so did `unattended-upgrades`, which left 3 updates pending). Fixed by hand
   on 2026-10-23 by appending the new key; nothing in the repo manages that keyring. *Open*
