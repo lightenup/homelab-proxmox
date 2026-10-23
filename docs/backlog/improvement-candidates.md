@@ -42,7 +42,8 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Restart/flapping + reboot detection** — cAdvisor for `container_start_time_seconds`
   (`changes(...[10m]) > 2`) and `changes(node_boot_time_seconds[1h]) > 0`. *Open*
 - **Backup job monitoring** — Pushgateway (or node textfile collector) + `BackupStale` alert
-  (`time() - backup_last_success_timestamp > 48h`). *Specified in [`091`](./091-backup-coverage-and-staleness.md)*
+  (`time() - backup_last_success_timestamp > 48h`). *Done (2026-10-23, [`091`](../../specs/091-backup-coverage-staleness/)):
+  `BackupStale` at 36 h, plus never-succeeded, over every backup and the PVE host*
 - **NFS mount health alerting** — `node_filesystem_readonly{mountpoint=~"/mnt/.*"} == 1` and
   `absent(node_filesystem_avail_bytes{mountpoint="…"})` per known mount. *Open*
 - **Alertmanager config validation in CI** — `amtool check-config` in `validate_alerts.yml`. *Open*
@@ -63,8 +64,9 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Predictive disk-fill** — `predict_linear(node_filesystem_avail_bytes[6h], 24*3600) < 0` to warn on
   fast-filling disks before the static 85/95% thresholds trip. *Open*
 - **Proxmox host/guest + storage health** — `pve` node_exporter/pve-exporter for per-VM/LXC state and
-  ZFS/LVM pool health (degraded pool, failing disk); today only blackbox/self-metrics touch the PVE host. *Open; node_exporter on `pve` is
-  part of [`091`](./091-backup-coverage-and-staleness.md)*
+  ZFS/LVM pool health (degraded pool, failing disk). *node_exporter on `pve` is done
+  ([`091`](../../specs/091-backup-coverage-staleness/), 2026-10-23); `pve-exporter` for per-guest and
+  storage-pool state is still open*
 - **Drifted monitoring role defaults** (2026-10-22, spec 090) — the non-version values in
   `roles/monitoring_stack/defaults/main.yml` have drifted from `group_vars/monitoring/vars.yml`, e.g.
   `monitoring_install_dir` vs `monitoring_base_path`, and `grafana_domain` (`monitoring.local` vs
@@ -102,3 +104,24 @@ Sparse backlog of operability / monitoring / security improvements, carried over
   API token secret; source `TF_VAR_proxmox_api_token_*` from a managed secret store instead.
   *Done (026-separate-prod-apply / 036-token-privilege-separation)*
 - Manual Proxmox API token rotation/paste + token-ID alignment. *Done (036)*
+
+## Follow-ups from 091 (2026-10-23)
+
+- **Nextcloud passes the DB password on the `mariadb-dump` command line** (visible in `ps` while the
+  backup runs). Carried over unchanged from the old role; `--defaults-extra-file` would fix it. *Open*
+- **Nextcloud's `config.php` (instance secret, DB password) is in its backup archive.** Carried over
+  unchanged. *Open*
+- **CI path for PVE host changes.** `host_proxmox.yml` and `backup_proxmox.yml` are operator-only (root
+  SSH and the vault password); the PVE host has no pipeline. Needs a privilege-model change. *Open*
+- **tfvars drift check compares top-level keys only** (`scripts/lab/lib/tfvars.sh`). A new nested
+  entry, such as `service_mountpoints.jellyfin.backups`, is never added to an existing rendered
+  `prod.tfvars`; 091 needed a hand edit on the runner. *Open*
+- **`host_proxmox.yml` fails at `tailscale_host`.** The role asserts `tailscale_advertise_routes` and
+  `tailscale_advertise_tags`; `group_vars/proxmox_hosts` defines `tailscale_subnet_routes` and
+  `tailscale_tags`. The role also runs `tailscale up` on the subnet-router host, so reconcile with care. *Open*
+- **HashiCorp apt signing key on `pve`.** The keyring from Jan 2026 lacked HashiCorp's new key, so
+  `apt update` failed (and so did `unattended-upgrades`, which left 3 updates pending). Fixed by hand
+  on 2026-10-23 by appending the new key; nothing in the repo manages that keyring. *Open*
+- **Stale `/tmp/ansible-vault.*` files on `pve`.** 28 files owned by `ci`, dated 2026-10-17 to 2026-10-22,
+  mostly 14 bytes (the size of a short vault password), left by runs that skipped the `rm`. Find the
+  step that leaves them and clear them. *Open*
