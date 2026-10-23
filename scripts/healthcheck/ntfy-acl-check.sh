@@ -39,7 +39,7 @@ Environment variables (all required):
   NTFY_PVE_BACKUP_TOKEN    Bearer token for the pve_backup account (spec 089)
   NTFY_VERSION_CHECK_TOKEN Bearer token for the version_check account (spec 090)
 
-Exit code: 0 if all 49 cells match, 1 otherwise.
+Exit code: 0 if all 54 cells match, 1 otherwise.
 EOF
   exit 0
 fi
