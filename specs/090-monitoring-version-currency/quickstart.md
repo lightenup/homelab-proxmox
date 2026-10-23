@@ -268,8 +268,8 @@ curl -s "http://$MON:9090/api/v1/query" --data-urlencode 'query=count by (versio
 | monitoring | (done in §5) | 1.12.1 |
 | jellyfin | 2026-10-22, promote 39839450482, apply 39840017364 | 1.12.1 |
 | nextcloud | 2026-10-22, promote 39847317753, apply 39848093385. The first apply (39840676506) failed the role's 10 GB free-disk preflight with 9 GB free: removed `nextcloud:30`–`:32` and untagged images (9.3 GB), kept `:33` | 1.12.1 |
-| financial-scenario | 2026-10-22, apply 39848803216 **red**: `lxc_base` installed node_exporter, then the app role's GHCR pull of `financial-scenario-*:0.2.2` was denied (`ghcr_pull_token`, predates 090). Service untouched. Re-run after the token is fixed | 1.12.1 (binary and Prometheus) |
-| market-model | pending: uses the same `ghcr_pull_token`; deploy after the token is fixed | |
+| financial-scenario | 2026-10-23, promote 39937816178, apply 39938164745. The first apply (39848803216, 2026-10-22) failed: GHCR accepted the login but denied the pull of `financial-scenario-*:0.2.2`, because `ghcr_pull_token` lacked package read access (predates 090; service untouched). Rotated to a classic `read:packages` token (aef771f) | 1.12.1 |
+| market-model | 2026-10-23, promote 39938337703, apply 39938698797 (after the token rotation) | 1.12.1 |
 | eurooffice | 2026-10-23, promote 39897709623, apply 39898001661 | 1.12.1 |
 | llm-router | 2026-10-23, promote 39898232981, apply 39898561470 | 1.12.1 |
 | hermes | 2026-10-23, promote 39898692525, apply 39899075675 | 1.12.1 |
@@ -278,6 +278,8 @@ curl -s "http://$MON:9090/api/v1/query" --data-urlencode 'query=count by (versio
 Done when the `count by (version)` query returns only `1.12.1`.
 
 2026-10-23 04:19Z: `count by (version)` = 10 × `1.12.1`, 1 × `1.10.2` (`market-model`, blocked on the GHCR pull token).
+
+2026-10-23 10:25Z: `count by (version)` = 11 × `1.12.1`. Done.
 
 ## 8. ntfy publisher (082 contract)
 

@@ -285,7 +285,7 @@ quickstart §7 table shows every LXC on the new node_exporter.
     5 minutes (SC-003; the owner confirms Pushover).
   - On any blocking difference, run the rollback in §6 (`pct rollback`, then revert the pins on
     the branch), record what happened, and stop.
-- [ ] T017 [US1] Live: node_exporter rollout (quickstart §7, SC-007). For each LXC in the §7 table
+- [X] T017 [US1] Live: node_exporter rollout (quickstart §7, SC-007). For each LXC in the §7 table
   except `monitoring` (already done in T015), one at a time:
   - run the normal prod deploy from the branch (`lxc-promote-prod`, then `lxc-apply-prod`,
     `-f service=<host>`), which applies `lxc_base` → `node_exporter`;
