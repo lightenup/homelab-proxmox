@@ -3,9 +3,9 @@
   ansible.builtin.assert:
     that:
       - tailscale_auth_key is defined
-      - tailscale_advertise_routes is defined
-      - tailscale_advertise_tags is defined
-    fail_msg: "Tailscale variables are missing. Please check group_vars/proxmox_hosts.yml"
+      - tailscale_subnet_routes is defined
+      - tailscale_tags is defined
+    fail_msg: "Tailscale variables are missing. Please check group_vars/proxmox_hosts/vars.yml"
 
 - name: Install required dependencies
   ansible.builtin.apt:
@@ -49,7 +49,8 @@
   ansible.builtin.command: >
     tailscale up
     --authkey={{ tailscale_auth_key }}
-    --advertise-routes={{ tailscale_advertise_routes }}
+    --advertise-routes={{ tailscale_subnet_routes }}
+    {{ '--advertise-tags=' + tailscale_tags | join(',') if tailscale_tags else '' }}
     --ssh=false
     --accept-routes
     --reset
