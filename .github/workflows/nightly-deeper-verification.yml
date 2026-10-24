@@ -57,6 +57,11 @@ jobs:
     needs: gate
     if: ${{ needs.gate.outputs.run == 'true' }}
     runs-on: [self-hosted]
+    env:
+      # Input defaults only apply to workflow_dispatch: on a `schedule` run `inputs.run_on_pve` is
+      # empty. The scheduled run must use PVE (the Pi runner has no NAS mount), so decide it here
+      # once and have every step read this instead of the input.
+      RUN_ON_PVE: ${{ github.event_name == 'schedule' || inputs.run_on_pve }}
     steps:
             - uses: actions/checkout@v4
 
@@ -83,7 +88,7 @@ jobs:
                   key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
 
             - name: Install rsync/ssh (PVE remote)
-              if: ${{ inputs.run_on_pve }}
+              if: ${{ env.RUN_ON_PVE == 'true' }}
               run: |
                   if ! command -v rsync >/dev/null 2>&1; then
                     sudo apt-get update
@@ -101,12 +106,12 @@ jobs:
                   .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
 
             - name: Ensure artifact root on PVE
-              if: ${{ inputs.run_on_pve }}
+              if: ${{ env.RUN_ON_PVE == 'true' }}
               run: |
                   SSH_USER=ci PROXMOX_HOST=pve ./scripts/lab/guardrails.sh ensure-artifacts
 
             - name: Sync repo to PVE
-              if: ${{ inputs.run_on_pve }}
+              if: ${{ env.RUN_ON_PVE == 'true' }}
               run: |
                   rsync -az --delete \
                     --exclude '.git' \
@@ -114,7 +119,7 @@ jobs:
                     ./ ci@pve:/home/ci/homelab-proxmox/
 
             - name: Prepare mutmut shared cache on PVE
-              if: ${{ inputs.run_on_pve }}
+              if: ${{ env.RUN_ON_PVE == 'true' }}
               run: |
                   cache_branch="${GITHUB_REF_NAME:-unknown}"
                   ssh ci@pve bash -s -- "$cache_branch" <<'EOF'
@@ -138,7 +143,7 @@ jobs:
                   EOF
 
             - name: Prepare Python venv on PVE
-              if: ${{ inputs.run_on_pve }}
+              if: ${{ env.RUN_ON_PVE == 'true' }}
               run: |
                   ssh ci@pve 'set -euo pipefail; \
                     if ! command -v uv >/dev/null 2>&1; then \
@@ -170,7 +175,7 @@ jobs:
                   ls -la /mnt/nas || true
 
             - name: Prepare mutmut shared cache
-              if: ${{ !inputs.run_on_pve }}
+              if: ${{ env.RUN_ON_PVE != 'true' }}
               run: |
                   set -euo pipefail
 
@@ -192,7 +197,7 @@ jobs:
                   ln -sfn "$cache_path" .mutmut-cache
 
             - name: Mutation testing (mutmut) on PVE
-              if: ${{ inputs.run_on_pve }}
+              if: ${{ env.RUN_ON_PVE == 'true' }}
               run: |
                   ssh ci@pve "cd /home/ci/homelab-proxmox && \
                     .venv/bin/python -m mutmut run \
@@ -204,7 +209,7 @@ jobs:
                     .venv/bin/python -m mutmut results"
 
             - name: Mutation testing (mutmut)
-              if: ${{ !inputs.run_on_pve }}
+              if: ${{ env.RUN_ON_PVE != 'true' }}
               run: |
                   .venv/bin/mutmut run \
                     --CI \

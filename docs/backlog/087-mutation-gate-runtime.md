@@ -85,7 +85,8 @@ Checked against the workflows on `main`, `gh run list` and `/mnt/nas/homelab_ci/
   `Prepare mutmut shared cache` (`if: ${{ !inputs.run_on_pve }}`) fails with
   `Shared cache mount missing at /mnt/nas/homelab_ci` on the Pi runner. The PVE variant of the mutmut
   step is guarded by `inputs.run_on_pve` too, so on a `schedule` run it is skipped. Fixing the guard
-  (FR-002) is a small change that can land before the migration.
+  (FR-002) is a small change that can land before the migration. *Fix: PR for FR-002, 2026-10-23
+  (job-level `RUN_ON_PVE`, true on `schedule`); confirmed only once a scheduled run goes green.*
 - **The NAS is healthy.** `/volume1/homelab_ci` is mounted on `pve` (8.2 TB, 26% used), so storage
   does not block FR-003 or FR-008.
 - **Nothing here has been implemented.** There is still no `specs/087-*` directory; this entry is the
