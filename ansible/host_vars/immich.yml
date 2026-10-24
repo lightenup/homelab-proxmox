@@ -26,3 +26,17 @@ monitoring_contract:
       summary: !unsafe "Immich job backlog growing on {{ $labels.instance }}"
       description: !unsafe "Immich has more than 500 waiting jobs for 10 minutes (current: {{ $value }})."
   dashboard_file: "grafana/dashboards/immich-photo-service.json"
+  # Per-service log error rule (spec 092, FR-008, research R8). Known noisy, non-actionable
+  # patterns (media decode errors) are excluded.
+  log_alert_rules:
+    - alert: ImmichErrorLogs
+      expr: |
+        sum(count_over_time({env="prod", host="immich", container="immich_server"} |~ "ERROR" !~ "VipsJpeg|ffprobe|unsupported image format" [15m])) > 5
+      for: "0m"
+      severity: warning
+      summary: !unsafe 'immich is logging errors — Explore: {host="immich", container="immich_server"} |~ "ERROR" !~ "VipsJpeg|ffprobe|unsupported image format"'
+      description: >-
+        More than 5 ERROR log lines in 15 minutes from immich_server, excluding the known
+        media-decode noise. Grafana -> Explore -> Loki: {host="immich"} |~ "ERROR".
+      enabled: false
+      disabled_reason: "awaiting 7-day baseline (SC-004)"

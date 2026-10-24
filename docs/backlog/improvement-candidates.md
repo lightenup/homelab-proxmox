@@ -52,7 +52,7 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Application-level error/log alerting** — Promtail/Alloy → Loki; alert on app error-rate spikes,
   stack traces, and OOM-kills (`kernel: Out of memory`) per service. Current alerting is host/infra +
   endpoint only, so a wedged app that still answers its port and doesn't saturate CPU/disk is invisible
-  (only Caddy 5xx rate covers app correctness today). Highest-value gap alongside backup monitoring. *Specified in [`092`](./092-log-aggregation.md)*
+  (only Caddy 5xx rate covers app correctness today). Highest-value gap alongside backup monitoring. *Delivered by [`092`](../../specs/092-log-aggregation/)*
 - **LXC base Debian 12 → 13** — Debian 12 left regular security support on 2026-07-11 (LTS until
   2028-06-30); the PVE host is already on Debian 13 and lab templates exist (`lab-tpl-debian-13-*`).
   Template change plus rolling LXC rebuilds. Not urgent before 2028. *Open*
@@ -85,7 +85,10 @@ Sparse backlog of operability / monitoring / security improvements, carried over
 - **Proxmox firewall baseline** — datacenter/node/container deny-inbound default + per-service allow
   rules; integrate with Terraform container defs. *Open*
 - **Login anomaly alerting** — Promtail/Alloy → Loki; alert on successful SSH from non-whitelisted IP,
-  unexpected `sudo`, off-hours login. *Specified in [`092`](./092-log-aggregation.md)*
+  unexpected `sudo`, off-hours login. *Delivered by [`092`](../../specs/092-log-aggregation/): login
+  and `sudo` alerting shipped keyed on (users, key fingerprint, source class) rather than IP, because
+  the census found DHCP addresses; off-hours/time-of-day rules were dropped as a separate axis (a
+  password login or an unlisted key/source alerts regardless of time of day).*
 - **CrowdSec** — replace/supplement fail2ban with shared ban lists + community blocklists + Caddy
   bouncer; add exporter to monitoring. *Open*
 - **PVE HTTPS via Caddy** — `pve.hus-sky.no` → `reverse_proxy https://192.168.1.112:8006`

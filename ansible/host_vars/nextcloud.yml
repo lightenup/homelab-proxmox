@@ -5,6 +5,12 @@ healthcheck_url:
 healthcheck_profile: lan
 healthcheck_expect_status: 200
 
+# Alloy log collector (spec 092): Nextcloud's application errors exist only in this file
+# (research R8). fail2ban's nextcloud jail reads the same file (log_type stays "file" below).
+alloy_file_logs:
+  - path_glob: "/mnt/nextcloud/data/nextcloud.log"
+    tail_from_end: true
+
 # fail2ban jail configuration (FR-009, FR-010, FR-011)
 # Feature: 042-monitoring-tier-c
 fail2ban_jails:
@@ -40,3 +46,18 @@ monitoring_contract:
       summary: !unsafe "Nextcloud is down on {{ $labels.instance }}"
       description: !unsafe "Nextcloud has been unreachable for more than 5 minutes (instance: {{ $labels.instance }})."
   dashboard_file: "grafana/dashboards/nextcloud.json"
+  # Per-service log error rule (spec 092, FR-008, research R8). Nextcloud's own log levels: 3
+  # is error, 4 is fatal. The R8 sample showed 3,227 level-4 lines in 72h; the baseline
+  # decides the final threshold.
+  log_alert_rules:
+    - alert: NextcloudErrorLogs
+      expr: |
+        sum(count_over_time({env="prod", host="nextcloud", source="file"} | json | level >= 3 [15m])) > 5
+      for: "0m"
+      severity: warning
+      summary: !unsafe 'nextcloud is logging errors — Explore: {host="nextcloud", source="file"} | json | level >= 3'
+      description: >-
+        More than 5 error/fatal-level (level >= 3) log lines in 15 minutes from
+        nextcloud.log. Grafana -> Explore -> Loki: {host="nextcloud"} | json | level >= 3.
+      enabled: false
+      disabled_reason: "awaiting 7-day baseline (SC-004)"

@@ -9,6 +9,12 @@
     dest: "{{ grafana_provisioning_path }}/datasources/prometheus.yml"
     mode: '0644'
 
+- name: Deploy Loki datasource provisioning
+  ansible.builtin.copy:
+    src: grafana/provisioning/datasources/loki.yml
+    dest: "{{ grafana_provisioning_path }}/datasources/loki.yml"
+    mode: '0644'
+
 - name: Deploy dashboard provider configuration
   ansible.builtin.copy:
     src: grafana/provisioning/dashboards/default.yml

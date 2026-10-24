@@ -58,6 +58,29 @@
     mode: '0644'
   notify: Reload prometheus
 
+- name: Deploy log pipeline alert rules
+  ansible.builtin.template:
+    src: log_pipeline_alerts.yml.j2
+    dest: "{{ prometheus_config_path }}/alerts/log_pipeline_alerts.yml"
+    mode: '0644'
+  notify: Reload prometheus
+  when: (deploy_environment | default('prod')) != 'lab'
+
+- name: Deploy Loki configuration
+  ansible.builtin.template:
+    src: loki.yaml.j2
+    dest: "{{ loki_config_path }}/loki.yaml"
+    mode: '0644'
+  notify: Restart monitoring stack
+
+- name: Deploy Loki ruler rules
+  ansible.builtin.template:
+    src: log_alerts.yaml.j2
+    dest: "{{ loki_rules_path }}/fake/log_alerts.yaml"
+    mode: '0644'
+  when: (deploy_environment | default('prod')) != 'lab'
+  # No handler: the local ruler polls the rules directory every minute (R15).
+
 - name: Deploy Telegraf configuration
   ansible.builtin.template:
     src: telegraf.conf.j2

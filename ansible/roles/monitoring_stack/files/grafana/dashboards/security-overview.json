@@ -363,6 +363,66 @@
         }
       ],
       "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "id": 13,
+      "title": "SSH logins and sudo (logs)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          }
+        }
+      },
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 28 },
+      "id": 14,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{env=\"prod\", ident=~\"sshd|sshd-session\"} |= \"Accepted \" | regexp `Accepted (?P<method>\\S+) for (?P<user>\\S+) from (?P<src>\\S+) port \\d+ ssh2(?:: \\S+ (?P<fp>SHA256:\\S+))?`",
+          "refId": "A"
+        }
+      ],
+      "transformations": [{ "id": "labelsToFields", "options": {} }],
+      "title": "Accepted SSH logins (24h)",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "none",
+          "min": 0
+        }
+      },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 28 },
+      "id": 15,
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum by (host, sudo_user) (count_over_time({env=\"prod\", ident=\"sudo\"} | regexp `^\\s*(?P<sudo_user>\\S+) : ` | sudo_user != \"\" [1h]))",
+          "legendFormat": "{{host}} / {{sudo_user}}",
+          "refId": "A"
+        }
+      ],
+      "title": "sudo calls by user",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

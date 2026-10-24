@@ -5,3 +5,6 @@ healthcheck_url:
 healthcheck_profile: lan
 healthcheck_verify_ssl: false
 healthcheck_expect_status: 401
+
+# Alloy log collector (spec 092): pve has no Docker.
+alloy_docker_logs: false

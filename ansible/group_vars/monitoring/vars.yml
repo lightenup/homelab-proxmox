@@ -9,6 +9,7 @@ grafana_version: "13.2.4"  # Upgraded from 12.3.1 (2026-10-22, spec 090)
 telegraf_version: "1.40.2"  # Upgraded from 1.37.0 (2026-10-22, spec 090)
 alertmanager_version: "v0.34.1"  # Upgraded from v0.30.0 (2026-10-22, spec 090)
 blackbox_exporter_version: "v0.29.1"  # Upgraded from v0.28.0 (2026-10-22, spec 090)
+loki_version: "3.7.9"  # Log store, spec 092. Also pins the lokitool binary used at deploy.
 
 # Monitoring LXC
 monitoring_ip: "192.168.1.214"
@@ -111,3 +112,33 @@ blackbox_static_hosts: >-
 # this alerts on the same DNS the services themselves depend on.
 blackbox_dns_resolvers:
   - "1.1.1.1"
+
+# Public key fingerprints, not secrets. Census 2026-10-24 (spec 092 R3). A password login has
+# no key and never matches, so every password login on pve alerts (owner decision).
+ssh_login_allowlist:
+  lxc:
+    - name: pipeline deploy key
+      users: [root, ansible]
+      keys: ["SHA256:NH5zp/61GeEPB81f+jkiTmMfTHaWrn4s4JU5MIQUwT4"]
+      from: [proxmox]
+    - name: owner
+      users: [root]
+      keys:
+        - "SHA256:cqi3Ec4bCtvvNDN4iPe1er0NH8BTToa2PfQV7WHHwVU"
+        - "SHA256:3+LnahZMxEHmkN3uF/R5qPgFxPev6aSf1Sk6H1jyhQM"
+      from: [lan, proxmox]
+  proxmox:
+    - name: CI runner
+      users: [ci]
+      keys: ["SHA256:bclAaF1GOPV0jxfGNMjdUaKQG4Mj85fv66zJ9VO9vrY"]
+      from: [lan]
+    - name: owner
+      users: [ci, root]
+      keys:
+        - "SHA256:ssfuJwQz9oDVn41sWkAwZHPvux2vT5x08vnWqiIYit0"
+        - "SHA256:cqi3Ec4bCtvvNDN4iPe1er0NH8BTToa2PfQV7WHHwVU"
+        - "SHA256:3+LnahZMxEHmkN3uF/R5qPgFxPev6aSf1Sk6H1jyhQM"
+      from: [lan, tailnet]
+ssh_sudo_expected:
+  lxc: ansible
+  proxmox: ci

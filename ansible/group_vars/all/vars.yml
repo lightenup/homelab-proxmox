@@ -8,9 +8,19 @@ ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 synology_nas_ip: "192.168.1.109"
 lan_router_ip: "192.168.1.1"
 proxmox_host_ip: "192.168.1.112"
+monitoring_host_ip: "192.168.1.214"
+# LAN and tailnet address ranges (spec 092). LAN addresses are DHCP, so login/alert rules
+# match the range rather than a literal address (research R3).
+lan_cidr: "192.168.1.0/24"
+tailnet_cidr: "100.64.0.0/10"
 
 # node_exporter on every LXC (role node_exporter via lxc_base). Single pin (spec 090).
 node_exporter_version: "1.12.1"
+
+# Alloy log collector on every host incl. pve, spec 092.
+alloy_version: "1.21.2"
+# Collector HTTP/metrics port; read by the alloy role and Prometheus' alloy job (spec 092).
+alloy_http_port: 12345
 
 # Service backups (091)
 # The key is the `backup` label and the stem of the unit, archive and snapshot names. The same

@@ -1,6 +1,9 @@
 # `PasswordAuthentication yes` is left on across the estate — inert today, one `passwd` from live
 
-**Status**: Backlog — found 2026-09-21 running spec `065`'s T042 against `hermes`.
+**Status**: **Folded into [`092`](./092-log-aggregation.md)** 2026-10-24 as FR-015 (a
+precondition for its login alerts), for the **LXCs only**. The Proxmox host keeps password SSH by
+owner decision, because it is in use there (`092` research R3), and every password login on it
+alerts instead. Found 2026-09-21 running spec `065`'s T042 against `hermes`.
 **Impact**: none today, and that is the whole problem. The protection currently rests on
 *"no account happens to have a password set"* rather than on configuration, so it is one
 ordinary administrative action away from silently disappearing.

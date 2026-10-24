@@ -54,6 +54,25 @@ scrape_configs:
 {% endif %}
 {% endfor %}
 
+  # Log pipeline self-monitoring (spec 092, research R14). Path-independent (R12): the same
+  # hosts are scraped on every path, so a LAB-path render leaves these targets unchanged.
+  - job_name: 'loki'
+    scrape_interval: {{ prometheus_scrape_interval }}
+    static_configs:
+      - targets: ['loki:3100']
+        labels:
+          instance: 'loki'
+
+  - job_name: 'alloy'
+    scrape_interval: {{ prometheus_scrape_interval }}
+    static_configs:
+{% for host in groups['services'] | default([]) + groups['proxmox_hosts'] | default([]) %}
+      - targets: ['{{ hostvars[host].ansible_host }}:{{ alloy_http_port }}']
+        labels:
+          instance: '{{ host }}'
+          no_down_alert: 'true'
+{% endfor %}
+
   # Application metrics — aggregated from service monitoring contracts (FR-008, US-4)
   # Each scrape target comes from a service role's monitoring_contract.scrape_targets
 {% for host in groups['all'] | default([]) %}

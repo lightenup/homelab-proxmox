@@ -5,6 +5,11 @@ healthcheck_url:
 healthcheck_profile: lan
 healthcheck_expect_status: 200
 
+# Alloy log collector (spec 092): no Docker on this host (Jellyfin runs as a native service).
+alloy_docker_logs: false
+alloy_file_logs:
+  - path_glob: "/var/log/jellyfin/*.log"
+
 # fail2ban jail configuration (FR-009, FR-010, FR-012)
 # Feature: 042-monitoring-tier-c
 fail2ban_jails:

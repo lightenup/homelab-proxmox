@@ -1,10 +1,81 @@
 ---
 # Validate rendered configuration before the stack restarts
-# Feature: 090-monitoring-version-currency (FR-008)
+# Feature: 090-monitoring-version-currency (FR-008), extended by 092-log-aggregation
 #
 # Runs promtool check config, promtool check rules, and amtool check-config
 # with the target images. A failure stops the play while the old containers
 # are still running.
+
+# --- Loki (spec 092) ---------------------------------------------------------
+
+- name: Check installed lokitool version
+  ansible.builtin.command:
+    cmd: "{{ lokitool_path }} --version"
+  register: lokitool_installed_version
+  failed_when: false
+  changed_when: false
+
+- name: Download lokitool archive
+  ansible.builtin.get_url:
+    url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/lokitool-linux-amd64.zip"
+    dest: "/tmp/lokitool-{{ loki_version }}.zip"
+    checksum: "sha256:https://github.com/grafana/loki/releases/download/v{{ loki_version }}/SHA256SUMS"
+    mode: '0644'
+  when: >-
+    lokitool_installed_version.rc | default(1) != 0 or
+    loki_version not in (lokitool_installed_version.stdout | default(''))
+  # Skipped in check mode: the download above is a no-op under --check, so the
+  # archive does not exist and unarchive would fail on a dry run.
+
+- name: Extract lokitool archive
+  ansible.builtin.unarchive:
+    src: "/tmp/lokitool-{{ loki_version }}.zip"
+    dest: /tmp/
+    remote_src: true
+  when: >-
+    (lokitool_installed_version.rc | default(1) != 0 or
+    loki_version not in (lokitool_installed_version.stdout | default(''))) and
+    not ansible_check_mode
+
+- name: Install lokitool binary
+  ansible.builtin.copy:
+    src: /tmp/lokitool-linux-amd64
+    dest: "{{ lokitool_path }}"
+    mode: '0755'
+    owner: root
+    group: root
+    remote_src: true
+  when: >-
+    (lokitool_installed_version.rc | default(1) != 0 or
+    loki_version not in (lokitool_installed_version.stdout | default(''))) and
+    not ansible_check_mode
+
+- name: Validate Loki configuration
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm -v {{ loki_config_path }}:/etc/loki:ro
+      grafana/loki:{{ loki_version }} -config.file=/etc/loki/loki.yaml -verify-config
+  changed_when: false
+
+- name: Validate Loki ruler rules with lokitool
+  ansible.builtin.command:
+    cmd: "{{ lokitool_path }} rules check {{ loki_rules_path }}/fake/log_alerts.yaml"
+  changed_when: false
+  when: (deploy_environment | default('prod')) != 'lab'
+  register: lokitool_check_result
+  failed_when: false
+
+- name: Fail if lokitool rules check found a problem
+  ansible.builtin.assert:
+    that:
+      - lokitool_check_result.rc | default(0) == 0
+    fail_msg: >-
+      lokitool rules check failed against {{ loki_rules_path }}/fake/log_alerts.yaml.
+      Fix the rule expression. Do not try `rules lint` without --dry-run as a workaround:
+      it rewrites the file into a form the local ruler rejects (research R10).
+  when: (deploy_environment | default('prod')) != 'lab'
+
+# --- Prometheus / Alertmanager (existing) -------------------------------------
 
 - name: Find deployed alert rule files
   ansible.builtin.find:

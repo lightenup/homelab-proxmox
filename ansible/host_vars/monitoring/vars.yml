@@ -8,3 +8,6 @@ healthcheck_url:
   port: 3000
   path: /api/health
 healthcheck_profile: both
+
+# Push-only relay on :3101 -> host-local Loki (spec 092, FR-013, R4).
+alloy_relay: true

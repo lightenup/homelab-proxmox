@@ -24,3 +24,29 @@
   ansible.builtin.include_role:
     name: node_exporter
   when: node_exporter_enabled | default(true)
+
+# Disable SSH password and keyboard-interactive auth (spec 092 FR-015). LXCs only; pve keeps
+# password authentication by owner decision (research R3/R13). Runs on every path: this is a
+# security baseline, not part of the log pipeline, so it is not lab-gated.
+- name: Deploy sshd drop-in to disable password authentication
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-homelab-auth.conf
+    mode: '0644'
+    owner: root
+    content: |
+      # Managed by Ansible, spec 092. LXCs only; pve keeps password auth by owner decision.
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+  notify: Reload ssh
+
+# No `validate:` on the copy above: a drop-in cannot be checked on its own. This checks the
+# whole merged sshd config instead, and stops the play before the handler reloads sshd.
+- name: Validate sshd configuration after the drop-in
+  ansible.builtin.command:
+    cmd: /usr/sbin/sshd -t
+  changed_when: false
+
+- name: Deploy Alloy log collector (spec 092)
+  ansible.builtin.include_role:
+    name: alloy
+  when: (deploy_environment | default('prod')) != 'lab' and (alloy_enabled | default(true))

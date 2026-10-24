@@ -1,0 +1,20 @@
+---
+# Alloy handlers. Tasks notify all three through `listen: alloy config changed`.
+# Feature: 092-log-aggregation
+
+- name: Validate alloy config
+  ansible.builtin.command:
+    cmd: alloy validate /etc/alloy/config.alloy
+  changed_when: false
+  listen: alloy config changed
+
+- name: Reload systemd for alloy
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: alloy config changed
+
+- name: Restart alloy
+  ansible.builtin.systemd:
+    name: alloy
+    state: restarted
+  listen: alloy config changed

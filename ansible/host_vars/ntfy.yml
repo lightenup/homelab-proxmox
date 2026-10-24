@@ -35,3 +35,16 @@ monitoring_contract:
       description: !unsafe >-
         The ntfy health probe has failed for 5 minutes. Alerts are still delivered to
         Pushover; the ntfy copy is expected to fail while ntfy is down (R-005).
+  # Per-service log error rule (spec 092, FR-008, research R8).
+  log_alert_rules:
+    - alert: NtfyErrorLogs
+      expr: |
+        sum(count_over_time({env="prod", host="ntfy", container="ntfy"} |~ "level=(ERROR|FATAL)|\\bERROR\\b" [15m])) > 5
+      for: "0m"
+      severity: warning
+      summary: !unsafe 'ntfy is logging errors — Explore: {host="ntfy", container="ntfy"} |~ "level=(ERROR|FATAL)|\\bERROR\\b"'
+      description: >-
+        More than 5 ERROR/FATAL log lines in 15 minutes from the ntfy container. Grafana ->
+        Explore -> Loki: {host="ntfy"} |~ "level=(ERROR|FATAL)|\\bERROR\\b".
+      enabled: false
+      disabled_reason: "awaiting 7-day baseline (SC-004)"

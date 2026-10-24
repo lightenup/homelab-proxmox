@@ -4,7 +4,7 @@
 # Purpose: Version pins, ports, paths for Prometheus, Grafana, SNMP Exporter, Alertmanager
 
 # Monitoring LXC
-monitoring_ip: "192.168.1.214"
+monitoring_ip: "{{ monitoring_host_ip }}"
 monitoring_hostname: "monitoring"
 
 # Synology NAS targets — synology_nas_ip lives in group_vars/all/vars.yml (central, spec
@@ -60,3 +60,11 @@ pushover_grafana_url: "{{ grafana_protocol | default('https') }}://{{ grafana_do
 # with empty ones, so it is refused by default. Set true only for a genuinely standalone
 # monitoring stack that is meant to watch nothing but itself.
 monitoring_allow_empty_contracts: false
+
+# Loki (spec 092)
+loki_port: 3100
+loki_config_path: "{{ monitoring_install_dir }}/loki"
+loki_rules_path: "{{ monitoring_install_dir }}/loki/rules"
+loki_retention_period: "720h"
+loki_mem_limit: "1g"
+lokitool_path: /usr/local/bin/lokitool

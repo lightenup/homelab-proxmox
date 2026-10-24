@@ -1,0 +1,167 @@
+---
+# Alloy log collector installation and configuration tasks
+# Feature: 092-log-aggregation (contracts/log-pipeline.md C3)
+
+- name: Assert alloy is production-only
+  ansible.builtin.assert:
+    that:
+      - (deploy_environment | default('prod')) != 'lab'
+    fail_msg: "alloy is production-only (FR-017)"
+
+- name: Check installed alloy version
+  ansible.builtin.command:
+    cmd: dpkg-query -W -f='${Version}' alloy
+  register: alloy_installed_version
+  failed_when: false
+  changed_when: false
+
+- name: Download alloy .deb package
+  ansible.builtin.get_url:
+    url: "https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/alloy-{{ alloy_version }}-1.amd64.deb"
+    dest: "/tmp/alloy-{{ alloy_version }}-1.amd64.deb"
+    checksum: "sha256:https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/SHA256SUMS"
+    mode: '0644'
+  when: not alloy_installed_version.stdout | default('') | regex_search('^' ~ alloy_version)
+  # Skipped in check mode: the download above is a no-op under --check, so the .deb does not
+  # exist and apt would fail on a dry run (same pattern as node_exporter).
+
+- name: Install alloy package
+  ansible.builtin.apt:
+    deb: "/tmp/alloy-{{ alloy_version }}-1.amd64.deb"
+  when: >-
+    (not alloy_installed_version.stdout | default('') | regex_search('^' ~ alloy_version))
+    and not ansible_check_mode
+
+- name: Clean up downloaded .deb
+  ansible.builtin.file:
+    path: "/tmp/alloy-{{ alloy_version }}-1.amd64.deb"
+    state: absent
+  when: not alloy_installed_version.stdout | default('') | regex_search('^' ~ alloy_version)
+
+- name: Ensure the docker system group exists
+  ansible.builtin.group:
+    name: docker
+    system: true
+    state: present
+  when: alloy_docker_logs
+
+- name: Check whether docker is installed
+  ansible.builtin.command:
+    cmd: which docker
+  register: alloy_docker_present
+  failed_when: false
+  changed_when: false
+  when: alloy_docker_logs
+
+# FR-003, research R9: a container with no max-size on its json-file log driver can fill the
+# LXC's disk. Skipped when Docker is not installed yet (a fresh build, before the Docker role
+# runs after lxc_base).
+- name: Check every running container has a bounded log size
+  ansible.builtin.shell:
+    cmd: >-
+      docker ps -q | xargs -r docker inspect -f
+      '{{ '{{' }}.Name{{ '}}' }} {{ '{{' }}index .HostConfig.LogConfig.Config "max-size"{{ '}}' }}'
+  register: alloy_docker_log_sizes
+  changed_when: false
+  when: alloy_docker_logs and alloy_docker_present.rc == 0
+
+- name: Identify containers with no bounded log size
+  ansible.builtin.set_fact:
+    alloy_unbounded_containers: "{{ alloy_docker_log_sizes.stdout_lines | default([]) | map('trim') | select('search', '^\\S+$') | list }}"
+  when: alloy_docker_logs and alloy_docker_present.rc == 0
+
+- name: Fail if any running container has no bounded log size
+  ansible.builtin.assert:
+    that:
+      - alloy_unbounded_containers | default([]) | length == 0
+    fail_msg: >-
+      These running containers have no max-size log option:
+      {{ alloy_unbounded_containers }}. Recreate them so they inherit spec 089's daemon
+      defaults before the Alloy Docker source is enabled.
+  when: alloy_docker_logs and alloy_docker_present.rc == 0
+
+# VMID -> LXC name map (pve only, research R6). Refreshed on every pve deploy; a container
+# created since the last deploy falls back to its VMID in the OOM alert until the next one.
+- name: Read VMID to name map (pve only)
+  ansible.builtin.command:
+    cmd: pct list
+  register: alloy_pct_list
+  changed_when: false
+  when: inventory_hostname in groups['proxmox_hosts']
+
+- name: Parse VMID to name map (pve only)
+  ansible.builtin.set_fact:
+    alloy_vmid_names: >-
+      {{ dict(alloy_pct_list.stdout_lines
+         | select('match', '^\s*\d+')
+         | map('regex_replace', '^(\S+).*\s(\S+)\s*$', '\1=\2')
+         | map('split', '=')) }}
+  when: inventory_hostname in groups['proxmox_hosts']
+
+- name: Add alloy user to its groups
+  ansible.builtin.user:
+    name: alloy
+    groups: "adm,systemd-journal{{ ',docker' if alloy_docker_logs else '' }}"
+    append: true
+  notify: alloy config changed
+
+- name: Ensure the alloy systemd override directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/alloy.service.d
+    state: directory
+    mode: '0755'
+
+- name: Deploy alloy systemd memory override
+  ansible.builtin.template:
+    src: alloy-override.conf.j2
+    dest: /etc/systemd/system/alloy.service.d/override.conf
+    mode: '0644'
+  notify: alloy config changed
+
+- name: Deploy /etc/default/alloy
+  ansible.builtin.template:
+    src: alloy.default.j2
+    dest: /etc/default/alloy
+    mode: '0644'
+  notify: alloy config changed
+
+- name: Deploy alloy collector pipeline config
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: /etc/alloy/config.alloy
+    mode: '0640'
+    owner: root
+    group: alloy
+  notify: alloy config changed
+
+- name: Check declared files are readable by the alloy user
+  ansible.builtin.command:
+    cmd: "runuser -u alloy -- test -r {{ item.path_glob }}"
+  loop: "{{ alloy_file_logs }}"
+  loop_control:
+    label: "{{ item.path_glob }}"
+  changed_when: false
+  when: "'*' not in item.path_glob"
+  register: alloy_file_readable
+  failed_when: false
+
+- name: Fail if a declared file is unreadable by the alloy user
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+    fail_msg: >-
+      alloy cannot read {{ item.item.path_glob }}. If this is on an NFS mount with root
+      squash, add `nogroup` to alloy_extra_groups for this host (quickstart §2 step 2).
+  loop: "{{ alloy_file_readable.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path_glob | default('') }}"
+  when: alloy_file_readable.results is defined
+
+- name: Enable and start alloy service
+  ansible.builtin.systemd:
+    name: alloy
+    enabled: true
+    state: started
+
+- name: Flush alloy handlers
+  ansible.builtin.meta: flush_handlers
