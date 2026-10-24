@@ -86,7 +86,8 @@ gh workflow run nightly-deeper-verification.yml --ref main -f min_score=99
 ```
 
 1. Expected: the job fails, and one message arrives on the `mutation` topic in the format in
-   contracts/regression-alert.md, showing floor 99.00.
+   contracts/regression-alert.md, showing floor 99.00. The run does not publish:
+   `/mnt/nas/homelab_ci/mutmut/main` still points at the previous set, with the committed floor.
 2. A normal nightly afterwards (no `min_score`) sends nothing.
 
 The weakened-test case itself is covered on the PR gate in step 3. It runs the same script.

@@ -675,3 +675,13 @@ T041, a revert would run mutmut 2 from an empty cache: slow, but correct.
 | T041 prune | 2026-10-24 ("before" only) | T002's note | Precondition met (T038 published); still not deleted — needs the owner's explicit go-ahead |
 | T042 SC-003 | — | — | Time-gated: 7 nightly runs after T038 (2026-10-24) |
 | T043 SC-006 | — | — | Time-gated: 2026-11-07 (two weeks after T037's 2026-10-24 merge) |
+
+## Phase 11: Convergence
+
+- [X] T045 Amend `spec.md` FR-003 and `plan.md` "Nightly" step 3 so a nightly dispatched with `min_score` (the alert test) does not publish, matching `.github/workflows/nightly-deeper-verification.yml` (publish `if:` requires `env.MUTMUT_MIN_SCORE == ''`) and `contracts/published-results.md` per FR-003 (contradicts)
+
+  Owner chose to keep the code and amend the docs (2026-10-24). Amended `spec.md` FR-003, `plan.md` "Nightly" step 3, `quickstart.md` §6 and the exit-code table in `contracts/gate-script.md`.
+- [ ] T046 After the first `schedule`-triggered nightly on the mutmut 3 workflow (2026-10-25T03:00Z or later), confirm it is green, published a new `main-<UTC>` set whose `report.json` `commit` equals the run's `head_sha` and `floor` is the committed one, and sent no message on ntfy topic `mutation`; record it under T040 and T007 and in the Rollout record per SC-005 / US5/AC2 (partial)
+- [ ] T047 On the Mac after `task mutmut:pull`, change one function in `python/src/homelab_proxmox_orchestrator/version_currency.py`, run `task mutmut:run`, and confirm only that function's mutants are re-tested; revert the change. Open `task mutmut:browse` and confirm survivors are listed. Record both under T039 per US4/AC1, US4/AC2 (partial)
+- [ ] T048 Make the PR gate keep no results after it ends: add an `if: always()` step after `Fetch mutation report` in `.github/workflows/mutation.yml` that runs `ssh ci@pve 'rm -rf /home/ci/homelab-proxmox/mutants'`, with a guard test in `python/tests/workflows/`; or, if the owner prefers, amend FR-004 to "carries no results into the next run" (already true: `scripts/ci/mutmut-threshold.sh` deletes `mutants/` first) per FR-004 (partial)
+- [ ] T049 Record in this file (a note under T044 or the Rollout record) the PR #281 additions not called for by spec, plan or tasks, and why: `python/tests/workflows/test_workflow_heredocs.py` (heredoc bug hit three times in 087), `norecursedirs` in `python/pytest.ini` (stray `mutants/` broke collection; FR-006/FR-007), the `--python '>=3.11,<3.15'` range on the ansible-lint hook in `.pre-commit-config.yaml`, the AGENTS.md "Running the tests" and `act` sections, and the orphaned-process note in `docs/operations/mutation-testing.md` (unrequested)

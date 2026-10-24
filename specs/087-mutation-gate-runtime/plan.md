@@ -176,7 +176,9 @@ mutmut's `status_by_exit_code`, and the unit test pins it against fixture files.
   1. Check the NAS mount on PVE (the existing check).
   2. Run the gate script on PVE with `MUTMUT_COMMIT=${{ github.sha }}`, recording its exit code
      without failing the step.
-  3. If the exit code is 0 or 1, publish (contracts/published-results.md) as a remote bash heredoc.
+  3. If the exit code is 0 or 1 and `min_score` is empty, publish (contracts/published-results.md)
+     as a remote bash heredoc. A `min_score` run is an alert test and does not publish (FR-003,
+     amended 2026-10-24).
   4. If it is 1, read the token from vault the way `version-currency.yml` does, and post the alert
      (contracts/regression-alert.md).
   5. Fail the job if the exit code is not 0, or if the publish failed.

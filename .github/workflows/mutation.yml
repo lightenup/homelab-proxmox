@@ -160,6 +160,14 @@ jobs:
             head -10 survivors.txt >> "$GITHUB_STEP_SUMMARY" || true
           fi
 
+      # FR-004: a PR run keeps no results. Delete them from the PVE working copy once the report is
+      # fetched, whatever the outcome. A failed delete only warns: it must not change the gate result.
+      - name: Remove mutation results from PVE
+        if: always()
+        run: |
+          ssh ci@pve 'rm -rf /home/ci/homelab-proxmox/mutants' \
+            || echo "::warning::Could not remove /home/ci/homelab-proxmox/mutants on pve"
+
       - name: Gate result
         run: |
           exit "${{ steps.gate_run.outputs.rc }}"
