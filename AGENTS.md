@@ -95,6 +95,23 @@ Service deploys go through the gated GitHub Actions pipeline
 branch ref — no merge to `main` is required to deploy. Trigger with `gh workflow run`. Per-feature
 runbooks live in `specs/*/quickstart.md`.
 
+## Mutation testing (mutmut 3)
+
+Use the Taskfile wrappers; they pick whichever venv actually has mutmut (`.venv`, else
+`.venv-mutmut` — the Mac's `.venv` is Python 3.15, which mutmut 3.8 does not support):
+
+| Task | Use |
+|---|---|
+| `task mutmut:pull` | Fetch `main`'s nightly results from the NAS into `mutants/` (via `ci@pve`) |
+| `task mutmut:status` | Print score, gate and top survivor modules from `mutants/report.json` |
+| `task mutmut:run` | Re-test changed source. After editing **tests**, pass the module: `task mutmut:run -- "homelab_proxmox_orchestrator.<module>*"` (mutmut does not notice test-only edits) |
+| `task mutmut:browse` | Survivor TUI (interactive — not for agents) |
+| `task mutmut:gate` | Full CI-equivalent gate, ~2 min. **Deletes `mutants/` first** |
+
+Score = killed / (killed + survived); floor in `python/mutmut-threshold.txt`, gate = floor − 1.
+The PR gate (`mutation.yml`) only runs for paths in `scripts/ci/mutation-gate-paths.txt`. Do not
+add incremental/seeded modes. Details: `docs/operations/mutation-testing.md`.
+
 ## PR gotcha: the protected-path label must exist *before* the event fires
 
 `ci.yml`'s **Guardrail: protected paths must not change** reads labels from the webhook payload:

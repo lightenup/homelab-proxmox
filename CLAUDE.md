@@ -67,4 +67,9 @@ Open PRs with `gh pr create`. `git fetch`/`clone` over HTTPS work.
 Pipeline deploys run on the `pve` host (which has unrestricted GitHub access) and are **unaffected**
 by the Mac's push block. Full procedure and gotchas: [AGENTS.md](./AGENTS.md).
 
+## Mutation testing
+
+Use `task mutmut:pull|status|run|browse|gate` rather than calling mutmut directly (they resolve
+the right venv). Summary table in [AGENTS.md](./AGENTS.md#mutation-testing-mutmut-3).
+
 <!-- MANUAL ADDITIONS END -->
