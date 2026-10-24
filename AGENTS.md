@@ -114,6 +114,18 @@ act -n -W .github/workflows/<file>.yml workflow_dispatch   # dry-run the one you
 - Steps that SSH to `pve` or need vault secrets can't really run under `act`. A full run with
   secrets is described in `docs/operations/proxmox-ci.md`. If `act` can't be used, say why in the PR.
 
+## Running the tests
+
+From the repo root: `bash scripts/ci/python-tests.sh` (the same command CI runs; set `PYTHON_BIN` to
+pick an interpreter). It runs `python/tests/` with `--cov-fail-under=80`.
+
+- **Coverage measures five modules only** (`orchestrator`, `evidence`, `summary_from_evidence`,
+  `summary_markdown`, `version_currency`; see `addopts` in `python/pytest.ini`). The other modules
+  are not in the percentage at all; the mutation gate is their check.
+- `python/tests/workflows/` and `python/tests/guardrails/` are guard tests: they assert the shape of
+  workflows and repo files, not runtime behaviour. Workflow edits usually need one here, because
+  `act -n` and yamllint miss logic and shell errors (see `test_workflow_heredocs.py`).
+
 ## Mutation testing (mutmut 3)
 
 Use the Taskfile wrappers; they pick whichever venv actually has mutmut (`.venv`, else

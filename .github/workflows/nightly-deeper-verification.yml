@@ -179,7 +179,9 @@ jobs:
 
       - name: Publish main results to NAS
         id: publish
-        if: ${{ steps.gate_run.outputs.rc == '0' || steps.gate_run.outputs.rc == '1' }}
+        # Not on a min_score run: that is an alert test, and its report carries the overridden
+        # floor, which would otherwise become main's published state.
+        if: ${{ (steps.gate_run.outputs.rc == '0' || steps.gate_run.outputs.rc == '1') && env.MUTMUT_MIN_SCORE == '' }}
         run: |
           ssh ci@pve bash -s <<'EOF'
           set -euo pipefail
