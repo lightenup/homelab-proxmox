@@ -335,8 +335,8 @@ tasks:
   mutmut:browse:
     desc: "[LOCAL] Open mutmut's survivor browser on the local mutants/ (spec 087)"
     summary: |
-      Thin wrapper, same venv detection as mutmut:run. Run `task mutmut:pull` first if
-      mutants/ is empty or stale.
+      Thin wrapper, same venv detection as mutmut:run. Refuses to start when mutants/ holds no
+      results: mutmut browse would otherwise show 0 for every module, which looks like real data.
       Example: task mutmut:browse
     cmds:
       - |
@@ -345,6 +345,10 @@ tasks:
         [ -x "$mutmut_bin" ] || mutmut_bin=".venv-mutmut/bin/mutmut"
         if [ ! -x "$mutmut_bin" ]; then
           echo "error: no mutmut binary in .venv or .venv-mutmut. See docs/operations/mutation-testing.md (Python 3.11 note)." >&2
+          exit 1
+        fi
+        if ! find mutants/src -name '*.meta' 2>/dev/null | grep -q .; then
+          echo "error: no mutation results in mutants/. Run 'task mutmut:pull' (main's nightly) or 'task mutmut:gate' first." >&2
           exit 1
         fi
         "$mutmut_bin" browse

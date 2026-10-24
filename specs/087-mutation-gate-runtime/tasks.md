@@ -690,6 +690,12 @@ T041, a revert would run mutmut 2 from an empty cache: slow, but correct.
   **US4/AC1**: `task mutmut:browse` starts and lists all 18 modules. Driving it through a
   pseudo-terminal did not render the survivor pane for capture, but the data it reads is present
   (`mutmut results`: 1066 survivors). A 10-second look by the owner closes that last bit.
+  *Correction, same day*: the owner's look showed 0 for every module. The agent had deleted
+  `mutants/` after its own checks, and `mutmut browse` silently shows zeros when there are no
+  results. Re-checked with a 200-column pseudo-terminal: right after `task mutmut:pull` the table
+  matches the published set (`bounds` 25 survived; `version_currency` 143 survived, 44 no tests;
+  `cli` 287 no tests). `task mutmut:browse` now refuses to start without results in `mutants/`
+  and says to pull or run the gate first (checked: missing, empty and pulled `mutants/`).
   **Finding**: the first plain `task mutmut:run` after a pull re-tested every mutant with tests
   (2780, about 2 minutes), not zero. mutmut 3.8 keys cached verdicts on
   `sha256(ast.dump(function))`, and `ast.dump` differs between Python versions: the nightly runs on
