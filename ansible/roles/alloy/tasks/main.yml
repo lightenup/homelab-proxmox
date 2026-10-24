@@ -87,7 +87,7 @@
     cmd: pct list
   register: alloy_pct_list
   changed_when: false
-  when: inventory_hostname in groups['proxmox_hosts']
+  when: inventory_hostname in groups['proxmox_hosts'] | default([])
 
 - name: Parse VMID to name map (pve only)
   ansible.builtin.set_fact:
@@ -96,7 +96,7 @@
          | select('match', '^\s*\d+')
          | map('regex_replace', '^(\S+).*\s(\S+)\s*$', '\1=\2')
          | map('split', '=')) }}
-  when: inventory_hostname in groups['proxmox_hosts']
+  when: inventory_hostname in groups['proxmox_hosts'] | default([])
 
 - name: Add alloy user to its groups
   ansible.builtin.user:

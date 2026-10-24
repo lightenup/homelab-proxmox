@@ -23,7 +23,7 @@ loki.process "redact" {
     values = {
       env     = "prod",
       host    = "{{ inventory_hostname }}",
-      service = "{{ 'proxmox' if inventory_hostname in groups['proxmox_hosts'] else inventory_hostname }}",
+      service = "{{ 'proxmox' if inventory_hostname in groups['proxmox_hosts'] | default([]) else inventory_hostname }}",
     }
   }
 
@@ -67,14 +67,14 @@ loki.relabel "journal" {
 loki.source.journal "journal" {
   max_age       = "{{ alloy_journal_max_age }}"
   relabel_rules = loki.relabel.journal.rules
-{% if inventory_hostname in groups['proxmox_hosts'] %}
+{% if inventory_hostname in groups['proxmox_hosts'] | default([]) %}
   forward_to    = [loki.process.oom.receiver]
 {% else %}
   forward_to    = [loki.process.redact.receiver]
 {% endif %}
 }
 
-{% if inventory_hostname in groups['proxmox_hosts'] %}
+{% if inventory_hostname in groups['proxmox_hosts'] | default([]) %}
 // OOM kill name mapping (research R6). alloy_vmid_names is set at deploy from `pct list`
 // (tasks/main.yml), VMID (string) -> LXC name. Falls back to the VMID for an unknown VMID
 // and to "host" for a non-LXC cgroup.

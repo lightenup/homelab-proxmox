@@ -251,6 +251,22 @@ def test_collector_production_only() -> None:
     when = str(alloy_task.get("when", ""))
     assert "deploy_environment" in when and "lab" in when
 
+    # A per-service deploy's scoped inventory (scripts/lab/pve-service-deploy) has no
+    # 'proxmox_hosts' group at all — only the full prod inventory does. Every reference must
+    # default to [] (existing convention: backup_alerts.yml.j2, prometheus.yml.j2), or the
+    # bare `groups['proxmox_hosts']` raises "'dict object' has no attribute" on a lone-service
+    # apply, failing every non-monitoring, non-pve deploy (found live on market-model).
+    for path in (
+        ANSIBLE / "roles/alloy/tasks/main.yml",
+        ANSIBLE / "roles/alloy/templates/config.alloy.j2",
+    ):
+        text = path.read_text()
+        for m in re.finditer(r"groups\['proxmox_hosts'\]", text):
+            window = text[m.end() : m.end() + 20]
+            assert window.lstrip().startswith("| default("), (
+                f"{path}: groups['proxmox_hosts'] without | default([]) at offset {m.start()}"
+            )
+
     host_proxmox = _safe_load(_read("ansible/playbooks/host_proxmox.yml"))
     roles = host_proxmox[0]["roles"]
     alloy_entries = [
