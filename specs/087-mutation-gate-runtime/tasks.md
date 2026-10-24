@@ -399,18 +399,13 @@ research R8, contracts/regression-alert.md).
 **Independent Test**: quickstart §6. `gh workflow run nightly-deeper-verification.yml --ref main -f min_score=99`
 fails and a message arrives. A normal run sends nothing.
 
-- [ ] T027 [US5] **(owner)** Generate the `mutation` publisher's password hash and token, per `docs/runbooks/ntfy-add-publisher.md` §2. Add them with `ansible-vault edit ansible/group_vars/services/vault.yml` as `ntfy_mutation_password_hash` and `ntfy_mutation_token`. The agent does not see the values. Verification, run by the owner: `ansible-vault view ansible/group_vars/services/vault.yml | grep -c '^ntfy_mutation_'` prints `2`. **This must be done before T028 merges**, or the ntfy role renders undefined variables on its next deploy.
+- [X] T027 [US5] **(owner)** Generate the `mutation` publisher's password hash and token, per `docs/runbooks/ntfy-add-publisher.md` §2. Add them with `ansible-vault edit ansible/group_vars/services/vault.yml` as `ntfy_mutation_password_hash` and `ntfy_mutation_token`. The agent does not see the values. Verification, run by the owner: `ansible-vault view ansible/group_vars/services/vault.yml | grep -c '^ntfy_mutation_'` prints `2`. **This must be done before T028 merges**, or the ntfy role renders undefined variables on its next deploy.
 
-  **Still open — blocks T033 and T040.** T028, T029 and T030's code (role defaults, preflight
-  assertions, ACL check rows, the nightly's "Read ntfy token"/"Post regression alert" steps) all
-  merged in this follow-up PR ahead of the vault entry, per the plan ("the code can land before the
-  secret, the secret must land before the next ntfy deploy"). Until this is done: (a) the ntfy role
-  will fail its `preflight.yml` assertion on the next deploy with "`ntfy_mutation_password_hash` …
-  missing or empty", so **do not deploy ntfy from `main` until this is done** (T033 already carries
-  this warning); (b) a nightly run that scores below the gate will fail at the new "Read ntfy token"
-  step with `::error::ntfy_mutation_token not found in vault` (exit 2) instead of delivering an
-  alert — the job still shows red (`Fail on gate result` still runs with `if: always()`), so FR-009
-  degrades safely to "red nightly, no push" rather than failing silently.
+  Done by the owner 2026-10-24 (agent never saw the values; the commit — `76e64f9` locally, pushed
+  as `cd18681` — showed the expected whole-file re-encrypt diff shape for a 2-key vault edit).
+  Confirmed live, not just by the `grep -c` check: after T033's deploy, `docker exec ntfy ntfy user
+  list` showed the `mutation` account with write-only access to its own topic, and T040's alert test
+  delivered a real message using it.
 - [X] T028 [P] [US5] In `ansible/roles/ntfy/defaults/main.yml`, append to `ntfy_users`: `- name: "mutation"`, `topic: "mutation"`, `password_hash: "{{ ntfy_mutation_password_hash }}"`, `token: "{{ ntfy_mutation_token }}"`. In `ansible/roles/ntfy/tasks/preflight.yml`, add `ntfy_mutation_password_hash` and `ntfy_mutation_token` to the required-variables assertion and to its `fail_msg` list, in the same pattern as `ntfy_version_check_*`. From `ansible/`, run `ansible-playbook -i inventories/prod/hosts.yml --syntax-check playbooks/ntfy.yml`.
 - [X] T029 [P] [US5] Extend `scripts/healthcheck/ntfy-acl-check.sh` per `docs/runbooks/ntfy-add-publisher.md` §5:
   - Add `NTFY_MUTATION_TOKEN` to the usage text, the required-vars loop and the token-name lookup.
