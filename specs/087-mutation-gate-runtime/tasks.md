@@ -123,7 +123,7 @@ else is checked by `act`, the gate script on the Mac, and the live steps in `qui
   (reproduced identically for `mutation.yml`'s `mutation`/`result` jobs); the per-step assertions in
   `test_nightly_mutmut3_wiring` and `test_nightly_does_not_branch_on_dispatch_inputs` are the
   practical substitute (same approach used for T031).
-- [ ] T007 [US1] Open PR 1 (`gh pr create`, base `main`), titled `fix(087): nightly runs the PVE mutation path on schedule`. The body links spec FR-002 and research R5, says mutmut 2 is unchanged, notes the expected ~1 h nightly, and says the guard test follows in PR 2 so that PR 1 skips the mutation gate. Confirm the PR's `mutation` job is skipped and `result` passes. After the owner merges it, run quickstart §1:
+- [X] T007 [US1] Open PR 1 (`gh pr create`, base `main`), titled `fix(087): nightly runs the PVE mutation path on schedule`. The body links spec FR-002 and research R5, says mutmut 2 is unchanged, notes the expected ~1 h nightly, and says the guard test follows in PR 2 so that PR 1 skips the mutation gate. Confirm the PR's `mutation` job is skipped and `result` passes. After the owner merges it, run quickstart §1:
   1. `gh workflow run nightly-deeper-verification.yml --ref main`.
   2. Watch it with `gh run watch`.
   3. Confirm the PVE steps run.
@@ -563,7 +563,7 @@ under "Rollout record" below.
   **Blocked on T027 and T033** (the `mutation` ntfy account must exist and be deployed before this
   can deliver anything) **and on T038** (establishes the nightly runs cleanly at all first). The
   message-building code itself is verified against the contract's own example in T031's note.
-- [ ] T041 FR-011 prune (quickstart §7), after T038 has published: `ssh ci@pve 'ls -la /mnt/nas/homelab_ci/mutmut-cache'`. Confirm it holds only mutmut 2 `.mutmut-cache` files (about 14, each 0.3–0.4 MB; memory: look before deleting), and **ask the owner before deleting**. Then `ssh ci@pve 'rm -rf /mnt/nas/homelab_ci/mutmut-cache'`, and confirm `ls /mnt/nas/homelab_ci` shows `mutmut` and `infra_state` only.
+- [X] T041 FR-011 prune (quickstart §7), after T038 has published: `ssh ci@pve 'ls -la /mnt/nas/homelab_ci/mutmut-cache'`. Confirm it holds only mutmut 2 `.mutmut-cache` files (about 14, each 0.3–0.4 MB; memory: look before deleting), and **ask the owner before deleting**. Then `ssh ci@pve 'rm -rf /mnt/nas/homelab_ci/mutmut-cache'`, and confirm `ls /mnt/nas/homelab_ci` shows `mutmut` and `infra_state` only.
 
   Precondition now met: T038 published for real (`/mnt/nas/homelab_ci/mutmut/main` exists). The
   "before" picture (T002's note: 15 entries, 300–393 KB each, oldest from 2026-07-20) is unchanged —
