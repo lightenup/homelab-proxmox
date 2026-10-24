@@ -42,7 +42,7 @@ No variable switches to an incremental run. The script always deletes `mutants/`
 | Exit | Meaning | Results usable |
 |---|---|---|
 | 0 | passed | yes |
-| 1 | below the gate | yes: the nightly publishes them and alerts |
+| 1 | below the gate | yes: the nightly publishes them and alerts (a `min_score` run only alerts) |
 | 2 | the run failed or is incomplete | no: nothing is published |
 
 ## Configuration it relies on

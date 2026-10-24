@@ -227,7 +227,9 @@ for that run only. Check that it fails and a message arrives.
   publishes `main`'s results to the NAS: the per-function results, the score, the no-tests count, a
   survivor report (survivors per module, worst first), the commit SHA and the time. The new set
   replaces the old one as a single step, so readers never see a partial set. A run that crashes or is
-  cancelled publishes nothing.
+  cancelled publishes nothing. A manual run with the floor override (FR-002) also publishes nothing:
+  it is an alert test, and its results carry the overridden floor (amended 2026-10-24 after the first
+  alert test replaced `main`'s published floor with 99).
 - **FR-004 — Fast PR gate.** The PR gate does a fresh full run of the branch: it starts from no
   earlier results and reads nothing from `main`'s published set. It keeps the path guard and the
   skip-as-pass `result` check. It fails if the branch's score is below the floor minus the margin

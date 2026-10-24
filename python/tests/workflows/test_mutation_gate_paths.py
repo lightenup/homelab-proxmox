@@ -168,3 +168,20 @@ def test_every_test_subdirectory_is_covered():
         assert _decide([str(sample)]), (
             f"python/tests/{name}/{sample.name} is not covered by the mutation gate path list"
         )
+
+
+def test_pr_gate_removes_results_from_pve():
+    """FR-004: the PR gate keeps no results after it ends. An always() step after the gate and the
+    report fetch deletes mutants/ from the PVE working copy, even when the gate fails."""
+    steps = _load_yaml(WORKFLOW)["jobs"]["mutation"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    cleanup = [
+        i for i, s in enumerate(steps)
+        if "rm -rf /home/ci/homelab-proxmox/mutants" in (s.get("run") or "")
+    ]
+    assert cleanup, "mutation job must remove /home/ci/homelab-proxmox/mutants on pve"
+    i = cleanup[0]
+    assert steps[i].get("if") == "always()", "cleanup must run even when the gate fails"
+    assert i > names.index("Run mutation gate on PVE"), "cleanup must come after the gate run"
+    assert i > names.index("Fetch mutation report"), "cleanup must come after the report is fetched"
+    assert i < names.index("Gate result"), "cleanup must come before the step that fails the job"
