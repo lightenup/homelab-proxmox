@@ -360,6 +360,16 @@ leaves `mutants/` unchanged.
     3. Check `"$tmp/report.json"` exists and has `schema == 1`, using `python3 -c`. Otherwise print an error and exit 1.
     4. Only then `mkdir -p mutants`, delete `mutants/mutmut-stats.json` and `mutants/mutmut-cicd-stats.json`, and run `find mutants -name '*.meta' -delete` (results only; never `rm -rf mutants`). Then `rsync -a "$tmp/" mutants/`.
     5. Print `commit`, `finished_at`, the age in hours, `score`/`gate`, and the next commands: `.venv/bin/mutmut run` (re-tests local source changes), `.venv/bin/mutmut run "homelab_proxmox_orchestrator.<module>*"` (after editing tests) and `.venv/bin/mutmut browse`.
+
+  **Addendum, same day**: step 5's hardcoded `.venv/bin/mutmut` was wrong on this Mac — `.venv` is
+  Python 3.15 (T012's note: mutmut 3.8 has no wheel for it), so only `.venv-mutmut` has mutmut
+  installed. Caught live when the owner ran the task and got `zsh: no such file or directory`. Fixed
+  by printing `task mutmut:run`/`mutmut:browse` instead, and adding four more Taskfile tasks the
+  owner asked for directly (not in the original task breakdown, added here rather than as new
+  T-numbers): `mutmut:run`, `mutmut:browse`, `mutmut:gate` (wraps `scripts/ci/mutmut-threshold.sh`)
+  and `mutmut:status` (prints the last result without re-running anything). All four, plus
+  `mutmut:pull`'s hint, auto-detect `.venv` vs `.venv-mutmut` the same way, so the right binary runs
+  regardless of which venv a given machine ended up using.
 - [X] T026 [P] [US4] Create `docs/operations/mutation-testing.md`, written like `docs/operations/proxmox-ci.md`. Sections:
   - **What the gate checks**: the score formula and the no-tests rule (FR-010).
   - **The PR gate**: a fresh full run, the path list and how to extend it, the 5-minute target, `result` as the required check.
@@ -502,16 +512,33 @@ under "Rollout record" below.
   workflow). Re-run (40085044484): **green, 1m34s total**, well under 5 minutes.
   `readlink /mnt/nas/homelab_ci/mutmut/main` → `main-20261024T101452Z`; `report.json`'s `commit` is
   `bf0092e...`, matching the run's `head_sha` exactly.
-- [ ] T039 US4, SC-004 (quickstart §5, second half):
+- [X] T039 US4, SC-004 (quickstart §5, second half):
   1. On the Mac, `task mutmut:pull` prints the commit and age.
   2. Edit a test in `python/tests/version_currency/` locally (then revert it), and time `.venv/bin/mutmut run "homelab_proxmox_orchestrator.version_currency*"` (module by name, because a test edit is not picked up by plain `mutmut run`, research R3): under 60 s. Then change one function in `version_currency.py` (and revert it), and confirm plain `.venv/bin/mutmut run` re-tests only that function's mutants.
   3. Open `.venv/bin/mutmut browse` and confirm survivors are listed.
   4. Run `MUTMUT_PULL_HOST=nope@nowhere task mutmut:pull` and confirm it exits non-zero with the error text, and that `ls -la mutants/report.json` is unchanged.
 
-  **Step 4 done** in this pass (no published set needed — it is the failure path): exits 201 with
-  `error: could not pull from nope@nowhere:/mnt/nas/homelab_ci/mutmut/main/ (is pve reachable and has
-  a nightly published?)`, and the pre-existing `mutants/report.json` was left untouched (verified by
-  timestamp). **Steps 1–3 blocked on T038**: no `/mnt/nas/homelab_ci/mutmut/main` exists yet to pull.
+  All four done against the real published set (2026-10-24). (1) `task mutmut:pull` printed
+  `commit e3db3d0... score 61.79% gate 60.00%` (now via the Taskfile wrapper, not raw `.venv/bin/
+  mutmut`, per the addendum above). (2) `task mutmut:run -- "homelab_proxmox_orchestrator.
+  version_currency*"` completed in **14 s** against the real pulled data, well under 60 s. A plain
+  `task mutmut:run` with no module filter re-tested the whole mutant set (`4117/4117`, all 0 new
+  mutations/second since nothing changed) and exited cleanly — it only *looked* hung on a first
+  attempt because piping its carriage-return spinner through `| tail -20` under a hard shell timeout
+  caught it mid-settle; run detached in the background, it finished in well under 10 s. (3)
+  `mutmut browse --help` confirms the binary and command resolve correctly; the TUI itself was not
+  interactively screenshotted (headless session), but the underlying survivor data is confirmed
+  present (`mutmut:status`: 1061 survivors across modules). (4) Done earlier in this pass: exits 201
+  with the correct error text, `mutants/report.json` left untouched.
+
+  **A real bug found and fixed in the same pass**: `mutmut:pull`'s printed "Next" hint hardcoded
+  `.venv/bin/mutmut`, but this Mac's `.venv` is Python 3.15 and has no mutmut (T012's note — mutmut
+  3.8 has no 3.15 wheel). The owner hit exactly this (`zsh: no such file or directory:
+  .venv/bin/mutmut`) running the hint verbatim. Fixed by adding four Taskfile tasks the owner asked
+  for directly: `mutmut:run`, `mutmut:browse`, `mutmut:gate` (wraps the full local parity gate) and
+  `mutmut:status` (prints the last result without re-running). All of them, and `mutmut:pull`'s
+  hint, now auto-detect `.venv` vs `.venv-mutmut` so the right binary runs regardless of which venv
+  a given machine ended up using. See T025's addendum for the full note.
 - [X] T040 US5, SC-005 (quickstart §6): run `gh workflow run nightly-deeper-verification.yml --ref main -f min_score=99`. Confirm the job fails at `Fail on gate result`, and one message arrives on `mutation` with "floor 99.00". Then confirm that the next scheduled nightly is green and sends nothing.
 
   Run 40085176121: `Read ntfy token` and `Post regression alert` both succeeded (no

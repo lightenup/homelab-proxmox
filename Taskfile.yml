@@ -296,6 +296,103 @@ tasks:
         "
         echo ""
         echo "Next:"
-        echo "  .venv/bin/mutmut run                                         # re-test local source changes"
-        echo "  .venv/bin/mutmut run \"homelab_proxmox_orchestrator.<module>*\"  # after editing a module's tests"
-        echo "  .venv/bin/mutmut browse                                      # inspect survivors"
+        mutmut_bin=".venv/bin/mutmut"
+        [ -x "$mutmut_bin" ] || mutmut_bin=".venv-mutmut/bin/mutmut"
+        echo "  task mutmut:run                                          # re-test local source changes"
+        echo "  task mutmut:run -- \"homelab_proxmox_orchestrator.<module>*\"  # after editing a module's tests"
+        echo "  task mutmut:browse                                       # inspect survivors"
+        echo "  (or directly: $mutmut_bin run / browse)"
+
+  mutmut:run:
+    desc: "[LOCAL] Run mutmut against the local mutants/ (pulled or gate-produced) (spec 087)"
+    summary: |
+      Thin wrapper that finds the Python 3.14 mutmut venv (research R11: the Mac's own .venv is
+      on a Python version mutmut 3.8 has not been validated against, so a separate .venv-mutmut
+      is used instead when .venv lacks it) and runs `mutmut run`.
+
+      With no args, re-tests only what changed since the last run (mutmut 3's per-function
+      caching) — cheap after `task mutmut:pull`. mutmut 3 does NOT notice a test-only edit on its
+      own (research R3): after editing a test, pass the module pattern explicitly, or nothing
+      will re-test.
+      Example: task mutmut:run
+      One module after editing its tests: task mutmut:run -- "homelab_proxmox_orchestrator.version_currency*"
+    cmds:
+      - |
+        set -euo pipefail
+        mutmut_bin=".venv/bin/mutmut"
+        [ -x "$mutmut_bin" ] || mutmut_bin=".venv-mutmut/bin/mutmut"
+        if [ ! -x "$mutmut_bin" ]; then
+          echo "error: no mutmut binary in .venv or .venv-mutmut. See docs/operations/mutation-testing.md's Python version fallback (research R11)." >&2
+          exit 1
+        fi
+        "$mutmut_bin" run {{.CLI_ARGS}}
+
+  mutmut:browse:
+    desc: "[LOCAL] Open mutmut's survivor browser on the local mutants/ (spec 087)"
+    summary: |
+      Thin wrapper, same venv detection as mutmut:run. Run `task mutmut:pull` first if
+      mutants/ is empty or stale.
+      Example: task mutmut:browse
+    cmds:
+      - |
+        set -euo pipefail
+        mutmut_bin=".venv/bin/mutmut"
+        [ -x "$mutmut_bin" ] || mutmut_bin=".venv-mutmut/bin/mutmut"
+        if [ ! -x "$mutmut_bin" ]; then
+          echo "error: no mutmut binary in .venv or .venv-mutmut. See docs/operations/mutation-testing.md's Python version fallback (research R11)." >&2
+          exit 1
+        fi
+        "$mutmut_bin" browse
+
+  mutmut:gate:
+    desc: "[LOCAL] Run the full mutation gate exactly as CI does (spec 087, FR-001 parity)"
+    summary: |
+      Runs scripts/ci/mutmut-threshold.sh with PYTHON_BIN auto-detected the same way as
+      mutmut:run. This is a FRESH FULL RUN every time (no incremental mode, spec Clarifications):
+      it deletes mutants/ first, so it discards anything task mutmut:pull brought down. Use this
+      to reproduce a CI score locally (parity check) or to measure a floor-raising change
+      end to end; use mutmut:run for the fast local survivor loop instead.
+      Takes roughly 2 minutes on the Mac.
+      Example: task mutmut:gate
+    cmds:
+      - |
+        set -euo pipefail
+        python_bin=".venv/bin/python"
+        if [ ! -x "$python_bin" ] || ! "$python_bin" -c 'import mutmut' 2>/dev/null; then
+          python_bin=".venv-mutmut/bin/python"
+        fi
+        if [ ! -x "$python_bin" ]; then
+          echo "error: no Python with mutmut installed in .venv or .venv-mutmut. See docs/operations/mutation-testing.md's Python version fallback (research R11)." >&2
+          exit 1
+        fi
+        PYTHON_BIN="$python_bin" bash scripts/ci/mutmut-threshold.sh
+
+  mutmut:status:
+    desc: "[LOCAL] Print the local mutants/report.json summary without re-running anything (spec 087)"
+    summary: |
+      Reads mutants/report.json as-is (from the last mutmut:pull or mutmut:gate) and prints the
+      same commit/age/score/gate summary mutmut:pull prints, plus the top 5 survivor modules.
+      Fails clearly if mutants/report.json does not exist yet.
+      Example: task mutmut:status
+    cmds:
+      - |
+        set -euo pipefail
+        if [ ! -f mutants/report.json ]; then
+          echo "error: mutants/report.json not found. Run 'task mutmut:pull' or 'task mutmut:gate' first." >&2
+          exit 1
+        fi
+        python3 -c "
+        import json
+        from datetime import datetime, timezone
+        with open('mutants/report.json') as f:
+            r = json.load(f)
+        finished = datetime.strptime(r['finished_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+        age_hours = (datetime.now(timezone.utc) - finished).total_seconds() / 3600
+        print(f\"commit {r['commit']}\")
+        print(f\"finished_at {r['finished_at']}  (age {age_hours:.1f}h)\")
+        print(f\"score {r['score']:.2f}%  gate {r['gate']:.2f}%  (floor {r['floor']:.2f}%  margin {r['margin']:.2f})\")
+        print()
+        print('Top survivor modules:')
+        for m in r['survivors_by_module'][:5]:
+            print(f\"  {m['survived']:>4}  {m['module']}\")
+        "

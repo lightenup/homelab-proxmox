@@ -90,7 +90,7 @@ the existing `mutants/report.json` untouched). Prints the commit, age and score.
 Then, from the repo root:
 
 ```bash
-.venv/bin/mutmut run                                              # re-test local source changes
+task mutmut:run                                                   # re-test local source changes
 ```
 
 **mutmut 3 keeps cached verdicts when only a test changes** (research R3): editing
@@ -98,18 +98,33 @@ Then, from the repo root:
 re-test `version_currency.py`'s mutants. Re-test by module name after editing tests:
 
 ```bash
-.venv/bin/mutmut run "homelab_proxmox_orchestrator.version_currency*"
+task mutmut:run -- "homelab_proxmox_orchestrator.version_currency*"
 ```
 
 Then browse survivors:
 
 ```bash
-.venv/bin/mutmut browse
+task mutmut:browse
 ```
 
-**Warning**: `scripts/ci/mutmut-threshold.sh` deletes `mutants/` before every run (fresh full run,
-no exceptions). Do not run it after `task mutmut:pull` if you want to keep the pulled set around for
-`mutmut browse` — use plain `mutmut run` instead.
+Or, at any point, print the last result without re-running anything:
+
+```bash
+task mutmut:status
+```
+
+`mutmut:run`, `mutmut:browse` and `mutmut:status` are thin wrappers in `Taskfile.yml`.
+`mutmut:run`/`mutmut:browse` auto-detect which local venv actually has mutmut installed (`.venv`,
+falling back to `.venv-mutmut` — see the Python version fallback below), so the right binary runs
+without having to remember which venv this Mac ended up using. If you prefer the binary directly,
+the same auto-detection logic is one `[ -x .venv/bin/mutmut ] || ...` line you can copy from either
+task.
+
+**Warning**: `task mutmut:gate` (wraps `scripts/ci/mutmut-threshold.sh`) deletes `mutants/` before
+every run (fresh full run, no exceptions) and takes about 2 minutes. Do not run it after
+`task mutmut:pull` if you want to keep the pulled set around for `mutmut browse` — use
+`task mutmut:run` instead. Use `mutmut:gate` only to reproduce a CI score locally (FR-001 parity)
+or to measure a floor-raising change end to end.
 
 **Python version fallback** (research R11): the Mac's `.venv` may be on a Python version mutmut 3.8
 has not been validated against (3.15 at the time of writing; mutmut 3.8 was tried on 3.14). If
