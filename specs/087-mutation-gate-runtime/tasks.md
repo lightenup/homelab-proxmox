@@ -682,6 +682,45 @@ T041, a revert would run mutmut 2 from an empty cache: slow, but correct.
 
   Owner chose to keep the code and amend the docs (2026-10-24). Amended `spec.md` FR-003, `plan.md` "Nightly" step 3, `quickstart.md` §6 and the exit-code table in `contracts/gate-script.md`.
 - [ ] T046 After the first `schedule`-triggered nightly on the mutmut 3 workflow (2026-10-25T03:00Z or later), confirm it is green, published a new `main-<UTC>` set whose `report.json` `commit` equals the run's `head_sha` and `floor` is the committed one, and sent no message on ntfy topic `mutation`; record it under T040 and T007 and in the Rollout record per SC-005 / US5/AC2 (partial)
-- [ ] T047 On the Mac after `task mutmut:pull`, change one function in `python/src/homelab_proxmox_orchestrator/version_currency.py`, run `task mutmut:run`, and confirm only that function's mutants are re-tested; revert the change. Open `task mutmut:browse` and confirm survivors are listed. Record both under T039 per US4/AC1, US4/AC2 (partial)
-- [ ] T048 Make the PR gate keep no results after it ends: add an `if: always()` step after `Fetch mutation report` in `.github/workflows/mutation.yml` that runs `ssh ci@pve 'rm -rf /home/ci/homelab-proxmox/mutants'`, with a guard test in `python/tests/workflows/`; or, if the owner prefers, amend FR-004 to "carries no results into the next run" (already true: `scripts/ci/mutmut-threshold.sh` deletes `mutants/` first) per FR-004 (partial)
-- [ ] T049 Record in this file (a note under T044 or the Rollout record) the PR #281 additions not called for by spec, plan or tasks, and why: `python/tests/workflows/test_workflow_heredocs.py` (heredoc bug hit three times in 087), `norecursedirs` in `python/pytest.ini` (stray `mutants/` broke collection; FR-006/FR-007), the `--python '>=3.11,<3.15'` range on the ansible-lint hook in `.pre-commit-config.yaml`, the AGENTS.md "Running the tests" and `act` sections, and the orphaned-process note in `docs/operations/mutation-testing.md` (unrequested)
+- [X] T047 On the Mac after `task mutmut:pull`, change one function in `python/src/homelab_proxmox_orchestrator/version_currency.py`, run `task mutmut:run`, and confirm only that function's mutants are re-tested; revert the change. Open `task mutmut:browse` and confirm survivors are listed. Record both under T039 per US4/AC1, US4/AC2 (partial)
+
+  Done 2026-10-24. **US4/AC2 holds**: after changing `compare_versions` in `version_currency.py`, a
+  plain `task mutmut:run` re-tested 4 mutants, all in that function, in 6 s; only
+  `version_currency.py.meta` changed (measured by diffing `durations_by_key`); change reverted.
+  **US4/AC1**: `task mutmut:browse` starts and lists all 18 modules. Driving it through a
+  pseudo-terminal did not render the survivor pane for capture, but the data it reads is present
+  (`mutmut results`: 1066 survivors). A 10-second look by the owner closes that last bit.
+  **Finding**: the first plain `task mutmut:run` after a pull re-tested every mutant with tests
+  (2780, about 2 minutes), not zero. mutmut 3.8 keys cached verdicts on
+  `sha256(ast.dump(function))`, and `ast.dump` differs between Python versions: the nightly runs on
+  3.11 (`061a32ec0c06` for `bounds.truncate_text`), the Mac's `.venv-mutmut` on 3.14
+  (`eab0305abbc0`). The pulled set is still right for `mutmut:status`, `mutmut:browse` and
+  module-by-name runs, but its cache does not carry over. Owner decision pending (see T050).
+- [X] T048 Make the PR gate keep no results after it ends: add an `if: always()` step after `Fetch mutation report` in `.github/workflows/mutation.yml` that runs `ssh ci@pve 'rm -rf /home/ci/homelab-proxmox/mutants'`, with a guard test in `python/tests/workflows/`; or, if the owner prefers, amend FR-004 to "carries no results into the next run" (already true: `scripts/ci/mutmut-threshold.sh` deletes `mutants/` first) per FR-004 (partial)
+
+  Done 2026-10-24 (PR #282, owner chose the cleanup step). `Remove mutation results from PVE` runs
+  with `if: always()` after the report is fetched; a failed delete only warns. Guard test
+  `test_pr_gate_removes_results_from_pve`. Verified live: after PR #282's own mutation run,
+  `/home/ci/homelab-proxmox/mutants` no longer existed on `pve`, and `task mutmut:pull` still worked
+  (it reads the NAS set, which only the nightly writes).
+- [X] T049 Record in this file (a note under T044 or the Rollout record) the PR #281 additions not called for by spec, plan or tasks, and why: `python/tests/workflows/test_workflow_heredocs.py` (heredoc bug hit three times in 087), `norecursedirs` in `python/pytest.ini` (stray `mutants/` broke collection; FR-006/FR-007), the `--python '>=3.11,<3.15'` range on the ansible-lint hook in `.pre-commit-config.yaml`, the AGENTS.md "Running the tests" and `act` sections, and the orphaned-process note in `docs/operations/mutation-testing.md` (unrequested)
+
+  Done 2026-10-24. PR #281 added, beyond spec/plan/tasks:
+  - `python/tests/workflows/test_workflow_heredocs.py`: the indented-heredoc bug hit three times in
+    087 and passed yamllint and `act -n`; the test flags both broken versions from git history.
+  - `norecursedirs` in `python/pytest.ini`: `testpaths` never applies (callers run from the repo
+    root, rootdir is `python/`), so a leftover `mutants/` broke collection with 31 errors (FR-007).
+  - `--python '>=3.11,<3.15'` on the ansible-lint hook: ansible-core 2.21 crashes on the Mac's 3.15.
+  - AGENTS.md "Running the tests", `act` and mutmut sections: agent discoverability.
+  - Runbook note on orphaned `mutmut` processes on `pve`: one blocked T041's NAS cleanup.
+- [X] T050 Make the pulled results' cache valid on the Mac, or document that it is not: mutmut's per-function cache keys on `ast.dump`, which differs between the nightly's Python 3.11 and the Mac's `.venv-mutmut` 3.14, so the first plain `task mutmut:run` after `task mutmut:pull` re-tests all ~2780 mutants (found in T047). Then correct the `mutmut:run` summary in `Taskfile.yml` ("cheap after `task mutmut:pull`") and the stale "15+ minutes" in `docs/operations/mutation-testing.md` per FR-008 / US4/AC2 (partial)
+
+  Done 2026-10-24 (owner chose a 3.11 Mac venv). Installed CPython 3.11.17 with
+  `UV_NATIVE_TLS=1 uv python install 3.11` (plain `uv` fails Zscaler's TLS interception) and rebuilt
+  `.venv-mutmut` on it from the same lock. `bounds.truncate_text` now hashes to `061a32ec0c06`, the
+  published value. From an empty `mutants/`: pull, then the first plain `task mutmut:run` took 10 s
+  and re-tested **0** mutants (was 2780 on 3.14). Re-checked on 3.11: a one-function change
+  re-tests 4 mutants in 6 s (US4/AC2); module by name 16 s (SC-004); `task mutmut:gate` 61.23%,
+  PASSED (CI 61.79%; macOS vs Linux, within FR-001's 1-point tolerance). `task mutmut:run` now warns
+  when its venv is not 3.11 (checked both ways). Docs fixed: `mutation-testing.md` (3.11 setup, the
+  stale "15+ minutes"), AGENTS.md mutmut section, `Taskfile.yml` summary and error texts.

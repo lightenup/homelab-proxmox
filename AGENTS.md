@@ -129,7 +129,9 @@ pick an interpreter). It runs `python/tests/` with `--cov-fail-under=80`.
 ## Mutation testing (mutmut 3)
 
 Use the Taskfile wrappers; they pick whichever venv actually has mutmut (`.venv`, else
-`.venv-mutmut` — the Mac's `.venv` is Python 3.15, which mutmut 3.8 does not support):
+`.venv-mutmut`). `.venv-mutmut` must be Python 3.11, the nightly's version: mutmut's cache keys on
+`ast.dump`, so on any other version the first run after a pull re-tests everything. Setup is in
+`docs/operations/mutation-testing.md`:
 
 | Task | Use |
 |---|---|
