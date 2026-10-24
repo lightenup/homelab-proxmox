@@ -306,9 +306,9 @@ tasks:
   mutmut:run:
     desc: "[LOCAL] Run mutmut against the local mutants/ (pulled or gate-produced) (spec 087)"
     summary: |
-      Thin wrapper that finds the Python 3.14 mutmut venv (research R11: the Mac's own .venv is
-      on a Python version mutmut 3.8 has not been validated against, so a separate .venv-mutmut
-      is used instead when .venv lacks it) and runs `mutmut run`.
+      Thin wrapper that finds the mutmut venv (.venv, else .venv-mutmut) and runs `mutmut run`.
+      The venv must be Python 3.11, the nightly's version: mutmut's per-function cache keys on
+      ast.dump, so on another version the first run after a pull re-tests everything (~2 min).
 
       With no args, re-tests only what changed since the last run (mutmut 3's per-function
       caching) — cheap after `task mutmut:pull`. mutmut 3 does NOT notice a test-only edit on its
@@ -322,8 +322,13 @@ tasks:
         mutmut_bin=".venv/bin/mutmut"
         [ -x "$mutmut_bin" ] || mutmut_bin=".venv-mutmut/bin/mutmut"
         if [ ! -x "$mutmut_bin" ]; then
-          echo "error: no mutmut binary in .venv or .venv-mutmut. See docs/operations/mutation-testing.md's Python version fallback (research R11)." >&2
+          echo "error: no mutmut binary in .venv or .venv-mutmut. See docs/operations/mutation-testing.md (Python 3.11 note)." >&2
           exit 1
+        fi
+        py="$(dirname "$mutmut_bin")/python"
+        if [ "$("$py" -c 'import sys; print("%d.%d" % sys.version_info[:2])')" != "3.11" ]; then
+          echo "warning: $mutmut_bin is not Python 3.11 (the nightly's version); pulled results will all re-test." >&2
+          echo "         See docs/operations/mutation-testing.md (Python 3.11 note)." >&2
         fi
         "$mutmut_bin" run {{.CLI_ARGS}}
 
@@ -339,7 +344,7 @@ tasks:
         mutmut_bin=".venv/bin/mutmut"
         [ -x "$mutmut_bin" ] || mutmut_bin=".venv-mutmut/bin/mutmut"
         if [ ! -x "$mutmut_bin" ]; then
-          echo "error: no mutmut binary in .venv or .venv-mutmut. See docs/operations/mutation-testing.md's Python version fallback (research R11)." >&2
+          echo "error: no mutmut binary in .venv or .venv-mutmut. See docs/operations/mutation-testing.md (Python 3.11 note)." >&2
           exit 1
         fi
         "$mutmut_bin" browse
@@ -362,7 +367,7 @@ tasks:
           python_bin=".venv-mutmut/bin/python"
         fi
         if [ ! -x "$python_bin" ]; then
-          echo "error: no Python with mutmut installed in .venv or .venv-mutmut. See docs/operations/mutation-testing.md's Python version fallback (research R11)." >&2
+          echo "error: no Python with mutmut installed in .venv or .venv-mutmut. See docs/operations/mutation-testing.md (Python 3.11 note)." >&2
           exit 1
         fi
         PYTHON_BIN="$python_bin" bash scripts/ci/mutmut-threshold.sh

@@ -47,8 +47,8 @@ be loosened (memory: this is a public repo).
 ## The Nightly
 
 `.github/workflows/nightly-deeper-verification.yml` runs the same fresh full gate on `main`, then
-publishes the result set to the NAS so the Mac can inspect survivors without re-running 15+ minutes
-of mutation testing locally.
+publishes the result set to the NAS so the Mac can inspect survivors and re-test incrementally
+without a full local run first.
 
 **Published layout**
 ([contracts/published-results.md](../../specs/087-mutation-gate-runtime/contracts/published-results.md)):
@@ -115,7 +115,7 @@ task mutmut:status
 
 `mutmut:run`, `mutmut:browse` and `mutmut:status` are thin wrappers in `Taskfile.yml`.
 `mutmut:run`/`mutmut:browse` auto-detect which local venv actually has mutmut installed (`.venv`,
-falling back to `.venv-mutmut` — see the Python version fallback below), so the right binary runs
+falling back to `.venv-mutmut` — see the Python 3.11 note below), so the right binary runs
 without having to remember which venv this Mac ended up using. If you prefer the binary directly,
 the same auto-detection logic is one `[ -x .venv/bin/mutmut ] || ...` line you can copy from either
 task.
@@ -126,16 +126,20 @@ every run (fresh full run, no exceptions) and takes about 2 minutes. Do not run 
 `task mutmut:run` instead. Use `mutmut:gate` only to reproduce a CI score locally (FR-001 parity)
 or to measure a floor-raising change end to end.
 
-**Python version fallback** (research R11): the Mac's `.venv` may be on a Python version mutmut 3.8
-has not been validated against (3.15 at the time of writing; mutmut 3.8 was tried on 3.14). If
-`uv pip sync` fails on `python/requirements-nightly.lock.txt` for that reason, use a separate
-mutation-only virtualenv instead of changing the lock's `--python-version`:
+**The Mac's mutmut venv must be Python 3.11**, the version the nightly runs (the lock's
+`--python-version 3.11`). mutmut keys each cached verdict on a hash of the function's `ast.dump`,
+and that output differs between Python versions. With any other version, the first `mutmut run`
+after a pull treats every function as changed and re-tests all ~2,800 tested mutants (about 2
+minutes) instead of none (found 2026-10-24, T047/T050). The Mac's default `.venv` is 3.15, which
+mutmut 3.8 does not support anyway, so use a separate venv:
 
 ```bash
-uv venv --python 3.14 .venv-mutmut
-uv pip sync --python .venv-mutmut/bin/python --require-hashes python/requirements-nightly.lock.txt
-PYTHON_BIN=.venv-mutmut/bin/python scripts/ci/mutmut-threshold.sh
+UV_NATIVE_TLS=1 uv python install 3.11   # UV_NATIVE_TLS: trust the Zscaler cert via the macOS store
+uv venv --python 3.11 .venv-mutmut
+UV_NATIVE_TLS=1 uv pip sync --python .venv-mutmut/bin/python --require-hashes python/requirements-nightly.lock.txt
 ```
+
+`task mutmut:run` warns when the venv it finds is not 3.11.
 
 ## Raising the Floor
 
