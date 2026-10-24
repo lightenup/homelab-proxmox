@@ -72,4 +72,10 @@ by the Mac's push block. Full procedure and gotchas: [AGENTS.md](./AGENTS.md).
 Use `task mutmut:pull|status|run|browse|gate` rather than calling mutmut directly (they resolve
 the right venv). Summary table in [AGENTS.md](./AGENTS.md#mutation-testing-mutmut-3).
 
+## Local workflow validation
+
+Validate `.github/workflows/*.yml` edits with `act -l` and `act -n -W <file>` (needs
+`DOCKER_HOST=unix://$HOME/.docker/run/docker.sock` on the dev Mac). Gotchas in
+[AGENTS.md](./AGENTS.md#running-workflows-locally-with-act).
+
 <!-- MANUAL ADDITIONS END -->

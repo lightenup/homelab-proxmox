@@ -95,6 +95,25 @@ Service deploys go through the gated GitHub Actions pipeline
 branch ref — no merge to `main` is required to deploy. Trigger with `gh workflow run`. Per-feature
 runbooks live in `specs/*/quickstart.md`.
 
+## Running workflows locally with `act`
+
+`act` (with `~/.actrc` mapping `ubuntu-latest`/`self-hosted` to `catthehacker/ubuntu:act-latest`) is
+the approved way to validate workflow edits (constitution, "Local Workflow Testing"):
+
+```bash
+act -l                                                     # all workflows parse
+act -n -W .github/workflows/<file>.yml workflow_dispatch   # dry-run the one you changed
+```
+
+- **Docker socket**: `act` defaults to Colima's socket, which is usually down on the dev Mac
+  (`Cannot connect to the Docker daemon`). Point it at Docker Desktop:
+  `DOCKER_HOST=unix://$HOME/.docker/run/docker.sock act ...`
+- **`-n` is a parse check, not a test.** Jobs gated on another job's outputs (`needs.gate.outputs.run`)
+  or on the PR owner/fork guard do not appear in the dry-run. Cover their logic with the guard tests
+  in `python/tests/workflows/`, or extract a step's `run:` with PyYAML and execute it locally.
+- Steps that SSH to `pve` or need vault secrets can't really run under `act`. A full run with
+  secrets is described in `docs/operations/proxmox-ci.md`. If `act` can't be used, say why in the PR.
+
 ## Mutation testing (mutmut 3)
 
 Use the Taskfile wrappers; they pick whichever venv actually has mutmut (`.venv`, else
