@@ -40,7 +40,9 @@ repos:
     hooks:
       - id: ansible-lint
         name: ansible-lint (uv)
-        entry: uv run --with ansible-lint ansible-lint -c .ansible-lint
+        # Python range: ansible-core 2.21 does not support 3.15 (the dev Mac's default), which
+        # crashes ansible-lint. CI's 3.11 is inside the range, so CI is unchanged.
+        entry: uv run --python '>=3.11,<3.15' --with ansible-lint ansible-lint -c .ansible-lint
         language: system
         types: [yaml]
         files: ^ansible/roles/.*\.(yml|yaml)$

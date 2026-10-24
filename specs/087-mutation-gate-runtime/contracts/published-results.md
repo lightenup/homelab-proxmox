@@ -1,7 +1,8 @@
 # Contract: published main results
 
 The nightly writes this. `task mutmut:pull` on the Mac reads it. The PR gate does not read it
-(FR-004).
+(FR-004). A nightly dispatched with `min_score` (an alert test) does not write it, so the published
+`floor` and `gate` are always the committed ones.
 
 ## Location
 

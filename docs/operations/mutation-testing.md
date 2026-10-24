@@ -163,7 +163,8 @@ gh workflow run nightly-deeper-verification.yml --ref main -f min_score=99
 ```
 
 This overrides the floor for that one run only (it does not touch `mutmut-threshold.txt`), so the
-gate fails and the alert fires. The next scheduled run reads the committed floor again and is green.
+gate fails and the alert fires. A `min_score` run never publishes, so `main`'s published results
+keep the committed floor. The next scheduled run reads the committed floor again and is green.
 
 ## Troubleshooting
 
@@ -179,3 +180,14 @@ the child runs the original, unmutated source. Check that the subprocess call:
 - inherits the rest of the parent environment (`{**os.environ, "PYTHONPATH": ...}`), not a
   replacement dict — mutmut 3 selects which mutant runs via `MUTANT_UNDER_TEST` in the environment,
   and a replaced environment silently runs the unmutated code instead of failing loudly.
+
+**Leftover processes on `pve` after a cancelled run.** Cancelling a `mutation` or nightly job stops
+the runner, not the `mutmut` process it started over SSH on `pve`. The orphan keeps running and can
+hold files open on the NAS (an `rm -rf` there then leaves `.nfsXXXX` files, "Device or resource
+busy"). Check and stop them:
+
+```bash
+# [m] keeps the pattern from matching the ssh shell's own command line.
+ssh ci@pve "pgrep -af '[m]utmut'"          # anything listed with no CI job running is an orphan
+ssh ci@pve "pkill -TERM -f '[m]utmut run'"
+```

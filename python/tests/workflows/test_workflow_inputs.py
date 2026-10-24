@@ -168,3 +168,15 @@ def test_nightly_mutmut3_wiring():
         "ntfy_mutation_token" in (s.get("run") or "") for s in steps
     ), "Nightly must have a step reading ntfy_mutation_token from vault"
     assert "?auth=" not in raw, "The ntfy token must never be passed as a URL query parameter"
+
+
+def test_nightly_min_score_override_does_not_publish():
+    """A min_score dispatch is an alert test: its report carries the overridden floor, so it must
+    not replace main's published results (found 2026-10-24: a min_score=99 run published a 98%
+    gate line that task mutmut:pull then showed as main's state)."""
+    steps = _nightly_steps(_nightly_doc())
+    publish = next(s for s in steps if s.get("id") == "publish")
+    cond = publish.get("if") or ""
+    assert "MUTMUT_MIN_SCORE == ''" in cond, (
+        f"Publish step must be skipped when MUTMUT_MIN_SCORE is set, got if: {cond!r}"
+    )
