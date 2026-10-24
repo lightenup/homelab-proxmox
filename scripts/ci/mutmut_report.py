@@ -7,7 +7,7 @@ and survivors.txt. Prints counts, score line, and top 10 survivor modules.
 
 Status map copied from data-model.md, referencing mutmut 3.8.0's mutmut/stats.py.
 
-Exit: 0 = pass, 1 = below gate, 2 = no results.
+Exit: 0 = pass, 1 = below gate, 2 = no results or incomplete run.
 """
 from __future__ import annotations
 
@@ -53,6 +53,19 @@ def _read_meta(meta_path: Path) -> dict:
         return json.loads(meta_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
+
+
+def _count_not_checked(mutants_dir: Path) -> int:
+    """Count mutants with no verdict (exit code null in .meta).
+
+    mutmut-cicd-stats.json omits not_checked, so a partial run would otherwise
+    score only the mutants that happened to finish.
+    """
+    src_root = mutants_dir / "src" / "homelab_proxmox_orchestrator"
+    n = 0
+    for meta_path in src_root.rglob("*.py.meta"):
+        n += sum(1 for ec in _read_meta(meta_path).get("exit_code_by_key", {}).values() if ec is None)
+    return n
 
 
 def _build_report(
@@ -178,6 +191,15 @@ def main(argv: list[str] | None = None) -> int:
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
     if stats.get("total", 0) == 0:
         print("::error::mutmut produced no results (run failed)", file=sys.stderr)
+        return 2
+
+    not_checked = _count_not_checked(mutants_dir)
+    interrupted = stats.get("check_was_interrupted_by_user", 0)
+    if not_checked or interrupted:
+        print(
+            f"::error::mutmut run incomplete ({not_checked} not checked, {interrupted} interrupted)",
+            file=sys.stderr,
+        )
         return 2
 
     report = _build_report(

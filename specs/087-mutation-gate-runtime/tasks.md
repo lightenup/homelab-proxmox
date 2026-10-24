@@ -152,7 +152,7 @@ uses them.
   - **Body**:
     1. Set `MUTMUT_COMMIT` (default `git rev-parse HEAD 2>/dev/null || echo unknown`).
     2. `rm -rf mutants`.
-    3. `"$PYTHON_BIN" -m mutmut run || true`, then `"$PYTHON_BIN" -m mutmut export-cicd-stats || true`.
+    3. `"$PYTHON_BIN" -m mutmut run`, then `"$PYTHON_BIN" -m mutmut export-cicd-stats`; exit 2 if either fails (amended after PR #277 review: mutmut 3.8 exits 0 when mutants survive, so a nonzero exit is a real failure; see contracts/gate-script.md).
     4. Read the version: `version="$("$PYTHON_BIN" -m mutmut --version | awk '{print $NF}')"`.
     5. `exec "$PYTHON_BIN" scripts/ci/mutmut_report.py --floor "$FLOOR" --margin "$MARGIN" --commit "$MUTMUT_COMMIT" --mutmut-version "$version"`.
   - **Remove**: the mutmut 2 flags (`--paths-to-mutate`, `--tests-dir`, `--runner`, `result-ids`) and the inline Python.

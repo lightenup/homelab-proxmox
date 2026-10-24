@@ -213,3 +213,41 @@ def test_exit_code_zero_total(tmp_path: Path, capsys):
          "--commit", "abc", "--mutmut-version", "3.8.0"]
     )
     assert rc == 2
+
+
+def _write_run(d: Path, exit_codes: dict[str, int | None], **stats_overrides) -> None:
+    src = d / "src" / "homelab_proxmox_orchestrator"
+    src.mkdir(parents=True)
+    stats = {"killed": 1, "survived": 0, "no_tests": 0, "timeout": 0, "suspicious": 0,
+             "skipped": 0, "segfault": 0, "check_was_interrupted_by_user": 0,
+             "total": len(exit_codes)}
+    stats.update(stats_overrides)
+    (d / "mutmut-cicd-stats.json").write_text(json.dumps(stats))
+    (src / "alpha.py.meta").write_text(json.dumps(_make_meta(exit_codes)))
+
+
+def test_incomplete_run_not_checked_exits_2(tmp_path: Path, capsys):
+    """One killed + one unchecked used to score 100% and pass; it must be rejected."""
+    mod = _load_script()
+    d = tmp_path / "mutants"
+    _write_run(d, {"f1": 1, "f2": None})
+    rc = mod.main(
+        ["--mutants-dir", str(d), "--floor", "50.0", "--margin", "1.0",
+         "--commit", "abc", "--mutmut-version", "3.8.0"]
+    )
+    assert rc == 2
+    assert "1 not checked" in capsys.readouterr().err
+    assert not (d / "report.json").exists(), "an incomplete run must not produce a publishable report"
+
+
+def test_incomplete_run_interrupted_exits_2(tmp_path: Path, capsys):
+    mod = _load_script()
+    d = tmp_path / "mutants"
+    _write_run(d, {"f1": 1, "f2": 2}, check_was_interrupted_by_user=1)
+    rc = mod.main(
+        ["--mutants-dir", str(d), "--floor", "50.0", "--margin", "1.0",
+         "--commit", "abc", "--mutmut-version", "3.8.0"]
+    )
+    assert rc == 2
+    assert "1 interrupted" in capsys.readouterr().err
+    assert not (d / "report.json").exists()

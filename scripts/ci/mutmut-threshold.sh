@@ -45,8 +45,16 @@ fi
 
 echo ">> Running mutmut 3 over python/src/homelab_proxmox_orchestrator (fresh full run)..."
 rm -rf mutants
-"$PYTHON_BIN" -m mutmut run || true
-"$PYTHON_BIN" -m mutmut export-cicd-stats || true
+# A non-zero exit means mutmut itself failed (e.g. the forced-fail sanity check), not
+# that mutants survived; never score a run like that (exit 2 = no valid results).
+if ! "$PYTHON_BIN" -m mutmut run; then
+	echo "::error::mutmut run failed; not scoring partial results" >&2
+	exit 2
+fi
+if ! "$PYTHON_BIN" -m mutmut export-cicd-stats; then
+	echo "::error::mutmut export-cicd-stats failed" >&2
+	exit 2
+fi
 
 version="$("$PYTHON_BIN" -m mutmut --version | awk '{print $NF}')"
 
