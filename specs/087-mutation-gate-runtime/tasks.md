@@ -129,13 +129,17 @@ else is checked by `act`, the gate script on the Mac, and the live steps in `qui
   3. Confirm the PVE steps run.
   4. Run `ssh ci@pve 'ls -l --time-style=+%F /mnt/nas/homelab_ci/mutmut-cache/main'`.
 
-  **PR opened and merged** (`#276`, 2026-10-24T04:10Z) but the **live verification steps were not
-  run**: `gh run list` shows ten consecutive `schedule` failures through 2026-10-24T03:09Z (all
-  before the merge) and zero `workflow_dispatch` runs since. Do not dispatch against the current
-  `main` to close this out — it still carries the "Fetch mutation report" heredoc bug this pass
-  found and fixed (see the Phase 6 note below); a dispatch now would fail at that step and waste a
-  PVE run. Dispatch once this PR merges (folds into T038, which covers the same live check for the
-  mutmut 3 nightly).
+  **PR opened and merged** (`#276`, 2026-10-24T04:10Z). The literal acceptance check
+  (`mutmut-cache/main`'s date on the NAS) no longer applies: that whole directory was mutmut 2's
+  and was deleted in T041 once the migration was confirmed live. What it was actually checking —
+  does a dispatch reach PVE and does the nightly go green — is superseded by T038/T040, which
+  dispatched this same workflow twice (plain, then with `min_score=99`) and both reached PVE,
+  published, and behaved correctly. The one thing those dispatches cannot substitute for is an
+  actual **`schedule`-triggered** run (as opposed to `workflow_dispatch`): `gh run list` still shows
+  zero of those since the merge, the next one is 2026-10-25T03:00Z. No action needed — this closes
+  itself out tomorrow; check `gh run list --workflow nightly-deeper-verification.yml --json
+  conclusion,event --jq '.[] | select(.event=="schedule")' | head -1` the next time anyone is in
+  this spec.
 
   Record the run ID, duration and result under "Rollout record" at the end of this file. Then check the next `schedule` run the same way (SC-003, first of 7).
 
@@ -467,21 +471,22 @@ under "Rollout record" below.
   **Not run**: the full ACL check script (§5) needs all five *other* tokens too, which the agent does
   not have; left for the owner. The one cell this task cares most about — `mutation`'s own grant —
   is confirmed correct from the server's own account listing.
-- [ ] T034 SC-007 (quickstart §3.2): on a throwaway branch off PR 2, delete the assertions in one test in `python/tests/orchestrator/` so the Mac gate (T032) drops below the gate line. Open a draft PR and confirm `result` fails, with the score below the gate line in the summary. Close it without merging and delete the branch.
+- [X] T034 SC-007 (quickstart §3.2): on a throwaway branch off PR 2, delete the assertions in one test in `python/tests/orchestrator/` so the Mac gate (T032) drops below the gate line. Open a draft PR and confirm `result` fails, with the score below the gate line in the summary. Close it without merging and delete the branch.
 
-  **Not run in this pass.** Reaching the 60% gate line from today's 61.20% needs roughly 34+
-  mutants to flip from killed to survived (`100*(1700-x)/2778 < 60 ⇒ x > 33.2`), which means
-  weakening a test that currently kills a large, specific slice of `orchestrator.py`'s mutants —
-  identifying one cheaply, then running two more full ~2-minute Mac gates (before/after) plus a live
-  PVE PR run, for a scenario the gate script's own unit tests already cover directly
-  (`test_mutmut_report.py::test_exit_code_below_gate`, a synthetic fixture scored at exactly the gate
-  line). Left for the owner to run if a live demonstration (vs. the unit-tested formula) is wanted.
-- [ ] T035 SC-001 (quickstart §4): on a throwaway branch off PR 2, add one comment line to a file under `python/tests/guardrails/`. Open a draft PR and confirm `mutation` is skipped and `result` passes. Close it and delete the branch.
+  Run 2026-10-24: not `python/tests/orchestrator/` but `python/tests/version_currency/
+  test_version_currency.py` (626 killed vs. 143 survived — the single biggest concentration of
+  kills in one file, so the cheapest reliable way to cross the ~34-mutant threshold). Every one of
+  its 49 test bodies reduced to `pass` via an `ast` transform (preserves signatures/decorators/
+  collection count, avoided a regex pass that broke on a multi-line `assert`). Mac gate:
+  61.79% → **53.66%**, exit 1. Pushed as throwaway branch `087-t034-demo`, draft PR `#280`: `result`
+  failed, CI measured **54.28%** (close to the Mac's number; same deterministic drop), with
+  `::error::Mutation score 54.28% is below the gate 60.00%` in the log/summary. Closed without
+  merging, remote and local branches deleted, `mutants/` cleared, `git reset --hard origin/main`.
+- [X] T035 SC-001 (quickstart §4): on a throwaway branch off PR 2, add one comment line to a file under `python/tests/guardrails/`. Open a draft PR and confirm `mutation` is skipped and `result` passes. Close it and delete the branch.
 
-  **Not run in this pass**, for the same reason as T034 (a live PVE PR run to prove what
-  `test_gate_skips_when_path_changes` and `test_mutation_gate_paths.py`'s `guardrails/` case already
-  assert statically). Cheaper than T034 to execute (no gate run needed — the point is that
-  `mutation` does not run at all) if the owner wants the live proof.
+  Run 2026-10-24: a two-line comment added to `python/tests/guardrails/test_no_deprecated_refs.py`.
+  Pushed as throwaway branch `087-t035-demo`, draft PR `#279`: `mutation` reported `skipping`,
+  `result` passed. Closed without merging, remote and local branches deleted.
 - [X] T036 Update `docs/backlog/087-mutation-gate-runtime.md`: set the status line to "Specified and implemented in `specs/087-mutation-gate-runtime` (2026-10-…)". Add a short "Outcome" section: the 39 s trial, the fresh full-run decision, the fifth subprocess caller, and the new floor. Update `docs/backlog/backlog.md` if it lists 087's status.
 - [X] T037 Mark PR 2 ready (`gh pr ready`). Its body:
   - links spec, plan and research;
