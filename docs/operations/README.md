@@ -82,6 +82,7 @@ To add a new check:
 ### CI/CD & Deployment
 - [CI Deploy Workflow](ci-deploy.md) -- gated LXC service deployment
 - [Proxmox CI Runbook](proxmox-ci.md) -- pi-ci runner, sudoers, artifact handling
+- [Mutation Testing](mutation-testing.md) -- mutmut 3 PR gate, nightly publish, Mac survivor loop
 
 ### Backups
 - [Proxmox Configuration Backup](backups-proxmox-config.md) -- automated daily backup system

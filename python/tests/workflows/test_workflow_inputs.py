@@ -87,6 +87,28 @@ def test_nightly_inputs_contract():
     )
 
 
+def test_nightly_does_not_branch_on_dispatch_inputs():
+    """FR-002: a schedule run gets no dispatch inputs (spec 087).
+
+    No if: condition (job-level or step-level) may depend on a workflow_dispatch input,
+    because those inputs are unset on a schedule run — branching on one would silently
+    change behaviour (or skip a step) only on dispatch. `env:` values reading an input
+    are fine (MUTMUT_MIN_SCORE is empty on schedule and the gate script falls back to
+    the committed floor); only `if:` is restricted here.
+    """
+    doc = _nightly_doc()
+    for job_name, job in doc["jobs"].items():
+        job_if = job.get("if")
+        if isinstance(job_if, str):
+            assert "inputs." not in job_if, f"Job {job_name}'s if: must not reference inputs."
+        for step in job.get("steps", []):
+            step_if = step.get("if")
+            if isinstance(step_if, str):
+                assert "inputs." not in step_if, (
+                    f"Job {job_name} step {step.get('name')!r}'s if: must not reference inputs."
+                )
+
+
 def test_nightly_mutmut3_wiring():
     doc = _nightly_doc()
     raw = NIGHTLY_WORKFLOW.read_text(encoding="utf-8")
@@ -139,3 +161,10 @@ def test_nightly_mutmut3_wiring():
     assert validate_idx is not None, "Nightly must have a Validate min_score step"
     assert gate_idx is not None, "Nightly must have a Run mutation gate on PVE step"
     assert validate_idx < gate_idx, "Validate min_score must precede Run mutation gate on PVE"
+
+    # (e2) a step's run contains ntfy_mutation_token, and the token is never in a URL
+    #      (?auth= absent): the alert posts the token only as an Authorization header.
+    assert any(
+        "ntfy_mutation_token" in (s.get("run") or "") for s in steps
+    ), "Nightly must have a step reading ntfy_mutation_token from vault"
+    assert "?auth=" not in raw, "The ntfy token must never be passed as a URL query parameter"

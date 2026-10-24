@@ -245,3 +245,57 @@ tasks:
     dir: ansible
     cmds:
       - ansible-playbook -i inventories/prod/hosts.yml playbooks/backup_proxmox.yml --vault-password-file .vault-pass.txt {{.CLI_ARGS}}
+
+  mutmut:pull:
+    desc: "[LOCAL] Pull main's published mutation results from the NAS via ci@pve (spec 087)"
+    summary: |
+      Pulls the nightly's published mutation result set for main (contracts/published-results.md)
+      from /mnt/nas/homelab_ci/mutmut/main on ci@pve into the local mutants/ directory, replacing
+      only the result files (never mutants/ wholesale, so also_copy'd sources are untouched).
+      Prints the commit, age and score, then the next commands for the Mac loop
+      (docs/operations/mutation-testing.md): mutmut run, mutmut run "<module>*", mutmut browse.
+      Example: task mutmut:pull
+      Alternate host: MUTMUT_PULL_HOST=ci@pve task mutmut:pull
+    cmds:
+      - |
+        set -euo pipefail
+        host="${MUTMUT_PULL_HOST:-ci@pve}"
+        tmp="$(mktemp -d)"
+        trap 'rm -rf "$tmp"' EXIT
+
+        if ! rsync -a "$host:/mnt/nas/homelab_ci/mutmut/main/" "$tmp/"; then
+          echo "error: could not pull from $host:/mnt/nas/homelab_ci/mutmut/main/ (is pve reachable and has a nightly published?)" >&2
+          exit 1
+        fi
+
+        if ! python3 -c "
+        import json, sys
+        with open('$tmp/report.json') as f:
+            r = json.load(f)
+        sys.exit(0 if r.get('schema') == 1 else 1)
+        " 2>/dev/null; then
+          echo "error: $tmp/report.json is missing or not schema 1" >&2
+          exit 1
+        fi
+
+        mkdir -p mutants
+        rm -f mutants/mutmut-stats.json mutants/mutmut-cicd-stats.json
+        find mutants -name '*.meta' -delete
+        rsync -a "$tmp/" mutants/
+
+        python3 -c "
+        import json
+        from datetime import datetime, timezone
+        with open('mutants/report.json') as f:
+            r = json.load(f)
+        finished = datetime.strptime(r['finished_at'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+        age_hours = (datetime.now(timezone.utc) - finished).total_seconds() / 3600
+        print(f\"commit {r['commit']}\")
+        print(f\"finished_at {r['finished_at']}  (age {age_hours:.1f}h)\")
+        print(f\"score {r['score']:.2f}%  gate {r['gate']:.2f}%\")
+        "
+        echo ""
+        echo "Next:"
+        echo "  .venv/bin/mutmut run                                         # re-test local source changes"
+        echo "  .venv/bin/mutmut run \"homelab_proxmox_orchestrator.<module>*\"  # after editing a module's tests"
+        echo "  .venv/bin/mutmut browse                                      # inspect survivors"
