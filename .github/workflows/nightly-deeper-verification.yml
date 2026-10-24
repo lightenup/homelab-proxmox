@@ -189,7 +189,13 @@ jobs:
           mkdir -p "$dest"
 
           cd /home/ci/homelab-proxmox/mutants
-          find . -name '*.meta' -print0 | rsync -a --from0 --files-from=- ./ "$dest/"
+          # --no-group: the NAS export squashes writes to a fixed uid/gid (research confirmed
+          # 2026-10-24 on pve: files land as a mapped uid with group "users", not ci's own group),
+          # and rsync -a (implies -g) then tries to chgrp to match the source group, which the NFS
+          # client is not permitted to do. That failed every file and halted the whole publish
+          # under set -e, before report.json was copied or main was repointed (found on this
+          # nightly's first live run; FR-003 was otherwise untested until now).
+          find . -name '*.meta' -print0 | rsync -a --no-group --from0 --files-from=- ./ "$dest/"
           cp mutmut-stats.json mutmut-cicd-stats.json survivors.txt "$dest/"
           cp report.json "$dest/"
 
