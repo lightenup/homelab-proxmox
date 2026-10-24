@@ -155,7 +155,9 @@
   loop: "{{ alloy_file_readable.results | default([]) }}"
   loop_control:
     label: "{{ item.item.path_glob | default('') }}"
-  when: alloy_file_readable.results is defined
+  # Entries with a glob path_glob are skipped by the task above (test -r does not handle
+  # globs), so their result has no .rc at all — only check the ones that actually ran.
+  when: alloy_file_readable.results is defined and not (item.skipped | default(false))
 
 - name: Enable and start alloy service
   ansible.builtin.systemd:
