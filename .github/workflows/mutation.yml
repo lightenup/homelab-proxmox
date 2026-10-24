@@ -25,7 +25,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect python/** changes
+      - name: Detect mutation-relevant changes
         id: changes
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -38,7 +38,25 @@ jobs:
             exit 0
           fi
           base_ref="$(git merge-base "$BASE" "$HEAD")"
-          if git diff --name-only "$base_ref" "$HEAD" | grep -qE '^python/'; then
+          includes="$(mktemp)"
+          excludes="$(mktemp)"
+          trap 'rm -f "$includes" "$excludes"' EXIT
+          while IFS= read -r line; do
+            case "$line" in
+              ''|\#*) continue ;;
+              '!'*) printf '%s\n' "${line#\!}" >>"$excludes" ;;
+              *) printf '%s\n' "$line" >>"$includes" ;;
+            esac
+          done < scripts/ci/mutation-gate-paths.txt
+          if [ ! -s "$includes" ]; then
+            echo "run=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed="$(git diff --name-only "$base_ref" "$HEAD")"
+          if [ -s "$excludes" ]; then
+            changed="$(printf '%s\n' "$changed" | grep -vEf "$excludes" || true)"
+          fi
+          if printf '%s\n' "$changed" | grep -qEf "$includes"; then
             echo "run=true" >>"$GITHUB_OUTPUT"
           else
             echo "run=false" >>"$GITHUB_OUTPUT"
@@ -55,6 +73,7 @@ jobs:
            (github.event.pull_request.head.repo.full_name == github.repository &&
             github.event.pull_request.user.login == github.repository_owner)) }}
     runs-on: [self-hosted]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -71,43 +90,8 @@ jobs:
             --exclude '.git' \
             --exclude 'artifacts/' \
             --exclude '.venv' \
-            --exclude '.mutmut-cache' \
+            --exclude 'mutants/' \
             ./ ci@pve:/home/ci/homelab-proxmox/
-
-      - name: Prepare mutmut cache on PVE (seed from main baseline)
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          ssh ci@pve bash -s -- "$HEAD_REF" <<'EOF'
-          set -euo pipefail
-          branch="${1:-unknown}"
-          safe_branch="${branch//\//_}"
-          cache_root="/mnt/nas/homelab_ci/mutmut-cache"
-
-          if [ ! -d "/mnt/nas/homelab_ci" ]; then
-            echo "::error::Shared cache mount missing at /mnt/nas/homelab_ci on PVE."
-            exit 1
-          fi
-
-          mkdir -p "$cache_root"
-          cache_path="$cache_root/$safe_branch"
-
-          if [ ! -e "$cache_path" ] && [ -e "$cache_root/main" ]; then
-            echo "Seeding cache for '$safe_branch' from main baseline"
-            cp "$cache_root/main" "$cache_path"
-          fi
-
-          if ! touch "$cache_path"; then
-            echo "::error::Shared cache path is not writable on PVE: $cache_path"
-            exit 1
-          fi
-
-          cd /home/ci/homelab-proxmox
-          rm -f .mutmut-cache
-          ln -sfn "$cache_path" .mutmut-cache
-          ls -la .mutmut-cache
-          EOF
 
       - name: Prepare Python venv on PVE
         run: |
@@ -125,10 +109,47 @@ jobs:
             uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt'
 
       - name: Run mutation gate on PVE
+        id: gate_run
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set +e
+          ssh ci@pve "cd /home/ci/homelab-proxmox && PYTHON_BIN=.venv/bin/python MUTMUT_COMMIT='${HEAD_SHA}' bash scripts/ci/mutmut-threshold.sh"
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Fetch mutation report
+        if: always()
         run: |
           set -euo pipefail
-          ssh ci@pve 'cd /home/ci/homelab-proxmox && \
-            PYTHON_BIN=.venv/bin/python bash scripts/ci/mutmut-threshold.sh'
+          scp ci@pve:/home/ci/homelab-proxmox/mutants/report.json ci@pve:/home/ci/homelab-proxmox/mutants/survivors.txt . || true
+          if [ -f report.json ]; then
+            python3 << 'PYEOF' >> "$GITHUB_STEP_SUMMARY"
+            import json
+            with open("report.json") as f:
+                r = json.load(f)
+            c = r["counts"]
+            print(f"| Metric | Value |")
+            print(f"|---|---|")
+            print(f"| Score | {r['score']:.2f}% |")
+            print(f"| Floor | {r['floor']:.2f}% |")
+            print(f"| Margin | {r['margin']:.2f} |")
+            print(f"| Gate | {r['gate']:.2f}% |")
+            print(f"| Killed | {c['killed']} |")
+            print(f"| Survived | {c['survived']} |")
+            print(f"| No tests | {c['no_tests']} |")
+            print(f"| Total | {c['total']} |")
+            PYEOF
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Top survivor modules" >> "$GITHUB_STEP_SUMMARY"
+            head -10 survivors.txt >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+
+      - name: Gate result
+        run: |
+          exit "${{ steps.gate_run.outputs.rc }}"
 
   # Single required status check. Always runs; passes when mutation was skipped
   # (non-Python PR) and fails only when the mutation job actually failed.

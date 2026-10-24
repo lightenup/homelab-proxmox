@@ -1,0 +1,13 @@
+# Mutation gate path list (spec 087, research R9).
+# One POSIX ERE per line. A line starting with `!` is an exclude, applied first.
+# Prefer a false run over a false skip.
+
+^python/src/
+^python/tests/
+^python/(pytest\.ini|mutmut-threshold\.txt|requirements-(test|nightly)(\.lock)?\.txt)$
+^setup\.cfg$
+^src$
+^scripts/ci/(mutmut-threshold\.sh|mutmut_report\.py|mutation-gate-paths\.txt)$
+^\.github/workflows/mutation\.yml$
+
+!^python/tests/(guardrails|workflows)/

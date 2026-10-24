@@ -1,7 +1,6 @@
 # Minimum acceptable mutation score (percent), enforced by scripts/ci/mutmut-threshold.sh.
-# Score = 100 * killed / (killed + survived); timeout/suspicious/skipped mutants are excluded.
-# Ratchet this UP manually (via PR) as coverage improves; never lower it without justification.
-#
-# PLACEHOLDER: 0.0 disables the gate. Replace with the measured baseline on `main`
-# (run scripts/ci/mutmut-threshold.sh on PVE once) before marking the check required.
-41.0
+# Score = 100 * killed / (killed + survived)
+# Excluded: no tests, timeout, suspicious, skipped, segfault, caught by type check (spec 087 FR-010)
+# Measured 61.20% on 3507d0d with mutmut 3.8.0
+# Ratchet UP by hand via PR; never lower without justification
+61.0

@@ -7,6 +7,10 @@ import subprocess
 import sys
 from typing import Mapping
 
+import homelab_proxmox_orchestrator
+
+_PKG_ROOT = str(Path(homelab_proxmox_orchestrator.__file__).resolve().parents[1])
+
 
 @dataclass(frozen=True)
 class RunResult:
@@ -33,10 +37,9 @@ def run_ops_cli(
     repo_root = cwd or _find_repo_root(Path(__file__).resolve())
 
     merged_env = dict(os.environ)
-    repo_python_src = repo_root / "python" / "src"
     merged_env["PYTHONPATH"] = os.pathsep.join(
         [
-            str(repo_python_src),
+            _PKG_ROOT,
             merged_env.get("PYTHONPATH", ""),
         ]
     ).strip(os.pathsep)

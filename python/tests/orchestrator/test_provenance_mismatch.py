@@ -1,11 +1,16 @@
 import json
 import subprocess
+import sys
 from pathlib import Path
+
+import homelab_proxmox_orchestrator
+
+_PKG_ROOT = str(Path(homelab_proxmox_orchestrator.__file__).resolve().parents[1])
 
 
 def _call_apply(*, evidence_root: Path, plan_run_id: str, source_ref: str | None = None):
     argv = [
-        "python3",
+        sys.executable,
         "-m",
         "homelab_proxmox_orchestrator.cli",
         "apply",
@@ -27,7 +32,7 @@ def _call_apply(*, evidence_root: Path, plan_run_id: str, source_ref: str | None
         argv,
         text=True,
         capture_output=True,
-        env={"PYTHONPATH": "python/src"},
+        env={"PYTHONPATH": _PKG_ROOT},
     )
 
 

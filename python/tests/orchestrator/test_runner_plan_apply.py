@@ -1,11 +1,17 @@
 import json
 import subprocess
+import sys
+from pathlib import Path
+
+import homelab_proxmox_orchestrator
+
+_PKG_ROOT = str(Path(homelab_proxmox_orchestrator.__file__).resolve().parents[1])
 
 
 def _run(action: str, *, evidence_root: str):
     return subprocess.run(
         [
-            "python3",
+            sys.executable,
             "-m",
             "homelab_proxmox_orchestrator.cli",
             action,
@@ -20,7 +26,7 @@ def _run(action: str, *, evidence_root: str):
         ],
         text=True,
         capture_output=True,
-        env={"PYTHONPATH": "python/src"},
+        env={"PYTHONPATH": _PKG_ROOT},
     )
 
 

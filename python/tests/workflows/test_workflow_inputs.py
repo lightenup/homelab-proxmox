@@ -63,3 +63,79 @@ def test_lxc_apply_prod_inputs_contract():
     _assert_input(inputs, "promotion_run_id", type_="string")
     _assert_input(inputs, "allow_override_failed_lab_gate", type_="boolean")
     _assert_input(inputs, "confirm_apply_prod", type_="string")
+
+
+ALLOWED_NIGHTLY_INPUTS = {"min_score"}
+
+NIGHTLY_WORKFLOW = Path(".github/workflows/nightly-deeper-verification.yml")
+
+
+def _nightly_doc() -> dict:
+    return _load_yaml(NIGHTLY_WORKFLOW)
+
+
+def _nightly_steps(doc: dict) -> list[dict]:
+    job = doc["jobs"]["deeper"]
+    return job["steps"]
+
+
+def test_nightly_inputs_contract():
+    doc = _nightly_doc()
+    inputs = _workflow_dispatch_inputs(doc)
+    assert set(inputs.keys()) == ALLOWED_NIGHTLY_INPUTS, (
+        f"Nightly inputs must be exactly {ALLOWED_NIGHTLY_INPUTS}, got {set(inputs.keys())}"
+    )
+
+
+def test_nightly_mutmut3_wiring():
+    doc = _nightly_doc()
+    raw = NIGHTLY_WORKFLOW.read_text(encoding="utf-8")
+
+    # (a) no .mutmut-cache or mutmut-cache
+    assert ".mutmut-cache" not in raw, "Nightly workflow must not reference .mutmut-cache"
+    assert "mutmut-cache" not in raw, "Nightly workflow must not reference mutmut-cache"
+
+    steps = _nightly_steps(doc)
+
+    # (b) a step whose run contains scripts/ci/mutmut-threshold.sh
+    assert any(
+        "scripts/ci/mutmut-threshold.sh" in (s.get("run") or "")
+        for s in steps
+    ), "Nightly must have a step running scripts/ci/mutmut-threshold.sh"
+
+    # (c) a step whose run contains mv -T and /mnt/nas/homelab_ci/mutmut
+    assert any(
+        "mv -T" in (s.get("run") or "") and "/mnt/nas/homelab_ci/mutmut" in (s.get("run") or "")
+        for s in steps
+    ), "Nightly must have a step with mv -T and /mnt/nas/homelab_ci/mutmut"
+
+    # (d) no step named Upload artifacts, Install Ansible Galaxy deps,
+    #     Setup Python (GitHub-hosted only) or Debug runner + mounts
+    forbidden_names = {
+        "Upload artifacts",
+        "Install Ansible Galaxy deps",
+        "Setup Python (GitHub-hosted only)",
+        "Debug runner + mounts",
+    }
+    step_names = {s.get("name", "") for s in steps}
+    for name in forbidden_names:
+        assert name not in step_names, f"Nightly must not have step: {name}"
+
+    # (e) deeper.timeout-minutes == 30
+    job = doc["jobs"]["deeper"]
+    assert job.get("timeout-minutes") == 30, (
+        f"deeper.timeout-minutes must be 30, got {job.get('timeout-minutes')}"
+    )
+
+    # (f) Validate min_score step with regex, preceding Run mutation gate on PVE
+    validate_idx = None
+    gate_idx = None
+    for i, s in enumerate(steps):
+        run = s.get("run") or ""
+        if "^[0-9]{1,3}(\\.[0-9]+)?$" in run:
+            validate_idx = i
+        if "Run mutation gate on PVE" == s.get("name", ""):
+            gate_idx = i
+    assert validate_idx is not None, "Nightly must have a Validate min_score step"
+    assert gate_idx is not None, "Nightly must have a Run mutation gate on PVE step"
+    assert validate_idx < gate_idx, "Validate min_score must precede Run mutation gate on PVE"
