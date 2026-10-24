@@ -1,4 +1,4 @@
-mutmut>=2,<3
+mutmut>=3.8,<4
 molecule>=25,<26
 molecule-plugins[docker]>=25,<26
 ansible-core>=2.16,<2.18

@@ -1,11 +1,20 @@
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+import homelab_proxmox_orchestrator
+
+_PKG_ROOT = str(Path(homelab_proxmox_orchestrator.__file__).resolve().parents[1])
+# Inherit the parent environment: mutmut 3 selects the mutant via MUTANT_UNDER_TEST,
+# so replacing the environment would make the child run the unmutated code.
+_SUBPROCESS_ENV = {**os.environ, "PYTHONPATH": _PKG_ROOT}
 
 
 def _call_apply(*, evidence_root: Path, plan_run_id: str, source_ref: str | None = None):
     argv = [
-        "python3",
+        sys.executable,
         "-m",
         "homelab_proxmox_orchestrator.cli",
         "apply",
@@ -27,7 +36,7 @@ def _call_apply(*, evidence_root: Path, plan_run_id: str, source_ref: str | None
         argv,
         text=True,
         capture_output=True,
-        env={"PYTHONPATH": "python/src"},
+        env=_SUBPROCESS_ENV,
     )
 
 

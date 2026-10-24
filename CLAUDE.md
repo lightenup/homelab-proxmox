@@ -25,6 +25,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-25
 - Synology NAS over NFS: `/mnt/nas-backup` on `pve`, `/mnt/immich` bind mount on `immich` (089-backup-log-rotation-fixes)
 - YAML (Ansible 2.x), Jinja2, Bash, Prometheus rule YAML; HCL only in + existing `node_exporter` role (1.12.1 pin), `monitoring_stack` (Prometheus (091-backup-coverage-staleness)
 - Synology NAS over NFS, bind-mounted into each LXC. One new share, `homelab_jellyfin`. (091-backup-coverage-staleness)
+- Bash, GitHub Actions YAML, Python 3.11 (gate venv on `pve` and in CI) + mutmut `3.8.0` (replaces `2.5.1`), `uv`, `curl`, `rsync` (087-mutation-gate-runtime)
+- NAS share `/mnt/nas/homelab_ci` on `pve`: published mutation results under `mutmut/main` (087-mutation-gate-runtime)
 
 - HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy) + `telmate/proxmox` Terraform provider, `lxc_service` Terraform module, `geerlingguy.docker` Ansible role, `community.docker.docker_compose_v2` Ansible module (044-transcriber-proxmox-deploy)
 
@@ -44,9 +46,9 @@ tests/
 HCL (Terraform), YAML (Ansible), JSON (Grafana dashboard), Caddyfile (reverse proxy): Follow standard conventions
 
 ## Recent Changes
+- 087-mutation-gate-runtime: nightly fix, mutmut 3.8 migration with a fresh full-run PR gate, published results, ntfy regression alert
 - 091-backup-coverage-staleness: Added YAML (Ansible 2.x), Jinja2, Bash, Prometheus rule YAML; HCL only in + existing `node_exporter` role (1.12.1 pin), `monitoring_stack` (Prometheus
 - 089-backup-log-rotation-fixes: PVE backup unit sandbox fix, immich_backup wired into immich.yml, Docker json-file log rotation via `docker_daemon_options`
-- 083-hermes-agent-runtime: Added YAML (Ansible 2.x), Jinja2, Bash; HCL only if LXC memory must grow. No
 
 
 <!-- MANUAL ADDITIONS START -->

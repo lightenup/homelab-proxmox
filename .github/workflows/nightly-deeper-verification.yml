@@ -5,14 +5,11 @@ on:
     - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
-      run_mutmut:
-        description: "Run mutmut (skip for Molecule-only)"
-        type: boolean
-        default: false
-      run_on_pve:
-        description: "Run heavy steps on PVE via SSH"
-        type: boolean
-        default: true
+      min_score:
+        description: "Override the floor for this run (alert test); empty = committed floor"
+        type: string
+        required: false
+        default: ""
 
 jobs:
   gate:
@@ -31,6 +28,13 @@ jobs:
           if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "reason=not-main" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Manual dispatches always run (e.g. a min_score alert test on an unchanged main).
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual-dispatch" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -57,181 +61,149 @@ jobs:
     needs: gate
     if: ${{ needs.gate.outputs.run == 'true' }}
     runs-on: [self-hosted]
+    timeout-minutes: 30
     env:
-      # Input defaults only apply to workflow_dispatch: on a `schedule` run `inputs.run_on_pve` is
-      # empty. The scheduled run must use PVE (the Pi runner has no NAS mount), so decide it here
-      # once and have every step read this instead of the input.
-      RUN_ON_PVE: ${{ github.event_name == 'schedule' || inputs.run_on_pve }}
+      MUTMUT_MIN_SCORE: ${{ inputs.min_score }}
     steps:
-            - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-            - name: Setup Python (GitHub-hosted only)
-              if: ${{ contains(runner.name, 'GitHub Actions') }}
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
+      - name: Validate system Python (self-hosted)
+        if: ${{ !contains(runner.name, 'GitHub Actions') }}
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 -c "import sys; assert sys.version_info[:2] >= (3, 11), sys.version"
 
-            - name: Validate system Python (self-hosted)
-              if: ${{ !contains(runner.name, 'GitHub Actions') }}
-              run: |
-                  set -euo pipefail
-                  python3 --version
-                  python3 -c "import sys; assert sys.version_info[:2] >= (3, 11), sys.version"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
 
-            - name: Setup uv
-              uses: astral-sh/setup-uv@v3
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
 
-            - name: Cache uv
-              uses: actions/cache@v4
-              with:
-                  path: ~/.cache/uv
-                  key: uv-${{ runner.os }}-${{ hashFiles('python/requirements-nightly.lock.txt') }}
+      - name: Install rsync/ssh (PVE remote)
+        run: |
+          if ! command -v rsync >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y rsync openssh-client
+          fi
 
-            - name: Install rsync/ssh (PVE remote)
-              if: ${{ env.RUN_ON_PVE == 'true' }}
-              run: |
-                  if ! command -v rsync >/dev/null 2>&1; then
-                    sudo apt-get update
-                    sudo apt-get install -y rsync openssh-client
-                  fi
+      - name: Install nightly dependencies
+        run: |
+          uv venv --python 3.11 --clear
+          uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt
 
-            - name: Install nightly dependencies
-              run: |
-                  uv venv --python 3.11 --clear
-                  uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt
+      - name: Sync repo to PVE
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'artifacts/' \
+            --exclude 'mutants/' \
+            ./ ci@pve:/home/ci/homelab-proxmox/
 
-            - name: Install Ansible Galaxy deps
-              run: |
-                  .venv/bin/ansible-galaxy role install -r ansible/requirements.yml
-                  .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml
+      - name: Prepare Python venv on PVE
+        run: |
+          ssh ci@pve 'set -euo pipefail; \
+            if ! command -v uv >/dev/null 2>&1; then \
+              curl -LsSf https://astral.sh/uv/install.sh | sh; \
+            fi; \
+            export PATH="$HOME/.local/bin:$PATH"; \
+            if ! command -v python3.11 >/dev/null 2>&1; then \
+              uv python install 3.11; \
+            fi; \
+            cd /home/ci/homelab-proxmox && \
+            uv venv --python 3.11 --clear; \
+            .venv/bin/python --version; \
+            uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt'
 
-            - name: Ensure artifact root on PVE
-              if: ${{ env.RUN_ON_PVE == 'true' }}
-              run: |
-                  SSH_USER=ci PROXMOX_HOST=pve ./scripts/lab/guardrails.sh ensure-artifacts
+      - name: Check NAS mount on PVE
+        run: |
+          set -euo pipefail
+          if ! ssh ci@pve 'test -d /mnt/nas/homelab_ci && touch /mnt/nas/homelab_ci/.write-test && rm /mnt/nas/homelab_ci/.write-test'; then
+            echo "::error::Shared mount missing at /mnt/nas/homelab_ci on PVE."
+            exit 1
+          fi
 
-            - name: Sync repo to PVE
-              if: ${{ env.RUN_ON_PVE == 'true' }}
-              run: |
-                  rsync -az --delete \
-                    --exclude '.git' \
-                    --exclude 'artifacts/' \
-                    ./ ci@pve:/home/ci/homelab-proxmox/
+      - name: Validate min_score
+        run: |
+          set -euo pipefail
+          if [ -n "${MUTMUT_MIN_SCORE:-}" ]; then
+            # Anchored match on the whole value: grep would accept a multiline input with one
+            # numeric line, and this value is interpolated into the remote ssh command.
+            if [[ ! "$MUTMUT_MIN_SCORE" =~ ^[0-9]{1,3}(\.[0-9]+)?$ ]]; then
+              echo "::error::min_score must be a number such as 61 or 61.5"
+              exit 1
+            fi
+          fi
 
-            - name: Prepare mutmut shared cache on PVE
-              if: ${{ env.RUN_ON_PVE == 'true' }}
-              run: |
-                  cache_branch="${GITHUB_REF_NAME:-unknown}"
-                  ssh ci@pve bash -s -- "$cache_branch" <<'EOF'
-                  set -euo pipefail
-                  cache_branch="$1"
-                  cache_root="/mnt/nas/homelab_ci/mutmut-cache"
-                  cache_path="$cache_root/$cache_branch"
-                  if [ ! -d "/mnt/nas/homelab_ci" ]; then
-                    echo "::error::Shared cache mount missing at /mnt/nas/homelab_ci on PVE."
-                    exit 1
-                  fi
-                  mkdir -p "$cache_root"
-                  if ! touch "$cache_path"; then
-                    echo "::error::Shared cache path is not writable on PVE: $cache_path"
-                    exit 1
-                  fi
-                  cd /home/ci/homelab-proxmox
-                  rm -f .mutmut-cache
-                  ln -sfn "$cache_path" .mutmut-cache
-                  ls -la .mutmut-cache
-                  EOF
+      - name: Run mutation gate on PVE
+        id: gate_run
+        run: |
+          set +e
+          ssh ci@pve "cd /home/ci/homelab-proxmox && PYTHON_BIN=.venv/bin/python MUTMUT_COMMIT='${GITHUB_SHA}' MUTMUT_MIN_SCORE='${MUTMUT_MIN_SCORE}' bash scripts/ci/mutmut-threshold.sh"
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          exit 0
 
-            - name: Prepare Python venv on PVE
-              if: ${{ env.RUN_ON_PVE == 'true' }}
-              run: |
-                  ssh ci@pve 'set -euo pipefail; \
-                    if ! command -v uv >/dev/null 2>&1; then \
-                      curl -LsSf https://astral.sh/uv/install.sh | sh; \
-                    fi; \
-                    export PATH="$HOME/.local/bin:$PATH"; \
-                    if ! command -v python3.11 >/dev/null 2>&1; then \
-                      uv python install 3.11; \
-                    fi; \
-                    cd /home/ci/homelab-proxmox && \
-                    uv venv --python 3.11 --clear; \
-                    .venv/bin/python --version; \
-                    uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt'
+      - name: Fetch mutation report
+        if: always()
+        run: |
+          set -euo pipefail
+          scp ci@pve:/home/ci/homelab-proxmox/mutants/report.json ci@pve:/home/ci/homelab-proxmox/mutants/survivors.txt . || true
+          if [ -f report.json ]; then
+            python3 << 'PYEOF' >> "$GITHUB_STEP_SUMMARY"
+            import json
+            with open("report.json") as f:
+                r = json.load(f)
+            c = r["counts"]
+            print(f"| Metric | Value |")
+            print(f"|---|---|")
+            print(f"| Score | {r['score']:.2f}% |")
+            print(f"| Floor | {r['floor']:.2f}% |")
+            print(f"| Margin | {r['margin']:.2f} |")
+            print(f"| Gate | {r['gate']:.2f}% |")
+            print(f"| Killed | {c['killed']} |")
+            print(f"| Survived | {c['survived']} |")
+            print(f"| No tests | {c['no_tests']} |")
+            print(f"| Total | {c['total']} |")
+            PYEOF
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Top survivor modules" >> "$GITHUB_STEP_SUMMARY"
+            head -10 survivors.txt >> "$GITHUB_STEP_SUMMARY" || true
+          fi
 
-            - name: Debug runner + mounts
-              run: |
-                  set -euo pipefail
-                  echo "Runner name: ${RUNNER_NAME:-unknown}"
-                  echo "Runner OS: ${RUNNER_OS:-unknown}"
-                  echo "Runner arch: ${RUNNER_ARCH:-unknown}"
-                  uname -a
-                  echo "--- /etc/os-release ---"
-                  cat /etc/os-release || true
-                  echo "--- mounts (grep nas) ---"
-                  mount | grep -i nas || true
-                  echo "--- /mnt ---"
-                  ls -la /mnt || true
-                  echo "--- /mnt/nas ---"
-                  ls -la /mnt/nas || true
+      - name: Publish main results to NAS
+        id: publish
+        if: ${{ steps.gate_run.outputs.rc == '0' || steps.gate_run.outputs.rc == '1' }}
+        run: |
+          ssh ci@pve bash -s <<'EOF'
+          set -euo pipefail
+          root=/mnt/nas/homelab_ci/mutmut
+          ts="$(date -u +%Y%m%dT%H%M%SZ)"
+          dest="$root/main-$ts"
+          mkdir -p "$dest"
 
-            - name: Prepare mutmut shared cache
-              if: ${{ env.RUN_ON_PVE != 'true' }}
-              run: |
-                  set -euo pipefail
+          cd /home/ci/homelab-proxmox/mutants
+          find . -name '*.meta' -print0 | rsync -a --from0 --files-from=- ./ "$dest/"
+          cp mutmut-stats.json mutmut-cicd-stats.json survivors.txt "$dest/"
+          cp report.json "$dest/"
 
-                  cache_root="/mnt/nas/homelab_ci/mutmut-cache"
-                  cache_path="$cache_root/${GITHUB_REF_NAME:-unknown}"
+          ln -sfn "main-$ts" "$root/main.tmp" && mv -T "$root/main.tmp" "$root/main"
 
-                  if [ ! -d "/mnt/nas/homelab_ci" ]; then
-                    echo "::error::Shared cache mount missing at /mnt/nas/homelab_ci. Mount the NAS share and ensure it is writable."
-                    exit 1
-                  fi
+          ls -1d "$root"/main-* | sort | head -n -2 | xargs -r rm -rf
 
-                  mkdir -p "$cache_root"
-                  if ! touch "$cache_path"; then
-                    echo "::error::Shared cache path is not writable: $cache_path"
-                    exit 1
-                  fi
+          readlink "$root/main"
+          EOF
 
-                  rm -f .mutmut-cache
-                  ln -sfn "$cache_path" .mutmut-cache
-
-            - name: Mutation testing (mutmut) on PVE
-              if: ${{ env.RUN_ON_PVE == 'true' }}
-              run: |
-                  ssh ci@pve "cd /home/ci/homelab-proxmox && \
-                    .venv/bin/python -m mutmut run \
-                      --CI \
-                      --no-progress \
-                      --paths-to-mutate python/src/homelab_proxmox_orchestrator \
-                      --tests-dir python/tests \
-                      --runner \"env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini -n auto\" && \
-                    .venv/bin/python -m mutmut results"
-
-            - name: Mutation testing (mutmut)
-              if: ${{ env.RUN_ON_PVE != 'true' }}
-              run: |
-                  .venv/bin/mutmut run \
-                    --CI \
-                    --no-progress \
-                    --paths-to-mutate python/src/homelab_proxmox_orchestrator \
-                    --tests-dir python/tests \
-                    --runner "env PYTHONPATH=python/src .venv/bin/python -m pytest -q -c python/pytest.ini -n auto"
-                  .venv/bin/mutmut results
-                  echo "::group::Mutmut survivors/timeouts"
-                  .venv/bin/mutmut result-ids survived || true
-                  .venv/bin/mutmut result-ids timeout || true
-                  .venv/bin/mutmut result-ids suspicious || true
-                  echo "::endgroup::"
-
-            - name: Upload artifacts
-              if: always()
-              uses: actions/upload-artifact@v4
-              with:
-                  name: nightly-deeper-artifacts
-                  if-no-files-found: ignore
-                  include-hidden-files: true
-                  path: |
-                      .mutmut-cache
-                      mutants/
-                      python/mutmut.ini
+      - name: Fail on gate result
+        if: always()
+        run: |
+          set -euo pipefail
+          rc="${{ steps.gate_run.outputs.rc }}"
+          if [ "$rc" != "0" ]; then
+            echo "::error::Mutation gate failed with rc=$rc"
+            exit 1
+          fi
+          echo "Mutation gate passed."

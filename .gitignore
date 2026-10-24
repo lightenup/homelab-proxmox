@@ -5,8 +5,7 @@ __pycache__/
 venv/
 .pytest_cache/
 .molecule/
-.mutmut-cache/
-.mutmut-cache
+mutants/
 .ruff_cache/
 .coverage
 htmlcov/
