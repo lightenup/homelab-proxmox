@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# T035 demo (SC-001): a comment-only change under python/tests/guardrails/ must not trigger
+# the mutation gate. This line is reverted/removed before merge.
 from collections.abc import Iterable
 from pathlib import Path
 
