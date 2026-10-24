@@ -47,8 +47,19 @@ else is checked by `act`, the gate script on the Mac, and the live steps in `qui
 
 **Purpose**: Baseline before editing.
 
-- [ ] T001 Confirm the branch is `087-mutation-gate-runtime` and up to date with `origin/main` (`git fetch origin main && git log --oneline origin/main -1`). Run `bash scripts/ci/python-tests.sh` and `act -l`. Record any failure that already exists as a note at the end of this file, so it is not blamed on this feature.
-- [ ] T002 Read-only check on `pve`: `ssh ci@pve 'ls -la /mnt/nas/homelab_ci /mnt/nas/homelab_ci/mutmut-cache; df -h /mnt/nas/homelab_ci'`. Record the file count and the age of `mutmut-cache/main` in the T001 note. That is the "before" picture for quickstart §1 and §7.
+- [X] T001 Confirm the branch is `087-mutation-gate-runtime` and up to date with `origin/main` (`git fetch origin main && git log --oneline origin/main -1`). Run `bash scripts/ci/python-tests.sh` and `act -l`. Record any failure that already exists as a note at the end of this file, so it is not blamed on this feature.
+
+  Done across both PRs rather than as one discrete step: `python-tests.sh` was green before each PR
+  (T011/T031 reruns), and `act -l` parsed the full workflow set each time (T018, T031). No
+  pre-existing failure was found to record.
+- [X] T002 Read-only check on `pve`: `ssh ci@pve 'ls -la /mnt/nas/homelab_ci /mnt/nas/homelab_ci/mutmut-cache; df -h /mnt/nas/homelab_ci'`. Record the file count and the age of `mutmut-cache/main` in the T001 note. That is the "before" picture for quickstart §1 and §7.
+
+  Run 2026-10-24: `mutmut-cache/` holds 15 entries (branch caches + `main`), each 300–393 KB.
+  `mutmut-cache/main` is dated **2026-07-20** — confirms the FR-002 bug PR #276 fixed (no scheduled
+  nightly had reached PVE since then). `/mnt/nas/homelab_ci` is 26% used (2.1T/8.2T). The new
+  `/mnt/nas/homelab_ci/mutmut/` (mutmut 3 publish target) does not exist yet: no nightly has
+  completed end to end on mutmut 3 (see T038, blocked on this PR merging and fixing the Fetch
+  mutation report heredoc bug found below).
 
 ---
 
@@ -61,7 +72,7 @@ else is checked by `act`, the gate script on the Mac, and the live steps in `qui
 
 ### Tests for User Story 1 (written now, committed in PR 2)
 
-- [ ] T003 [US1] Extend `python/tests/workflows/test_workflow_inputs.py` (reuse its `_load_yaml` and `_Yaml12SafeLoader`). Add `test_nightly_does_not_depend_on_dispatch_inputs`. Load `.github/workflows/nightly-deeper-verification.yml` and assert:
+- [X] T003 [US1] Extend `python/tests/workflows/test_workflow_inputs.py` (reuse its `_load_yaml` and `_Yaml12SafeLoader`). Add `test_nightly_does_not_depend_on_dispatch_inputs`. Load `.github/workflows/nightly-deeper-verification.yml` and assert:
   - (a) `on.workflow_dispatch` exists, and its `inputs` is absent or empty. Write it as `set(inputs) <= ALLOWED_NIGHTLY_INPUTS` with `ALLOWED_NIGHTLY_INPUTS = set()`. PR 2 changes that to `{"min_score"}`.
   - (b) No `if:` value on any job or step contains `inputs.`.
   - (c) The `deeper` job has an integer `timeout-minutes`.
@@ -69,22 +80,62 @@ else is checked by `act`, the gate script on the Mac, and the live steps in `qui
 
   Docstring: "FR-002: a schedule run gets no dispatch inputs (spec 087)". Run `.venv/bin/python -m pytest -c python/pytest.ini -o addopts= python/tests/workflows/test_workflow_inputs.py` and confirm the new test **fails** on today's workflow. **Do not commit it in PR 1**: any `python/` change triggers today's mutmut 2 gate. Keep it as a local change (`git stash` or a scratch commit outside PR 1) and commit it as the first commit of PR 2, where T021 extends it.
 
+  **Done as**, split across the two assertion groups rather than one combined test, because PR 2
+  (`#277`) landed a full mutmut-3 rewrite of the file rather than an incremental patch: (a) is
+  `test_nightly_inputs_contract` (exact-set match on `ALLOWED_NIGHTLY_INPUTS = {"min_score"}`); (b)
+  is the new `test_nightly_does_not_branch_on_dispatch_inputs` (added in this follow-up PR, closing
+  a gap this implementation pass found — it was true of the shipped file but never asserted); (c)
+  is `test_nightly_mutmut3_wiring`'s `deeper.timeout-minutes == 30` check; (d) holds (`run_on_pve`
+  does not appear anywhere in the current file — confirmed by grep) but has no standalone assertion,
+  since T021/T022 replaced the whole step list rather than deleting a condition from it.
+
 ### Implementation for User Story 1 (PR 1)
 
-- [ ] T004 [US1] Edit `.github/workflows/nightly-deeper-verification.yml`:
+- [X] T004 [US1] Edit `.github/workflows/nightly-deeper-verification.yml`:
   - (1) Delete the `run_mutmut` and `run_on_pve` inputs. Leave `workflow_dispatch:` with no `inputs` key.
   - (2) Delete the `if: ${{ inputs.run_on_pve }}` line from each of: `Install rsync/ssh (PVE remote)`, `Ensure artifact root on PVE`, `Sync repo to PVE`, `Prepare mutmut shared cache on PVE`, `Prepare Python venv on PVE`, `Mutation testing (mutmut) on PVE`.
   - (3) Delete the two steps guarded by `!inputs.run_on_pve`: `Prepare mutmut shared cache` and `Mutation testing (mutmut)`.
   - (4) Add `timeout-minutes: 120` to the `deeper` job (plan, PR 1 step 4).
 
   Leave every other step unchanged in PR 1.
-- [ ] T005 [US1] In the same file, in the `gate` job's `Decide whether to run` step, make the `no-new-commits` skip apply only to scheduled runs: change the check to `if [ "${GITHUB_EVENT_NAME}" = "schedule" ] && [ "$last_sha" = "$GITHUB_SHA" ]; then`. A `workflow_dispatch` on an unchanged `main` must still run (research R5).
-- [ ] T006 [US1] Re-run the T003 test (locally, uncommitted) and the whole `python/tests/workflows/` directory, and confirm green. Confirm the PR 1 diff touches only `.github/workflows/nightly-deeper-verification.yml` (`git diff --name-only origin/main`). Run `act -l` and `act -n -W .github/workflows/nightly-deeper-verification.yml schedule`. In the dry-run output, no step of `deeper` is skipped because of a condition. Record the `act` result in the PR description (Constitution, "Local Workflow Testing").
+
+  **Done differently, same end state**: PR 1 (`#276`, merged before this spec's Phase 3 began) took
+  a narrower path — it kept the `run_on_pve`/`run_mutmut` inputs and added a job-level
+  `RUN_ON_PVE: ${{ github.event_name == 'schedule' || inputs.run_on_pve }}` env, guarding each PVE
+  step on that instead of deleting the inputs. PR 2 (`#277`) then replaced the whole job (T022) for
+  mutmut 3, which deleted `run_on_pve`/`run_mutmut` outright and left every PVE step unconditional.
+  The current `main` satisfies (1)–(4) as written; `timeout-minutes` is now `30` (T022), not `120`,
+  because the mutmut-3 fresh-run nightly is far faster than mutmut 2's incremental one.
+- [X] T005 [US1] In the same file, in the `gate` job's `Decide whether to run` step, make the `no-new-commits` skip apply only to scheduled runs: change the check to `if [ "${GITHUB_EVENT_NAME}" = "schedule" ] && [ "$last_sha" = "$GITHUB_SHA" ]; then`. A `workflow_dispatch` on an unchanged `main` must still run (research R5).
+
+  **Done as**: an early-return (`if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then run=true`)
+  before the last-successful-SHA lookup, added in this follow-up PR after the Copilot review of PR 2
+  caught that the original `no-new-commits` skip still applied to `workflow_dispatch` (PR #277 review
+  comment: "Apply min_score override on manual dispatches"). Same effect as the task's literal
+  `&&`-based rewrite: a dispatch always runs, `schedule` still skips if `main` has not moved.
+- [X] T006 [US1] Re-run the T003 test (locally, uncommitted) and the whole `python/tests/workflows/` directory, and confirm green. Confirm the PR 1 diff touches only `.github/workflows/nightly-deeper-verification.yml` (`git diff --name-only origin/main`). Run `act -l` and `act -n -W .github/workflows/nightly-deeper-verification.yml schedule`. In the dry-run output, no step of `deeper` is skipped because of a condition. Record the `act` result in the PR description (Constitution, "Local Workflow Testing").
+
+  `python/tests/workflows/` is green (63 tests, confirmed in this pass). `act -l` lists both
+  `nightly-deeper-verification.yml` jobs. `act -n -W ... schedule` only shows the `gate` job
+  executing in dry-run mode (act 0.2.89): `deeper`'s `if: needs.gate.outputs.run == 'true'` cannot
+  be resolved without actually running `gate`'s shell command, which `-n` does not do — act prints
+  `🏁 Job succeeded` for `gate` and stops there. This is a tool limitation, not a workflow defect
+  (reproduced identically for `mutation.yml`'s `mutation`/`result` jobs); the per-step assertions in
+  `test_nightly_mutmut3_wiring` and `test_nightly_does_not_branch_on_dispatch_inputs` are the
+  practical substitute (same approach used for T031).
 - [ ] T007 [US1] Open PR 1 (`gh pr create`, base `main`), titled `fix(087): nightly runs the PVE mutation path on schedule`. The body links spec FR-002 and research R5, says mutmut 2 is unchanged, notes the expected ~1 h nightly, and says the guard test follows in PR 2 so that PR 1 skips the mutation gate. Confirm the PR's `mutation` job is skipped and `result` passes. After the owner merges it, run quickstart §1:
   1. `gh workflow run nightly-deeper-verification.yml --ref main`.
   2. Watch it with `gh run watch`.
   3. Confirm the PVE steps run.
   4. Run `ssh ci@pve 'ls -l --time-style=+%F /mnt/nas/homelab_ci/mutmut-cache/main'`.
+
+  **PR opened and merged** (`#276`, 2026-10-24T04:10Z) but the **live verification steps were not
+  run**: `gh run list` shows ten consecutive `schedule` failures through 2026-10-24T03:09Z (all
+  before the merge) and zero `workflow_dispatch` runs since. Do not dispatch against the current
+  `main` to close this out — it still carries the "Fetch mutation report" heredoc bug this pass
+  found and fixed (see the Phase 6 note below); a dispatch now would fail at that step and waste a
+  PVE run. Dispatch once this PR merges (folds into T038, which covers the same live check for the
+  mutmut 3 nightly).
 
   Record the run ID, duration and result under "Rollout record" at the end of this file. Then check the next `schedule` run the same way (SC-003, first of 7).
 
@@ -99,7 +150,7 @@ uses them.
 
 ### Tests (write first, see them fail)
 
-- [ ] T008 [P] Create `python/tests/workflows/test_mutmut_report.py` for `scripts/ci/mutmut_report.py`. Import it with `importlib.util.spec_from_file_location`, because `scripts/ci` is not a package. In `tmp_path`, build a fake `mutants/` holding:
+- [X] T008 [P] Create `python/tests/workflows/test_mutmut_report.py` for `scripts/ci/mutmut_report.py`. Import it with `importlib.util.spec_from_file_location`, because `scripts/ci` is not a package. In `tmp_path`, build a fake `mutants/` holding:
   - `mutants/mutmut-cicd-stats.json` with `killed`, `survived`, `no_tests`, `timeout`, `suspicious`, `skipped`, `segfault`, `total`.
   - Two meta files: `mutants/src/homelab_proxmox_orchestrator/alpha.py.meta` and `.../pkg/beta.py.meta`. Each is JSON with exactly the keys `exit_code_by_key`, `hash_by_function_name`, `type_check_error_by_key`, `durations_by_key` (data-model.md "Survivor report").
 
@@ -113,7 +164,7 @@ uses them.
   - (g) Exit code: 0 when passed, 1 when below the gate, 2 when the stats file is missing or `total` is 0.
 
   Confirm the file fails (the script does not exist yet).
-- [ ] T009 [P] Create `python/tests/workflows/test_mutation_gate_paths.py`, modelled on `python/tests/workflows/test_confidence_gate_paths.py` (same YAML loader, same "cleaned patterns" helper). It reads `scripts/ci/mutation-gate-paths.txt`. Lines starting with `!` are exclude EREs, and all other non-comment, non-blank lines are include EREs. Implement `_decide(paths) -> bool` the way the workflow will: drop paths matching any exclude, then run if any remaining path matches an include. Assert:
+- [X] T009 [P] Create `python/tests/workflows/test_mutation_gate_paths.py`, modelled on `python/tests/workflows/test_confidence_gate_paths.py` (same YAML loader, same "cleaned patterns" helper). It reads `scripts/ci/mutation-gate-paths.txt`. Lines starting with `!` are exclude EREs, and all other non-comment, non-blank lines are include EREs. Implement `_decide(paths) -> bool` the way the workflow will: drop paths matching any exclude, then run if any remaining path matches an include. Assert:
   - **Runs** (true) for each of: `python/src/homelab_proxmox_orchestrator/cli.py`, `python/tests/orchestrator/test_cli.py`, `python/tests/conftest.py`, `python/pytest.ini`, `python/mutmut-threshold.txt`, `python/requirements-nightly.lock.txt`, `python/requirements-test.txt`, `setup.cfg`, `src`, `scripts/ci/mutmut-threshold.sh`, `scripts/ci/mutmut_report.py`, `scripts/ci/mutation-gate-paths.txt`, `.github/workflows/mutation.yml`.
   - **Skips** (false) for each of: `python/tests/guardrails/test_service_backup.py`, `python/tests/workflows/test_confidence_gate_paths.py`, `.github/workflows/ci.yml`, `docs/operations/mutation-testing.md`, `ansible/roles/ntfy/defaults/main.yml`.
   - **Workflow wiring**: `.github/workflows/mutation.yml` contains `scripts/ci/mutation-gate-paths.txt` and `grep -qEf`, and no longer contains `grep -qE '^python/'`.
@@ -121,23 +172,27 @@ uses them.
 
   Confirm it fails.
 
+  **Written in this follow-up pass**: PR 2 (`#277`) shipped the path list (T019) and the workflow
+  wiring without this guard test — a real gap this implementation pass found and closed. 23 tests,
+  all green on the first run (the implementation it tests was already correct).
+
 ### Implementation
 
-- [ ] T010 Create the layout symlink `src -> python/src` at the repo root (`ln -s python/src src`, committed as a symlink; through the Git-Data API it is a tree entry with mode `120000`). Create `setup.cfg` at the repo root containing only a `[mutmut]` section, with one value per line, exactly as in research R4:
+- [X] T010 Create the layout symlink `src -> python/src` at the repo root (`ln -s python/src src`, committed as a symlink; through the Git-Data API it is a tree entry with mode `120000`). Create `setup.cfg` at the repo root containing only a `[mutmut]` section, with one value per line, exactly as in research R4:
   - `source_paths = src/homelab_proxmox_orchestrator`
   - `also_copy` = `python/tests`, `python/pytest.ini`, `scripts`, `terraform`, `Taskfile.yml`
   - `pytest_add_cli_args` = `-c`, `python/pytest.ini`, `-o`, `addopts=`, `-o`, `pythonpath=src`
   - `pytest_add_cli_args_test_selection` = `python/tests`, `--ignore=python/tests/guardrails`, `--ignore=python/tests/workflows`
 
   Add a two-line header comment naming spec 087 and research R4. Delete `python/mutmut.ini`.
-- [ ] T011 [P] Fix the subprocess callers (research R4 point 3) so they run the mutated code under mutmut and still pass outside it.
+- [X] T011 [P] Fix the subprocess callers (research R4 point 3) so they run the mutated code under mutmut and still pass outside it.
   - **Three tests**: `python/tests/orchestrator/test_cli.py`, `python/tests/orchestrator/test_runner_plan_apply.py` and `python/tests/orchestrator/test_provenance_mismatch.py`. In each, replace the `"python3"` argv element with `sys.executable`. Replace `env={"PYTHONPATH": "python/src"}` with `env={"PYTHONPATH": _PKG_ROOT}`, where the module defines `_PKG_ROOT = str(Path(homelab_proxmox_orchestrator.__file__).resolve().parents[1])` after its imports, with `import sys`, `from pathlib import Path` and `import homelab_proxmox_orchestrator` added if missing.
   - **`python/tests/orchestrator/test_exec.py`**: replace both `"python3"` with `sys.executable`.
   - **`python/tests/task_smoke/helpers.py`**: replace `repo_python_src = repo_root / "python" / "src"` with the imported package's parent (`Path(homelab_proxmox_orchestrator.__file__).resolve().parents[1]`), importing the package at module top.
 
   Match each file's import style. Run `bash scripts/ci/python-tests.sh` and confirm green.
-- [ ] T012 [P] Add `mutants/` to `.gitignore` and delete its two `.mutmut-cache` lines. Change `mutmut>=2,<3` to `mutmut>=3.8,<4` in `python/requirements-nightly.txt`. Regenerate both locks with `bash scripts/ci/uv-lock.sh`. It keeps existing pins, so check that `git diff python/requirements-test.lock.txt` is empty. If it is not, revert that file. In `python/requirements-nightly.lock.txt`, confirm `mutmut==3.8.0` is pinned and the header command is unchanged. Re-sync the local venv: `uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt`. The Mac `.venv` is Python 3.15, and mutmut 3.8 has only been tried on 3.14 (research R11). If the sync fails (for example no 3.15 wheel for `libcst` or `setproctitle`), **stop and report**. Do not change the lock's `--python-version 3.11`. The fallback is a separate `uv venv --python 3.14 .venv-mutmut` for the mutation loop, used by T015, T032 and T039 through `PYTHON_BIN=.venv-mutmut/bin/python`, and documented in T026.
-- [ ] T013 Create `scripts/ci/mutmut_report.py`: standard library only, `#!/usr/bin/env python3`, with a docstring naming spec 087, data-model.md and contracts/published-results.md.
+- [X] T012 [P] Add `mutants/` to `.gitignore` and delete its two `.mutmut-cache` lines. Change `mutmut>=2,<3` to `mutmut>=3.8,<4` in `python/requirements-nightly.txt`. Regenerate both locks with `bash scripts/ci/uv-lock.sh`. It keeps existing pins, so check that `git diff python/requirements-test.lock.txt` is empty. If it is not, revert that file. In `python/requirements-nightly.lock.txt`, confirm `mutmut==3.8.0` is pinned and the header command is unchanged. Re-sync the local venv: `uv pip sync --python .venv/bin/python --require-hashes python/requirements-nightly.lock.txt`. The Mac `.venv` is Python 3.15, and mutmut 3.8 has only been tried on 3.14 (research R11). If the sync fails (for example no 3.15 wheel for `libcst` or `setproctitle`), **stop and report**. Do not change the lock's `--python-version 3.11`. The fallback is a separate `uv venv --python 3.14 .venv-mutmut` for the mutation loop, used by T015, T032 and T039 through `PYTHON_BIN=.venv-mutmut/bin/python`, and documented in T026.
+- [X] T013 Create `scripts/ci/mutmut_report.py`: standard library only, `#!/usr/bin/env python3`, with a docstring naming spec 087, data-model.md and contracts/published-results.md.
   - **Arguments**: `--mutants-dir` (default `mutants`), `--floor` (float), `--margin` (float), `--commit` (str), `--mutmut-version` (str).
   - **Reads** `mutmut-cicd-stats.json` and every `src/homelab_proxmox_orchestrator/**/*.py.meta` under the mutants dir.
   - **Writes** `report.json` (`schema: 1`, the fields and order of contracts/published-results.md, `finished_at` as `datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")`) and `survivors.txt`.
@@ -146,7 +201,7 @@ uses them.
   - **Status map**: a module-level dict copied from data-model.md, with a comment naming mutmut 3.8.0's `mutmut/stats.py`.
 
   Run the T008 tests and confirm green.
-- [ ] T014 Rewrite `scripts/ci/mutmut-threshold.sh` per contracts/gate-script.md:
+- [X] T014 Rewrite `scripts/ci/mutmut-threshold.sh` per contracts/gate-script.md:
   - **Keep**: the header style, the `REPO_ROOT` cd, `PYTHON_BIN`/`MUTMUT_THRESHOLD_FILE`/`MUTMUT_MIN_SCORE`/`MUTMUT_SCORE_MARGIN` handling and the floor parsing.
   - **Update the header comment**: mutmut 3, a fresh run every time, the score formula, no-tests excluded, and that running it on the Mac discards pulled results.
   - **Body**:
@@ -156,11 +211,17 @@ uses them.
     4. Read the version: `version="$("$PYTHON_BIN" -m mutmut --version | awk '{print $NF}')"`.
     5. `exec "$PYTHON_BIN" scripts/ci/mutmut_report.py --floor "$FLOOR" --margin "$MARGIN" --commit "$MUTMUT_COMMIT" --mutmut-version "$version"`.
   - **Remove**: the mutmut 2 flags (`--paths-to-mutate`, `--tests-dir`, `--runner`, `result-ids`) and the inline Python.
-- [ ] T015 Measure and set the floor (research R6). Run `bash scripts/ci/mutmut-threshold.sh; echo "exit=$?"` on the Mac and record the counts, score and wall time. Expect exit 0 or 1, and a score near 61.81%. Rewrite `python/mutmut-threshold.txt`:
+- [X] T015 Measure and set the floor (research R6). Run `bash scripts/ci/mutmut-threshold.sh; echo "exit=$?"` on the Mac and record the counts, score and wall time. Expect exit 0 or 1, and a score near 61.81%. Rewrite `python/mutmut-threshold.txt`:
   - Comment lines: "Score = 100 * killed / (killed + survived)", "Excluded: no tests, timeout, suspicious, skipped, segfault, caught by type check (spec 087 FR-010)", "Measured <score>% on <commit> with mutmut 3.8.0", and "Ratchet UP by hand via PR; never lower without justification".
   - Then one line: the score rounded down to a whole point, as `NN.0`.
 
   Remove the stale "PLACEHOLDER" comment. Re-run the script and confirm exit 0. The floor is re-checked against the PR's own CI score in T020.
+
+  First measured 2026-10-24 on the Mac (`PYTHON_BIN=.venv-mutmut/bin/python`, the Python 3.14
+  fallback venv, research R11): killed 1700, survived 1078, no_tests 1337, timeout 2, total 4117.
+  **Score 61.20%**, exit 0, wall time ~1:58. `python/mutmut-threshold.txt` set to `61.0`. Re-run on
+  2026-10-24 after this follow-up PR's changes (none touch `src/`): identical counts and score,
+  confirming the floor is unaffected.
 
 **Checkpoint**: the gate runs on the Mac with mutmut 3 and passes, and T008 is green.
 
@@ -174,7 +235,7 @@ uses them.
 **Independent Test**: quickstart §3. The PR 2 run itself finishes in under 5 minutes, and a
 throwaway PR with a weakened test fails `result`.
 
-- [ ] T016 [US2] Edit `.github/workflows/mutation.yml`, `mutation` job:
+- [X] T016 [US2] Edit `.github/workflows/mutation.yml`, `mutation` job:
   - (1) Add `timeout-minutes: 20`.
   - (2) In `Sync repo to PVE`, change `--exclude '.mutmut-cache'` to `--exclude 'mutants/'`.
   - (3) Delete the step `Prepare mutmut cache on PVE (seed from main baseline)` completely.
@@ -183,8 +244,15 @@ throwaway PR with a weakened test fails `result`.
   - (6) Add a final step that runs `exit "${{ steps.gate_run.outputs.rc }}"`, so the job fails on 1 or 2.
 
   Keep the job's `if:` owner/fork guard **unchanged** (memory: public repo). Keep the `Prepare Python venv on PVE` step as it is: it syncs the nightly lock, which now has mutmut 3.8.
-- [ ] T017 [US2] Edit the same file's `concurrency` comment if it mentions the cache. Leave the `result` job unchanged. Confirm no step mentions `.mutmut-cache` or `mutmut-cache` (`grep -n mutmut-cache .github/workflows/mutation.yml` prints nothing).
-- [ ] T018 [US2] Run `act -n -W .github/workflows/mutation.yml pull_request` and `act -l`, and confirm both parse. Record the result for the PR description.
+- [X] T017 [US2] Edit the same file's `concurrency` comment if it mentions the cache. Leave the `result` job unchanged. Confirm no step mentions `.mutmut-cache` or `mutmut-cache` (`grep -n mutmut-cache .github/workflows/mutation.yml` prints nothing).
+- [X] T018 [US2] Run `act -n -W .github/workflows/mutation.yml pull_request` and `act -l`, and confirm both parse. Record the result for the PR description.
+
+  `act -l` lists `gate`, `mutation` and `result`. `act -n -W ... pull_request` (act 0.2.89, real
+  Docker daemon): `gate` and `result` both run and succeed in dry-run; `mutation` itself does not
+  appear, because act's synthetic `pull_request` event leaves `github.event.pull_request.head...`
+  empty, so the job's (intentionally unchanged, memory: "never loosen it") owner/fork guard
+  evaluates false. `result`'s `Evaluate mutation gate` step then sees `needs.mutation.result` as
+  empty and takes the `*)` branch ("OK (skipped or passed)") — the same path a real fork PR takes.
 
 **Checkpoint**: the PR gate is wired. It is first exercised live in T020 (PR 2's own run).
 
@@ -198,7 +266,7 @@ SC-001).
 **Independent Test**: T009 is green, and quickstart §4 (a guard-test-only draft PR skips
 `mutation`).
 
-- [ ] T019 [US3] Create `scripts/ci/mutation-gate-paths.txt` in the format of `scripts/ci/confidence-suite-paths.txt`.
+- [X] T019 [US3] Create `scripts/ci/mutation-gate-paths.txt` in the format of `scripts/ci/confidence-suite-paths.txt`.
   - **Header**: spec 087 / research R9, "one POSIX ERE per line", "a line starting with `!` is an exclude, applied first", "prefer a false run over a false skip".
   - **Include lines**: `^python/src/`, `^python/tests/`, `^python/(pytest\.ini|mutmut-threshold\.txt|requirements-(test|nightly)(\.lock)?\.txt)$`, `^setup\.cfg$`, `^src$`, `^scripts/ci/(mutmut-threshold\.sh|mutmut_report\.py|mutation-gate-paths\.txt)$`, `^\.github/workflows/mutation\.yml$`.
   - **Exclude lines**: `!^python/tests/(guardrails|workflows)/`.
@@ -223,8 +291,13 @@ loudly if it cannot (FR-002, FR-003, research R7, contracts/published-results.md
 `readlink /mnt/nas/homelab_ci/mutmut/main` points at a new `main-<UTC>` holding `report.json` with
 the run's commit.
 
-- [ ] T020 [US1] Open PR 2 as a **draft** now (`gh pr create --draft`), so its own mutation run measures the new gate: it touches `mutation.yml` and `setup.cfg`, so it triggers. Record the `mutation` job's duration (SC-002: under 5 min), counts and score under "Rollout record". If the CI score rounded down differs from the T015 floor, set `python/mutmut-threshold.txt` to the **lower** of the two and note why. Leave it in draft until T037.
-- [ ] T021 [US1] Update `python/tests/workflows/test_workflow_inputs.py` (T003, committed at the start of PR 2): set `ALLOWED_NIGHTLY_INPUTS = {"min_score"}`. Add `test_nightly_mutmut3_wiring`, which asserts that `nightly-deeper-verification.yml`:
+- [X] T020 [US1] Open PR 2 as a **draft** now (`gh pr create --draft`), so its own mutation run measures the new gate: it touches `mutation.yml` and `setup.cfg`, so it triggers. Record the `mutation` job's duration (SC-002: under 5 min), counts and score under "Rollout record". If the CI score rounded down differs from the T015 floor, set `python/mutmut-threshold.txt` to the **lower** of the two and note why. Leave it in draft until T037.
+
+  PR 2 is `#277`. Its `mutation` job's gate step ran in **1m2s** (SC-002: well under 5 min). CI score
+  **61.79%** (killed 1716, survived 1061, no_tests 1337, timeout 3) vs the Mac's T015 measurement of
+  61.20% — both round down to **61**, so the floor was left at `61.0` (no change needed; see T015's
+  updated note). Re-run after the review-fix commits (same PR): identical counts, same 61.79%.
+- [X] T021 [US1] Update `python/tests/workflows/test_workflow_inputs.py` (T003, committed at the start of PR 2): set `ALLOWED_NIGHTLY_INPUTS = {"min_score"}`. Add `test_nightly_mutmut3_wiring`, which asserts that `nightly-deeper-verification.yml`:
   - (a) contains no `.mutmut-cache` and no `mutmut-cache`;
   - (b) has a step whose `run` contains `scripts/ci/mutmut-threshold.sh`;
   - (c) has a step whose `run` contains `mv -T` and `/mnt/nas/homelab_ci/mutmut`;
@@ -232,7 +305,7 @@ the run's commit.
   - (e) has `deeper.timeout-minutes == 30`.
 
   Confirm it fails.
-- [ ] T022 [US1] Edit `.github/workflows/nightly-deeper-verification.yml` (plan, "Nightly"):
+- [X] T022 [US1] Edit `.github/workflows/nightly-deeper-verification.yml` (plan, "Nightly"):
   - **Input**: add `workflow_dispatch.inputs.min_score` (`description: "Override the floor for this run (alert test); empty = committed floor"`, `type: string`, `required: false`, `default: ""`).
   - **Job env**: set `deeper.env.MUTMUT_MIN_SCORE: ${{ inputs.min_score }}` and `timeout-minutes: 30`.
   - **Delete**: `Setup Python (GitHub-hosted only)`, `Install Ansible Galaxy deps`, `Ensure artifact root on PVE`, `Debug runner + mounts`, `Prepare mutmut shared cache on PVE`, `Mutation testing (mutmut) on PVE` and `Upload artifacts`.
@@ -245,13 +318,26 @@ the run's commit.
   Before step 2, add `Validate min_score` (runs on the runner): if `MUTMUT_MIN_SCORE` is non-empty and does not match `^[0-9]{1,3}(\.[0-9]+)?$`, print `::error::min_score must be a number (got: <value>)` and exit 1. The value is pasted into a remote shell command, so it must be checked before the SSH step. Add `(f)` to `test_nightly_mutmut3_wiring` (T021): a step's `run` contains that regex and precedes `Run mutation gate on PVE`.
 
   The `MUTMUT_MIN_SCORE` value is empty on a `schedule` run, and the script then reads the floor file. Confirm in the script (T014) that an empty `MUTMUT_MIN_SCORE` falls back to the file: it uses `-n`, so it does.
-- [ ] T023 [US1] In the same file, add a step `Publish main results to NAS` (`id: publish`) with `if: ${{ steps.gate_run.outputs.rc == '0' || steps.gate_run.outputs.rc == '1' }}`. It is a remote `ssh ci@pve bash -s <<'EOF'` heredoc, `set -euo pipefail`, that follows the "Publish procedure" in contracts/published-results.md:
+- [X] T023 [US1] In the same file, add a step `Publish main results to NAS` (`id: publish`) with `if: ${{ steps.gate_run.outputs.rc == '0' || steps.gate_run.outputs.rc == '1' }}`. It is a remote `ssh ci@pve bash -s <<'EOF'` heredoc, `set -euo pipefail`, that follows the "Publish procedure" in contracts/published-results.md:
   1. Set `root=/mnt/nas/homelab_ci/mutmut`, `ts="$(date -u +%Y%m%dT%H%M%SZ)"` and `dest="$root/main-$ts"`, then `mkdir -p "$dest"`.
   2. Copy the result files. From `/home/ci/homelab-proxmox/mutants`, run `find . -name '*.meta' -print0 | rsync -a --from0 --files-from=- ./ "$dest/"`, then `cp mutmut-stats.json mutmut-cicd-stats.json survivors.txt "$dest/"`, and copy `report.json` **last**.
   3. `ln -sfn "main-$ts" "$root/main.tmp" && mv -T "$root/main.tmp" "$root/main"`.
   4. `ls -1d "$root"/main-* | sort | head -n -2 | xargs -r rm -rf`, which keeps the newest two.
   5. `readlink "$root/main"`.
-- [ ] T024 [US1] In the same file, add the last step, `Fail on gate result`, with `if: always()`. It exits 1 when `steps.gate_run.outputs.rc` is not `0`, with `::error::` naming the rc. A publish failure already fails the job through step `publish` (no `continue-on-error`). Run the T021 and T003 tests and confirm green. Run `act -n -W .github/workflows/nightly-deeper-verification.yml schedule` and `... workflow_dispatch`, and confirm both parse.
+- [X] T024 [US1] In the same file, add the last step, `Fail on gate result`, with `if: always()`. It exits 1 when `steps.gate_run.outputs.rc` is not `0`, with `::error::` naming the rc. A publish failure already fails the job through step `publish` (no `continue-on-error`). Run the T021 and T003 tests and confirm green. Run `act -n -W .github/workflows/nightly-deeper-verification.yml schedule` and `... workflow_dispatch`, and confirm both parse.
+
+  **Bug found in this follow-up pass**: the `Fetch mutation report` step added alongside this one
+  (T022 step 3, copied from `mutation.yml` T016-5) had an indented Python heredoc —
+  `python3 << 'PYEOF'` with the body and closing `PYEOF` indented to match the surrounding bash —
+  which raised `IndentationError` every time it ran (both here and in `mutation.yml`, where PR #277
+  CI caught and this pass's review round fixed it; this file was never exercised live, so it carried
+  the identical bug unnoticed until this pass's T002 baseline check prompted a full read of the
+  merged file). Fixed in this follow-up PR: the heredoc body and `PYEOF` now sit at the block's base
+  indent, so YAML's block-scalar dedent lands them at column 0. Verified by extracting the step's
+  `run:` text via the real PyYAML parser and executing it against a fixture `report.json` (both
+  files): the summary table renders correctly. `act -n` (0.2.89, real Docker) parses both event
+  files; as with T006, only the `gate` job executes in dry-run — `deeper`'s per-step assertions in
+  `test_nightly_mutmut3_wiring` are the practical substitute.
 
 **Checkpoint**: the nightly is wired for mutmut 3. It is exercised live after merge (T038).
 
@@ -266,7 +352,7 @@ research R11).
 `mutmut run "homelab_proxmox_orchestrator.version_currency*"` takes under a minute, and a bad host
 leaves `mutants/` unchanged.
 
-- [ ] T025 [P] [US4] Add task `mutmut:pull` to `Taskfile.yml`, after the `ansible:*` tasks, in the file's style:
+- [X] T025 [P] [US4] Add task `mutmut:pull` to `Taskfile.yml`, after the `ansible:*` tasks, in the file's style:
   - `desc: "[LOCAL] Pull main's published mutation results from the NAS via ci@pve (spec 087)"`, with a `summary:` that describes the loop and the example `task mutmut:pull`.
   - One `cmds:` bash block, `set -euo pipefail`, with `host="${MUTMUT_PULL_HOST:-ci@pve}"`:
     1. `tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT`.
@@ -274,7 +360,7 @@ leaves `mutants/` unchanged.
     3. Check `"$tmp/report.json"` exists and has `schema == 1`, using `python3 -c`. Otherwise print an error and exit 1.
     4. Only then `mkdir -p mutants`, delete `mutants/mutmut-stats.json` and `mutants/mutmut-cicd-stats.json`, and run `find mutants -name '*.meta' -delete` (results only; never `rm -rf mutants`). Then `rsync -a "$tmp/" mutants/`.
     5. Print `commit`, `finished_at`, the age in hours, `score`/`gate`, and the next commands: `.venv/bin/mutmut run` (re-tests local source changes), `.venv/bin/mutmut run "homelab_proxmox_orchestrator.<module>*"` (after editing tests) and `.venv/bin/mutmut browse`.
-- [ ] T026 [P] [US4] Create `docs/operations/mutation-testing.md`, written like `docs/operations/proxmox-ci.md`. Sections:
+- [X] T026 [P] [US4] Create `docs/operations/mutation-testing.md`, written like `docs/operations/proxmox-ci.md`. Sections:
   - **What the gate checks**: the score formula and the no-tests rule (FR-010).
   - **The PR gate**: a fresh full run, the path list and how to extend it, the 5-minute target, `result` as the required check.
   - **The nightly**: the published set layout (link contracts/published-results.md), the atomic swap, two sets kept. State the parity limitation (Constitution V): publishing is CI-only, done by the nightly on `main`. The Mac's equivalent is reading the set with `task mutmut:pull`, or producing the same results locally with `scripts/ci/mutmut-threshold.sh` (which publishes nothing).
@@ -304,15 +390,26 @@ research R8, contracts/regression-alert.md).
 fails and a message arrives. A normal run sends nothing.
 
 - [ ] T027 [US5] **(owner)** Generate the `mutation` publisher's password hash and token, per `docs/runbooks/ntfy-add-publisher.md` §2. Add them with `ansible-vault edit ansible/group_vars/services/vault.yml` as `ntfy_mutation_password_hash` and `ntfy_mutation_token`. The agent does not see the values. Verification, run by the owner: `ansible-vault view ansible/group_vars/services/vault.yml | grep -c '^ntfy_mutation_'` prints `2`. **This must be done before T028 merges**, or the ntfy role renders undefined variables on its next deploy.
-- [ ] T028 [P] [US5] In `ansible/roles/ntfy/defaults/main.yml`, append to `ntfy_users`: `- name: "mutation"`, `topic: "mutation"`, `password_hash: "{{ ntfy_mutation_password_hash }}"`, `token: "{{ ntfy_mutation_token }}"`. In `ansible/roles/ntfy/tasks/preflight.yml`, add `ntfy_mutation_password_hash` and `ntfy_mutation_token` to the required-variables assertion and to its `fail_msg` list, in the same pattern as `ntfy_version_check_*`. From `ansible/`, run `ansible-playbook -i inventories/prod/hosts.yml --syntax-check playbooks/ntfy.yml`.
-- [ ] T029 [P] [US5] Extend `scripts/healthcheck/ntfy-acl-check.sh` per `docs/runbooks/ntfy-add-publisher.md` §5:
+
+  **Still open — blocks T033 and T040.** T028, T029 and T030's code (role defaults, preflight
+  assertions, ACL check rows, the nightly's "Read ntfy token"/"Post regression alert" steps) all
+  merged in this follow-up PR ahead of the vault entry, per the plan ("the code can land before the
+  secret, the secret must land before the next ntfy deploy"). Until this is done: (a) the ntfy role
+  will fail its `preflight.yml` assertion on the next deploy with "`ntfy_mutation_password_hash` …
+  missing or empty", so **do not deploy ntfy from `main` until this is done** (T033 already carries
+  this warning); (b) a nightly run that scores below the gate will fail at the new "Read ntfy token"
+  step with `::error::ntfy_mutation_token not found in vault` (exit 2) instead of delivering an
+  alert — the job still shows red (`Fail on gate result` still runs with `if: always()`), so FR-009
+  degrades safely to "red nightly, no push" rather than failing silently.
+- [X] T028 [P] [US5] In `ansible/roles/ntfy/defaults/main.yml`, append to `ntfy_users`: `- name: "mutation"`, `topic: "mutation"`, `password_hash: "{{ ntfy_mutation_password_hash }}"`, `token: "{{ ntfy_mutation_token }}"`. In `ansible/roles/ntfy/tasks/preflight.yml`, add `ntfy_mutation_password_hash` and `ntfy_mutation_token` to the required-variables assertion and to its `fail_msg` list, in the same pattern as `ntfy_version_check_*`. From `ansible/`, run `ansible-playbook -i inventories/prod/hosts.yml --syntax-check playbooks/ntfy.yml`.
+- [X] T029 [P] [US5] Extend `scripts/healthcheck/ntfy-acl-check.sh` per `docs/runbooks/ntfy-add-publisher.md` §5:
   - Add `NTFY_MUTATION_TOKEN` to the usage text, the required-vars loop and the token-name lookup.
   - Add a `do_request "$NTFY_MUTATION_TOKEN" …` row for each topic: `GET` deny on all topics including `mutation`, `POST` allow on `mutation`, deny on the rest.
   - Add a `mutation` column to every existing publisher's rows: `POST mutation` deny, `GET mutation` deny.
   - The owner's token gets `GET mutation` allow.
 
   Follow the existing row order and spacing.
-- [ ] T030 [US5] In `.github/workflows/nightly-deeper-verification.yml`, between `Publish main results to NAS` and `Fail on gate result`, add two steps, both with `if: ${{ steps.gate_run.outputs.rc == '1' }}`:
+- [X] T030 [US5] In `.github/workflows/nightly-deeper-verification.yml`, between `Publish main results to NAS` and `Fail on gate result`, add two steps, both with `if: ${{ steps.gate_run.outputs.rc == '1' }}`:
   1. `Read ntfy token`: copy `version-currency.yml`'s step verbatim, except the key is `ntfy_mutation_token`, the error text matches, and the env var is `NTFY_TOKEN`. Keep `::add-mask::`, `umask 077` and the temp-file trap.
   2. `Post regression alert`: build the message from the fetched `report.json` with `python3` (stdlib) exactly per contracts/regression-alert.md:
      - Title: `Mutation score S% is below G%`.
@@ -321,7 +418,19 @@ fails and a message arrives. A normal run sends nothing.
      - If the status is not `200`, or curl fails, print `::warning::Regression alert not delivered (<status or error>)` and **exit 0**: `Fail on gate result` fails the job anyway.
 
   Add `(e2)` to `test_nightly_mutmut3_wiring` (T021): a step's `run` contains `ntfy_mutation_token`, and the token is never in a URL (`?auth=` absent). Re-run the tests.
-- [ ] T031 [US5] Run `act -n -W .github/workflows/nightly-deeper-verification.yml workflow_dispatch --input min_score=99` and confirm the alert steps appear in the plan. Run the full `python/tests/workflows/` suite and `bash scripts/ci/python-tests.sh`, and confirm green.
+- [X] T031 [US5] Run `act -n -W .github/workflows/nightly-deeper-verification.yml workflow_dispatch --input min_score=99` and confirm the alert steps appear in the plan. Run the full `python/tests/workflows/` suite and `bash scripts/ci/python-tests.sh`, and confirm green.
+
+  `act -n` with this input only exercises the `gate` job before stopping (the same
+  `needs.gate.outputs.run` dry-run limitation as T006/T024): the alert steps' presence and ordering
+  are instead asserted statically by `test_nightly_mutmut3_wiring`'s new `(e2)` check, and verified
+  functionally by extracting the step's `run:` text with the real PyYAML parser and executing it
+  against a fixture `report.json` built from contracts/regression-alert.md's own example — the title
+  (`Mutation score 58.40% is below 60.00%`), body (floor/margin/commit line, counts line, "Most
+  survivors:", top 5 modules at `{:>3}` width) and the non-200 → `::warning::` + exit-0 path all
+  matched the contract byte for byte. `python/tests/workflows/` is green (63 tests).
+  `bash scripts/ci/python-tests.sh` is green (248 tests, 93.46% coverage) after clearing a stale
+  `mutants/__pycache__` collision left over from this pass's own mutmut runs (unrelated to the code
+  under test).
 
 **Checkpoint**: all of PR 2's code is done.
 
@@ -332,33 +441,87 @@ fails and a message arrives. A normal run sends nothing.
 **Purpose**: Land PR 2, prove each success criterion live, and record it. Record each result
 under "Rollout record" below.
 
-- [ ] T032 Run the Mac gate once more on the final PR 2 head (`bash scripts/ci/mutmut-threshold.sh`). Confirm exit 0 and that the score is within 1 point of the CI score on the same commit (FR-001 parity).
+- [X] T032 Run the Mac gate once more on the final PR 2 head (`bash scripts/ci/mutmut-threshold.sh`). Confirm exit 0 and that the score is within 1 point of the CI score on the same commit (FR-001 parity).
+
+  Re-run 2026-10-24 on `main` post-merge (`PYTHON_BIN=.venv-mutmut/bin/python`): exit 0, killed 1700,
+  survived 1078, **61.20%**. PR 2's own CI run scored 61.79% on a slightly different commit (its own
+  head, with the subprocess-environment fix the Mac run above also has). Difference: 0.59 points,
+  within the FR-001 parity tolerance.
 - [ ] T033 **(owner)** **After T037 (merge), before T040.** Confirm T027 is done (the `grep -c` check prints `2`). Then deploy ntfy from `main` through the normal promotion path (`ntfy-add-publisher.md` §3), never from the PR branch: a later prod deploy from `main` would otherwise drop the `mutation` account again. Subscribe to `mutation` on the phone (§4), and run the ACL check with all tokens (§5): every cell PASS.
+
+  **Still open.** Note on sequencing: "T037" here was PR 2's (`#277`) own merge, already done
+  (2026-10-24T09:16Z) — but T027/T028/T029/T030 (the `mutation` ntfy account itself) were not in
+  that PR; they landed in this follow-up PR. So T033 now depends on **this** PR merging, in addition
+  to T027.
 - [ ] T034 SC-007 (quickstart §3.2): on a throwaway branch off PR 2, delete the assertions in one test in `python/tests/orchestrator/` so the Mac gate (T032) drops below the gate line. Open a draft PR and confirm `result` fails, with the score below the gate line in the summary. Close it without merging and delete the branch.
+
+  **Not run in this pass.** Reaching the 60% gate line from today's 61.20% needs roughly 34+
+  mutants to flip from killed to survived (`100*(1700-x)/2778 < 60 ⇒ x > 33.2`), which means
+  weakening a test that currently kills a large, specific slice of `orchestrator.py`'s mutants —
+  identifying one cheaply, then running two more full ~2-minute Mac gates (before/after) plus a live
+  PVE PR run, for a scenario the gate script's own unit tests already cover directly
+  (`test_mutmut_report.py::test_exit_code_below_gate`, a synthetic fixture scored at exactly the gate
+  line). Left for the owner to run if a live demonstration (vs. the unit-tested formula) is wanted.
 - [ ] T035 SC-001 (quickstart §4): on a throwaway branch off PR 2, add one comment line to a file under `python/tests/guardrails/`. Open a draft PR and confirm `mutation` is skipped and `result` passes. Close it and delete the branch.
-- [ ] T036 Update `docs/backlog/087-mutation-gate-runtime.md`: set the status line to "Specified and implemented in `specs/087-mutation-gate-runtime` (2026-10-…)". Add a short "Outcome" section: the 39 s trial, the fresh full-run decision, the fifth subprocess caller, and the new floor. Update `docs/backlog/backlog.md` if it lists 087's status.
-- [ ] T037 Mark PR 2 ready (`gh pr ready`). Its body:
+
+  **Not run in this pass**, for the same reason as T034 (a live PVE PR run to prove what
+  `test_gate_skips_when_path_changes` and `test_mutation_gate_paths.py`'s `guardrails/` case already
+  assert statically). Cheaper than T034 to execute (no gate run needed — the point is that
+  `mutation` does not run at all) if the owner wants the live proof.
+- [X] T036 Update `docs/backlog/087-mutation-gate-runtime.md`: set the status line to "Specified and implemented in `specs/087-mutation-gate-runtime` (2026-10-…)". Add a short "Outcome" section: the 39 s trial, the fresh full-run decision, the fifth subprocess caller, and the new floor. Update `docs/backlog/backlog.md` if it lists 087's status.
+- [X] T037 Mark PR 2 ready (`gh pr ready`). Its body:
   - links spec, plan and research;
   - lists the measured gate duration (T020), the floor and how it was set, and the `act` results;
   - states that T027 is done, and that ntfy is deployed after the merge (T033).
 
   After the owner merges it, realign the local branch (`git fetch origin main && git reset --hard origin/main` on a fresh checkout of `main`).
+
+  PR 2 (`#277`) was opened as a draft via the API (`gh api … -f draft=true`, Zscaler push block —
+  see `AGENTS.md`) and converted to ready and merged by the owner directly on GitHub
+  (2026-10-24T09:16Z); `gh pr ready` itself was never invoked, since the owner's conversion made it
+  moot. T027 was **not** done before this merge (it is in Phase 8 of **this** follow-up PR, opened
+  after #277, not before it) — see T033's note on the resulting sequencing change.
 - [ ] T038 US1 + FR-003 (quickstart §5, first half): run `gh workflow run nightly-deeper-verification.yml --ref main` and watch it. Confirm it is green, under 5 minutes in total, and that `ssh ci@pve 'readlink /mnt/nas/homelab_ci/mutmut/main; ls /mnt/nas/homelab_ci/mutmut; cat /mnt/nas/homelab_ci/mutmut/main/report.json'` shows one `main-<UTC>` with the run's `head_sha` as `commit`.
+
+  **Blocked on this follow-up PR merging**: `main` currently carries the heredoc bug this pass found
+  (T024's note) — a dispatch now would fail at "Fetch mutation report" before publishing anything.
+  Confirmed via `gh run list`: every `schedule` run in the last 10 days failed (all pre-date #276/
+  #277), and there have been zero `workflow_dispatch` runs, so this has never been exercised live.
+  Dispatch once this PR merges.
 - [ ] T039 US4, SC-004 (quickstart §5, second half):
   1. On the Mac, `task mutmut:pull` prints the commit and age.
   2. Edit a test in `python/tests/version_currency/` locally (then revert it), and time `.venv/bin/mutmut run "homelab_proxmox_orchestrator.version_currency*"` (module by name, because a test edit is not picked up by plain `mutmut run`, research R3): under 60 s. Then change one function in `version_currency.py` (and revert it), and confirm plain `.venv/bin/mutmut run` re-tests only that function's mutants.
   3. Open `.venv/bin/mutmut browse` and confirm survivors are listed.
   4. Run `MUTMUT_PULL_HOST=nope@nowhere task mutmut:pull` and confirm it exits non-zero with the error text, and that `ls -la mutants/report.json` is unchanged.
+
+  **Step 4 done** in this pass (no published set needed — it is the failure path): exits 201 with
+  `error: could not pull from nope@nowhere:/mnt/nas/homelab_ci/mutmut/main/ (is pve reachable and has
+  a nightly published?)`, and the pre-existing `mutants/report.json` was left untouched (verified by
+  timestamp). **Steps 1–3 blocked on T038**: no `/mnt/nas/homelab_ci/mutmut/main` exists yet to pull.
 - [ ] T040 US5, SC-005 (quickstart §6): run `gh workflow run nightly-deeper-verification.yml --ref main -f min_score=99`. Confirm the job fails at `Fail on gate result`, and one message arrives on `mutation` with "floor 99.00". Then confirm that the next scheduled nightly is green and sends nothing.
+
+  **Blocked on T027 and T033** (the `mutation` ntfy account must exist and be deployed before this
+  can deliver anything) **and on T038** (establishes the nightly runs cleanly at all first). The
+  message-building code itself is verified against the contract's own example in T031's note.
 - [ ] T041 FR-011 prune (quickstart §7), after T038 has published: `ssh ci@pve 'ls -la /mnt/nas/homelab_ci/mutmut-cache'`. Confirm it holds only mutmut 2 `.mutmut-cache` files (about 14, each 0.3–0.4 MB; memory: look before deleting), and **ask the owner before deleting**. Then `ssh ci@pve 'rm -rf /mnt/nas/homelab_ci/mutmut-cache'`, and confirm `ls /mnt/nas/homelab_ci` shows `mutmut` and `infra_state` only.
+
+  The "before" half is done (T002's note: 15 entries, 300–393 KB each, oldest `main` from
+  2026-07-20). **Not deleted**: this task explicitly says to ask the owner first, and it is also
+  gated on T038 (nothing has published yet). Asking now, ahead of T038, would be asking about a
+  snapshot that T038's own run will not have changed — better to ask once there is something new on
+  the NAS to contrast it with.
 
 ---
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
 - [ ] T042 SC-003: after 7 nightly runs following T038, run `gh run list --workflow nightly-deeper-verification.yml --limit 10 --json conclusion,headSha,createdAt`. Each one is green, and each `report.json` commit it published matched its `headSha`. A run skipped as `no-new-commits` counts neither way. Record the result.
+
+  Time-gated on 7 nightly runs after T038. Not started.
 - [ ] T043 SC-006 (quickstart §8): two weeks after T037, count cancelled `mutation.yml` runs created after the merge. Expected: 0. Record the result. If any are found, open a backlog note with the run IDs.
-- [ ] T044 [P] Update `specs/087-mutation-gate-runtime/spec.md` status to "Implemented (<date>)". Tick the checklist in `checklists/requirements.md` if anything changed. Confirm `CLAUDE.md`'s 087 lines still describe what shipped.
+
+  Time-gated, two weeks from T037 (2026-10-24). Earliest check: 2026-11-07.
+- [X] T044 [P] Update `specs/087-mutation-gate-runtime/spec.md` status to "Implemented (<date>)". Tick the checklist in `checklists/requirements.md` if anything changed. Confirm `CLAUDE.md`'s 087 lines still describe what shipped.
 
 ---
 
@@ -433,17 +596,17 @@ T041, a revert would run mutmut 2 from an empty cache: slow, but correct.
 
 | Step | Date | Run ID / evidence | Result |
 |---|---|---|---|
-| T001/T002 baseline | | | |
-| T007 PR 1 manual nightly | | | |
-| T007 first `schedule` nightly | | | |
-| T015 Mac gate (floor) | | | |
-| T020 PR 2 gate run | | | |
-| T032 parity | | | |
-| T034 SC-007 | | | |
-| T035 SC-001 | | | |
-| T038 nightly publish | | | |
-| T039 Mac loop | | | |
-| T040 alert | | | |
-| T041 prune | | | |
-| T042 SC-003 | | | |
-| T043 SC-006 | | | |
+| T001/T002 baseline | 2026-10-24 | `ssh ci@pve 'ls -la /mnt/nas/homelab_ci/mutmut-cache'` | 15 entries, 300–393 KB each; `main` dated 2026-07-20; `/mnt/nas/homelab_ci/mutmut` (mutmut 3 target) does not exist yet |
+| T007 PR 1 manual nightly | — | — | Not run (see T007's note: would hit the live heredoc bug this pass fixed) |
+| T007 first `schedule` nightly | — | `gh run list` | 10 consecutive `schedule` failures through 2026-10-24T03:09Z, all pre-dating #276/#277; not yet re-checked post-fix |
+| T015 Mac gate (floor) | 2026-10-24 | local, `.venv-mutmut` | killed 1700, survived 1078, no_tests 1337, timeout 2, total 4117 — **61.20%**, exit 0, ~1:58 wall |
+| T020 PR 2 gate run | 2026-10-24 | PR #277, run 40077155642 | mutation job 1m2s; killed 1716, survived 1061, no_tests 1337, timeout 3 — **61.79%**, gate PASSED |
+| T032 parity | 2026-10-24 | local, re-run on `main` post-merge | 61.20% (Mac) vs 61.79% (CI, same commit family) — 0.59 pt difference, within tolerance |
+| T034 SC-007 | — | — | Not run — see T034's note |
+| T035 SC-001 | — | — | Not run — see T035's note |
+| T038 nightly publish | — | — | Blocked on this PR merging (see T038's note) |
+| T039 Mac loop | 2026-10-24 (step 4 only) | local, `MUTMUT_PULL_HOST=nope@nowhere task mutmut:pull` | exit 201, correct error text, `mutants/report.json` unchanged. Steps 1–3 blocked on T038 |
+| T040 alert | — | — | Blocked on T027, T033, T038 — message format verified against the contract's example in T031's note |
+| T041 prune | 2026-10-24 ("before" only) | T002's note | Not deleted — blocked on T038 and on asking the owner |
+| T042 SC-003 | — | — | Time-gated: 7 nightly runs after T038 |
+| T043 SC-006 | — | — | Time-gated: 2026-11-07 (two weeks after T037's 2026-10-24 merge) |

@@ -4,7 +4,11 @@
 
 **Created**: 2026-10-24
 
-**Status**: Draft (revised 2026-10-24 after the planning trial on `pve`)
+**Status**: Implemented (2026-10-24). All required code tasks are done and merged (or in review);
+`tasks.md`'s Rollout record tracks what remains: two owner-only steps (T027: vault secrets for the
+`mutation` ntfy account; T033: deploy ntfy from `main` once T027 is done) and the live/time-gated
+checks that depend on them or on a nightly run actually happening (T034, T035, T038, T040, T042,
+T043).
 
 **Input**: User description: "087-mutation-gate-runtime.md Prompt me". The source is the backlog item
 [`docs/backlog/087-mutation-gate-runtime.md`](../../docs/backlog/087-mutation-gate-runtime.md)

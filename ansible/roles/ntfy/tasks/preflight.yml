@@ -19,7 +19,8 @@
       ntfy_alertmanager_password_hash, ntfy_alertmanager_token,
       ntfy_hermes_password_hash, ntfy_hermes_token,
       ntfy_pve_backup_password_hash, ntfy_pve_backup_token,
-      ntfy_version_check_password_hash, ntfy_version_check_token.
+      ntfy_version_check_password_hash, ntfy_version_check_token,
+      ntfy_mutation_password_hash, ntfy_mutation_token.
   loop:
     - ntfy_owner_password_hash
     - ntfy_owner_token
@@ -31,6 +32,8 @@
     - ntfy_pve_backup_token
     - ntfy_version_check_password_hash
     - ntfy_version_check_token
+    - ntfy_mutation_password_hash
+    - ntfy_mutation_token
   no_log: true
 
 - name: Assert tokens match the ntfy token format (tk_ + 29 chars)
@@ -46,6 +49,7 @@
     - "{{ ntfy_hermes_token }}"
     - "{{ ntfy_pve_backup_token }}"
     - "{{ ntfy_version_check_token }}"
+    - "{{ ntfy_mutation_token }}"
   no_log: true
 
 - name: Assert password hashes are bcrypt with cost >= 10
@@ -61,6 +65,7 @@
     - "{{ ntfy_hermes_password_hash }}"
     - "{{ ntfy_pve_backup_password_hash }}"
     - "{{ ntfy_version_check_password_hash }}"
+    - "{{ ntfy_mutation_password_hash }}"
   no_log: true
 
 - name: Assert topic names in ntfy_users are unique

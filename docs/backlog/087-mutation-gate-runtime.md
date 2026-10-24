@@ -1,12 +1,43 @@
 # Backlog: the mutation gate takes ~40 minutes and blocks the only runner
 
-**Status**: Backlog — raised 2026-10-18, while PR #259 (`086`) waited behind it. Spec only.
+**Status**: Specified and implemented in `specs/087-mutation-gate-runtime` (2026-10-24).
 **Revised 2026-10-22**: a trial of mutmut 3 (below) made the migration the main fix, and the owner
 decided the PR, results and regression behaviour.
 **Refreshed 2026-10-23**: re-checked against `main` (`a5bbe47`), the run history and the NAS. The cost
 is rising (a 133-minute run cancelled, then an 81-minute run cancelled, in two days) and the nightly
 job is still broken. See "Update 2026-10-23".
 **Order**: Independent. Worth doing before the next Python-heavy feature. Both `090` and `091` paid for it.
+
+## Outcome (2026-10-24)
+
+Shipped across three PRs: `#276` (FR-002 fix, mutmut 2, merged 2026-10-24T04:10Z), `#277` (the
+mutmut 3 migration itself, merged 2026-10-24T09:16Z) and a follow-up (Phase 7/8: the Mac pull task,
+the ntfy regression alert, the operations runbook, plus a live heredoc bug found during this pass).
+
+- **The spec's own plan changed the design mid-flight.** This backlog's original FR-004 ("seed
+  `mutants/` from `main`'s published results, run incrementally") was dropped during `/speckit.plan`
+  — the 39 s full-run trial (below) made a fresh full run on every PR fast enough that incremental
+  seeding's staleness risk was not worth taking on. `scripts/ci/mutmut-threshold.sh` always deletes
+  `mutants/` first; there is no seeding, anywhere, ever (spec Clarifications, research R2).
+- **A fifth subprocess caller** turned up beyond the four this backlog's trial found:
+  `python/tests/task_smoke/helpers.py`'s `run_ops_cli`. Same fix shape (derive `PYTHONPATH` from the
+  imported package, not a hardcoded `python/src`), plus (found by PR #277's Copilot review) all four
+  subprocess tests needed `{**os.environ, ...}` rather than a replacement `env={...}` dict — mutmut 3
+  selects the active mutant via `MUTANT_UNDER_TEST` in the environment, and a replaced environment
+  silently ran the unmutated code instead of failing loudly.
+- **The floor**: measured 61.20% on the Mac (61.79% on CI, same commit family — within FR-001's
+  parity tolerance), well above this backlog's 41% mutmut-2 floor (not comparable: mutmut 3 excludes
+  "no tests" mutants from the denominator, which mutmut 2 counted as survived).
+- **A second live heredoc bug**: both `mutation.yml`'s and `nightly-deeper-verification.yml`'s
+  "Fetch mutation report" steps used an indented `python3 << 'PYEOF'` heredoc, which raises
+  `IndentationError` under bash (the delimiter must sit at column 0 after YAML's block-scalar
+  dedent). PR #277's own CI caught the `mutation.yml` copy immediately; the `nightly-deeper-
+  verification.yml` copy went unnoticed because no nightly run had reached that step live yet (the
+  FR-002 fix only merged the same day, and the next `schedule` run was hours away) — found during
+  this pass's T002 baseline re-check, fixed before it could fail a real nightly.
+- **Still open**: the owner's two vault secrets (T027) and the ntfy deploy from `main` (T033) that
+  depends on them; the first live nightly run on mutmut 3 (T038) and the two SC-003/SC-006 time-gated
+  checks after it.
 
 ## Why this exists
 

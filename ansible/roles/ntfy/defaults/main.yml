@@ -25,3 +25,7 @@ ntfy_users:
     topic: "versions"
     password_hash: "{{ ntfy_version_check_password_hash }}"
     token: "{{ ntfy_version_check_token }}"
+  - name: "mutation"
+    topic: "mutation"
+    password_hash: "{{ ntfy_mutation_password_hash }}"
+    token: "{{ ntfy_mutation_token }}"
