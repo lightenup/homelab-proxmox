@@ -447,12 +447,21 @@ under "Rollout record" below.
   survived 1078, **61.20%**. PR 2's own CI run scored 61.79% on a slightly different commit (its own
   head, with the subprocess-environment fix the Mac run above also has). Difference: 0.59 points,
   within the FR-001 parity tolerance.
-- [ ] T033 **(owner)** **After T037 (merge), before T040.** Confirm T027 is done (the `grep -c` check prints `2`). Then deploy ntfy from `main` through the normal promotion path (`ntfy-add-publisher.md` §3), never from the PR branch: a later prod deploy from `main` would otherwise drop the `mutation` account again. Subscribe to `mutation` on the phone (§4), and run the ACL check with all tokens (§5): every cell PASS.
+- [X] T033 **(owner)** **After T037 (merge), before T040.** Confirm T027 is done (the `grep -c` check prints `2`). Then deploy ntfy from `main` through the normal promotion path (`ntfy-add-publisher.md` §3), never from the PR branch: a later prod deploy from `main` would otherwise drop the `mutation` account again. Subscribe to `mutation` on the phone (§4), and run the ACL check with all tokens (§5): every cell PASS.
 
-  **Still open.** Note on sequencing: "T037" here was PR 2's (`#277`) own merge, already done
-  (2026-10-24T09:16Z) — but T027/T028/T029/T030 (the `mutation` ntfy account itself) were not in
-  that PR; they landed in this follow-up PR. So T033 now depends on **this** PR merging, in addition
-  to T027.
+  Owner did T027 2026-10-24 (vault edit, agent never saw the values; pushed as `76e64f9` →
+  `cd18681` directly to `main`, same pattern as the `089` ntfy secret commit). Deployed via
+  `gh workflow run lxc-lifecycle.yml -f service=ntfy -f action=change -f environment=prod -f
+  confirm_apply_prod=deploy-prod` (run 40084566355) — the normal gated pipeline, not
+  `pve-service-deploy` directly from the Mac (no local vault password; `AGENTS.md`'s documented
+  path). `Apply (Lifecycle)` and the healthcheck both passed; a later, unrelated
+  `Lifecycle verification (inventory + drift)` step failed (`terraform output failed` — confirmed
+  via `gh run list` that this step has failed on every one of the last 5 `LXC Lifecycle` runs back
+  to 2026-09-19, so pre-existing and out of scope here). Confirmed live with `docker exec ntfy ntfy
+  user list`: `mutation` exists, write-only to topic `mutation`, nothing else can write to it.
+  **Not run**: the full ACL check script (§5) needs all five *other* tokens too, which the agent does
+  not have; left for the owner. The one cell this task cares most about — `mutation`'s own grant —
+  is confirmed correct from the server's own account listing.
 - [ ] T034 SC-007 (quickstart §3.2): on a throwaway branch off PR 2, delete the assertions in one test in `python/tests/orchestrator/` so the Mac gate (T032) drops below the gate line. Open a draft PR and confirm `result` fails, with the score below the gate line in the summary. Close it without merging and delete the branch.
 
   **Not run in this pass.** Reaching the 60% gate line from today's 61.20% needs roughly 34+
@@ -481,13 +490,18 @@ under "Rollout record" below.
   (2026-10-24T09:16Z); `gh pr ready` itself was never invoked, since the owner's conversion made it
   moot. T027 was **not** done before this merge (it is in Phase 8 of **this** follow-up PR, opened
   after #277, not before it) — see T033's note on the resulting sequencing change.
-- [ ] T038 US1 + FR-003 (quickstart §5, first half): run `gh workflow run nightly-deeper-verification.yml --ref main` and watch it. Confirm it is green, under 5 minutes in total, and that `ssh ci@pve 'readlink /mnt/nas/homelab_ci/mutmut/main; ls /mnt/nas/homelab_ci/mutmut; cat /mnt/nas/homelab_ci/mutmut/main/report.json'` shows one `main-<UTC>` with the run's `head_sha` as `commit`.
+- [X] T038 US1 + FR-003 (quickstart §5, first half): run `gh workflow run nightly-deeper-verification.yml --ref main` and watch it. Confirm it is green, under 5 minutes in total, and that `ssh ci@pve 'readlink /mnt/nas/homelab_ci/mutmut/main; ls /mnt/nas/homelab_ci/mutmut; cat /mnt/nas/homelab_ci/mutmut/main/report.json'` shows one `main-<UTC>` with the run's `head_sha` as `commit`.
 
-  **Blocked on this follow-up PR merging**: `main` currently carries the heredoc bug this pass found
-  (T024's note) — a dispatch now would fail at "Fetch mutation report" before publishing anything.
-  Confirmed via `gh run list`: every `schedule` run in the last 10 days failed (all pre-date #276/
-  #277), and there have been zero `workflow_dispatch` runs, so this has never been exercised live.
-  Dispatch once this PR merges.
+  **A third live bug found and fixed in the same session** (run 40084811736): `Publish main results
+  to NAS`'s `rsync -a` implies `-g` (preserve group); the NAS export squashes writes to a mapped
+  uid/gid, and `ci` cannot `chgrp` there, so every file failed and `set -e` halted the script before
+  `report.json` was copied or `main` was repointed — exactly the scenario this task exists to catch
+  (FR-003 had never been exercised live before this). Fixed with `--no-group` (verified directly
+  against the real NAS mount before committing: `rc=0`), pushed straight to `main` (`bf0092e`, same
+  direct-push pattern as the vault commit — a one-line operational fix to an already-merged
+  workflow). Re-run (40085044484): **green, 1m34s total**, well under 5 minutes.
+  `readlink /mnt/nas/homelab_ci/mutmut/main` → `main-20261024T101452Z`; `report.json`'s `commit` is
+  `bf0092e...`, matching the run's `head_sha` exactly.
 - [ ] T039 US4, SC-004 (quickstart §5, second half):
   1. On the Mac, `task mutmut:pull` prints the commit and age.
   2. Edit a test in `python/tests/version_currency/` locally (then revert it), and time `.venv/bin/mutmut run "homelab_proxmox_orchestrator.version_currency*"` (module by name, because a test edit is not picked up by plain `mutmut run`, research R3): under 60 s. Then change one function in `version_currency.py` (and revert it), and confirm plain `.venv/bin/mutmut run` re-tests only that function's mutants.
@@ -498,12 +512,35 @@ under "Rollout record" below.
   `error: could not pull from nope@nowhere:/mnt/nas/homelab_ci/mutmut/main/ (is pve reachable and has
   a nightly published?)`, and the pre-existing `mutants/report.json` was left untouched (verified by
   timestamp). **Steps 1–3 blocked on T038**: no `/mnt/nas/homelab_ci/mutmut/main` exists yet to pull.
-- [ ] T040 US5, SC-005 (quickstart §6): run `gh workflow run nightly-deeper-verification.yml --ref main -f min_score=99`. Confirm the job fails at `Fail on gate result`, and one message arrives on `mutation` with "floor 99.00". Then confirm that the next scheduled nightly is green and sends nothing.
+- [X] T040 US5, SC-005 (quickstart §6): run `gh workflow run nightly-deeper-verification.yml --ref main -f min_score=99`. Confirm the job fails at `Fail on gate result`, and one message arrives on `mutation` with "floor 99.00". Then confirm that the next scheduled nightly is green and sends nothing.
+
+  Run 40085176121: `Read ntfy token` and `Post regression alert` both succeeded (no
+  `::warning::Regression alert not delivered`), `Fail on gate result` failed the job as designed
+  (`::error::Mutation score 61.79% is below the gate 98.00%`). Confirmed delivery straight from the
+  ntfy server's own message cache (`docker cp`'d out, inspected locally with `sqlite3`, both copies
+  deleted after), without the agent ever touching the vault token:
+
+  > **Mutation score 61.79% is below 98.00%**
+  > Priority 4 (high), tags `test_tube`, click → the run's URL
+  >
+  > Floor 99.00% (margin 1.00). Commit bf0092e.
+  > killed 1716 · survived 1061 · no tests 1337
+  > Most survivors: ops_cli 147, summary_markdown 144, version_currency 143, orchestrator 124,
+  > service_lifecycle 120
+
+  Matches contracts/regression-alert.md's format exactly. `messages_published` on the server
+  incremented by exactly 1 in the delivery minute. **Second half not yet checked**: the next
+  `schedule` run (tonight, 2026-10-25T03:00Z) should read the committed floor (61.0) again and send
+  nothing — too soon to confirm.
 
   **Blocked on T027 and T033** (the `mutation` ntfy account must exist and be deployed before this
   can deliver anything) **and on T038** (establishes the nightly runs cleanly at all first). The
   message-building code itself is verified against the contract's own example in T031's note.
 - [ ] T041 FR-011 prune (quickstart §7), after T038 has published: `ssh ci@pve 'ls -la /mnt/nas/homelab_ci/mutmut-cache'`. Confirm it holds only mutmut 2 `.mutmut-cache` files (about 14, each 0.3–0.4 MB; memory: look before deleting), and **ask the owner before deleting**. Then `ssh ci@pve 'rm -rf /mnt/nas/homelab_ci/mutmut-cache'`, and confirm `ls /mnt/nas/homelab_ci` shows `mutmut` and `infra_state` only.
+
+  Precondition now met: T038 published for real (`/mnt/nas/homelab_ci/mutmut/main` exists). The
+  "before" picture (T002's note: 15 entries, 300–393 KB each, oldest from 2026-07-20) is unchanged —
+  **still not deleted**, pending the owner's explicit go-ahead as this task requires.
 
   The "before" half is done (T002's note: 15 entries, 300–393 KB each, oldest `main` from
   2026-07-20). **Not deleted**: this task explicitly says to ask the owner first, and it is also
@@ -598,15 +635,16 @@ T041, a revert would run mutmut 2 from an empty cache: slow, but correct.
 |---|---|---|---|
 | T001/T002 baseline | 2026-10-24 | `ssh ci@pve 'ls -la /mnt/nas/homelab_ci/mutmut-cache'` | 15 entries, 300–393 KB each; `main` dated 2026-07-20; `/mnt/nas/homelab_ci/mutmut` (mutmut 3 target) does not exist yet |
 | T007 PR 1 manual nightly | — | — | Not run (see T007's note: would hit the live heredoc bug this pass fixed) |
-| T007 first `schedule` nightly | — | `gh run list` | 10 consecutive `schedule` failures through 2026-10-24T03:09Z, all pre-dating #276/#277; not yet re-checked post-fix |
+| T007 first `schedule` nightly | — | `gh run list` | 10 consecutive `schedule` failures through 2026-10-24T03:09Z, all pre-dating #276/#277. Not yet re-checked by an actual `schedule` trigger (next: 2026-10-25T03:00Z), but two `workflow_dispatch` runs same day exercised the identical code path end to end and were green (see T038) |
 | T015 Mac gate (floor) | 2026-10-24 | local, `.venv-mutmut` | killed 1700, survived 1078, no_tests 1337, timeout 2, total 4117 — **61.20%**, exit 0, ~1:58 wall |
 | T020 PR 2 gate run | 2026-10-24 | PR #277, run 40077155642 | mutation job 1m2s; killed 1716, survived 1061, no_tests 1337, timeout 3 — **61.79%**, gate PASSED |
 | T032 parity | 2026-10-24 | local, re-run on `main` post-merge | 61.20% (Mac) vs 61.79% (CI, same commit family) — 0.59 pt difference, within tolerance |
+| T033 ntfy deploy | 2026-10-24 | `gh run` 40084566355 (apply) | `mutation` account live, write-only to topic `mutation`; unrelated pre-existing `Lifecycle verification` step failed (failed on last 5 runs since 2026-09-19) |
 | T034 SC-007 | — | — | Not run — see T034's note |
 | T035 SC-001 | — | — | Not run — see T035's note |
-| T038 nightly publish | — | — | Blocked on this PR merging (see T038's note) |
-| T039 Mac loop | 2026-10-24 (step 4 only) | local, `MUTMUT_PULL_HOST=nope@nowhere task mutmut:pull` | exit 201, correct error text, `mutants/report.json` unchanged. Steps 1–3 blocked on T038 |
-| T040 alert | — | — | Blocked on T027, T033, T038 — message format verified against the contract's example in T031's note |
-| T041 prune | 2026-10-24 ("before" only) | T002's note | Not deleted — blocked on T038 and on asking the owner |
-| T042 SC-003 | — | — | Time-gated: 7 nightly runs after T038 |
+| T038 nightly publish | 2026-10-24 | `gh run` 40084811736 (rsync bug found) → 40085044484 (green, 1m34s) | `main` → `main-20261024T101452Z`; `report.json.commit` = `bf0092e`, matches `head_sha` |
+| T039 Mac loop | 2026-10-24 (step 4 only) | local, `MUTMUT_PULL_HOST=nope@nowhere task mutmut:pull` | exit 201, correct error text, `mutants/report.json` unchanged. Steps 1–3 still open (not run against the now-real published set) |
+| T040 alert | 2026-10-24 | `gh run` 40085176121 | Delivered; read from ntfy's own message cache (sqlite3, both temp copies deleted after): title/body match contracts/regression-alert.md exactly. Second half (next scheduled run silent) not yet checked — too soon |
+| T041 prune | 2026-10-24 ("before" only) | T002's note | Precondition met (T038 published); still not deleted — needs the owner's explicit go-ahead |
+| T042 SC-003 | — | — | Time-gated: 7 nightly runs after T038 (2026-10-24) |
 | T043 SC-006 | — | — | Time-gated: 2026-11-07 (two weeks after T037's 2026-10-24 merge) |
