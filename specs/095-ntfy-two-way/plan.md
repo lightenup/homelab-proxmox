@@ -72,7 +72,7 @@ manual checks per [quickstart.md](./quickstart.md).
 | I. Spec-driven | PASS | `specs/095-ntfy-two-way/` (spec, plan, research). Amendments to `082`/`083` docs are tasks (FR-013). |
 | II. Secrets | PASS | Slice 1 reuses the `owner` and `hermes` users and tokens (only their ACLs change) and adds one LAB-only credential, `hermes_lab` (`ntfy_hermes_lab_password_hash`, `ntfy_hermes_lab_token`), in vault (spec FR-011). The relay's new ntfy user and token go in vault (`ntfy_action_relay_*`). Tokens exposed in session output are rotated as part of rollout. |
 | III. Separation | PASS | No Terraform change. No new LXC (R-011). All service changes are Ansible. The LAB rig is the existing `pve-lab` VM (R-015); nothing under `scripts/lab/` changes. |
-| IV. Code economy | PASS, with two watch items | Slice 1 adds no code beyond two small hooks. The relay replaces the Go template (one artifact out, one in) instead of adding a parallel path. The allowlist starts with **one** action; no plugin system is built for future actions. Watch item 2: the LAB-rig workflow (`lab-rig.yml`) and playbook (`lab_hermes_agent.yml`) have one consumer today (the T008 gate). They are justified because spec FR-011 needs the scratch pair on a machine that is not production, and no existing path deploys an application role to the 10.99.x rig (R-015). They reuse `pve-lab up`/`down` and the `hermes` role unchanged, and add no wrapper. |
+| IV. Code economy | PASS, with two watch items | Slice 1 adds no code beyond two small hooks. The relay replaces the Go template (one artifact out, one in) instead of adding a parallel path. The allowlist starts with **one** action; no plugin system is built for future actions. Watch item 2: the LAB-rig workflow (`lab-rig.yml`) and playbook (`hermes_lab_rig.yml`) have one consumer today (the T008 gate). They are justified because spec FR-011 needs the scratch pair on a machine that is not production, and no existing path deploys an application role to the 10.99.x rig (R-015). They reuse `pve-lab up`/`down` and the `hermes` role unchanged, and add no wrapper. |
 | V. Dual provisioning | PASS, with one documented limitation | Existing `ntfy`, `hermes` and `monitoring` deploys, via CI or laptop. No new service in workflow dropdowns. The new `lab-rig.yml` (R-015) runs its commands on `pve` over SSH as `ci`. A laptop cannot route to 10.99.0.0/24, so the local path is the same commands run by hand from `ssh ci@pve` (documented in quickstart § 0, as principle V allows). |
 | Networking / access | PASS | Nothing new is exposed. The relay talks to Alertmanager on the compose network and to ntfy via Caddy. |
 | Test-driven | PASS | Relay logic in a testable Python module. Guard tests for rendered config. LAB-first verification of R-001/R-002 before PROD. |
@@ -127,7 +127,7 @@ docs/backlog/{082,083,093}-*.md        # amendments (FR-013)
 # LAB rig for the T008 gate (R-015)
 .github/workflows/lab-rig.yml          # workflow_dispatch: up | deploy | status | down (down needs confirm)
 .github/workflows/proxmox-apply.yml    # + first step: refuse while a held LAB rig exists; shared concurrency group
-ansible/playbooks/lab_hermes_agent.yml # docker + hermes roles on lab-pve-01; loads group_vars/services via vars_files
+ansible/playbooks/hermes_lab_rig.yml # docker + hermes roles on lab-pve-01; loads group_vars/services via vars_files
 python/tests/workflows/test_lab_rig_workflow.py  # guard test for the two workflows and the playbook
 ```
 
@@ -143,7 +143,7 @@ inherits the test, coverage and mutation tooling.
    2. `lab-rig.yml` `action=up`: `pve-lab run --profile hypervisor-control-plane --keep` (tier-2
       clone, kept), then check that the rig reaches ntfy and the LLM router. If either is
       unreachable, stop and raise it.
-   3. `lab-rig.yml` `action=deploy`: run `lab_hermes_agent.yml` on the rig.
+   3. `lab-rig.yml` `action=deploy`: run `hermes_lab_rig.yml` on the rig.
    4. Run quickstart § 0 from the phone: verify R-001 (a text approval prompt appears and
       `/approve` runs the command) and R-002 (`/yolo` and `/update` are refused over ntfy). If
       either fails, stop: the design depends on both.

@@ -1,0 +1,30 @@
+---
+# LAB rig deploy of the hermes agent (spec 095 T063, research R-015).
+#
+# Runs on `pve` against the kept pve-lab VM (lab-pve-01, 10.99.0.10), never against production.
+# Driven by .github/workflows/lab-rig.yml action=deploy; laptop path: the same command from
+# `ssh ci@pve` (quickstart § 0.1). The hermes role renders the LAB-rig branch of agent.env.j2
+# (scratch pair hermes-lab-in / hermes-lab only) and asserts the rendered file.
+#
+# group_vars/services is loaded through vars_files rather than by adding lab-pve-01 to the
+# `services` group, so the shared lab inventory (used by the tier-2 harness) is unchanged.
+# lxc_base (dist-upgrade, sshd drop-in, Alloy) and service_backup are deliberately not run.
+- name: Deploy the hermes agent to the LAB rig
+  hosts: lab
+  become: true
+  vars_files:
+    - ../group_vars/services/vars.yml
+    - ../group_vars/services/vault.yml
+  pre_tasks:
+    - name: Refuse anything but the LAB rig with deploy_environment=lab
+      ansible.builtin.assert:
+        that:
+          - lab_inventory | default(false) | bool
+          - (deploy_environment | default('prod')) == 'lab'
+          - inventory_hostname is match('^lab-pve-')
+        fail_msg: >-
+          hermes_lab_rig.yml runs only against the LAB rig inventory
+          (ansible/inventories/lab/hosts.yml) with -e deploy_environment=lab (spec 095 FR-011).
+  roles:
+    - geerlingguy.docker
+    - hermes

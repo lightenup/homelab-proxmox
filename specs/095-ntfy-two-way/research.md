@@ -256,10 +256,12 @@ Checked 2026-10-25 against `scripts/lab/pve-lab`, `scripts/lab/pve-service-deplo
 - **Vault [repo]**: both `up` and `deploy` read the persistent password file on `pve`
   (`/var/lib/homelab-proxmox/vault/.ansible_vault_pass`, the same file `pve-service-deploy`
   prefers), so no vault secret passes through GitHub Actions.
-- **Deploy [design]**: `ansible/playbooks/lab_hermes_agent.yml` runs `geerlingguy.docker` and
+- **Deploy [design]**: `ansible/playbooks/hermes_lab_rig.yml` runs `geerlingguy.docker` and
   `hermes` on `lab` with `-e deploy_environment=lab`. It loads `group_vars/services/{vars,vault}.yml`
   through `vars_files` instead of adding `lab-pve-01` to `services` in the shared lab inventory,
-  so the tier-2 harness never has to decrypt the services vault. It skips `lxc_base` (dist-upgrade,
+  so the tier-2 harness never has to decrypt the services vault. The name avoids the `lab_*.yml`
+  prefix: `test_confidence_gate_paths.py` treats every `ansible/playbooks/lab_*.yml` as a
+  nested-harness playbook whose roles must trigger the confidence suite. It skips `lxc_base` (dist-upgrade,
   sshd drop-in, Alloy) and `service_backup` (already off for LAB). The role's own guards apply
   unchanged: `hermes_agent_operational` is false (`lab_inventory`), the LAB-rig branch renders the
   scratch pair, and the rendered-file assert checks it.

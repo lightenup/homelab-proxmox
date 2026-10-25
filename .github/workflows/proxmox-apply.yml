@@ -5,7 +5,8 @@ on:
   # push trigger temporarily disabled
 
 concurrency:
-    group: proxmox-apply
+    # Shared with lab-rig.yml: both drive the same pve-lab VM (spec 095 R-015).
+    group: pve-lab
     cancel-in-progress: false
 
 jobs:
@@ -39,6 +40,17 @@ jobs:
                     --exclude 'scripts/lab/artifacts/' \
                     --exclude 'artifacts/' \
                     ./ ci@pve:/home/ci/homelab-proxmox/
+
+            # The harness starts with CLEANUP-PRE-001, which destroys any lab VM. Outside a running
+            # harness a lab VM is a kept LAB rig (lab-rig.yml), possibly mid-gate (spec 095 R-015).
+            - name: Refuse while a kept LAB rig exists
+              run: |
+                  status="$(ssh ci@pve "cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ./pve-lab status")"
+                  echo "${status}"
+                  if grep -q 'Found Lab VM' <<<"${status}"; then
+                    echo "::error::A kept LAB rig exists; run lab-rig.yml with action=down (confirm=destroy-lab-rig) first"
+                    exit 1
+                  fi
 
             - name: Apply + verify on PVE
               env:

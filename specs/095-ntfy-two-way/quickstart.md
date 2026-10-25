@@ -25,7 +25,7 @@ export ANSIBLE_VAULT_PASSWORD_FILE=/var/lib/homelab-proxmox/vault/.ansible_vault
 ANSIBLE_VAULT_PASSWORD="$(cat "$ANSIBLE_VAULT_PASSWORD_FILE")" \
   ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts \
   scripts/lab/pve-lab run --profile hypervisor-control-plane --keep          # up
-(cd ansible && ansible-playbook -i inventories/lab/hosts.yml playbooks/lab_hermes_agent.yml \
+(cd ansible && ansible-playbook -i inventories/lab/hosts.yml playbooks/hermes_lab_rig.yml \
   --private-key "$PROVISION_SSH_KEY" -e deploy_environment=lab)            # deploy
 scripts/lab/pve-lab status                                                # status
 scripts/lab/pve-lab down                                                  # down
