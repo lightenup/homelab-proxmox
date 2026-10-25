@@ -191,7 +191,10 @@ def test_pve_backup_notifies_through_ntfy_not_mail() -> None:
     ntfy_users = yaml.safe_load((repo_root / "ansible/roles/ntfy/defaults/main.yml").read_text())["ntfy_users"]
     pve_vars = (repo_root / "ansible/group_vars/proxmox_hosts/vars.yml").read_text()
     entry = next(u for u in ntfy_users if u["name"] == "pve_backup")
-    assert f'proxmox_backup_ntfy_topic: "{entry["topic"]}"' in pve_vars
+    # 095 T004: grants moved from `topic:` to an `access:` list of "<topic>:<perm>".
+    write_topics = [g.split(":")[0] for g in entry["access"] if g.split(":")[1] in ("write-only", "read-write")]
+    assert write_topics == ["pve-backup"]
+    assert 'proxmox_backup_ntfy_topic: "pve-backup"' in pve_vars
 
 
 def test_immich_restore_drill_uses_the_service_images() -> None:

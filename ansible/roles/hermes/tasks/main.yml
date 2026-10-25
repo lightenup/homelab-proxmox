@@ -96,23 +96,54 @@
   notify: Restart hermes
   no_log: true
 
-# FR-014: the LAB stage must never hold the push credential. Check the rendered file, not the
-# inputs, so a template regression is caught. (LAB deploys the real LXC — backlog 067 — so
-# this is also what removes a token left by an earlier PROD deploy: the template re-renders.)
-- name: Read the rendered agent environment (LAB guard)
+# FR-014 (083) + FR-011 (095): the pipeline LAB stage must never hold the push credential;
+# the LAB rig may only ever hold the scratch pair. Check the rendered file, not the inputs,
+# so a template regression is caught. (LAB deploys the real LXC — backlog 067 — so this is
+# also what removes a token left by an earlier PROD deploy: the template re-renders.)
+- name: Read the rendered agent environment (LAB guards)
   ansible.builtin.slurp:
     src: "{{ hermes_agent_env_path }}"
   register: hermes_agent_env_rendered
-  when: not hermes_agent_operational
   no_log: true
 
-- name: Assert the LAB agent environment holds no push token (FR-014)
+- name: Assert the pipeline LAB stage environment holds no push credential (083 FR-014)
   ansible.builtin.assert:
     that:
       - (hermes_agent_env_rendered.content | b64decode).splitlines() | select('match', '^\\s*NTFY_TOKEN\\s*=') | list | length == 0
+      - (hermes_agent_env_rendered.content | b64decode).splitlines() | select('match', '^\\s*NTFY_TOPIC\\s*=') | list | length == 0
+      - (hermes_agent_env_rendered.content | b64decode).splitlines() | select('match', '^\\s*NTFY_ALLOWED_USERS\\s*=') | list | length == 0
     fail_msg: >-
-      The rendered agent environment contains NTFY_TOKEN on a non-operational (LAB) deploy.
-      The LAB stage must never be able to reach the phone (spec 083 FR-014).
+      The rendered agent environment contains NTFY_TOKEN, NTFY_TOPIC or NTFY_ALLOWED_USERS on
+      a pipeline LAB deploy. The LAB stage must never be able to reach the phone
+      (spec 083 FR-014, 095 FR-011: the ntfy platform stays off there).
+  when: not hermes_agent_operational and not (lab_inventory | default(false) | bool)
+  no_log: true
+
+- name: Assert the LAB rig environment holds only the scratch pair (095 FR-011)
+  ansible.builtin.assert:
+    that:
+      - env_lines | select('match', '^NTFY_TOPIC=hermes-lab-in$') | list | length == 1
+      - env_lines | select('match', '^NTFY_PUBLISH_TOPIC=hermes-lab$') | list | length == 1
+      - env_lines | select('match', '^NTFY_TOPIC=hermes-in$') | list | length == 0
+      - env_lines | select('search', 'hermes-in') | list | length == 0
+      - env_lines | select('search', ntfy_hermes_token) | list | length == 0
+    fail_msg: >-
+      The LAB rig agent environment is not the scratch pair (hermes-lab-in / hermes-lab), or
+      leaks a production topic or the PROD token (spec 095 FR-011).
+  vars:
+    env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() }}"
+  when: not hermes_agent_operational and (lab_inventory | default(false) | bool)
+  no_log: true
+
+- name: Assert no allow-all variable ever appears in the agent environment (095 FR-003)
+  ansible.builtin.assert:
+    that:
+      - env_lines | select('match', '^\\s*(NTFY_ALLOW_ALL_USERS|GATEWAY_ALLOW_ALL_USERS)\\s*=') | list | length == 0
+    fail_msg: >-
+      An *_ALLOW_ALL_USERS variable appears in the rendered agent environment. A topic that
+      can talk to the agent would be a shell credential (spec 095 FR-003).
+  vars:
+    env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() }}"
   when: not hermes_agent_operational
   no_log: true
 
