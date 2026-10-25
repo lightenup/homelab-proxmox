@@ -231,13 +231,13 @@ Then confirm or change FR-004's limits and the collectors' `MemoryHigh` and `Mem
 
 | Check | Date | Result |
 |---|---|---|
-| §0.1 census matches allowlist | | |
-| §1 static checks | | |
-| §2 rollout (per host) | | |
-| §3 exposure | | |
-| §4 SC-001 canary (12 journal / 9 docker) | | |
-| §4 collector memory ntfy / hermes | | |
-| §5 SC-002 redaction | | |
+| §0.1 census matches allowlist | 2026-10-24 | Owner confirmed `3+Lnah…` as theirs; allow-list committed per R3 |
+| §1 static checks | 2026-10-24 | 276 tests pass; lokitool check, promtool, `loki -verify-config`, `alloy validate` (6 host types) all exit 0 |
+| §2 rollout (per host) | 2026-10-24/25 | All 11 LXCs + pve + monitoring live. Five defects found and fixed in rollout: `proxmox_hosts` undefined in scoped inventory, glob-path assert, missing `unzip`, Grafana not restarted on datasource change, `#` comments in Alloy config (now validated before write). nextcloud.log readable by alloy without the `nogroup` fallback |
+| §3 exposure | 2026-10-25 | `:3100` refused from LAN; `:3101` query path 404; Grafana registered Loki (uid `loki`) |
+| §4 SC-001 canary (12 journal / 9 docker) | 2026-10-25 | 11/11 LXC journals + pve journal (verified via live sshd lines; `ci` sudo cannot run `logger` on pve); 9/9 docker within 60 s after `refresh_interval = "15s"` (1m default missed short-lived containers) |
+| §4 collector memory ntfy / hermes | 2026-10-24 | ntfy 87 MiB at first start (68% of MemoryHigh 128M), under the 70% bar; re-measure at SC-007 |
+| §5 SC-002 redaction | 2026-10-25 | All 8 patterns redacted on market-model, journal and docker; controls byte-identical; 0 streams contain a raw drill secret |
 | §6 SC-004 baselines (5 services) | | |
 | §7 SC-008 purge | | |
 | §8 SC-003 OOM + backstop | | |
