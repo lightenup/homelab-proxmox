@@ -283,6 +283,32 @@ Checked 2026-10-25 against `scripts/lab/pve-lab`, `scripts/lab/pve-service-deplo
   this branch until agreed.
 - **Laptop path (constitution V)**: the same commands, run by hand after `ssh ci@pve`
   (quickstart § 0). A laptop cannot route to the rig, which principle V allows when documented.
+- **A second, independent reason the laptop path is required pre-merge [found 2026-10-25]**:
+  `gh workflow run lab-rig.yml --ref 095-ntfy-two-way -f action=up` returned `HTTP 404: workflow
+  lab-rig.yml not found on the default branch`. This is a GitHub platform restriction, not a
+  `gh`/CI bug: `workflow_dispatch` can only be triggered via the API/CLI once the workflow file
+  exists on the repository's default branch — `--ref` selects which version of an *already
+  known* workflow runs, it does not register a brand-new one. `lab-rig.yml` has never been on
+  `main`. Not worked around by merging early (that would land unfinished 095 work just to
+  unblock a dispatch button); the laptop path above already sidesteps the Actions API entirely,
+  so it resolves this too, for a second reason beyond the original routing one. Does not affect
+  `proxmox-apply.yml` or `lxc-promote-prod.yml` — both already existed on `main` before 095
+  edited them.
+- **The laptop path's own SSH key step was missing, and silently broke a kept rig [found
+  2026-10-25]**: `scripts/lab/lib/rebuild.sh:14` only reuses `PROVISION_SSH_KEY` when that path
+  **already exists** (`-f` test); the workflow's `up` case creates it first
+  (`if [[ ! -f "${PROVISION_SSH_KEY}" ]]; then ssh-keygen ...; fi`) before ever calling
+  `pve-lab run`, but quickstart's laptop-path commands did not include that step — they only
+  `export`ed the variable. With the file absent, `rebuild.sh` falls through to its own ephemeral
+  key (`lib/rebuild.sh:26-33`), uses it to provision the VM, then deletes it on exit regardless
+  of `--keep` (`:38-44`) — `--keep` preserves the VM, not the provisioning key. Net effect: a
+  rig that nothing can SSH into, discovered only on the next step (`ansible.builtin.uri` via
+  `-i inventories/lab/hosts.yml` failed `Permission denied (publickey)`, `no such identity`).
+  Recovery is a second `pve-lab run --keep` after creating the key — `CLEANUP-PRE-001` at the
+  start of every `pve-lab run` destroys the previous (now-unreachable) rig automatically, so
+  this is one command, not a manual teardown. Fixed in quickstart.md: the laptop path now
+  creates the key inline with the same `ssh-keygen` invocation the workflow uses, so it is
+  copy-paste safe standalone.
 
 ## R-016: What the LAB rig actually asserts, and its credential policy for the T008 gate
 

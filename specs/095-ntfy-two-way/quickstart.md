@@ -21,11 +21,20 @@ Plan to bring it up, run § 0.2 and tear it down (§ 0.3) on the same day.
 3. `gh workflow run lab-rig.yml --ref 095-ntfy-two-way -f action=deploy`. The hermes role's LAB-rig
    guard must pass: the rendered `agent.env` holds only the scratch pair.
 
-Laptop path (constitution V; a laptop cannot route to 10.99.x): `ssh ci@pve`, `cd
-~/homelab-proxmox` (synced copy of the branch), then run the same commands the workflow runs:
+Laptop path (constitution V; a laptop cannot route to 10.99.x — and separately, before `main`
+has ever seen `lab-rig.yml`, GitHub refuses to dispatch it at all, `workflow_dispatch` only
+works once a workflow file exists on the default branch, no `--ref` override changes that):
+`ssh ci@pve`, `cd ~/homelab-proxmox` (synced copy of the branch), then run the same commands the
+workflow runs:
 
 ```bash
-export PROVISION_SSH_KEY=$HOME/.ssh/lab_rig_ed25519   # stable key; created by action=up if missing
+# Create the stable key FIRST if missing — `rebuild.sh` only reuses PROVISION_SSH_KEY when the
+# file already exists; skip this and `pve-lab` silently falls back to an ephemeral key that it
+# deletes on exit regardless of --keep, leaving a rig nothing can SSH into (found 2026-10-25).
+if [[ ! -f "$HOME/.ssh/lab_rig_ed25519" ]]; then
+  ssh-keygen -q -t ed25519 -N '' -C lab-rig-095 -f "$HOME/.ssh/lab_rig_ed25519"
+fi
+export PROVISION_SSH_KEY=$HOME/.ssh/lab_rig_ed25519
 export ANSIBLE_VAULT_PASSWORD_FILE=/var/lib/homelab-proxmox/vault/.ansible_vault_pass
 ANSIBLE_VAULT_PASSWORD="$(cat "$ANSIBLE_VAULT_PASSWORD_FILE")" \
   ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts \
