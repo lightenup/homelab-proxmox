@@ -329,3 +329,28 @@ Reviewed 2026-10-25 after T062–T066 landed, before any rig is brought up.
   rig-specific router keys (needs an `llm_router` PROD deploy to mint them), a rig-correct
   `hermes-own-node-exporter` probe, and an expiry or alert for a forgotten rig. Revisit before
   the rig is used by a second feature (plan, Constitution IV watch item 2).
+
+## R-017: `ntfy-acl-check.sh` crosses ntfy's default rate limit (found running T067 on PROD)
+
+Found 2026-10-25 running T067's PROD verification: 61/120 PASS, with every request from #61
+onward returning `429` regardless of credential or topic, immediately after 60 consecutive
+correct auth decisions.
+
+- **Finding**: ntfy's `visitor-request-limit-burst` defaults to 60 requests per visitor,
+  replenished one per `visitor-request-limit-replenish` (default `5s`) — confirmed against
+  `binwiederhier/ntfy:v2.28.0 serve --help`. Neither is overridden in
+  `ansible/roles/ntfy/templates/server.yml.j2`, so the server default applies. `behind-proxy:
+  true` makes the limit see the real client IP (not Caddy's), so it is scoped to whichever
+  single host runs the check, not shared with the phone or other services.
+- **Why now**: the matrix has grown every spec that touched it and stayed under 60 every time
+  (20 cells at `082`, 35 at `089`, 54 at `090`, per their own quickstart records). `095`'s
+  `hermes_lab` row is the first to push it over — to 120 cells, double the burst.
+- **Decision**: fix the script, not the server. The request volume is the diagnostic tool's
+  own, not real traffic; loosening a public-facing service's abuse protection for that reason
+  would be the wrong trade. `ntfy-acl-check.sh` now retries on `429` with a bounded count,
+  honoring `Retry-After` when ntfy sends one and falling back to the documented 5s default
+  otherwise (commit `844d372`). Verified against a throwaway token-bucket test server before
+  touching PROD. A full run now takes several minutes past the burst, not a single pass.
+- **Forward note**: P2 (T044/T045) adds more rows (`actions`, `relay`, `action_relay`), growing
+  the matrix further. The retry fix scales with it; no further action needed unless ntfy's
+  defaults change.
