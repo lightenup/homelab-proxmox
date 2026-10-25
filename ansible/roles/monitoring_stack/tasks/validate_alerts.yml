@@ -15,6 +15,14 @@
   failed_when: false
   changed_when: false
 
+- name: Ensure unzip is installed (lokitool release is a .zip, unlike node_exporter's .tar.gz)
+  ansible.builtin.apt:
+    name: unzip
+    state: present
+  when: >-
+    lokitool_installed_version.rc | default(1) != 0 or
+    loki_version not in (lokitool_installed_version.stdout | default(''))
+
 - name: Download lokitool archive
   ansible.builtin.get_url:
     url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/lokitool-linux-amd64.zip"
