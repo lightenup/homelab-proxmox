@@ -118,10 +118,10 @@ loki.process "oom" {
 {% if alloy_docker_logs %}
 discovery.docker "local" {
   host            = "unix:///var/run/docker.sock"
-  # Default is 1m (upstream docs). A brand-new container can otherwise sit
-  # undiscovered for up to 60s before its first line is even collected, which
-  # risks SC-001's "found within 60 seconds" on its own (found live, quickstart
-  # §4: a 15s-lived container was missed with the 1m default).
+  // Default is 1m (upstream docs). A brand-new container can otherwise sit
+  // undiscovered for up to 60s before its first line is even collected, which
+  // risks SC-001's "found within 60 seconds" on its own (found live, quickstart
+  // §4: a 15s-lived container was missed with the 1m default).
   refresh_interval = "15s"
 }
 

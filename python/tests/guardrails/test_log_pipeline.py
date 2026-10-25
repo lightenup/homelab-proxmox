@@ -231,6 +231,21 @@ def test_collector_contract() -> None:
     assert "3101" not in config or "alloy_relay_port" in config
     assert "listen_port = {{ alloy_relay_port }}" in config
 
+    # Alloy config syntax has only // and /* */ comments. A `#` line fails `alloy validate`
+    # (found live). Jinja comments `{# ... #}` are fine: they never reach the rendered file.
+    for n, line in enumerate(config.splitlines(), 1):
+        assert not line.lstrip().startswith("#"), f"config.alloy.j2:{n}: use // for comments, not #"
+
+    tasks = _safe_load(main_tasks)
+    tmpl = next(
+        t for t in tasks
+        if isinstance(t.get("ansible.builtin.template"), dict)
+        and t["ansible.builtin.template"].get("src") == "config.alloy.j2"
+    )
+    assert "alloy validate" in str(tmpl["ansible.builtin.template"].get("validate", "")), (
+        "config.alloy.j2 must be validated before it replaces the live file"
+    )
+
     override = _read("ansible/roles/alloy/templates/alloy-override.conf.j2")
     assert "MemoryMax=" in override
     assert "MemoryHigh=" in override
