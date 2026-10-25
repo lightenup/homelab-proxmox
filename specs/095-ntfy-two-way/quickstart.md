@@ -8,6 +8,11 @@ The LAB rig (10.99.0.10) is reachable only from `pve` (research R-015).
 
 ### 0.1 Bring the rig up (research R-015)
 
+Preconditions (research R-016): `bash scripts/ci/python-tests.sh` is green on this branch with
+T070 (`test_hermes_env_modes.py`, credential freeze) and T071 (confidence-suite held-rig guard)
+in it. The rig runs with production router and Hermes identities; only ntfy is LAB-specific.
+Plan to bring it up, run § 0.2 and tear it down (§ 0.3) on the same day.
+
 1. `ntfy` carries the scratch pair: deploy it from this branch through `Prod 1 - LXC Promote` →
    `Prod 2 - LXC Apply`, then run § 1 with `NTFY_HERMES_LAB_TOKEN` set (T067).
 2. `gh workflow run lab-rig.yml --ref 095-ntfy-two-way -f action=up`. This clones the tier-2
@@ -31,7 +36,8 @@ scripts/lab/pve-lab status                                                # stat
 scripts/lab/pve-lab down                                                  # down
 ```
 
-While the rig is up, `proxmox-apply.yml` refuses to run (its harness would destroy the rig).
+While the rig is up, `proxmox-apply.yml` and the confidence-suite job of `Prod 1 - LXC Promote`
+refuse to run (the harness would destroy the rig).
 
 ### 0.2 Gate steps
 
@@ -68,7 +74,8 @@ If any step fails, stop. Slice 1's safety argument depends on all of them.
 
 `gh workflow run lab-rig.yml --ref 095-ntfy-two-way -f action=down -f confirm=destroy-lab-rig`,
 then `-f action=status` reports no lab VM (T069). Any other `confirm` value fails before anything
-is destroyed.
+is destroyed. Do this the same day as § 0.1, also when § 0.2 fails or stalls; bring the rig up
+again later rather than keep it (research R-016).
 
 ## 1. ACL matrix (SC-002)
 

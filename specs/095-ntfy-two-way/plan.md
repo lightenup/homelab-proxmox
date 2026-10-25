@@ -70,9 +70,9 @@ manual checks per [quickstart.md](./quickstart.md).
 | Principle | Status | Notes |
 |---|---|---|
 | I. Spec-driven | PASS | `specs/095-ntfy-two-way/` (spec, plan, research). Amendments to `082`/`083` docs are tasks (FR-013). |
-| II. Secrets | PASS | Slice 1 reuses the `owner` and `hermes` users and tokens (only their ACLs change) and adds one LAB-only credential, `hermes_lab` (`ntfy_hermes_lab_password_hash`, `ntfy_hermes_lab_token`), in vault (spec FR-011). The relay's new ntfy user and token go in vault (`ntfy_action_relay_*`). Tokens exposed in session output are rotated as part of rollout. |
+| II. Secrets | PASS | Slice 1 reuses the `owner` and `hermes` users and tokens (only their ACLs change) and adds one LAB-only credential, `hermes_lab` (`ntfy_hermes_lab_password_hash`, `ntfy_hermes_lab_token`), in vault (spec FR-011). The relay's new ntfy user and token go in vault (`ntfy_action_relay_*`). Tokens exposed in session output are rotated as part of rollout. **LAB rig limitation (R-016)**: apart from ntfy, the rig renders production identities (router keys, Hermes API, WebUI and SearXNG secrets). Accepted for the T008 gate only: the rig is reachable only from `pve`, lives one day (T069), and its credential set is frozen by an offline test (T070). |
 | III. Separation | PASS | No Terraform change. No new LXC (R-011). All service changes are Ansible. The LAB rig is the existing `pve-lab` VM (R-015); nothing under `scripts/lab/` changes. |
-| IV. Code economy | PASS, with two watch items | Slice 1 adds no code beyond two small hooks. The relay replaces the Go template (one artifact out, one in) instead of adding a parallel path. The allowlist starts with **one** action; no plugin system is built for future actions. Watch item 2: the LAB-rig workflow (`lab-rig.yml`) and playbook (`hermes_lab_rig.yml`) have one consumer today (the T008 gate). They are justified because spec FR-011 needs the scratch pair on a machine that is not production, and no existing path deploys an application role to the 10.99.x rig (R-015). They reuse `pve-lab up`/`down` and the `hermes` role unchanged, and add no wrapper. |
+| IV. Code economy | PASS, with two watch items | Slice 1 adds no code beyond two small hooks. The relay replaces the Go template (one artifact out, one in) instead of adding a parallel path. The allowlist starts with **one** action; no plugin system is built for future actions. Watch item 2: the LAB-rig workflow (`lab-rig.yml`) and playbook (`hermes_lab_rig.yml`) have one consumer today (the T008 gate). They are justified because spec FR-011 needs the scratch pair on a machine that is not production, and no existing path deploys an application role to the 10.99.x rig (R-015). They reuse `pve-lab up`/`down` and the `hermes` role unchanged, and add no wrapper. Before a second feature uses the rig, settle the deferred items in R-016 (credential allowlist, rig-specific router keys, rig expiry). |
 | V. Dual provisioning | PASS, with one documented limitation | Existing `ntfy`, `hermes` and `monitoring` deploys, via CI or laptop. No new service in workflow dropdowns. The new `lab-rig.yml` (R-015) runs its commands on `pve` over SSH as `ci`. A laptop cannot route to 10.99.0.0/24, so the local path is the same commands run by hand from `ssh ci@pve` (documented in quickstart § 0, as principle V allows). |
 | Networking / access | PASS | Nothing new is exposed. The relay talks to Alertmanager on the compose network and to ntfy via Caddy. |
 | Test-driven | PASS | Relay logic in a testable Python module. Guard tests for rendered config. LAB-first verification of R-001/R-002 before PROD. |
@@ -88,7 +88,7 @@ instead of keeping both paths.
 specs/095-ntfy-two-way/
 ├── spec.md
 ├── plan.md              # this file
-├── research.md          # R-001 … R-015
+├── research.md          # R-001 … R-016
 ├── data-model.md        # topics, users, ACL matrix, action command, approval prompt
 ├── quickstart.md        # LAB/PROD validation, phone setup, revocation
 ├── contracts/
@@ -128,7 +128,9 @@ docs/backlog/{082,083,093}-*.md        # amendments (FR-013)
 .github/workflows/lab-rig.yml          # workflow_dispatch: up | deploy | status | down (down needs confirm)
 .github/workflows/proxmox-apply.yml    # + first step: refuse while a held LAB rig exists; shared concurrency group
 ansible/playbooks/hermes_lab_rig.yml # docker + hermes roles on lab-pve-01; loads group_vars/services via vars_files
-python/tests/workflows/test_lab_rig_workflow.py  # guard test for the two workflows and the playbook
+python/tests/workflows/test_lab_rig_workflow.py  # guard test for the two workflows and the playbook (+ T071 confidence-suite guard)
+.github/workflows/lxc-promote-prod.yml # + confidence job refuses while a held LAB rig exists (T071, R-016)
+python/tests/guardrails/test_hermes_env_modes.py  # agent.env.j2 rendered in PROD / rig / LAB stage; pinned credential sets (T070, R-016)
 ```
 
 **Structure Decision**: No new role and no new LXC. Slice 1 touches the `ntfy` and `hermes` roles.
@@ -137,7 +139,10 @@ inherits the test, coverage and mutation tooling.
 
 ## Rollout order (slice 1)
 
-1. **LAB gate** (R-015), every step a `workflow_dispatch`:
+1. **LAB gate** (R-015, R-016), every step a `workflow_dispatch`:
+   0. Preconditions (R-016): T070 (offline render test, credential freeze) and T071 (confidence
+      suite refuses while a rig is held) are green. Do not deploy `hermes` to PROD from this
+      branch before US1 (tasks T014 note).
    1. Deploy `ntfy` through `Prod 1 - LXC Promote` → `Prod 2 - LXC Apply` from this branch (adds
       the `hermes_lab` scratch pair; production grants unchanged). Run the ACL check script.
    2. `lab-rig.yml` `action=up`: `pve-lab run --profile hypervisor-control-plane --keep` (tier-2
@@ -147,7 +152,8 @@ inherits the test, coverage and mutation tooling.
    4. Run quickstart § 0 from the phone: verify R-001 (a text approval prompt appears and
       `/approve` runs the command) and R-002 (`/yolo` and `/update` are refused over ntfy). If
       either fails, stop: the design depends on both.
-   5. `lab-rig.yml` `action=down`, `confirm=destroy-lab-rig`.
+   5. `lab-rig.yml` `action=down`, `confirm=destroy-lab-rig`, the same day as step 2, also if
+      step 4 fails or stalls (R-016).
 2. ntfy deploy: new ACLs. `hermes` gets read on `hermes-in`; `owner` gets read-write on
    `hermes-in`. Run the ACL check script.
 3. hermes deploy: env, config and hooks. The agent subscribes to `hermes-in`. Confirm that the

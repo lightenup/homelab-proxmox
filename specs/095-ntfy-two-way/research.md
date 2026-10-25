@@ -283,3 +283,49 @@ Checked 2026-10-25 against `scripts/lab/pve-lab`, `scripts/lab/pve-service-deplo
   this branch until agreed.
 - **Laptop path (constitution V)**: the same commands, run by hand after `ssh ci@pve`
   (quickstart § 0). A laptop cannot route to the rig, which principle V allows when documented.
+
+## R-016: What the LAB rig actually asserts, and its credential policy for the T008 gate
+
+Reviewed 2026-10-25 after T062–T066 landed, before any rig is brought up.
+
+- **What is asserted [repo]**:
+  - *CI*: `test_lab_rig_workflow.py` (workflow and playbook shape, teardown barrier, vault stays
+    on `pve`, `proxmox-apply` held-rig guard) and `test_ntfy_acl.py` (`hermes_lab` has no grant
+    on a production topic). Neither renders the `hermes` role.
+  - *`action=up`*: ntfy and LLM-router reachability from the rig. No credential involved.
+  - *`action=deploy`, role preflight*: pinned images, no NFS, aliases exist, each secret
+    **defined and non-empty**, no `api.openai.com`, signup off.
+  - *`action=deploy`, role main*: the rendered `agent.env` holds only the scratch pair and not
+    the PROD ntfy token (`tasks/main.yml:122-135`); no `*_ALLOW_ALL_USERS`; compose confinement;
+    health; egress probe; no heartbeat job.
+  - *T008*: upstream agent behaviour over the scratch topics. It does not test infrastructure.
+- **What is not asserted [repo]**:
+  - ntfy is the **only** credential the rig holds a LAB-specific value for. The rig renders the
+    production values of: `llm_router_client_hermes_key`, `llm_router_client_hermes_agent_key`,
+    `llm_router_client_scout_probe_key` (passthrough, backlog 088), `hermes_agent_api_server_key`,
+    `hermes_webui_secret_key`, `hermes_admin_password_bootstrap`, `hermes_searxng_secret`. No
+    assert distinguishes them from PROD; the LLM router cannot tell rig traffic from PROD.
+  - The role's env guards read the file back **after** it is written on the target. They detect;
+    they do not prevent. No test renders `agent.env.j2` offline in any of its three modes.
+  - The egress probe's `hermes-own-node-exporter` entry uses `hermes_ip`, which is the PROD LXC.
+    On the rig it still proves a LAN destination is refused, but not the one its name says.
+  - Prod 1's confidence suite (`pve-lab confidence` → `cmd_run` → CLEANUP-PRE-001) destroys any
+    lab VM. Its job is in concurrency group `lxc-promote-prod-lab-<service>` and has no held-rig
+    check, so it can kill a rig mid-gate.
+- **Decision (pragmatic, 2026-10-25) — proceed with the gate, with three conditions**:
+  1. **Accept production identities on the rig for the T008 gate only.** Compensating
+     controls: the rig is reachable only from `pve`; it runs only for the gate (T069 the same
+     day, see 3); the router keys are already budget- and rpm-capped per client (`064`, `071`);
+     the agent's egress allowlist applies on the rig as on PROD. Rotating none of them after the
+     gate is acceptable because none leaves `pve`/the rig.
+  2. **Freeze the rig's credential set (T070).** An offline render test pins the exact set of
+     secret-bearing variables each mode renders. Adding a key to the rig fails CI and forces an
+     explicit decision here, instead of arriving silently. No rig-specific keys beyond the ntfy
+     scratch pair are added in 095.
+  3. **Close the confidence-suite hole (T071)** with the same guard `proxmox-apply` has, and
+     bound the rig's lifetime by procedure (T069): down the same day, also if T008 stalls or
+     fails; re-`up` is cheap.
+- **Deferred (out of 095, follow-up backlog item)**: a rig credential *allowlist* policy with
+  rig-specific router keys (needs an `llm_router` PROD deploy to mint them), a rig-correct
+  `hermes-own-node-exporter` probe, and an expiry or alert for a forgotten rig. Revisit before
+  the rig is used by a second feature (plan, Constitution IV watch item 2).

@@ -1,9 +1,11 @@
-"""LAB rig workflow, playbook and proxmox-apply guard (spec 095 T062, research R-015).
+"""LAB rig workflow, playbook, proxmox-apply guard and the confidence-suite held-rig guard
+(spec 095 T062/T071, research R-015/R-016).
 
 The rig (10.99.0.10) is reachable only from `pve`, is kept between jobs, and would be destroyed by
-a `proxmox-apply` harness run (CLEANUP-PRE-001). These tests pin the controls that make that safe:
-the teardown barrier, the shared concurrency group, the held-rig refusal, a stable SSH key, the
-vault read on `pve` (never from GitHub secrets), and the tier-2 kept harness.
+a `proxmox-apply` harness run (CLEANUP-PRE-001) or by Prod 1's confidence suite (`pve-lab
+confidence`, same CLEANUP-PRE-001). These tests pin the controls that make that safe: the teardown
+barrier, the shared concurrency group, both held-rig refusals, a stable SSH key, the vault read on
+`pve` (never from GitHub secrets), and the tier-2 kept harness.
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ import yaml
 
 LAB_RIG = Path(".github/workflows/lab-rig.yml")
 PROXMOX_APPLY = Path(".github/workflows/proxmox-apply.yml")
+LXC_PROMOTE_PROD = Path(".github/workflows/lxc-promote-prod.yml")
 PLAYBOOK = Path("ansible/playbooks/hermes_lab_rig.yml")
 
 CONFIRM_WORD = "destroy-lab-rig"
@@ -31,6 +34,12 @@ def _load(path: Path) -> dict:
 
 def _steps(doc: dict) -> list[dict]:
     return [step for job in doc["jobs"].values() for step in job.get("steps", [])]
+
+
+def _job_steps(doc: dict, job_name: str) -> list[dict]:
+    """Steps of a single named job — `lxc-promote-prod.yml` has several jobs that each have
+    their own "Sync repo to PVE" step, so index-based ordering checks must not flatten them."""
+    return doc["jobs"][job_name].get("steps", [])
 
 
 def _runs(doc: dict) -> str:
@@ -144,6 +153,38 @@ def test_proxmox_apply_refuses_while_a_rig_is_kept():
     assert "pve-lab status" in steps[guard]["run"]
     assert "exit 1" in steps[guard]["run"]
     assert _index(steps, "Sync repo to PVE") < guard < _index(steps, "pve-lab rebuild")
+
+
+# --- lxc-promote-prod.yml confidence_suite job (spec 095 T071, research R-016 condition 3) -----
+
+
+def test_confidence_suite_refuses_while_a_rig_is_kept():
+    """`pve-lab confidence` -> `pve-lab run` -> CLEANUP-PRE-001 destroys any lab VM, so Prod 1's
+    best-effort confidence suite needs the same held-rig guard as proxmox-apply.yml, in the same
+    job, before the suite runs."""
+    doc = _load(LXC_PROMOTE_PROD)
+    steps = _job_steps(doc, "confidence_suite")
+    guard = _index(steps, "Found Lab VM")
+    assert "pve-lab status" in steps[guard]["run"]
+    assert "exit 1" in steps[guard]["run"]
+    assert _index(steps, "Sync repo to PVE") < guard < _index(steps, "Run confidence suite on PVE")
+
+
+def test_confidence_suite_guard_matches_the_proxmox_apply_guard_text():
+    """Same command and message in both places (T071): one control, not two to keep in sync."""
+    apply_steps = _steps(_load(PROXMOX_APPLY))
+    suite_steps = _job_steps(_load(LXC_PROMOTE_PROD), "confidence_suite")
+    apply_guard = apply_steps[_index(apply_steps, "Found Lab VM")]["run"]
+    suite_guard = suite_steps[_index(suite_steps, "Found Lab VM")]["run"]
+    assert apply_guard.strip() == suite_guard.strip()
+
+
+def test_confidence_suite_guard_step_parses_as_bash():
+    steps = _job_steps(_load(LXC_PROMOTE_PROD), "confidence_suite")
+    script = steps[_index(steps, "Found Lab VM")]["run"]
+    script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
+    result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
 
 
 # --- hermes_lab_rig.yml ----------------------------------------------------------------------
