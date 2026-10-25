@@ -29,6 +29,16 @@
 #     scripts/healthcheck/ntfy-acl-check.sh
 #
 # Exits non-zero on any FAIL. Never echoes tokens.
+#
+# Rate limiting: ntfy's `visitor-request-limit-burst` defaults to 60 requests per visitor
+# (source IP, since `behind-proxy: true` makes it see the real client, not Caddy), replenished
+# one per `visitor-request-limit-replenish` (default 5s) — confirmed against
+# `binwiederhier/ntfy:v2.28.0 serve --help`, 2026-10-25. Neither is overridden in
+# ansible/roles/ntfy/templates/server.yml.j2, so the server default applies. The matrix has
+# grown every spec that touched it (20 cells at 082, 35 at 089, 54 at 090) and 095's
+# hermes_lab row is the first to cross it (120 cells today). A single run from one host now
+# always exhausts the burst, so every request past the 60th retries on 429 below rather than
+# widening the server's own abuse protection, which is unrelated to this script's own volume.
 set -euo pipefail
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -44,6 +54,9 @@ Environment variables (all required):
   NTFY_VERSION_CHECK_TOKEN Bearer token for the version_check account (spec 090)
   NTFY_MUTATION_TOKEN      Bearer token for the mutation account (spec 087)
   NTFY_HERMES_LAB_TOKEN    Bearer token for the hermes_lab scratch account (spec 095 FR-011)
+
+A full run now makes more requests than ntfy's default per-visitor burst (60), so it retries on
+429 and can take several minutes — this is expected, not a hang.
 
 Exit code: 0 if all cells match, 1 otherwise.
 EOF
@@ -61,15 +74,24 @@ NTFY_URL="${NTFY_URL%/}"
 FAILURES=0
 TOTAL=0
 
+# Matches ntfy's own visitor-request-limit-replenish default (5s); used only when a 429
+# response carries no Retry-After header to read instead.
+readonly DEFAULT_RETRY_AFTER_SECONDS=5
+# Generous bound: in steady state one retry per request suffices once past the burst (each
+# wait regenerates exactly the one token the next request consumes). Higher in case something
+# else sharing this IP is also calling ntfy concurrently.
+readonly MAX_RATE_LIMIT_RETRIES=8
+
 # do_request <token_or_empty> <method: GET|POST> <topic> <expected: allow|deny>
 do_request() {
   local token="$1" method="$2" topic="$3" expected="$4"
-  local url code
+  local url code attempt header_file retry_after
 
   TOTAL=$((TOTAL + 1))
 
   # Build the curl argument array.
-  local -a curl_args=(-s -o /dev/null -w '%{http_code}')
+  header_file="$(mktemp -t ntfy-acl-check.XXXXXX)"
+  local -a curl_args=(-s -o /dev/null -D "${header_file}" -w '%{http_code}')
 
   if [[ "$method" == "GET" ]]; then
     # JSON API poll: GET /<topic>/json?poll=1&since=1m
@@ -84,7 +106,17 @@ do_request() {
     curl_args+=(-H "Authorization: Bearer ${token}")
   fi
 
-  code=$(curl "${curl_args[@]}" "$url" 2>/dev/null || true)
+  attempt=0
+  while :; do
+    code=$(curl "${curl_args[@]}" "$url" 2>/dev/null || true)
+    if [[ "$code" != "429" || "$attempt" -ge "$MAX_RATE_LIMIT_RETRIES" ]]; then
+      break
+    fi
+    attempt=$((attempt + 1))
+    retry_after="$(grep -i '^retry-after:' "${header_file}" | tr -d '\r' | awk '{print $2}')"
+    sleep "${retry_after:-$DEFAULT_RETRY_AFTER_SECONDS}"
+  done
+  rm -f "${header_file}"
 
   local got_label
   case "$code" in
