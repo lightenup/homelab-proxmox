@@ -1,0 +1,1039 @@
+{
+  "uid": "logs",
+  "title": "Logs",
+  "description": "Saved day-to-day LogQL queries (Loki). Provisioned from git: ansible/roles/monitoring_stack/files/grafana/dashboards/logs.json. UI edits are lost on rebuild; change the file instead.",
+  "tags": [
+    "logs",
+    "loki"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "fiscalYearStartMonth": 0,
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "Security Overview",
+      "type": "link",
+      "url": "/d/security-overview",
+      "icon": "dashboard"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "host",
+        "label": "Host",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "query": {
+          "type": 1,
+          "label": "host",
+          "stream": "{env=\"prod\"}",
+          "refId": "LokiVariableQueryEditor-VariableQuery"
+        },
+        "definition": "label_values({env=\"prod\"}, host)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "hide": 0
+      },
+      {
+        "type": "query",
+        "name": "container",
+        "label": "Container",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "query": {
+          "type": 1,
+          "label": "container",
+          "stream": "{env=\"prod\", host=~\"$host\"}",
+          "refId": "LokiVariableQueryEditor-VariableQuery"
+        },
+        "definition": "label_values({env=\"prod\", host=~\"$host\"}, container)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "hide": 0
+      },
+      {
+        "type": "textbox",
+        "name": "search",
+        "label": "Search (regex)",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Estate errors",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 2,
+      "title": "Error lines per host",
+      "description": "Lines that look like errors in any format (logfmt level=error, JSON \"level\":\"error\", ERROR/CRITICAL/FATAL/PANIC words, [error]). Loki's own 'context canceled' lines are dropped: they mean a query was aborted. Each service's own, tighter error rule lives in its host_vars log_alert_rules.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 24,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host) (count_over_time({env=\"prod\", host=~\"$host\"} |~ `level=(?i:error|fatal|crit\\w*)|\"level\":\"(?i:error|fatal|crit\\w*)\"|\\b(ERROR|CRITICAL|FATAL|PANIC)\\b|\\[(?i:error|fatal|crit)\\]` != \"context canceled\" [$__auto]))",
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "id": 3,
+      "title": "Error lines",
+      "description": "The lines behind the chart above. Narrow with the host variable.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 10
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=~\"$host\"} |~ `level=(?i:error|fatal|crit\\w*)|\"level\":\"(?i:error|fatal|crit\\w*)\"|\\b(ERROR|CRITICAL|FATAL|PANIC)\\b|\\[(?i:error|fatal|crit)\\]` != \"context canceled\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 4,
+      "title": "Service logs",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 5,
+      "title": "Log volume by stream",
+      "description": "Lines per host/container for the chosen variables. Journal streams have no container label and show under the host alone.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host, container) (count_over_time({env=\"prod\", host=~\"$host\", container=~\"$container\"} |~ \"(?i)$search\" [$__auto]))",
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "{{host}} {{container}}"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "id": 6,
+      "title": "Logs: $host / $container",
+      "description": "The everyday tail. Pick host and container at the top; 'search' is a case-insensitive regex. With container = All this includes journal and file streams too.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 14
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=~\"$host\", container=~\"$container\"} |~ \"(?i)$search\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 7,
+      "title": "Hermes / ntfy",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "logs",
+      "id": 8,
+      "title": "Phone audit trail (gateway.log)",
+      "description": "Spec 095 FR-009: inbound phone messages, approvals with their scope (once/session/always), denials and refused slash commands. Upstream INFO lines, only in gateway.log (T072).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 16,
+        "h": 10
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=\"hermes\", source=\"file\", filename=\"/var/log/hermes-agent/gateway.log\"} |~ `inbound message|via /approve|via /deny|Slash command \\S+ denied`",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 9,
+      "title": "Permanent approvals (time range)",
+      "description": "`/approve always` grants in the selected range. Each one also fires HermesPermanentApprovalGranted; revoke with `docker restart hermes_agent` (runbook).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 40,
+        "w": 4,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum(count_over_time({env=\"prod\", host=\"hermes\", source=\"file\", filename=\"/var/log/hermes-agent/gateway.log\"} |= \"via /approve (always)\" [$__range]))",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 10,
+      "title": "ntfy stream errors, last 7 days",
+      "description": "Spec 095 SC-004 / task T061: must be 0 for 7 days after rollout before backlog 093 closes. Same selector as the HermesNtfyStreamDown alert. Stays red until ~2026-11-02 while the window still covers the pre-rollout 403 noise (last line 2026-10-26 11:38 UTC).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 40,
+        "w": 4,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum(count_over_time({env=\"prod\", host=\"hermes\", container=\"hermes_agent\"} |= \"Stream error\" [7d]))",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "timeFrom": "7d",
+      "hideTimeOverride": false
+    },
+    {
+      "type": "timeseries",
+      "id": 11,
+      "title": "ntfy stream errors",
+      "description": "Sustained errors here mean phone chat is down (HermesNtfyStreamDown fires after 10 min).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 45,
+        "w": 8,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum(count_over_time({env=\"prod\", host=\"hermes\", container=\"hermes_agent\"} |= \"Stream error\" [$__auto]))",
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "Stream error"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "id": 12,
+      "title": "ntfy adapter messages",
+      "description": "Warnings and errors from the Hermes ntfy adapter (container stdout carries WARNING and up): auth failures (401/403), stream drops, reconnects.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 7
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=\"hermes\", container=\"hermes_agent\"} |= \"[Ntfy]\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 13,
+      "title": "Security / access",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "logs",
+      "id": 14,
+      "title": "SSH logins (accepted)",
+      "description": "Every accepted SSH login. Security Overview has the same data as a parsed table.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=~\"$host\", ident=~\"sshd|sshd-session\"} |= \"Accepted \"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 15,
+      "title": "Failed SSH authentication by host",
+      "description": "Failed passwords, invalid users and pre-auth disconnects. fail2ban acts on the same lines.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 58,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host) (count_over_time({env=\"prod\", host=~\"$host\", ident=~\"sshd|sshd-session\"} |~ \"Failed password|Invalid user|authentication failure|Connection closed by authenticating\" [$__auto]))",
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "id": 16,
+      "title": "sudo commands",
+      "description": "Who ran what as root. On pve this is mostly the ci account's allowlisted qm/pct calls.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 66,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=~\"$host\", ident=\"sudo\"} |= \"COMMAND=\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "id": 17,
+      "title": "Reverse proxy warnings and errors",
+      "description": "Caddy's own warn/error lines (e.g. upstream aborted). Caddy access logging is not enabled, so per-request 4xx/5xx are not in Loki.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 66,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=\"reverse_proxy\", ident=\"caddy\"} | json | level=~\"warn|error\" | line_format \"{{.level}} {{.logger}}: {{.msg}} {{.upstream}}\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 18,
+      "title": "Backups and jobs",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 74,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 19,
+      "title": "Backup unit outcomes per host",
+      "description": "One mark per backup run: systemd's end state for each *-backup.service (service backups and the pve config backup). Debian's dpkg-db-backup.service is excluded.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 75,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host, outcome) (count_over_time({env=\"prod\", ident=\"systemd\"} |~ `-backup\\.service: (Deactivated successfully|Failed with result)` != \"dpkg-db-backup\" | regexp `: (?P<outcome>Deactivated successfully|Failed with result)` [$__auto]))",
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "{{host}}: {{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "id": 20,
+      "title": "Backup unit end states",
+      "description": "'Deactivated successfully' = the run exited 0; 'Failed with result' = it did not.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 75,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", ident=\"systemd\"} |~ `-backup\\.service: (Deactivated successfully|Failed with result)` != \"dpkg-db-backup\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "id": 21,
+      "title": "Backup script output",
+      "description": "Everything the backup scripts print: archive names, pruning, verification. Use 'search' to narrow (e.g. error|fail).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 83,
+        "w": 24,
+        "h": 9
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=~\"$host\", ident=~\"backup_.+|proxmox-backup\"} |~ \"(?i)$search\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 22,
+      "title": "Kernel, OOM and unit failures",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 92,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "logs",
+      "id": 23,
+      "title": "OOM kills",
+      "description": "Kernel OOM lines (collected on pve; Alloy attaches the LXC name as structured metadata 'lxc').",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 93,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", ident=\"kernel\"} |~ \"oom-kill|Out of memory|Killed process\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "id": 24,
+      "title": "Unit failures and restarts",
+      "description": "systemd units that failed, crashed or were restarted by systemd.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 93,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{env=\"prod\", host=~\"$host\", ident=\"systemd\"} |~ \"Failed with result|Scheduled restart job|Main process exited, code=(killed|dumped)\"",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 25,
+      "title": "Unit failures per host",
+      "description": "Count of 'Failed with result' lines.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 101,
+        "w": 24,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host) (count_over_time({env=\"prod\", host=~\"$host\", ident=\"systemd\"} |= \"Failed with result\" [$__auto]))",
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    }
+  ],
+  "version": 1
+}
