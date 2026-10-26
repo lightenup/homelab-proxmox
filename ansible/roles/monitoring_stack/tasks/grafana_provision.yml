@@ -43,5 +43,13 @@
     dest: "{{ grafana_dashboards_path }}/security-overview.json"
     mode: '0644'
 
+# Saved day-to-day LogQL (estate errors, service tail, Hermes/ntfy, security, backups, OOM).
+# Kept in git because grafana.db is not backed up: queries saved only in the UI die on rebuild.
+- name: Deploy Logs dashboard
+  ansible.builtin.copy:
+    src: grafana/dashboards/logs.json
+    dest: "{{ grafana_dashboards_path }}/logs.json"
+    mode: '0644'
+
 - name: Deploy service-owned dashboards from monitoring contracts
   ansible.builtin.include_tasks: provision_dashboards.yml
