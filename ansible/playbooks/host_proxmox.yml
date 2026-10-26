@@ -13,4 +13,6 @@
   roles:
     - proxmox_host
     - node_exporter
+    - role: alloy
+      when: (deploy_environment | default('prod')) != 'lab'
     - tailscale_host

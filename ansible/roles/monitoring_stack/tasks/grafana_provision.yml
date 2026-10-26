@@ -3,11 +3,21 @@
 # Feature: 017-synology-metrics
 # Purpose: Auto-provision Prometheus datasource and Synology dashboard (zero clickops per US3)
 
+# Grafana reads datasource provisioning only at startup, so a changed file needs a restart
+# (found live in spec 092: the Loki datasource file landed but Grafana never loaded it).
 - name: Deploy Prometheus datasource provisioning
   ansible.builtin.copy:
     src: grafana/provisioning/datasources/prometheus.yml
     dest: "{{ grafana_provisioning_path }}/datasources/prometheus.yml"
     mode: '0644'
+  notify: Restart grafana
+
+- name: Deploy Loki datasource provisioning
+  ansible.builtin.copy:
+    src: grafana/provisioning/datasources/loki.yml
+    dest: "{{ grafana_provisioning_path }}/datasources/loki.yml"
+    mode: '0644'
+  notify: Restart grafana
 
 - name: Deploy dashboard provider configuration
   ansible.builtin.copy:

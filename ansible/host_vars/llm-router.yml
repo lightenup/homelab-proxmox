@@ -206,3 +206,17 @@ monitoring_contract:
         The Mac's llm_queue returned 429 in the last 15 minutes, because the queue was full
         (outcome=rejected_full) or a request waited past --max-wait (rejected_timeout). opencode
         retries 429 with Retry-After and then fails the turn; Hermes surfaces it to the user.
+  # Per-service log error rule (spec 092, FR-008, research R8). Disabled until its 7-day
+  # baseline passes (quickstart §6); the threshold is then max(5, 3 * max_15m).
+  log_alert_rules:
+    - alert: LlmRouterErrorLogs
+      expr: |
+        sum(count_over_time({env="prod", host="llm-router", container="llm_router_litellm"} | json | level="ERROR" [15m])) > 5
+      for: "0m"
+      severity: warning
+      summary: !unsafe 'llm-router is logging errors — Explore: {host="llm-router", container="llm_router_litellm"} | json | level="ERROR"'
+      description: >-
+        More than 5 ERROR-level log lines in 15 minutes from llm_router_litellm. Grafana ->
+        Explore -> Loki: {host="llm-router"} | json | level="ERROR".
+      enabled: false
+      disabled_reason: "awaiting 7-day baseline (SC-004)"

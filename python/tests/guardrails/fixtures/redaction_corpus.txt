@@ -1,0 +1,18 @@
+# Redaction corpus — spec 092 (R7, FR-005, SC-002)
+#
+# Format: <pattern name>|<raw line>|<secret substring>
+# One positive line per alloy_redaction_pattern name (ansible/roles/alloy/defaults/main.yml),
+# synthetic values only. Lines prefixed `control` must stay byte-identical after every
+# pattern is applied (no secret column), proving the patterns do not touch login lines or
+# plain text. Lines starting with # are comments.
+authorization-header|drill-1 GET /api Authorization: Bearer abc123xyzTOKEN ok|abc123xyzTOKEN
+pve-api-token|drill-2 pvesh call with PVEAPIToken=pve-token-value-999|pve-token-value-999
+ntfy-token|drill-3 ntfy publish token tk_abcdefghijklmnopqrstuvwxyzabc done|tk_abcdefghijklmnopqrstuvwxyzabc
+litellm-key|drill-4 litellm key sk-ABCDEFGH12345678 used|sk-ABCDEFGH12345678
+tailscale-key|drill-5 tailscale up --authkey=tskey-auth-abc123XYZ|tskey-auth-abc123XYZ
+query-credential|drill-6 GET /alerts?auth=qc-secret-777&x=1 200|qc-secret-777
+url-password|drill-7 DATABASE_URL=postgresql://litellm:S3cr3tPassw0rd@llm_router_postgres:5432/litellm|S3cr3tPassw0rd
+env-assignment|drill-8 DOMENESHOP_TOKEN=dmn-tok-123456|dmn-tok-123456
+control|drill-9 plain line with no secret, user=andreas path=/var/lib/x|
+control|Accepted publickey for root from 192.168.1.112 port 1 ssh2: ED25519 SHA256:NH5zp/61GeEPB81f+jkiTmMfTHaWrn4s4JU5MIQUwT4|
+control|drill-10 GET /healthz 200 5ms|

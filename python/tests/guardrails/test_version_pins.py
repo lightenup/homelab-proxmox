@@ -25,7 +25,7 @@ MONITORING_VARS = [
     "blackbox_exporter_version",
 ]
 
-ALL_VARS = ["node_exporter_version"]
+ALL_VARS = ["node_exporter_version", "alloy_version"]
 
 
 _YAML_TEXT_CACHE: dict[Path, list[str]] = {}
@@ -113,6 +113,8 @@ def test_every_pin_has_a_source() -> None:
     )
     if "node_exporter_version" in all_vars:
         collected["node_exporter_version"] = repo_root / "ansible/group_vars/all/vars.yml"
+    if "alloy_version" in all_vars:
+        collected["alloy_version"] = repo_root / "ansible/group_vars/all/vars.yml"
 
     services_text = (repo_root / "ansible/group_vars/services/vars.yml").read_text()
     lines = services_text.splitlines()

@@ -35,7 +35,7 @@ unless its destination is an NFS mount.
 | hermes | Backed up | SQLite, documents, vector index and agent state |
 | jellyfin | Backed up | `jellyfin.db` (users, watch history) and `/etc/jellyfin`; metadata and trickplay regenerate |
 | reverse_proxy | Rebuilt from configuration | The Caddyfile is templated; certificates reissue over DNS-01 |
-| monitoring | Rebuilt from configuration | Prometheus keeps 15 days; dashboards and rules are provisioned |
+| monitoring | Rebuilt from configuration | Prometheus keeps 15 days; Loki keeps 30 days of logs; dashboards and rules are provisioned |
 | llm-router | Rebuilt from configuration | Virtual keys are generated with the vault value and re-applied on every deploy |
 | ntfy | Rebuilt from configuration | Declarative (spec 082) |
 | market-model | Disposable | A cache |
@@ -51,6 +51,17 @@ unless its destination is an NFS mount.
 - **Monitoring**: `BackupStale` (36 h, and never-succeeded) on
   `backup_last_success_timestamp_seconds`, one series per backup, written by
   `/usr/local/bin/backup-success-metric` after a verified run.
+
+- **Logging** (spec 092, [runbook](operations/monitoring/logging.md)): Loki runs as a sixth
+  container in `monitoring_stack`, host-local only (`127.0.0.1:3100`), 30 days of retention, not
+  backed up. The `alloy` role runs on every production host (pve included) and ships the
+  journal, Docker container output and any declared files, redacting 8 credential-pattern
+  families on the host before anything leaves it. The monitoring host's own Alloy doubles as a
+  push-only relay on `:3101`, so no new container is needed to receive pushes from every other
+  collector. Log rules (kernel OOM kills named by LXC, SSH logins and `sudo` outside an
+  allow-list, and one disabled-until-baselined error-rate rule per service) render into a
+  single Loki ruler file; pipeline self-monitoring (collector down, store silent, rules not
+  loaded, lines discarded or dropped) lives in Prometheus alongside the existing rules.
 
 - **Synology NAS**
   - Provides storage (e.g. NFS) for services, especially Immich.

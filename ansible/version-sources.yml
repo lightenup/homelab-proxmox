@@ -26,12 +26,20 @@ pins:
     file: ansible/group_vars/monitoring/vars.yml
     policy: latest
     github: prometheus/blackbox_exporter
+  - variable: loki_version
+    file: ansible/group_vars/monitoring/vars.yml
+    policy: latest
+    github: grafana/loki
 
   # Shared (ansible/group_vars/all/vars.yml)
   - variable: node_exporter_version
     file: ansible/group_vars/all/vars.yml
     policy: latest
     github: prometheus/node_exporter
+  - variable: alloy_version
+    file: ansible/group_vars/all/vars.yml
+    policy: latest
+    github: grafana/alloy
 
   # Services (ansible/group_vars/services/vars.yml)
   - variable: nextcloud_version

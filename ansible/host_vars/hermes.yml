@@ -44,3 +44,18 @@ monitoring_contract:
       description: >-
         The Hermes agent scheduler has not run its heartbeat for more than an hour. Scheduled
         jobs are not running; this is a stopped scheduler, not a job that found nothing to report.
+  # Per-service log error rule (spec 092, FR-008, research R8). hermes_agent's ntfy stream
+  # "WARNING ... 403 Forbidden" lines are deliberately not matched (WARNING, not ERROR); they
+  # are tracked separately (docs/backlog/093-hermes-agent-ntfy-403.md).
+  log_alert_rules:
+    - alert: HermesErrorLogs
+      expr: |
+        sum(count_over_time({env="prod", host="hermes", container=~"hermes_open_webui|hermes_agent"} |~ "[| ](ERROR|CRITICAL)[ |]" [15m])) > 5
+      for: "0m"
+      severity: warning
+      summary: !unsafe 'hermes is logging errors — Explore: {host="hermes", container=~"hermes_open_webui|hermes_agent"} |~ "[| ](ERROR|CRITICAL)[ |]"'
+      description: >-
+        More than 5 ERROR/CRITICAL log lines in 15 minutes from Open WebUI or hermes-agent.
+        Grafana -> Explore -> Loki: {host="hermes"} |~ "[| ](ERROR|CRITICAL)[ |]".
+      enabled: false
+      disabled_reason: "awaiting 7-day baseline (SC-004)"

@@ -4,6 +4,9 @@
 **Purpose**: End-to-end deployment guide from prerequisites to verification
 **Audience**: Homelab operators deploying Synology monitoring for the first time
 
+See also: [Log Aggregation Runbook](logging.md) (spec 092) for the Loki/Alloy log pipeline,
+leaked-credential purges and per-service error-rule tuning.
+
 ## TL;DR - Fully Automated Deployment 🚀
 
 **New!** Use the automated init script for zero-manual-step deployment:

@@ -1,0 +1,3 @@
+CONFIG_FILE="/etc/alloy/config.alloy"
+CUSTOM_ARGS="--server.http.listen-addr={{ ansible_host }}:{{ alloy_http_port }} --disable-reporting"
+RESTART_ON_UPGRADE=true

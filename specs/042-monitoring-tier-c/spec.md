@@ -252,7 +252,7 @@ As a homelab administrator, I want security alerts to follow the same inhibition
 
 ## Out of Scope
 
-- **Log aggregation / centralized logging** — Loki, Promtail, or similar. Entirely separate architecture concern. Out of scope for all monitoring tiers.
+- **Log aggregation / centralized logging** — Loki, Promtail, or similar. Entirely separate architecture concern. Out of scope for all monitoring tiers. Delivered separately by spec 092.
 - **Network intrusion detection** — Suricata, Zeek, or similar. Requires dedicated hardware/resources beyond the homelab scope.
 - **Proxmox VE host metrics** — Deferred since Tier A. The hypervisor itself (as opposed to its LXC guests) requires a different collection approach. Separate feature.
 - **Vulnerability scanning** — Trivy, Grype, or similar. Not a monitoring concern.

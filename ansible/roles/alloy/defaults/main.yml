@@ -1,0 +1,51 @@
+---
+# Alloy log collector role defaults
+# Feature: 092-log-aggregation
+#
+# alloy_version lives in group_vars/all/vars.yml (every host runs this role, pve included),
+# not here (test_monitoring_role_defaults_have_no_versions-style guard, data-model §2).
+
+alloy_docker_logs: true
+alloy_file_logs: []
+alloy_relay: false
+
+alloy_memory_high: "128M"
+alloy_memory_max: "160M"
+
+alloy_journal_max_age: "168h"
+
+alloy_relay_port: 3101
+
+# Per-host throttle, lines per second (research R9). drop=false: nothing is lost, the excess
+# waits on the host's own disk.
+alloy_rate_limit: 200
+alloy_rate_burst: 2000
+
+# The central monitoring_host_ip address (group_vars/all/vars.yml), not a per-host lookup
+# into the monitoring inventory entry, so a per-service deploy whose inventory does not
+# include the monitoring host still works (data-model §2).
+alloy_push_url: "http://{{ monitoring_host_ip }}:{{ alloy_relay_port }}/loki/api/v1/push"
+alloy_local_loki_url: "http://127.0.0.1:3100/loki/api/v1/push"
+
+# Redaction patterns (FR-005, SC-002, research R7). Each has exactly one capture group,
+# which is the span replaced by <redacted>. Single-quoted: RE2/Go and Python share this
+# syntax, and single quotes keep the backslashes literal. Covered by
+# python/tests/guardrails/test_log_pipeline.py::test_redaction_corpus against
+# fixtures/redaction_corpus.txt — adding a pattern means adding a corpus line.
+alloy_redaction_patterns:
+  - name: authorization-header
+    expression: '(?i)authorization:\s*(?:bearer|basic|pveapitoken=)?\s*([^\s"'',]+)'
+  - name: pve-api-token
+    expression: 'PVEAPIToken=(\S+)'
+  - name: ntfy-token
+    expression: '(tk_[A-Za-z0-9]{29})'
+  - name: litellm-key
+    expression: '\b(sk-[A-Za-z0-9_-]{8,})'
+  - name: tailscale-key
+    expression: '(tskey-[A-Za-z0-9_-]+)'
+  - name: query-credential
+    expression: '[?&](?:auth|token|access_token|api_key)=([^&\s"'']+)'
+  - name: url-password
+    expression: '[a-zA-Z][a-zA-Z0-9+.-]*://[^:/@\s]+:([^@/\s]+)@'
+  - name: env-assignment
+    expression: '(?i)\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|_KEY)\s*[=:]\s*"?([^\s"'',]+)'

@@ -61,3 +61,17 @@
     path: "{{ blackbox_config_path }}"
     state: directory
     mode: '0755'
+
+# Loki (spec 092). Loki runs as uid 10001 and reads the rules directory through a
+# read-only bind mount, so the directories only need to exist with normal permissions.
+- name: Create Loki configuration directory
+  ansible.builtin.file:
+    path: "{{ loki_config_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Create Loki rules directory (fake tenant)
+  ansible.builtin.file:
+    path: "{{ loki_rules_path }}/fake"
+    state: directory
+    mode: '0755'

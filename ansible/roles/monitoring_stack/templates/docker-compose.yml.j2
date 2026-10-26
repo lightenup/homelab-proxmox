@@ -92,6 +92,24 @@ services:
       retries: 3
       start_period: 15s
 
+  # Loki (spec 092). No compose healthcheck: the grafana/loki image has no shell, so a
+  # CMD-based check is impossible (research R2). Liveness is up{job="loki"} together with the
+  # existing ServiceDown rule.
+  loki:
+    container_name: loki
+    image: grafana/loki:{{ loki_version }}
+    command: ['-config.file=/etc/loki/loki.yaml']
+    ports:
+      - "127.0.0.1:{{ loki_port }}:3100"
+    volumes:
+      - {{ loki_config_path }}/loki.yaml:/etc/loki/loki.yaml:ro
+      - {{ loki_rules_path }}:/etc/loki/rules:ro
+      - loki_data:/loki
+    environment:
+      - TZ={{ timezone }}
+    restart: unless-stopped
+    mem_limit: {{ loki_mem_limit }}
+
   blackbox-exporter:
     container_name: blackbox-exporter
     image: prom/blackbox-exporter:{{ blackbox_exporter_version }}
@@ -125,5 +143,7 @@ volumes:
   grafana_data:
     driver: local
   alertmanager_data:
+    driver: local
+  loki_data:
     driver: local
 

@@ -5,6 +5,9 @@ healthcheck_url:
 healthcheck_profile: both
 healthcheck_expect_status: 200
 
+# Alloy log collector (spec 092): no Docker on this host.
+alloy_docker_logs: false
+
 # fail2ban jail configuration (FR-009, FR-010)
 # Feature: 042-monitoring-tier-c
 fail2ban_jails:

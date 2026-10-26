@@ -91,6 +91,7 @@ To add a new check:
 
 ### Monitoring
 - [Monitoring Quickstart](monitoring/quickstart.md) -- deploy the Prometheus/Grafana/Alertmanager stack
+- [Log Aggregation Runbook](monitoring/logging.md) -- Loki/Alloy log pipeline, credential purges, error-rule tuning
 - [Monitoring Automation](monitoring/automation.md) -- automation scripts
 - [Alert Testing](monitoring/runbook-alert-testing.md) -- test alerting pipeline
 - [Monitoring Restore](monitoring/runbook-restore.md) -- restore from backup
