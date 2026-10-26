@@ -2,14 +2,14 @@
 
 **Feature Branch**: `095-ntfy-two-way`
 **Created**: 2026-10-25
-**Status**: Slice 1 (chat, approvals, gap notice) shipped and verified on PROD 2026-10-26 (merged
-`main` via #287): ntfy, hermes and monitoring deployed; ACL check, phone chat, approval scopes
-(once/session/always), the gap notice and the SC-006 revocation drill all pass
-([`specs/095-ntfy-two-way/`](../../specs/095-ntfy-two-way/)). The rotated `pve_backup` ntfy token
-was also pushed to the bare-metal host (`/etc/proxmox-backup.conf` regenerated 14:05 CET via
-`task ansible:backup`, operator-only, outside the LXC service pipeline). Only the SC-004 7-day
-silence check remains (T061, due ~2026-11-02), which closes `093` for good. Slice 2 (action
-buttons) not started.
+**Status**: Slice 1 (chat, approvals, gap notice) merged to `main` (#287) and deployed to PROD
+2026-10-26: ntfy, hermes and monitoring deployed, ACL check 133/133 PASS
+([`specs/095-ntfy-two-way/`](../../specs/095-ntfy-two-way/)). The bare-metal backup config
+(`/etc/proxmox-backup.conf`) was regenerated at 14:05 CET with an ntfy token line, outside the LXC
+service pipeline. **Open**: the on-phone checks (T020, T026, T031) and the SC-006 drill (T059).
+They were reported done, then reopened the same day because PROD logs show no inbound or approval
+traffic and no agent restart after the 12:41 UTC deploy. Also open: the SC-004 7-day silence check
+(T061, due ~2026-11-02), which closes `093`. Slice 2 (action buttons) not started.
 Amends [`082`](./082-ntfy-push-service.md) (Direction: publish-only) and
 [`083`](./083-hermes-agent-runtime.md) (FR-011: delivery only). Supersedes
 [`093`](./093-hermes-agent-ntfy-403.md) (the 403 noise disappears once the agent subscribes to a
