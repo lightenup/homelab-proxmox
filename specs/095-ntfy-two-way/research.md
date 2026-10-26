@@ -406,6 +406,13 @@ Checked 2026-10-25 against `scripts/lab/pve-lab`, `scripts/lab/pve-service-deplo
   creates the key inline with the same `ssh-keygen` invocation the workflow uses, so it is
   copy-paste safe standalone.
 
+- **`pve-lab down` outside a run writes its nested-teardown evidence under `/` [found
+  2026-10-26, T069]**: `mkdir: cannot create directory '/reports': Permission denied` and
+  `rebuild.sh: line 381: /reports/cleanup/teardown-vm-100.txt: No such file or directory`. With no
+  run active the evidence directory is empty, so the path resolves to `/reports/...`. It's harmless
+  (the VM was destroyed and `status` was clean), but noisy and it loses teardown evidence. The
+  fix belongs in `scripts/lab/` (protected path), outside 095; raise it as a follow-up.
+
 ## R-016: What the LAB rig actually asserts, and its credential policy for the T008 gate
 
 Reviewed 2026-10-25 after T062–T066 landed, before any rig is brought up.
