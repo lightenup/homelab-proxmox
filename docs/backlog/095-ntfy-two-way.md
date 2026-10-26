@@ -2,7 +2,14 @@
 
 **Feature Branch**: `095-ntfy-two-way`
 **Created**: 2026-10-25
-**Status**: In progress. Slice 1 (chat, approvals, gap notice) code complete and the LAB gate passed (2026-10-26, [`specs/095-ntfy-two-way/`](../../specs/095-ntfy-two-way/)); PROD rollout pending (T020). Slice 2 (action buttons) not started.
+**Status**: Slice 1 (chat, approvals, gap notice) shipped and verified on PROD 2026-10-26 (merged
+`main` via #287): ntfy, hermes and monitoring deployed; ACL check, phone chat, approval scopes
+(once/session/always), the gap notice and the SC-006 revocation drill all pass
+([`specs/095-ntfy-two-way/`](../../specs/095-ntfy-two-way/)). Outstanding before the slice is fully
+closed: push the rotated `pve_backup` ntfy token to the bare-metal host
+(`ansible/playbooks/backup_proxmox.yml`, outside the LXC service pipeline) and the SC-004 7-day
+silence check (T061, due ~2026-11-02), which closes `093` for good. Slice 2 (action buttons) not
+started.
 Amends [`082`](./082-ntfy-push-service.md) (Direction: publish-only) and
 [`083`](./083-hermes-agent-runtime.md) (FR-011: delivery only). Supersedes
 [`093`](./093-hermes-agent-ntfy-403.md) (the 403 noise disappears once the agent subscribes to a
