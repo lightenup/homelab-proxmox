@@ -56,17 +56,24 @@ writes `hermes-lab` with the `hermes_lab` credential. Run `docker` commands on t
 `hermes-lab` for the duration of the test and send from `hermes-lab-in`. Research R-014 predicts every result below
 from the v0.21.6 source; this run confirms it on the deployed image.
 
-1. Send `delete /opt/data/scratch.txt`. Expect a text approval prompt listing once, session
+Use **flagged** commands only. A plain `rm` of one file inside the agent's home (`/opt/data/...`)
+is not flagged upstream: the detector folds the home prefix to `~` before matching, so it runs
+with no prompt (research R-014, LAB finding 2026-10-26). Recursive deletes, `chmod 777`, and
+deletes outside the home (`/tmp`, `/etc`) are flagged. Before each step, create the scratch
+directory on the rig:
+`sudo docker exec -u hermes hermes_agent mkdir -p /opt/data/scratchdir && sudo docker exec -u hermes hermes_agent touch /opt/data/scratchdir/a`.
+
+1. Send `run: rm -r /opt/data/scratchdir`. Expect a text approval prompt listing once, session
    (pattern), always (permanent), deny and the deadline (R-001, R-014).
-2. Reply `/approve`. The file is gone. Repeat with `/deny`, then with no reply for 900 s: the file
-   remains each time.
+2. Reply `/approve`. The directory is gone. Recreate it and repeat with `/deny`, then with no reply
+   for the timeout: the directory remains each time.
 3. Send `/yolo` and `/update`: both refused. Send `/help`: it lists exactly the spec FR-014 set.
    `/compress`, `/retry`, `/undo`, `/usage`, `/title` and `/model` each work.
-4. `/approve session` on a scratch `rm`; a second `rm` runs without a prompt; `chmod 777` on a
-   scratch file still prompts; `/new`; `rm` prompts again.
+4. `/approve session` on a scratch `rm -r`; a second `rm -r` (on a fresh scratch directory) runs
+   without a prompt; `chmod 777` on a scratch file still prompts; `/new`; `rm -r` prompts again.
 5. Ask for two flagged commands in one message. The second prompt appears only after the first is
    answered.
-6. `/approve always` on a scratch `rm`. `docker logs hermes_agent | grep "via /approve (always)"`
+6. `/approve always` on a scratch `rm -r`. `docker logs hermes_agent | grep "via /approve (always)"`
    matches. After `docker restart hermes_agent`, the same `rm` prompts again.
 7. Ask for a reply longer than 4096 characters. It arrives split into several notifications, or cut
    with a visible marker (spec US1 AS-4). If it is cut silently, stop and record it in R-014.

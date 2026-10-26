@@ -225,6 +225,25 @@ Read 2026-10-25 from `NousResearch/hermes-agent@v0.21.6` source (tag `f27cdbc`).
 - **Decision (session scope; Clarifications, option A)**: the spec adopts upstream semantics.
   `/approve session` covers the approved pattern for the rest of the conversation, other flagged
   commands still prompt, and `/new` or `/reset` ends it. `/yolo` stays refused (R-002).
+- **LAB finding 2026-10-26 (T008 step 1): a single-file `rm` in the agent's home is not flagged.**
+  Sent `delete /opt/data/scratch.txt`, then `delete /opt/data/scratch2.txt`, on `hermes-lab-in`. Both
+  ran with no prompt (`state.db` transcript: `terminal` → `rm /opt/data/scratch*.txt && echo
+  "deleted"`, exit 0). Not a gate bypass. Evaluating the guard in the running container showed
+  `detect_dangerous_command(...) == (False, None, None)`, with the gate context correct:
+  `platform=ntfy`, `is_gateway=True`, `approvals.mode=manual`, no yolo, no permanent allowlist
+  match. Cause: `_normalize_command_for_detection` (`tools/approval_detection.py:534-535`) folds the
+  resolved `HERMES_HOME`/`HOME` (both `/opt/data` in the image) to `~/` before matching, so
+  `rm /opt/data/x` becomes `rm ~/x`, which no pattern flags. A non-recursive delete of one file
+  in the agent's own home is outside upstream's dangerous set by design. The same command
+  evaluated on a dev Mac returned `True` only because `HOME` differs there; that's why the
+  quickstart and the spec's US2 Independent Test chose a bad example. Flagged in the container:
+  `rm -r`/`rm -rf` (recursive delete), `chmod 777` and `chmod -R 777`, and `rm` outside the home
+  (`/tmp`, `/etc`: delete in root path). quickstart § 0.2 and spec US2 now use `rm -r` on a
+  scratch directory. **Residual risk, recorded rather than fixed**: the agent can delete
+  individual files in `/opt/data` (its own state, memory, jobs) without approval. The deploy-owned
+  `config.yaml` is mounted read-only, and `.env` writes are covered by file-tool and pattern
+  guards. Adding an `approvals.deny` or custom pattern for this would be a new policy beyond what
+  095 set out to verify. Raise it as a follow-up if wanted.
 
 ## R-015: How the LAB rig is brought up, deployed and torn down (T008 gate)
 

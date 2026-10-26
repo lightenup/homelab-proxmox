@@ -94,9 +94,11 @@ approve or deny from the phone.
 surface the agent has is non-interactive in practice. This story makes the agent useful for real
 operations with a human in the loop.
 
-**Independent Test**: From the phone, ask the agent to delete a scratch file, which is a flagged
-operation. A prompt arrives. Approve it and the file is deleted. Repeat with deny, and repeat with
-no answer: the file remains, and the deadline was stated in the prompt.
+**Independent Test**: From the phone, ask the agent to recursively delete a scratch directory
+(`rm -r`), which is a flagged operation. A prompt arrives. Approve it and the directory is deleted.
+Repeat with deny, and repeat with no answer: the directory remains, and the deadline was stated in
+the prompt. (A plain single-file `rm` inside the agent's own home is **not** flagged upstream, so
+it runs without a prompt and is not a valid test; research R-014, LAB finding 2026-10-26.)
 
 **Acceptance Scenarios**:
 
