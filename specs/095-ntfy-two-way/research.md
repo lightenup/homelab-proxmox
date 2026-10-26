@@ -263,7 +263,8 @@ Read 2026-10-25 from `NousResearch/hermes-agent@v0.21.6` source (tag `f27cdbc`).
   | 4 Session scope | PASS: `/approve session` → second `rm -r` ran unprompted; `chmod 777` still prompted; after `/new` `rm -r` prompted again |
   | 5 One pending prompt | PASS: second prompt appeared only after the first was answered |
   | 6 Permanent until restart | PASS: `/approve always` → "pattern approved permanently", `via /approve (always)` in gateway.log, `Could not save allowlist: Read-only file system`; after `docker restart` the same `rm -r` prompted again |
-  | 7 Long reply | **FAIL**: see next finding |
+  | 7 Long reply | FAIL on the stock adapter (next finding); **PASS 2026-10-26 with the R-018 shim**: `(1/2)` ending 1037, `(2/2)` ending 1200 |
+  | 3 (rerun) `/cancel` | PASS after adding it to FR-014: `/undo` → `/cancel` → "/undo cancelled. Conversation unchanged." |
 
   Further findings from the run, none blocking:
   - **`/approve always.` (trailing full stop) is treated as `/approve` once** (logged `(once)`).
