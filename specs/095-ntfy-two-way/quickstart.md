@@ -77,8 +77,10 @@ directory on the rig:
    matches. After `docker restart hermes_agent`, the same `rm` prompts again.
 7. Ask for a reply longer than 4096 characters. It arrives split into several notifications, or cut
    with a visible marker (spec US1 AS-4). If it is cut silently, stop and record it in R-014.
-8. Check that `docker logs hermes_agent` shows the audit lines from the audit hook with a message id,
-   or the `msg_id=-` fallback (spec FR-009).
+8. Check that `/opt/data/logs/gateway.log` on the rig has the four upstream audit lines
+   (data-model § Audit lines): `inbound message:`, `via /approve (<scope>)`, `via /deny`, and
+   `Slash command /yolo denied` (FR-009, research R-008 revised). That they reach Loki is checked
+   at PROD rollout (T020), because the rig runs no Alloy.
 9. Block the agent's egress to ntfy for 15 minutes (on the rig, an `iptables -I DOCKER-USER`
    reject rule for the ntfy address; remove it afterwards) and watch
    `docker logs hermes_agent | grep "Stream error"`: record the interval between error lines. If it

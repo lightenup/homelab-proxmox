@@ -13,7 +13,7 @@ new inbound topic `hermes-in` that only the owner's phone can write. The agent c
 never write it. Replies keep going to `hermes`. Phone-originated sessions are interactive, so
 flagged commands become typed `/approve`/`/deny` prompts on the phone. Bypass commands (`/yolo`,
 `/update`) are gated off for ntfy. A read-only gateway startup hook reports offline gaps, and an
-audit hook logs every inbound message and decision to Loki. It all runs on the stock upstream
+upstream `gateway.log` lines, collected into Loki, record every inbound message and decision (R-008, revised). It all runs on the stock upstream
 image: changes are ntfy ACLs, `agent.env`, `agent-config.yaml` and two hooks.
 
 **Slice 2 (P2)** covers US-4, US-5 and US-6:
@@ -110,7 +110,6 @@ ansible/roles/hermes/
 ├── templates/agent-config.yaml.j2     # ntfy slash-command gating (R-002, spec FR-014); approvals.timeout 900
 ├── templates/docker-compose.yml.j2    # read-only bind mounts for hooks
 ├── files/hooks/gap-notice/{HOOK.yaml,handler.py}   # R-007 (static files, importable by pytest)
-├── files/hooks/audit/{HOOK.yaml,handler.py}        # R-008
 └── tasks/main.yml                     # LAB assert extended (FR-011)
 ansible/roles/monitoring_stack/        # P2
 ├── templates/docker-compose.yml.j2    # + action-relay service (python:3.11-slim, code ro)

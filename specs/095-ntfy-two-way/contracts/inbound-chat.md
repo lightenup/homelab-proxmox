@@ -10,7 +10,7 @@
   `approve`, `deny`, `new`, `reset`, `stop`, `status`, `compress`, `retry`, `undo`, `usage`,
   `title`, `model`, plus upstream's always-allowed `help` and `whoami`. `/help` lists exactly this
   set (upstream filters the catalog by the gating policy). Anything else is refused with a short
-  reply and an audit line `event=slash_refused`.
+  reply and the upstream log line `Slash command /<cmd> denied for ntfy:<topic>` (data-model § Audit lines).
 - While a prompt is pending, bare words also answer it (research R-014): `yes|ok|okay|confirm|y|👍`
   = `/approve`, `no|deny|reject|cancel|n|👎` = `/deny`, `session` = `/approve session`,
   `always|remember` = `/approve always`. With no prompt pending they are ordinary chat.

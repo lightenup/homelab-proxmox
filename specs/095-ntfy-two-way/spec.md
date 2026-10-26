@@ -299,7 +299,10 @@ backup job and reports the result.
   - confirm or refuse every press on the phone;
   - emit a heartbeat that the estate's monitoring alerts on when it goes missing.
 - **FR-009**: Every inbound message, approval decision and relay action MUST be logged with time,
-  channel, message id and outcome, and MUST be searchable in the estate's log aggregation (`092`).
+  channel and outcome, and MUST be searchable in the estate's log aggregation (`092`). Relay actions
+  MUST also carry the ntfy message id. Agent-side events use upstream Hermes's own `gateway.log`
+  lines, which carry no message id; correlate by time, topic and the first 80 characters
+  (research R-008, revised 2026-10-26 after the LAB probe).
 - **FR-010**: The owner credential (password and token) MUST be revocable and rotatable with a
   single deploy, and the procedure MUST be documented together with the phone setup.
 - **FR-011**: Rehearsal (LAB) deploys MUST render no credential that can read the production

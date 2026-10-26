@@ -107,9 +107,29 @@ docs. File references inside the agent image are paths under `/opt/hermes/`.
 
 - **Finding**: The adapter logs inbound messages only at DEBUG (`Message on topic …`). Approvals
   are logged at INFO (`User approved %d dangerous command(s) via /approve`, slash_commands.py:1211).
-- **Decision**: A second read-only hook (`agent:start` and `command:*`) logs one INFO line per
-  inbound message (topic, message id, first 80 characters) and per approval or denial. stdout goes
-  to Docker, then Alloy, then Loki (`092`). No new log pipeline.
+- **Original decision (superseded 2026-10-26)**: a read-only hook (`agent:start` and `command:*`)
+  logging one line per inbound message and per approval or denial.
+- **Revised decision (2026-10-26, owner): no audit hook; use upstream's `gateway.log` lines,
+  collected by T072.** Verified against the v0.21.6 source and on the LAB rig with a temporary
+  probe hook (removed afterwards):
+  - Upstream already writes all four events at INFO to `gateway.log`: inbound (`run_turn.py:2148`,
+    first 80 characters with newlines collapsed), approve with scope (`slash_commands.py:1211`),
+    deny (`:1235`), refused slash command (`run_busy.py:1127`). Bare-word replies reuse the
+    approve/deny handlers (`run_busy.py`). All four lines were seen on the rig during T008.
+  - The hook cannot see the decisions that matter. Probe results: `command:status` fired while
+    the agent was idle; `/yolo` produced the refusal line and **no hook event** (gating runs before
+    hooks, `run_inbound.py:843` vs `:847`); `/approve` sent while the turn waited on the approval
+    ran the command and logged `via /approve (once)`, but **no `command:approve` event** (by design
+    upstream: "The running-agent path deliberately does NOT fire these").
+  - The hook's only addition would be the ntfy message id on inbound lines: `agent:start` can read
+    it from the session context (`HERMES_SESSION_MESSAGE_ID`, seen as `mcmtxTjd9Y7h`). That alone
+    doesn't justify carrying code against an internal API (Constitution IV). FR-009 is amended:
+    agent-side lines carry no message id; relay lines (P2) still must.
+  - `gateway.log` is upstream's permanent component log (`hermes_logging.py`: INFO+, rotating
+    5 MB × 3, `RedactingFormatter`), so Alloy can tail it.
+- **Consequences**: T011 and the audit half of T017 are dropped; the hooks mount (T018/T019)
+  stays for the gap-notice hook (US3, no upstream equivalent); T072 now also serves FR-009; T020's
+  audit check queries the file stream.
 
 ## R-009: Reply-to-report context (FR-007, US-4)
 
@@ -264,6 +284,7 @@ Read 2026-10-25 from `NousResearch/hermes-agent@v0.21.6` source (tag `f27cdbc`).
   | 5 One pending prompt | PASS: second prompt appeared only after the first was answered |
   | 6 Permanent until restart | PASS: `/approve always` → "pattern approved permanently", `via /approve (always)` in gateway.log, `Could not save allowlist: Read-only file system`; after `docker restart` the same `rm -r` prompted again |
   | 7 Long reply | FAIL on the stock adapter (next finding); **PASS 2026-10-26 with the R-018 shim**: `(1/2)` ending 1037, `(2/2)` ending 1200 |
+  | 8 Audit lines | PASS (redefined, R-008 revised): `gateway.log` on the rig holds `inbound message:`, `via /approve (once\|session\|always)`, `via /deny` and `Slash command /yolo denied`; the Loki half waits for T072 at PROD (T020) |
   | 3 (rerun) `/cancel` | PASS after adding it to FR-014: `/undo` → `/cancel` → "/undo cancelled. Conversation unchanged." |
 
   Further findings from the run, none blocking:

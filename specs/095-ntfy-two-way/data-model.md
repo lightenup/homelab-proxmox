@@ -100,6 +100,17 @@ production topic. The pipeline's LAB stage (production machine, `deploy_environm
 no ntfy topic at all, which disables the ntfy platform there (`required_env=["NTFY_TOPIC"]`). The text names the window
 during which `hermes-in` messages were not received.
 
-## Audit line (stdout to Loki)
+## Audit lines (upstream `gateway.log` to Loki; research R-008, revised 2026-10-26)
 
-`ntfy_audit event=<inbound|approve|deny|slash_refused> topic=<t> msg_id=<id> text="<first 80 chars>"`
+No hook of our own. The agent-side events FR-009 needs are written by upstream Hermes (v0.21.6) at
+INFO into `/opt/data/logs/gateway.log` (rotating, 5 MB × 3, secrets redacted by
+`RedactingFormatter`), collected by T072:
+
+| Event | Upstream line (source) |
+|---|---|
+| inbound | `inbound message: platform=ntfy user=<topic> chat=<topic> msg='<first 80 chars, newlines collapsed>' ...` (`gateway/run_turn.py:2148`) |
+| approve | `User approved <n> dangerous command(s) via /approve (<once\|session\|always>)` (`gateway/slash_commands.py:1211`); bare-word replies use the same handler |
+| deny | `User denied <n> dangerous command(s) via /deny[ (with reason)]` (`gateway/slash_commands.py:1235`) |
+| slash refused | `Slash command /<cmd> denied for ntfy:<topic> (not admin, not in user_allowed_commands)` (`gateway/run_busy.py:1127`) |
+
+No message id on these lines; correlate by timestamp, topic and text.
