@@ -244,6 +244,15 @@ Read 2026-10-25 from `NousResearch/hermes-agent@v0.21.6` source (tag `f27cdbc`).
   `config.yaml` is mounted read-only, and `.env` writes are covered by file-tool and pattern
   guards. Adding an `approvals.deny` or custom pattern for this would be a new policy beyond what
   095 set out to verify. Raise it as a follow-up if wanted.
+- **LAB finding 2026-10-26 (T008 step 2): approval log lines go to a file, not stdout.** After
+  `/approve` on `hermes-lab-in`, `docker logs hermes_agent` showed no approval line. The line is in
+  `/opt/data/logs/gateway.log` (and `agent.log`): `INFO gateway.run: User approved 1 dangerous
+  command(s) via /approve (once)`. Container stdout carries WARNING and above, and that's all 092's
+  Docker collection ships. So the planned `HermesPermanentApprovalGranted` rule, which selected
+  `container="hermes_agent"`, could never have fired. Fix: T072 adds `gateway.log` through 092's
+  `alloy_file_logs`; T022/T023 select the file stream. `Stream error` lines (T030) are WARNING and
+  do reach stdout (they were the 093 noise), so T030 is unaffected. Whether the audit hook's
+  output (T017) reaches stdout is checked by T008 step 8.
 
 ## R-015: How the LAB rig is brought up, deployed and torn down (T008 gate)
 
