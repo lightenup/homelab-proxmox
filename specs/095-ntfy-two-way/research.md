@@ -273,7 +273,7 @@ Read 2026-10-25 from `NousResearch/hermes-agent@v0.21.6` source (tag `f27cdbc`).
   `alloy_file_logs`; T022/T023 select the file stream. `Stream error` lines (T030) are WARNING and
   do reach stdout (they were the 093 noise), so T030 is unaffected. Whether the audit hook's
   output (T017) reaches stdout is checked by T008 step 8.
-- **Verified on LAB 2026-10-26 (T008 steps 1-6, rig `lab-pve-01`, image v0.21.6, T015 config):**
+- **Verified on LAB 2026-10-26 (T008 steps 1-9, rig `lab-pve-01`, image v0.21.6, T015 config):**
 
   | Step | Result |
   |---|---|
@@ -285,6 +285,7 @@ Read 2026-10-25 from `NousResearch/hermes-agent@v0.21.6` source (tag `f27cdbc`).
   | 6 Permanent until restart | PASS: `/approve always` → "pattern approved permanently", `via /approve (always)` in gateway.log, `Could not save allowlist: Read-only file system`; after `docker restart` the same `rm -r` prompted again |
   | 7 Long reply | FAIL on the stock adapter (next finding); **PASS 2026-10-26 with the R-018 shim**: `(1/2)` ending 1037, `(2/2)` ending 1200 |
   | 8 Audit lines | PASS (redefined, R-008 revised): `gateway.log` on the rig holds `inbound message:`, `via /approve (once\|session\|always)`, `via /deny` and `Slash command /yolo denied`; the Loki half waits for T072 at PROD (T020) |
+  | 9 Stream-error interval | PASS: ntfy blocked 15 min on the rig (iptables REJECT to 192.168.1.211:443, auto-removed); adapter backoff 2s → 5s → 10s → 30s → 60s, then capped at 60s (19 `Stream error` WARNINGs, on stdout so already in Loki via 092). 60s ≤ the 5m range window, so `HermesNtfyStreamDown` (T030) keeps `[5m]`. Reconnect logs nothing; a `/status` round-trip right after the unblock confirmed recovery |
   | 3 (rerun) `/cancel` | PASS after adding it to FR-014: `/undo` → `/cancel` → "/undo cancelled. Conversation unchanged." |
 
   Further findings from the run, none blocking:
