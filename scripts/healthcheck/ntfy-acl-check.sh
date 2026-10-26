@@ -115,7 +115,9 @@ do_request() {
       break
     fi
     attempt=$((attempt + 1))
-    retry_after="$(grep -i '^retry-after:' "${header_file}" | tr -d '\r' | awk '{print $2}')"
+    # `|| true`: a 429 without Retry-After makes grep exit 1, which under `set -euo pipefail`
+    # would silently kill the whole run (found on the 095 PROD rollout, request 61).
+    retry_after="$(grep -i '^retry-after:' "${header_file}" | tr -d '\r' | awk '{print $2}' || true)"
     sleep "${retry_after:-$DEFAULT_RETRY_AFTER_SECONDS}"
   done
   rm -f "${header_file}"
