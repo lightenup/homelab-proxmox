@@ -28,9 +28,11 @@ to in this template is already a Python bool.
 
 from __future__ import annotations
 
+import base64
 import re
 from pathlib import Path
 
+import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 
@@ -260,3 +262,68 @@ DOCKER_COMPOSE_SECRET_VARS = {
 def test_docker_compose_secret_vars_are_pinned() -> None:
     text = (HERMES_ROLE / "templates" / "docker-compose.yml.j2").read_text()
     assert _secret_like_vars_referenced(text) == DOCKER_COMPOSE_SECRET_VARS
+
+
+# --- the role's own LAB-rig guard task, executed for real (found 2026-10-26, T068) ---
+#
+# The deploy-time assert in ansible/roles/hermes/tasks/main.yml scanned the WHOLE rendered
+# file, including its own header comment ("PROD ... -> inbound hermes-in, publish hermes,
+# PROD token."), for the unanchored substring "hermes-in". That comment necessarily names the
+# PROD branch to document it, so the guard failed on every correct LAB-rig render, not just a
+# leaking one -- caught on the very first real deploy to the rig (T068), since nothing had
+# exercised this task end-to-end before. Fixed by rejecting comment lines first. This test runs
+# the REAL task's Jinja expressions (parsed from the YAML, not re-implemented), so a future edit
+# that reintroduces the same mistake fails here, not in production again.
+
+
+def _hermes_main_tasks() -> list[dict]:
+    return yaml.safe_load((HERMES_ROLE / "tasks" / "main.yml").read_text())
+
+
+def _find_task(tasks: list[dict], name: str) -> dict:
+    for task in tasks:
+        if task.get("name") == name:
+            return task
+    raise AssertionError(f"no task named {name!r} in hermes/tasks/main.yml")
+
+
+def _strip_jinja_braces(expr: str) -> str:
+    match = re.fullmatch(r"\{\{\s*(.*?)\s*\}\}", expr.strip(), re.DOTALL)
+    assert match, f"expected a {{{{ ... }}}} template string, got: {expr!r}"
+    return match.group(1)
+
+
+def _ansible_like_jinja_env() -> Environment:
+    """A bare Jinja2 Environment with just enough of Ansible's extensions registered to
+    evaluate this role's own assert expressions for real: the `match`/`search` tests (regex,
+    anchored/unanchored respectively) and the `b64decode` filter. Mirrors the `lookup`/`bool`
+    stand-ins used for agent.env.j2 itself, above."""
+    jenv = Environment(undefined=StrictUndefined)
+    jenv.tests["match"] = lambda value, pattern: re.match(pattern, str(value)) is not None
+    jenv.tests["search"] = lambda value, pattern: re.search(pattern, str(value)) is not None
+    jenv.filters["b64decode"] = lambda s: base64.b64decode(s).decode()
+    return jenv
+
+
+def test_lab_rig_guard_task_is_not_fooled_by_the_header_comment() -> None:
+    task = _find_task(
+        _hermes_main_tasks(),
+        "Assert the LAB rig environment holds only the scratch pair (095 FR-011)",
+    )
+    env_lines_expr = task["vars"]["env_lines"]
+    that_exprs = task["ansible.builtin.assert"]["that"]
+
+    jenv = _ansible_like_jinja_env()
+
+    # hermes_agent_env_rendered is the ansible.builtin.slurp result the real task reads from;
+    # reproduce its shape (base64 content) rather than the plain string agent.env.j2 renders to.
+    fake_slurp = {"content": base64.b64encode(render_lab_rig().encode()).decode()}
+    env_lines = jenv.compile_expression(_strip_jinja_braces(env_lines_expr))(
+        hermes_agent_env_rendered=fake_slurp
+    )
+
+    for expr in that_exprs:
+        result = jenv.compile_expression(expr)(
+            env_lines=env_lines, ntfy_hermes_token=_stub("ntfy_hermes_token")
+        )
+        assert result is True, f"condition evaluated to {result!r}: {expr}"

@@ -131,7 +131,13 @@
       The LAB rig agent environment is not the scratch pair (hermes-lab-in / hermes-lab), or
       leaks a production topic or the PROD token (spec 095 FR-011).
   vars:
-    env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() }}"
+    # Comment lines excluded (found 2026-10-26, T068 first real deploy to the rig): the
+    # template's own header explains all three modes by name, so its prose necessarily
+    # contains the literal text "hermes-in" when describing what the PROD branch does. An
+    # unanchored `search` over the full file (comments included) therefore failed every
+    # correct render, not just a leaking one. The anchored `match` conditions above were never
+    # affected -- comment lines start with `#`, never with a bare variable name.
+    env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() | reject('match', '^\\s*#') | list }}"
   when: not hermes_agent_operational and (lab_inventory | default(false) | bool)
   no_log: true
 
@@ -143,7 +149,7 @@
       An *_ALLOW_ALL_USERS variable appears in the rendered agent environment. A topic that
       can talk to the agent would be a shell credential (spec 095 FR-003).
   vars:
-    env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() }}"
+    env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() | reject('match', '^\\s*#') | list }}"
   when: not hermes_agent_operational
   no_log: true
 
