@@ -38,6 +38,14 @@
     group: "{{ hermes_agent_uid }}"
     mode: '0750'
 
+- name: Ensure the agent log directory exists (095 T072, mounted at /opt/data/logs)
+  ansible.builtin.file:
+    path: "{{ hermes_agent_log_dir }}"
+    state: directory
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0755'
+
 - name: Ensure the agent scripts directory exists
   ansible.builtin.file:
     path: "{{ hermes_agent_data_dir }}/scripts"
@@ -163,7 +171,7 @@
       can talk to the agent would be a shell credential (spec 095 FR-003).
   vars:
     env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() | reject('match', '^\\s*#') | list }}"
-  when: not hermes_agent_operational
+  # Every mode, PROD included (095 T016): PROD is where hermes-in reaches the agent.
   no_log: true
 
 - name: Deploy SearXNG settings

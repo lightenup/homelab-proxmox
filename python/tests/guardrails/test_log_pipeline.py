@@ -317,6 +317,10 @@ def test_log_rules_declarations() -> None:
             assert rule["severity"] in REQUIRED_SEVERITIES
             if rule["enabled"] is False:
                 assert "disabled_reason" in rule, f"{path.name}: disabled rule missing disabled_reason"
+            elif rule.get("kind") == "event":
+                # 095 (T023/T030): event rules fire on ANY match of a specific line (count > 0),
+                # so the error-rate baseline below does not apply to them.
+                assert re.search(r"\)\s*>\s*0\s*$", rule["expr"].strip()), f"{path.name}: event rule must be count > 0"
             else:
                 baseline = rule.get("baseline")
                 assert baseline, f"{path.name}: enabled rule missing baseline"
@@ -327,8 +331,8 @@ def test_log_rules_declarations() -> None:
         assert service in found_services, f"{service}: missing log_alert_rules"
         path = ANSIBLE / "host_vars" / f"{service}.yml"
         data = _safe_load(path.read_text())
-        rules = data["monitoring_contract"]["log_alert_rules"]
-        assert len(rules) == 1, f"{service}: expected exactly one log_alert_rules entry"
+        rules = [r for r in data["monitoring_contract"]["log_alert_rules"] if r.get("kind") != "event"]
+        assert len(rules) == 1, f"{service}: expected exactly one error-rate log_alert_rules entry"
 
 
 # ---------------------------------------------------------------------------

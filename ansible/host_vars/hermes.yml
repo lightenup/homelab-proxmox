@@ -44,9 +44,9 @@ monitoring_contract:
       description: >-
         The Hermes agent scheduler has not run its heartbeat for more than an hour. Scheduled
         jobs are not running; this is a stopped scheduler, not a job that found nothing to report.
-  # Per-service log error rule (spec 092, FR-008, research R8). hermes_agent's ntfy stream
-  # "WARNING ... 403 Forbidden" lines are deliberately not matched (WARNING, not ERROR); they
-  # are tracked separately (docs/backlog/093-hermes-agent-ntfy-403.md).
+  # Per-service log rules. The first is 092's error-rate rule (FR-008, research R8; WARNINGs are
+  # not ERRORs, so ntfy stream errors never count here). The two `kind: event` rules are 095's:
+  # they fire on any single matching line, so they carry no error-rate baseline.
   log_alert_rules:
     - alert: HermesErrorLogs
       expr: |
@@ -59,3 +59,42 @@ monitoring_contract:
         Grafana -> Explore -> Loki: {host="hermes"} |~ "[| ](ERROR|CRITICAL)[ |]".
       enabled: false
       disabled_reason: "awaiting 7-day baseline (SC-004)"
+    # 095 T023 (FR-004/FR-005, research R-014): `/approve always` lets scheduled jobs run that
+    # pattern until the agent restarts, and no config can remove the choice upstream. The line is
+    # INFO, so it exists only in gateway.log (T072), never on container stdout (T008 step 2).
+    - alert: HermesPermanentApprovalGranted
+      kind: event
+      expr: |
+        sum(count_over_time({env="prod", host="hermes", source="file", filename="/var/log/hermes-agent/gateway.log"} |= "via /approve (always)" [5m])) > 0
+      for: "0m"
+      severity: warning
+      summary: !unsafe 'A permanent command approval was granted on Hermes. Explore: {host="hermes", source="file"} |= "via /approve (always)"'
+      description: >-
+        Someone answered an approval prompt with /approve always (or a bare "always"/"remember").
+        Scheduled jobs now skip their refusal for that command pattern until the agent restarts
+        (spec 095 FR-004/FR-005, research R-014). If it was not intended, revoke it with
+        `docker restart hermes_agent` on the hermes LXC.
+      enabled: true
+    # 095 T030 (FR-006, research R-007.2): after 095 the agent's token can read hermes-in, so
+    # the 093 403 noise is gone and a sustained `Stream error` is a real outage of the phone
+    # channel. The adapter backs off to one WARNING per 60 s (measured, T008 step 9), so [5m]
+    # always sees one while it lasts; for: 10m ignores short blips. WARNINGs reach stdout.
+    - alert: HermesNtfyStreamDown
+      kind: event
+      expr: |
+        sum(count_over_time({env="prod", host="hermes", container="hermes_agent"} |= "Stream error" [5m])) > 0
+      for: "10m"
+      severity: warning
+      summary: !unsafe 'Hermes cannot reach ntfy: phone chat is down. Explore: {host="hermes", container="hermes_agent"} |= "Stream error"'
+      description: >-
+        The Hermes agent has logged ntfy stream errors for over 10 minutes, so messages sent
+        from the phone on hermes-in are not being received (spec 095 US3). Messages sent during
+        the outage are not replayed. Check ntfy and the reverse proxy, then the agent's egress.
+      enabled: true
+
+# Alloy (spec 092): also collect Hermes's own gateway.log (095 T072). Its INFO lines are the
+# audit trail for inbound messages, approvals, denials and refused commands (research R-008);
+# container stdout carries WARNING and above only. Exact path, not a glob: alloy's readability
+# check skips globs, and a glob would re-read rotated gateway.log.N files as new streams.
+alloy_file_logs:
+  - path_glob: "/var/log/hermes-agent/gateway.log"

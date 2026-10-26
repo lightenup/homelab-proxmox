@@ -327,3 +327,20 @@ def test_lab_rig_guard_task_is_not_fooled_by_the_header_comment() -> None:
             env_lines=env_lines, ntfy_hermes_token=_stub("ntfy_hermes_token")
         )
         assert result is True, f"condition evaluated to {result!r}: {expr}"
+
+
+def test_allow_all_guard_runs_on_every_deploy_including_prod() -> None:
+    """095 T016 (FR-003): PROD is where hermes-in reaches the agent, so the allow-all guard must
+    not be skipped there. It also executes cleanly against a real PROD render."""
+    task = _find_task(
+        _hermes_main_tasks(),
+        "Assert no allow-all variable ever appears in the agent environment (095 FR-003)",
+    )
+    assert "when" not in task, "the allow-all guard must run in every mode, PROD included"
+    jenv = _ansible_like_jinja_env()
+    fake_slurp = {"content": base64.b64encode(render_prod().encode()).decode()}
+    env_lines = jenv.compile_expression(_strip_jinja_braces(task["vars"]["env_lines"]))(
+        hermes_agent_env_rendered=fake_slurp
+    )
+    for expr in task["ansible.builtin.assert"]["that"]:
+        assert jenv.compile_expression(expr)(env_lines=env_lines) is True, expr

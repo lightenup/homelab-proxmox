@@ -2,6 +2,26 @@
 - name: Configure base for hermes
   hosts: hermes
   become: true
+  # 095 T072: lxc_base runs alloy, which checks (runuser -u alloy -- test -r) that every declared
+  # log file is readable. gateway.log must exist before that on the first deploy; the hermes role
+  # (second play) also ensures the folder for paths without this play (the LAB rig).
+  pre_tasks:
+    - name: Ensure the Hermes log folder exists before alloy checks it
+      ansible.builtin.file:
+        path: /var/log/hermes-agent
+        state: directory
+        owner: "10000"
+        group: "10000"
+        mode: '0755'
+    - name: Ensure gateway.log exists before alloy checks it
+      ansible.builtin.file:
+        path: /var/log/hermes-agent/gateway.log
+        state: touch
+        owner: "10000"
+        group: "10000"
+        mode: '0644'
+        modification_time: preserve
+        access_time: preserve
   roles:
     - lxc_base
 
