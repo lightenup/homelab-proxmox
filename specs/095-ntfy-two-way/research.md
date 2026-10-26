@@ -253,6 +253,51 @@ Read 2026-10-25 from `NousResearch/hermes-agent@v0.21.6` source (tag `f27cdbc`).
   `alloy_file_logs`; T022/T023 select the file stream. `Stream error` lines (T030) are WARNING and
   do reach stdout (they were the 093 noise), so T030 is unaffected. Whether the audit hook's
   output (T017) reaches stdout is checked by T008 step 8.
+- **Verified on LAB 2026-10-26 (T008 steps 1-6, rig `lab-pve-01`, image v0.21.6, T015 config):**
+
+  | Step | Result |
+  |---|---|
+  | 1 Prompt text | PASS: command, reason ("recursive delete"), once/session/always/deny, deadline ("5 minutes", then "15 minutes" after T015) |
+  | 2 Approve / deny / timeout | PASS: approve ran; deny blocked and the agent did not retry; no answer → "Approval timed out ... NOT run" |
+  | 3 Gating, `/help`, allowed commands | PASS: `/yolo` and `/update` → "admin-only here" (logged `Slash command /yolo denied ... not in user_allowed_commands`); `/help` = FR-014 set + help/whoami; retry/title/usage/status/model/undo/compress all answer |
+  | 4 Session scope | PASS: `/approve session` → second `rm -r` ran unprompted; `chmod 777` still prompted; after `/new` `rm -r` prompted again |
+  | 5 One pending prompt | PASS: second prompt appeared only after the first was answered |
+  | 6 Permanent until restart | PASS: `/approve always` → "pattern approved permanently", `via /approve (always)` in gateway.log, `Could not save allowlist: Read-only file system`; after `docker restart` the same `rm -r` prompted again |
+  | 7 Long reply | **FAIL**: see next finding |
+
+  Further findings from the run, none blocking:
+  - **`/approve always.` (trailing full stop) is treated as `/approve` once** (logged `(once)`).
+    That fails safe but silently. Phone autocorrect adds full stops. Runbook (T024): type the
+    scope word bare.
+  - **`/undo` and `/new` confirmations offer `/approve`, `/always` or `/cancel`**; `always` and
+    `cancel` are outside FR-014, so `/approve` is the only usable answer. Whether to add `cancel`
+    is an owner decision (open).
+  - **A pending `clarify` question survives `/new`**: the next message is consumed as its answer
+    (`Gateway intercepted clarify text response`) and no turn starts. Nothing runs; it's a
+    usability trap to note in the runbook.
+  - **The model often refuses or interrogates a destructive request before calling the tool**,
+    and after a deny it may ask (via `clarify`) instead of retrying. That's defence in depth, but
+    not deterministic: never rely on it, and phrase gate tests so the model reaches the gate.
+  - **`Could not save allowlist` is a WARNING on stdout**, so it's already in Loki via 092, and
+    it fires exactly on a permanent approval when `config.yaml` is read-only. It's a candidate
+    selector for T023 that doesn't depend on T072.
+  - **Model-side outages surface honestly over ntfy**: with the Mac asleep, the router returned
+    429 (`cooldown_list=['balanced-local']`) and the agent replied "Your request was not
+    processed". `LlmRouterLocalTierDown` fired and resolved on its own. The rig shares the PROD
+    router key (R-016), so rig traffic counts against PROD limits during the gate.
+- **LAB finding 2026-10-26 (T008 step 7): replies over 4096 characters are cut silently.** A
+  4892-char reply arrived as exactly its first 4096 characters, with no marker and no follow-up.
+  `gateway.log`: `response ready ... response=4892 chars`, then the adapter WARNING `[Ntfy]
+  Message truncated from 4892 to 4096 chars (ntfy limit)`. Cause: `plugins/platforms/ntfy/
+  adapter.py:280-284` slices the body to `MAX_MESSAGE_LENGTH = 4096` in `send()`, and the
+  adapter keeps the base default `splits_long_messages = False`. Chat replies get no
+  gateway-level handling, and only cron delivery (`gateway/delivery.py` `_cap_oversized_output`)
+  adds a visible "[truncated, full output saved to ...]" footer. The base class already has a
+  splitter, `BasePlatformAdapter.truncate_message()`, which produces `(1/3)` chunks and keeps code
+  fences, and the WhatsApp Cloud and BlueBubbles adapters use it. Our server's
+  `message-size-limit` is 32k, so the 4096 cap is the adapter's own choice, not ntfy's. No
+  configuration changes it. US1 AS-4 ("split or visibly cut") fails on v0.21.6. The WARNING
+  reaches stdout and therefore Loki.
 
 ## R-015: How the LAB rig is brought up, deployed and torn down (T008 gate)
 
