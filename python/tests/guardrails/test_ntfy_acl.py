@@ -161,9 +161,12 @@ def test_every_publisher_has_write_only_on_its_topic() -> None:
                 )
 
 
-def test_owner_access_list_is_read_only_wildcard_plus_lab_pair() -> None:
-    """T004/T007: owner reads everything, plus read-write on the LAB scratch inbound."""
-    assert _defaults()["ntfy_owner_access"] == ["*:read-only", "hermes-lab-in:read-write"]
+def test_owner_access_list_is_read_only_wildcard_plus_inbound_topics() -> None:
+    """T004/T007/T012: owner reads everything, plus read-write on the inbound topics. read-write,
+    not write-only: the specific entry replaces the wildcard read for that topic (R-004)."""
+    assert _defaults()["ntfy_owner_access"] == [
+        "*:read-only", "hermes-lab-in:read-write", "hermes-in:read-write",
+    ]
 
 
 def test_writers_baseline() -> None:
@@ -230,3 +233,21 @@ def test_hermes_lab_has_no_grant_on_any_production_topic() -> None:
         assert topic not in PRODUCTION_TOPICS, (
             f"hermes_lab holds a grant on production topic {topic} (FR-011)"
         )
+
+
+# --- T009 (US1, FR-001/FR-002): the hermes-in columns of contracts/acl-matrix.md ---
+
+
+def test_only_owner_writes_hermes_in() -> None:
+    """Bold cell: the agent's credential can never write its own inbound topic."""
+    assert writers("hermes-in") == {"owner"}
+    assert ("owner", "hermes-in", "read-write") in _access_rules()
+
+
+def test_owner_and_agent_read_hermes_in() -> None:
+    assert readers("hermes-in") == {"owner", "hermes"}
+
+
+def test_agent_reads_hermes_in_and_still_writes_only_hermes() -> None:
+    entry = next(u for u in _defaults()["ntfy_users"] if u["name"] == "hermes")
+    assert _user_grants(entry) == [("hermes", "write-only"), ("hermes-in", "read-only")]

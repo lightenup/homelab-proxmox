@@ -5,6 +5,8 @@
 #
 #   (095 adds the hermes-lab-in / hermes-lab scratch cells below, per
 #   specs/095-ntfy-two-way/contracts/acl-matrix.md § LAB scratch pair.)
+#   (095 T013 adds the hermes-in cells for every credential; the owner WRITE cell is covered by
+#   the guard test, not probed here, because an accepted message starts a PROD agent turn.)
 #
 #   Credential ↓ / action → | read alerts | read hermes | read pve-backup | read versions | read mutation | write alerts | write hermes | write pve-backup | write versions | write mutation | write other
 #   ------------------------+-------------+-------------+-----------------+---------------+---------------+--------------+--------------+------------------+----------------+----------------+-------------
@@ -160,12 +162,14 @@ do_request "" GET  versions   deny
 do_request "" GET  mutation  deny
 do_request "" GET  hermes-lab-in deny
 do_request "" GET  hermes-lab deny
+do_request "" GET  hermes-in  deny  # 095 T013 (FR-002)
 do_request "" POST alerts     deny
 do_request "" POST hermes     deny
 do_request "" POST pve-backup deny
 do_request "" POST versions   deny
 do_request "" POST mutation  deny
 do_request "" POST other      deny
+do_request "" POST hermes-in  deny
 
 # --- Row: owner token (read *) ---
 do_request "$NTFY_OWNER_TOKEN" GET  alerts     allow
@@ -183,6 +187,11 @@ do_request "$NTFY_OWNER_TOKEN" GET hermes-lab-in allow
 do_request "$NTFY_OWNER_TOKEN" POST hermes-lab-in allow  # 095 FR-011: owner writes the scratch inbound
 do_request "$NTFY_OWNER_TOKEN" GET hermes-lab allow
 do_request "$NTFY_OWNER_TOKEN" POST hermes-lab deny
+do_request "$NTFY_OWNER_TOKEN" GET hermes-in allow   # 095 T013
+# owner POST hermes-in = 200 (contracts/acl-matrix.md) is deliberately NOT probed: an accepted
+# message reaches the PROD agent, which would start a model turn and reply to the phone on every
+# run. Covered instead by test_ntfy_acl.py (writers("hermes-in") == {"owner"}) and the first real
+# phone message at rollout (095 T020). Every deny cell below is safe: a refused POST is never stored.
 
 # --- Row: alertmanager token (write alerts only) ---
 do_request "$NTFY_ALERTMANAGER_TOKEN" GET  alerts     deny
@@ -200,6 +209,8 @@ do_request "$NTFY_ALERTMANAGER_TOKEN" GET hermes-lab-in deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST hermes-lab-in deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" GET hermes-lab deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST hermes-lab deny
+do_request "$NTFY_ALERTMANAGER_TOKEN" GET hermes-in deny   # 095 T013
+do_request "$NTFY_ALERTMANAGER_TOKEN" POST hermes-in deny
 
 # --- Row: hermes token (write hermes only) ---
 do_request "$NTFY_HERMES_TOKEN" GET  alerts     deny
@@ -217,6 +228,8 @@ do_request "$NTFY_HERMES_TOKEN" GET hermes-lab-in deny
 do_request "$NTFY_HERMES_TOKEN" POST hermes-lab-in deny
 do_request "$NTFY_HERMES_TOKEN" GET hermes-lab deny
 do_request "$NTFY_HERMES_TOKEN" POST hermes-lab deny
+do_request "$NTFY_HERMES_TOKEN" GET  hermes-in allow  # 095 T013 (FR-001): the agent reads its inbound
+do_request "$NTFY_HERMES_TOKEN" POST hermes-in deny   # 095 T013 (FR-002): bold cell, the agent never writes it
 
 # --- Row: pve_backup token (write pve-backup only) ---
 do_request "$NTFY_PVE_BACKUP_TOKEN" GET  alerts     deny
@@ -234,6 +247,8 @@ do_request "$NTFY_PVE_BACKUP_TOKEN" GET hermes-lab-in deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST hermes-lab-in deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" GET hermes-lab deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST hermes-lab deny
+do_request "$NTFY_PVE_BACKUP_TOKEN" GET hermes-in deny   # 095 T013
+do_request "$NTFY_PVE_BACKUP_TOKEN" POST hermes-in deny
 
 # --- Row: version_check token (write versions only) ---
 do_request "$NTFY_VERSION_CHECK_TOKEN" GET  alerts     deny
@@ -251,6 +266,8 @@ do_request "$NTFY_VERSION_CHECK_TOKEN" GET hermes-lab-in deny
 do_request "$NTFY_VERSION_CHECK_TOKEN" POST hermes-lab-in deny
 do_request "$NTFY_VERSION_CHECK_TOKEN" GET hermes-lab deny
 do_request "$NTFY_VERSION_CHECK_TOKEN" POST hermes-lab deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" GET hermes-in deny   # 095 T013
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST hermes-in deny
 
 # --- Row: mutation token (write mutation only) ---
 do_request "$NTFY_MUTATION_TOKEN" GET  alerts     deny
@@ -268,6 +285,8 @@ do_request "$NTFY_MUTATION_TOKEN" GET hermes-lab-in deny
 do_request "$NTFY_MUTATION_TOKEN" POST hermes-lab-in deny
 do_request "$NTFY_MUTATION_TOKEN" GET hermes-lab deny
 do_request "$NTFY_MUTATION_TOKEN" POST hermes-lab deny
+do_request "$NTFY_MUTATION_TOKEN" GET hermes-in deny   # 095 T013
+do_request "$NTFY_MUTATION_TOKEN" POST hermes-in deny
 
 # --- Row: hermes_lab token (095 FR-011 LAB scratch pair) ---
 do_request "$NTFY_HERMES_LAB_TOKEN" GET  hermes-lab-in allow

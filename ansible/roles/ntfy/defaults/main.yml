@@ -17,6 +17,10 @@ ntfy_owner_access:
   - "*:read-only"
   # 095 T007 (FR-011): read-write on the LAB scratch inbound topic (data-model § LAB pair).
   - "hermes-lab-in:read-write"
+  # 095 T012 (FR-001/FR-002): the phone writes the agent's inbound topic. read-write, not
+  # write-only: the longer pattern replaces the wildcard read for this topic (research R-004).
+  # The owner is the ONLY writer of hermes-in (preflight + test_ntfy_acl.py enforce it).
+  - "hermes-in:read-write"
 ntfy_users:
   - name: "alertmanager"
     access:
@@ -26,6 +30,9 @@ ntfy_users:
   - name: "hermes"
     access:
       - "hermes:write-only"
+      # 095 T012: the agent subscribes to its inbound topic. Read only: a credential the
+      # agent holds (and can read from its own .env) must never write hermes-in (R-005).
+      - "hermes-in:read-only"
     password_hash: "{{ ntfy_hermes_password_hash }}"
     token: "{{ ntfy_hermes_token }}"
   - name: "pve_backup"

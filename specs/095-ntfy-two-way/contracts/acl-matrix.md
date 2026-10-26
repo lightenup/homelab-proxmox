@@ -20,6 +20,11 @@ The bold cells carry the feature's safety argument:
 - The `hermes` credential (the agent) can **never** write `hermes-in` or `actions`.
 - The only writer of `hermes-in` and `actions` is `owner`.
 
+The `owner` → `hermes-in` W cell (200) is asserted by the guard test (rendered `server.yml`), not
+probed live by `ntfy-acl-check.sh`: an accepted message reaches the PROD agent and starts a model
+turn on every run. The first real phone message at rollout (T020) is its live check. Every deny cell
+is probed live, because a refused POST is never stored.
+
 ## LAB scratch pair (spec FR-011)
 
 | Credential ↓ / Topic → | `hermes-lab-in` R | `hermes-lab-in` W | `hermes-lab` R | `hermes-lab` W | any production topic |
