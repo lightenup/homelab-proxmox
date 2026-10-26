@@ -46,7 +46,7 @@ Server `message-size-limit` stays `32k` (spec Edge Case "Oversized inbound messa
 
 Slash gating (all branches, spec FR-014): root-level `ntfy:` block with `allow_admin_from: ["no-admin"]`
 (matches no sender id) and `user_allowed_commands: [approve, deny, new, reset, stop, status,
-compress, retry, undo, usage, title, model]`; `help` and `whoami` are always allowed upstream.
+compress, retry, undo, usage, title, model, cancel]`; `help` and `whoami` are always allowed upstream.
 
 Not rendering `NTFY_TOPIC` on the pipeline LAB stage ends today's anonymous 403s there.
 

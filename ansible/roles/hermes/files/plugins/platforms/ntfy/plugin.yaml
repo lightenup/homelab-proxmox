@@ -1,0 +1,16 @@
+# Override of the bundled ntfy platform plugin (spec 095, research R-018): same directory name as
+# the bundled plugins/platforms/ntfy, so Hermes treats it as the documented override, not an
+# impostor. Enabled only through plugins.enabled ["platforms/ntfy"] in the read-only config.yaml.
+name: ntfy-platform
+label: ntfy
+kind: platform
+version: 1.0.0-homelab-chunking
+description: >
+  Bundled ntfy adapter with long replies split into (n/m) messages instead of cut at 4096
+  characters. Remove when upstream chunks natively (095 T076).
+author: homelab-proxmox
+requires_env:
+  - name: NTFY_TOPIC
+    description: "Topic name to subscribe to"
+    prompt: "ntfy subscribe topic"
+    password: false

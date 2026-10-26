@@ -110,6 +110,16 @@ ntfy:
     - usage
     - title
     - model
+    # Owner decision 2026-10-26 (T008): /undo and /new ask for confirmation with /approve,
+    # /always or /cancel. cancel only declines that confirmation; always stays out.
+    - cancel
+
+# Plugins (095 R-018). User plugins are opt-in; this file is read-only to the agent, so it
+# cannot enable anything else or switch the override off. platforms/ntfy is the chunking shim
+# that splits long replies instead of cutting them at 4096 characters. Remove with T076.
+plugins:
+  enabled:
+    - platforms/ntfy
 
 # MCP servers (FR-011, R-005): rendered from the single hermes_mcp_servers list — the same
 # list Open WebUI's TOOL_SERVER_CONNECTIONS is built from, so the two surfaces can never

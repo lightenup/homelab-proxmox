@@ -453,3 +453,33 @@ correct auth decisions.
 - **Forward note**: P2 (T044/T045) adds more rows (`actions`, `relay`, `action_relay`), growing
   the matrix further. The retry fix scales with it; no further action needed unless ntfy's
   defaults change.
+
+## R-018: Long replies over ntfy: a read-only adapter shim until upstream chunks
+
+Decision 2026-10-26 (owner), after T008 step 7 failed (R-014: the bundled ntfy adapter slices chat
+replies to 4096 characters with only a WARNING).
+
+- **Decision**: fix it now with a thin, read-only user-plugin override, and send the same change
+  upstream (T076). Waiting for a release (block slice 1) and documenting a silent cut (weaken US1
+  AS-4) were rejected.
+- **Mechanism [v0.21.6 source]**: `hermes_cli/plugins_discovery.py:221` `resolve_manifest_winners`:
+  "a same-named copy under `~/.hermes/plugins/<name>` is the documented way to override a bundled
+  plugin". The key is `platforms/ntfy`; the directory must be named `ntfy` or it's skipped as an
+  impostor. User platform plugins load only when listed in `plugins.enabled`
+  (`gate_manifest`), which lives in the deploy-owned, read-only `config.yaml`.
+- **Shape**: subclass, not fork. The shim imports the bundled `plugins.platforms.ntfy.adapter`
+  (import verified in the running container), sets `splits_long_messages = True`, and its
+  `send()` sends each chunk of `BasePlatformAdapter.truncate_message(content,
+  MAX_MESSAGE_LENGTH)` through the parent's `send()`. Auth headers, markdown, the HTTP call and
+  error handling stay upstream's code. Verified in the container: the 4892-char failing reply
+  splits into 2 chunks (4083 + 820 chars) ending `(1/2)` / `(2/2)`, with nothing lost. `register()`
+  reuses the bundled one and replaces only `adapter_factory`.
+- **Posture**: same as the hooks (plan, Complexity Tracking): static files owned by root, bind-mounted
+  `:ro` at `/opt/data/plugins/platforms/ntfy`, so the agent (which can write `/opt/data`) can't
+  modify gateway-executed code or turn the override off. This is code we carry, so it's tested
+  (T073) and has a removal trigger (T076).
+- **Cron delivery is unaffected**: `gateway/delivery.py` already caps cron output at 4000
+  characters with a visible "[truncated, full output saved to ...]" footer, below the
+  adapter's limit.
+- **Ordering in the app**: chunks are published in order. ntfy lists newest first, so `(2/2)`
+  appears above `(1/2)`; the indicators make the order clear.

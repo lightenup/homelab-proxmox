@@ -51,10 +51,12 @@ def _find_repo_root(start: Path) -> Path:
 ROOT = _find_repo_root(Path(__file__).resolve())
 HERMES_TEMPLATES = ROOT / "ansible" / "roles" / "hermes" / "templates"
 
-# spec FR-014: exactly this set may be run over ntfy by a non-admin.
+# spec FR-014: exactly this set may be run over ntfy by a non-admin. `cancel` added 2026-10-26
+# (owner decision, T008 step 3): /undo and /new confirmations offer /approve, /always or /cancel,
+# and without it /approve was the only usable answer. `always` stays out (silences permanently).
 FR014_COMMANDS = {
     "approve", "deny", "new", "reset", "stop", "status",
-    "compress", "retry", "undo", "usage", "title", "model",
+    "compress", "retry", "undo", "usage", "title", "model", "cancel",
 }
 # The adapter's sender ids (R-003): an inbound topic name in allow_admin_from = full admin.
 SENDER_IDS = {"hermes-in", "hermes-lab-in"}
@@ -107,6 +109,7 @@ def test_bypass_and_update_commands_are_never_allowed() -> None:
     commands = {c.lstrip("/").lower() for c in _ntfy_block().get("user_allowed_commands", [])}
     assert "yolo" not in commands
     assert "update" not in commands
+    assert "always" not in commands
 
 
 def test_restart_notification_stays_off() -> None:
@@ -124,3 +127,15 @@ def test_approval_policy() -> None:
     assert approvals["cron_mode"] == "deny"
     assert approvals["single_query_mode"] == "deny"
     assert approvals["unattended_mode"] == "deny"
+
+
+# --- T073: the ntfy chunking shim is enabled and mounted read-only (research R-018) ---
+
+
+def test_only_the_ntfy_shim_is_enabled_as_a_plugin() -> None:
+    assert render_agent_config()["plugins"]["enabled"] == ["platforms/ntfy"]
+
+
+def test_shim_is_mounted_read_only_at_the_override_path() -> None:
+    compose = (HERMES_TEMPLATES / "docker-compose.yml.j2").read_text()
+    assert '"{{ hermes_agent_plugins_dir }}/platforms/ntfy:/opt/data/plugins/platforms/ntfy:ro"' in compose

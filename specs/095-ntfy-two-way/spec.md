@@ -315,6 +315,7 @@ backup job and reports the result.
   be amended to describe the new model. `093` MUST be closed as superseded.
 - **FR-014**: Over the inbound channel the agent MUST accept only these slash commands: `approve`,
   `deny`, `new`, `reset`, `stop`, `status`, `compress`, `retry`, `undo`, `usage`, `title`, `model`,
+  `cancel` (added 2026-10-26: declines the `/undo` and `/new` confirmations; `always` stays out),
   plus upstream's always-allowed `help` and `whoami`. Every other command, including `/yolo` and
   `/update`, MUST be refused with a short reply and logged (FR-009). `/help` MUST list exactly the
   allowed set.
