@@ -2,7 +2,7 @@
 
 **Feature Branch**: `095-ntfy-two-way`
 **Created**: 2026-10-25
-**Status**: Backlog — spec + plan drafted ([`specs/095-ntfy-two-way/`](../../specs/095-ntfy-two-way/)), not started.
+**Status**: In progress. Slice 1 (chat, approvals, gap notice) code complete and the LAB gate passed (2026-10-26, [`specs/095-ntfy-two-way/`](../../specs/095-ntfy-two-way/)); PROD rollout pending (T020). Slice 2 (action buttons) not started.
 Amends [`082`](./082-ntfy-push-service.md) (Direction: publish-only) and
 [`083`](./083-hermes-agent-runtime.md) (FR-011: delivery only). Supersedes
 [`093`](./093-hermes-agent-ntfy-403.md) (the 403 noise disappears once the agent subscribes to a

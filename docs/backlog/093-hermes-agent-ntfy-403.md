@@ -1,6 +1,6 @@
 # hermes-agent's ntfy stream subscription gets `403 Forbidden` about every 3 minutes
 
-**Status**: Backlog — found 2026-10-24 measuring research R8 for `092` (log aggregation).
+**Status**: **Superseded by [`095`](./095-ntfy-two-way.md)**. The agent's token gets read access to its inbound topic `hermes-in`, which removes the cause. The fix ships with 095's PROD rollout; the 7-day zero-403 check (095 SC-004, T061) closes it for good.
 **Impact**: none observed yet (the agent evidently reconnects), but it is a live defect that
 would otherwise have gone unnoticed forever — it only surfaced because spec 092's log sampling
 looked at hermes_agent's output directly.
