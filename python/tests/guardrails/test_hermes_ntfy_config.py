@@ -139,3 +139,17 @@ def test_only_the_ntfy_shim_is_enabled_as_a_plugin() -> None:
 def test_shim_is_mounted_read_only_at_the_override_path() -> None:
     compose = (HERMES_TEMPLATES / "docker-compose.yml.j2").read_text()
     assert '"{{ hermes_agent_plugins_dir }}/platforms/ntfy:/opt/data/plugins/platforms/ntfy:ro"' in compose
+
+
+# --- T018/T019: the gap-notice hook is mounted read-only (research R-007, plan § Complexity) ---
+
+
+def test_gap_notice_hook_is_mounted_read_only() -> None:
+    compose = (HERMES_TEMPLATES / "docker-compose.yml.j2").read_text()
+    assert '"{{ hermes_agent_hooks_dir }}/gap-notice:/opt/data/hooks/gap-notice:ro"' in compose
+    assert "/opt/data/hooks/audit" not in compose, "the audit hook was dropped (R-008 revised)"
+
+
+def test_confinement_assert_requires_ro_on_hook_mounts() -> None:
+    tasks = (HERMES_TEMPLATES.parent / "tasks" / "main.yml").read_text()
+    assert "select('search', ':/opt/data/hooks') | reject('search', ':ro$')" in tasks

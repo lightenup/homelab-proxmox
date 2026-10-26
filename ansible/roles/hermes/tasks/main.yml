@@ -107,6 +107,18 @@
     directory_mode: '0755'
   notify: Restart hermes
 
+# Gateway hooks (095 T018/T029): Python the gateway runs on startup. Root-owned and mounted :ro,
+# so the agent (which can write /opt/data) cannot rewrite gateway-executed code.
+- name: Install the agent gateway hooks (read-only mount source)
+  ansible.builtin.copy:
+    src: hooks/
+    dest: "{{ hermes_agent_hooks_dir }}/"
+    owner: root
+    group: root
+    mode: u=rwX,g=rX,o=rX
+    directory_mode: '0755'
+  notify: Restart hermes
+
 - name: Deploy the agent environment (vault-rendered secrets)
   ansible.builtin.template:
     src: agent.env.j2
@@ -278,11 +290,12 @@
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', 'docker.sock') | list | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].networks | list | sort == ['agent']
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/plugins') | reject('search', ':ro$') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/hooks') | reject('search', ':ro$') | list | length == 0
     fail_msg: >-
       The rendered hermes-agent service is not confined: it must have no published ports,
       no privileged mode, no cap_add, no Docker socket mount, and sit only on the `agent`
-      network (spec 083 FR-004/FR-007/FR-008), and every /opt/data/plugins mount must be :ro
-      (095 R-018). Fix docker-compose.yml.j2 before deploying.
+      network (spec 083 FR-004/FR-007/FR-008), and every /opt/data/plugins and /opt/data/hooks mount must
+      be :ro (095 R-018, R-007). Fix docker-compose.yml.j2 before deploying.
   vars:
     hermes_compose: "{{ hermes_compose_rendered.content | b64decode }}"
 

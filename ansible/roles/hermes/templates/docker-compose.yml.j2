@@ -190,6 +190,9 @@ services:
       # can write /opt/data, so gateway-executed code must not live there writable. Overrides
       # the bundled ntfy adapter by directory name; enabled by plugins.enabled in config.yaml.
       - "{{ hermes_agent_plugins_dir }}/platforms/ntfy:/opt/data/plugins/platforms/ntfy:ro"
+      # Gap-notice gateway hook (095 FR-006, R-007), READ-ONLY for the same reason: it is Python
+      # the gateway executes on every start.
+      - "{{ hermes_agent_hooks_dir }}/gap-notice:/opt/data/hooks/gap-notice:ro"
       # Heartbeat file for the scheduler watchdog (US4, R-007) — PROD only.
 {% if hermes_agent_operational %}
       - "{{ hermes_agent_heartbeat_dir }}:/heartbeat"
