@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# ntfy ACL matrix check (spec 082, SC-002; extended by spec 090, spec 087)
+# ntfy ACL matrix check (spec 082, SC-002; extended by spec 090, spec 087, spec 095)
 #
 # Asserts every cell in data-model.md § "The access matrix the SC-002 check asserts":
+#
+#   (095 adds the hermes-lab-in / hermes-lab scratch cells below, per
+#   specs/095-ntfy-two-way/contracts/acl-matrix.md § LAB scratch pair.)
+#   (095 T013 adds the hermes-in cells for every credential; the owner WRITE cell is covered by
+#   the guard test, not probed here, because an accepted message starts a PROD agent turn.)
 #
 #   Credential ↓ / action → | read alerts | read hermes | read pve-backup | read versions | read mutation | write alerts | write hermes | write pve-backup | write versions | write mutation | write other
 #   ------------------------+-------------+-------------+-----------------+---------------+---------------+--------------+--------------+------------------+----------------+----------------+-------------
@@ -26,6 +31,16 @@
 #     scripts/healthcheck/ntfy-acl-check.sh
 #
 # Exits non-zero on any FAIL. Never echoes tokens.
+#
+# Rate limiting: ntfy's `visitor-request-limit-burst` defaults to 60 requests per visitor
+# (source IP, since `behind-proxy: true` makes it see the real client, not Caddy), replenished
+# one per `visitor-request-limit-replenish` (default 5s) — confirmed against
+# `binwiederhier/ntfy:v2.28.0 serve --help`, 2026-10-25. Neither is overridden in
+# ansible/roles/ntfy/templates/server.yml.j2, so the server default applies. The matrix has
+# grown every spec that touched it (20 cells at 082, 35 at 089, 54 at 090) and 095's
+# hermes_lab row is the first to cross it (120 cells today). A single run from one host now
+# always exhausts the burst, so every request past the 60th retries on 429 below rather than
+# widening the server's own abuse protection, which is unrelated to this script's own volume.
 set -euo pipefail
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -40,13 +55,17 @@ Environment variables (all required):
   NTFY_PVE_BACKUP_TOKEN    Bearer token for the pve_backup account (spec 089)
   NTFY_VERSION_CHECK_TOKEN Bearer token for the version_check account (spec 090)
   NTFY_MUTATION_TOKEN      Bearer token for the mutation account (spec 087)
+  NTFY_HERMES_LAB_TOKEN    Bearer token for the hermes_lab scratch account (spec 095 FR-011)
+
+A full run now makes more requests than ntfy's default per-visitor burst (60), so it retries on
+429 and can take several minutes — this is expected, not a hang.
 
 Exit code: 0 if all cells match, 1 otherwise.
 EOF
   exit 0
 fi
 
-for var in NTFY_URL NTFY_OWNER_TOKEN NTFY_ALERTMANAGER_TOKEN NTFY_HERMES_TOKEN NTFY_PVE_BACKUP_TOKEN NTFY_VERSION_CHECK_TOKEN NTFY_MUTATION_TOKEN; do
+for var in NTFY_URL NTFY_OWNER_TOKEN NTFY_ALERTMANAGER_TOKEN NTFY_HERMES_TOKEN NTFY_PVE_BACKUP_TOKEN NTFY_VERSION_CHECK_TOKEN NTFY_MUTATION_TOKEN NTFY_HERMES_LAB_TOKEN; do
   if [[ -z "${!var:-}" ]]; then
     echo "ERROR: ${var} is not set. See --help." >&2
     exit 2
@@ -57,15 +76,24 @@ NTFY_URL="${NTFY_URL%/}"
 FAILURES=0
 TOTAL=0
 
+# Matches ntfy's own visitor-request-limit-replenish default (5s); used only when a 429
+# response carries no Retry-After header to read instead.
+readonly DEFAULT_RETRY_AFTER_SECONDS=5
+# Generous bound: in steady state one retry per request suffices once past the burst (each
+# wait regenerates exactly the one token the next request consumes). Higher in case something
+# else sharing this IP is also calling ntfy concurrently.
+readonly MAX_RATE_LIMIT_RETRIES=8
+
 # do_request <token_or_empty> <method: GET|POST> <topic> <expected: allow|deny>
 do_request() {
   local token="$1" method="$2" topic="$3" expected="$4"
-  local url code
+  local url code attempt header_file retry_after
 
   TOTAL=$((TOTAL + 1))
 
   # Build the curl argument array.
-  local -a curl_args=(-s -o /dev/null -w '%{http_code}')
+  header_file="$(mktemp -t ntfy-acl-check.XXXXXX)"
+  local -a curl_args=(-s -o /dev/null -D "${header_file}" -w '%{http_code}')
 
   if [[ "$method" == "GET" ]]; then
     # JSON API poll: GET /<topic>/json?poll=1&since=1m
@@ -80,7 +108,19 @@ do_request() {
     curl_args+=(-H "Authorization: Bearer ${token}")
   fi
 
-  code=$(curl "${curl_args[@]}" "$url" 2>/dev/null || true)
+  attempt=0
+  while :; do
+    code=$(curl "${curl_args[@]}" "$url" 2>/dev/null || true)
+    if [[ "$code" != "429" || "$attempt" -ge "$MAX_RATE_LIMIT_RETRIES" ]]; then
+      break
+    fi
+    attempt=$((attempt + 1))
+    # `|| true`: a 429 without Retry-After makes grep exit 1, which under `set -euo pipefail`
+    # would silently kill the whole run (found on the 095 PROD rollout, request 61).
+    retry_after="$(grep -i '^retry-after:' "${header_file}" | tr -d '\r' | awk '{print $2}' || true)"
+    sleep "${retry_after:-$DEFAULT_RETRY_AFTER_SECONDS}"
+  done
+  rm -f "${header_file}"
 
   local got_label
   case "$code" in
@@ -102,6 +142,8 @@ do_request() {
     credential_label="version_check"
   elif [[ "$token" == "$NTFY_MUTATION_TOKEN" ]]; then
     credential_label="mutation"
+  elif [[ "$token" == "$NTFY_HERMES_LAB_TOKEN" ]]; then
+    credential_label="hermes_lab"
   else
     credential_label="hermes"
   fi
@@ -120,12 +162,16 @@ do_request "" GET  hermes     deny
 do_request "" GET  pve-backup deny
 do_request "" GET  versions   deny
 do_request "" GET  mutation  deny
+do_request "" GET  hermes-lab-in deny
+do_request "" GET  hermes-lab deny
+do_request "" GET  hermes-in  deny  # 095 T013 (FR-002)
 do_request "" POST alerts     deny
 do_request "" POST hermes     deny
 do_request "" POST pve-backup deny
 do_request "" POST versions   deny
 do_request "" POST mutation  deny
 do_request "" POST other      deny
+do_request "" POST hermes-in  deny
 
 # --- Row: owner token (read *) ---
 do_request "$NTFY_OWNER_TOKEN" GET  alerts     allow
@@ -139,6 +185,15 @@ do_request "$NTFY_OWNER_TOKEN" POST pve-backup deny
 do_request "$NTFY_OWNER_TOKEN" POST versions   deny
 do_request "$NTFY_OWNER_TOKEN" POST mutation  deny
 do_request "$NTFY_OWNER_TOKEN" POST other      deny
+do_request "$NTFY_OWNER_TOKEN" GET hermes-lab-in allow
+do_request "$NTFY_OWNER_TOKEN" POST hermes-lab-in allow  # 095 FR-011: owner writes the scratch inbound
+do_request "$NTFY_OWNER_TOKEN" GET hermes-lab allow
+do_request "$NTFY_OWNER_TOKEN" POST hermes-lab deny
+do_request "$NTFY_OWNER_TOKEN" GET hermes-in allow   # 095 T013
+# owner POST hermes-in = 200 (contracts/acl-matrix.md) is deliberately NOT probed: an accepted
+# message reaches the PROD agent, which would start a model turn and reply to the phone on every
+# run. Covered instead by test_ntfy_acl.py (writers("hermes-in") == {"owner"}) and the first real
+# phone message at rollout (095 T020). Every deny cell below is safe: a refused POST is never stored.
 
 # --- Row: alertmanager token (write alerts only) ---
 do_request "$NTFY_ALERTMANAGER_TOKEN" GET  alerts     deny
@@ -152,6 +207,12 @@ do_request "$NTFY_ALERTMANAGER_TOKEN" POST pve-backup deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST versions   deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST mutation  deny
 do_request "$NTFY_ALERTMANAGER_TOKEN" POST other      deny
+do_request "$NTFY_ALERTMANAGER_TOKEN" GET hermes-lab-in deny
+do_request "$NTFY_ALERTMANAGER_TOKEN" POST hermes-lab-in deny
+do_request "$NTFY_ALERTMANAGER_TOKEN" GET hermes-lab deny
+do_request "$NTFY_ALERTMANAGER_TOKEN" POST hermes-lab deny
+do_request "$NTFY_ALERTMANAGER_TOKEN" GET hermes-in deny   # 095 T013
+do_request "$NTFY_ALERTMANAGER_TOKEN" POST hermes-in deny
 
 # --- Row: hermes token (write hermes only) ---
 do_request "$NTFY_HERMES_TOKEN" GET  alerts     deny
@@ -165,6 +226,12 @@ do_request "$NTFY_HERMES_TOKEN" POST pve-backup deny
 do_request "$NTFY_HERMES_TOKEN" POST versions   deny
 do_request "$NTFY_HERMES_TOKEN" POST mutation  deny
 do_request "$NTFY_HERMES_TOKEN" POST other      deny
+do_request "$NTFY_HERMES_TOKEN" GET hermes-lab-in deny
+do_request "$NTFY_HERMES_TOKEN" POST hermes-lab-in deny
+do_request "$NTFY_HERMES_TOKEN" GET hermes-lab deny
+do_request "$NTFY_HERMES_TOKEN" POST hermes-lab deny
+do_request "$NTFY_HERMES_TOKEN" GET  hermes-in allow  # 095 T013 (FR-001): the agent reads its inbound
+do_request "$NTFY_HERMES_TOKEN" POST hermes-in deny   # 095 T013 (FR-002): bold cell, the agent never writes it
 
 # --- Row: pve_backup token (write pve-backup only) ---
 do_request "$NTFY_PVE_BACKUP_TOKEN" GET  alerts     deny
@@ -178,6 +245,12 @@ do_request "$NTFY_PVE_BACKUP_TOKEN" POST pve-backup allow
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST versions   deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST mutation  deny
 do_request "$NTFY_PVE_BACKUP_TOKEN" POST other      deny
+do_request "$NTFY_PVE_BACKUP_TOKEN" GET hermes-lab-in deny
+do_request "$NTFY_PVE_BACKUP_TOKEN" POST hermes-lab-in deny
+do_request "$NTFY_PVE_BACKUP_TOKEN" GET hermes-lab deny
+do_request "$NTFY_PVE_BACKUP_TOKEN" POST hermes-lab deny
+do_request "$NTFY_PVE_BACKUP_TOKEN" GET hermes-in deny   # 095 T013
+do_request "$NTFY_PVE_BACKUP_TOKEN" POST hermes-in deny
 
 # --- Row: version_check token (write versions only) ---
 do_request "$NTFY_VERSION_CHECK_TOKEN" GET  alerts     deny
@@ -191,6 +264,12 @@ do_request "$NTFY_VERSION_CHECK_TOKEN" POST pve-backup deny
 do_request "$NTFY_VERSION_CHECK_TOKEN" POST versions   allow
 do_request "$NTFY_VERSION_CHECK_TOKEN" POST mutation  deny
 do_request "$NTFY_VERSION_CHECK_TOKEN" POST other      deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" GET hermes-lab-in deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST hermes-lab-in deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" GET hermes-lab deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST hermes-lab deny
+do_request "$NTFY_VERSION_CHECK_TOKEN" GET hermes-in deny   # 095 T013
+do_request "$NTFY_VERSION_CHECK_TOKEN" POST hermes-in deny
 
 # --- Row: mutation token (write mutation only) ---
 do_request "$NTFY_MUTATION_TOKEN" GET  alerts     deny
@@ -204,6 +283,31 @@ do_request "$NTFY_MUTATION_TOKEN" POST pve-backup deny
 do_request "$NTFY_MUTATION_TOKEN" POST versions   deny
 do_request "$NTFY_MUTATION_TOKEN" POST mutation  allow
 do_request "$NTFY_MUTATION_TOKEN" POST other      deny
+do_request "$NTFY_MUTATION_TOKEN" GET hermes-lab-in deny
+do_request "$NTFY_MUTATION_TOKEN" POST hermes-lab-in deny
+do_request "$NTFY_MUTATION_TOKEN" GET hermes-lab deny
+do_request "$NTFY_MUTATION_TOKEN" POST hermes-lab deny
+do_request "$NTFY_MUTATION_TOKEN" GET hermes-in deny   # 095 T013
+do_request "$NTFY_MUTATION_TOKEN" POST hermes-in deny
+
+# --- Row: hermes_lab token (095 FR-011 LAB scratch pair) ---
+do_request "$NTFY_HERMES_LAB_TOKEN" GET  hermes-lab-in allow
+do_request "$NTFY_HERMES_LAB_TOKEN" POST hermes-lab-in deny  # FR-011: scratch agent cannot write its own inbound
+do_request "$NTFY_HERMES_LAB_TOKEN" GET  hermes-lab    deny
+do_request "$NTFY_HERMES_LAB_TOKEN" POST hermes-lab    allow
+do_request "$NTFY_HERMES_LAB_TOKEN" GET  hermes         deny  # FR-011/SC-002: no production topic, read or write
+do_request "$NTFY_HERMES_LAB_TOKEN" POST hermes         deny
+do_request "$NTFY_HERMES_LAB_TOKEN" GET  hermes-in      deny
+do_request "$NTFY_HERMES_LAB_TOKEN" POST hermes-in      deny
+do_request "$NTFY_HERMES_LAB_TOKEN" GET  alerts         deny
+do_request "$NTFY_HERMES_LAB_TOKEN" POST alerts         deny
+do_request "$NTFY_HERMES_LAB_TOKEN" GET  pve-backup     deny
+do_request "$NTFY_HERMES_LAB_TOKEN" POST pve-backup     deny
+do_request "$NTFY_HERMES_LAB_TOKEN" GET  versions       deny
+do_request "$NTFY_HERMES_LAB_TOKEN" POST versions       deny
+do_request "$NTFY_HERMES_LAB_TOKEN" GET  mutation       deny
+do_request "$NTFY_HERMES_LAB_TOKEN" POST mutation       deny
+do_request "$NTFY_HERMES_LAB_TOKEN" POST other          deny
 
 echo ""
 echo "=== ntfy ACL check: $((TOTAL - FAILURES))/${TOTAL} PASS, ${FAILURES} FAIL ==="

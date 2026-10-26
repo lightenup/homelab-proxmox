@@ -383,6 +383,18 @@ jobs:
             --exclude 'artifacts/' \
             ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
 
+      # pve-lab confidence (via pve-lab run) starts with CLEANUP-PRE-001, which destroys any lab
+      # VM, so an unguarded run here would kill a LAB rig mid-gate (spec 095 R-016, condition 3;
+      # same guard and message as .github/workflows/proxmox-apply.yml).
+      - name: Refuse while a kept LAB rig exists
+        run: |
+          status="$(ssh ci@pve "cd /home/ci/homelab-proxmox/scripts/lab && ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ./pve-lab status")"
+          echo "${status}"
+          if grep -q 'Found Lab VM' <<<"${status}"; then
+            echo "::error::A kept LAB rig exists; run lab-rig.yml with action=down (confirm=destroy-lab-rig) first"
+            exit 1
+          fi
+
       - name: Run confidence suite on PVE
         id: suite_on_pve
         continue-on-error: true

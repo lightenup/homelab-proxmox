@@ -3,6 +3,19 @@
 **Feature Branch**: `083-hermes-agent-runtime`
 **Created**: 2026-10-16
 **Status**: **Implemented** — live on PROD since 2026-10-18 ([`specs/083-hermes-agent-runtime/`](../../specs/083-hermes-agent-runtime/), [PR #247](https://github.com/lightenup/homelab-proxmox/pull/247)). No open follow-ups (the two-week review T050 was skipped by owner decision). Router check Q-P6 done: ISP Carrier-Grade NAT, so there is no inbound path. Depends on [`082`](./082-ntfy-push-service.md); amends [`065`](./065-hermes-service.md).
+**Amended by [`095`](./095-ntfy-two-way.md) (2026-10-26, FR-013)**:
+- *Delivery-only → interactive*: ntfy sessions from `hermes-in` are chat sessions with approval
+  prompts on the phone. Cron, single-query and API-server (Open WebUI) surfaces still deny (FR-005
+  unchanged). Slash commands over ntfy are limited to the 095 FR-014 set.
+- *Silent restarts → silent gap notice*: every gateway start posts a priority-2 notice naming the
+  window in which `hermes-in` messages were not received (gap-notice hook, read-only mount).
+- *Approval timeout*: 300 s → 15 min.
+- *FR-014 (LAB stage)*: the pipeline LAB stage still renders no ntfy. A separate LAB rig may hold the
+  LAB-only `hermes_lab` scratch-pair credential.
+- *Control comments*: `agent.env.j2` and `agent-config.yaml.j2` now describe inbound `hermes-in`,
+  read-only for the agent's token, and that no `*_ALLOW_ALL_USERS` variable may ever be set.
+- Two read-only overrides are mounted: the ntfy chunking shim (long replies split, not cut) and the
+  gap-notice hook. Hermes's logs moved to `/var/log/hermes-agent` (collected for audit, FR-009).
 **Input**: Add the upstream **Hermes Agent** (Nous Research) to the Hermes LXC as a second backend
 behind the existing Open WebUI, so that (a) chats can use a full agent with terminal, tools and
 memory, and (b) **any scheduled job is one script plus one `hermes cron create` line**, delivered

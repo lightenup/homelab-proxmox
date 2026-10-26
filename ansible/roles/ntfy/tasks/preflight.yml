@@ -20,7 +20,8 @@
       ntfy_hermes_password_hash, ntfy_hermes_token,
       ntfy_pve_backup_password_hash, ntfy_pve_backup_token,
       ntfy_version_check_password_hash, ntfy_version_check_token,
-      ntfy_mutation_password_hash, ntfy_mutation_token.
+      ntfy_mutation_password_hash, ntfy_mutation_token,
+      ntfy_hermes_lab_password_hash, ntfy_hermes_lab_token.
   loop:
     - ntfy_owner_password_hash
     - ntfy_owner_token
@@ -34,6 +35,8 @@
     - ntfy_version_check_token
     - ntfy_mutation_password_hash
     - ntfy_mutation_token
+    - ntfy_hermes_lab_password_hash
+    - ntfy_hermes_lab_token
   no_log: true
 
 - name: Assert tokens match the ntfy token format (tk_ + 29 chars)
@@ -50,6 +53,7 @@
     - "{{ ntfy_pve_backup_token }}"
     - "{{ ntfy_version_check_token }}"
     - "{{ ntfy_mutation_token }}"
+    - "{{ ntfy_hermes_lab_token }}"
   no_log: true
 
 - name: Assert password hashes are bcrypt with cost >= 10
@@ -66,15 +70,48 @@
     - "{{ ntfy_pve_backup_password_hash }}"
     - "{{ ntfy_version_check_password_hash }}"
     - "{{ ntfy_mutation_password_hash }}"
+    - "{{ ntfy_hermes_lab_password_hash }}"
   no_log: true
 
-- name: Assert topic names in ntfy_users are unique
+- name: Assert every writable topic has exactly one non-owner writer
+  # spec 095 T006 (082 rule, data-model.md § Validation): a topic with a write grant
+  # has exactly one non-owner writer. Computed from the ACL data, so it also covers
+  # grants added via ntfy_owner_access or a user's multi-topic access list.
   ansible.builtin.assert:
     that:
-      - ntfy_users | map(attribute='topic') | list | length == ntfy_users | map(attribute='topic') | list | unique | length
+      - writable | length == writable | unique | length
     fail_msg: >-
-      Topic names in ntfy_users are not unique. A topic has exactly one publisher
-      (data-model.md § Topic).
+      A topic has more than one non-owner writer: {{ writable }}
+      (data-model.md § Validation).
+  vars:
+    writable: >-
+      {{ ntfy_users
+         | map(attribute='access')
+         | flatten
+         | select('search', ':(write-only|read-write)$')
+         | map('regex_replace', '^([^:]+):.*$', '\1')
+         | list }}
+  no_log: true
+
+- name: Assert no non-owner user can write inbound or action topics
+  # spec 095 FR-002 (data-model.md § Validation): hermes-in, actions and hermes-lab-in
+  # are owner-writable only; a publisher grant there is a misconfiguration.
+  ansible.builtin.assert:
+    that:
+      - offending | length == 0
+    fail_msg: >-
+      Non-owner write grant found on an inbound/action topic: {{ offending }}
+      (FR-002: only the owner may write hermes-in, actions or hermes-lab-in).
+  vars:
+    offending: >-
+      {{ ntfy_users
+         | map(attribute='access')
+         | flatten
+         | select('search', ':(write-only|read-write)$')
+         | map('regex_replace', '^([^:]+):.*$', '\1')
+         | select('in', ['hermes-in', 'actions', 'hermes-lab-in'])
+         | list }}
+  no_log: true
 
 - name: Check Docker daemon is running
   ansible.builtin.systemd:

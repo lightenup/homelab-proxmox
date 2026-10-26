@@ -44,6 +44,17 @@ hermes_agent_default_model: "hermes-balanced"
 # US4 (FR-016): host directory the heartbeat script writes its .prom file into; bind-mounted
 # at /heartbeat in the agent container, exposed to node_exporter by symlink (R-007).
 hermes_agent_heartbeat_dir: "/var/lib/hermes-agent-heartbeat"
+# Host folder for Hermes's own logs (095 T072), bind-mounted at /opt/data/logs. Outside the
+# 0750 agent state folder so alloy can read gateway.log (INFO audit lines, R-008) without being
+# able to traverse into state.db, memory or .env. The same path is in host_vars/hermes.yml
+# (alloy_file_logs) and playbooks/hermes.yml (pre_tasks); test_hermes_log_rules.py keeps them equal.
+hermes_agent_log_dir: "/var/log/hermes-agent"
+# Host directory for gateway hooks (095 T018: the gap-notice hook). Root-owned, outside the
+# agent's data dir, bind-mounted read-only per hook.
+hermes_agent_hooks_dir: "/opt/hermes-agent-hooks"
+# Host directory for agent plugin overrides (095 R-018: the ntfy chunking shim). Root-owned,
+# outside the agent's data dir, bind-mounted read-only.
+hermes_agent_plugins_dir: "/opt/hermes-agent-plugins"
 # Names of job secrets exposed to cron scripts through terminal.env_passthrough (R-004).
 # Each name's value is read from the vault variable `name | lower` (the llm_router_clients
 # key_env convention). A job that needs a secret is the one case where adding a job costs a

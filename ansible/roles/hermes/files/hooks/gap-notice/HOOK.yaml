@@ -1,0 +1,7 @@
+# Gateway hook (spec 095 FR-006, research R-007). Mounted read-only at
+# /opt/data/hooks/gap-notice; the agent can write /opt/data but not this code.
+name: gap-notice
+description: >-
+  On every gateway start, post a silent ntfy notice naming the window in which messages sent
+  to the inbound topic were not received (ntfy subscriptions do not replay, R-007).
+events: ["gateway:startup"]

@@ -1,0 +1,129 @@
+name: LAB rig (095)
+
+# Kept pve-lab VM for manual LAB gates (spec 095 T064, research R-015).
+#   up      clone the tier-2 template, keep it, probe ntfy and the LLM router from the rig
+#   deploy  run ansible/playbooks/hermes_lab_rig.yml on the rig (deploy_environment=lab)
+#   status  report the rig
+#   down    destroy it; needs confirm=destroy-lab-rig
+# Every command runs on pve as ci: only pve routes to 10.99.0.0/24. The vault password is read
+# from the file on pve, never from GitHub secrets. While a rig exists, proxmox-apply.yml refuses
+# to run (its harness would destroy it). Laptop path: the same commands from `ssh ci@pve`
+# (quickstart § 0.1).
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "up | deploy | status | down"
+        type: choice
+        options:
+          - status
+          - up
+          - deploy
+          - down
+        default: status
+      confirm:
+        description: "For action=down only: type destroy-lab-rig"
+        type: string
+        default: ""
+
+concurrency:
+  group: pve-lab
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rig:
+    runs-on: [self-hosted]
+    env:
+      ACTION: ${{ inputs.action }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Teardown barrier (action=down needs confirm=destroy-lab-rig)
+        run: |
+          if [[ "${ACTION}" == "down" && "${CONFIRM}" != "destroy-lab-rig" ]]; then
+            echo "::error::action=down destroys the LAB rig; set confirm=destroy-lab-rig"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Ensure artifact root on PVE
+        run: |
+          SSH_USER=ci PROXMOX_HOST=pve ./scripts/lab/guardrails.sh ensure-artifacts
+
+      - name: Sync repo to PVE
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'scripts/lab/artifacts/' \
+            --exclude 'artifacts/' \
+            ./ ci@pve:/home/ci/homelab-proxmox/
+
+      - name: Run the action on PVE
+        run: |
+          # The script arrives on stdin (`bash -s`). It is one function called on the last line, so
+          # bash has read all of it before any child (ansible, ssh) could consume stdin.
+          ssh ci@pve bash -s -- "${ACTION}" <<'REMOTE'
+          set -euo pipefail
+          main() {
+          local action="$1"
+          cd /home/ci/homelab-proxmox
+          export ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts
+          export PROVISION_SSH_KEY=/home/ci/.ssh/lab_rig_ed25519
+          vault_pass_file=/var/lib/homelab-proxmox/vault/.ansible_vault_pass
+
+          rig_exists() {
+            scripts/lab/pve-lab status | grep -q 'Found Lab VM'
+          }
+
+          rig_probe() {
+            (cd ansible && ANSIBLE_VAULT_PASSWORD_FILE="${vault_pass_file}" \
+              ansible -i inventories/lab/hosts.yml lab --private-key "${PROVISION_SSH_KEY}" \
+              -e @group_vars/services/vars.yml \
+              -m ansible.builtin.uri -a "url=$1 timeout=10")
+          }
+
+          case "${action}" in
+            up)
+              if rig_exists; then
+                echo "::error::A LAB rig already exists (pve-lab run would destroy it); run action=down first"
+                exit 1
+              fi
+              if [[ ! -f "${PROVISION_SSH_KEY}" ]]; then
+                ssh-keygen -q -t ed25519 -N '' -C lab-rig-095 -f "${PROVISION_SSH_KEY}"
+              fi
+              ANSIBLE_VAULT_PASSWORD="$(cat "${vault_pass_file}")" \
+                scripts/lab/pve-lab run --profile hypervisor-control-plane --keep
+              rig_probe 'https://ntfy.{{ caddy_base_domain }}/v1/health' \
+                || { echo "::error::The rig cannot reach ntfy (R-015: stop and raise it)"; exit 1; }
+              rig_probe 'http://{{ llm_router_ip }}:{{ llm_router_port }}/health/liveliness' \
+                || { echo "::error::The rig cannot reach the LLM router (R-015: stop and raise it)"; exit 1; }
+              ;;
+            deploy)
+              if ! rig_exists; then
+                echo "::error::No LAB rig; run action=up first"
+                exit 1
+              fi
+              cd ansible
+              ANSIBLE_VAULT_PASSWORD_FILE="${vault_pass_file}" \
+                ansible-playbook -i inventories/lab/hosts.yml playbooks/hermes_lab_rig.yml \
+                --private-key "${PROVISION_SSH_KEY}" -e deploy_environment=lab
+              ;;
+            status)
+              scripts/lab/pve-lab status
+              ;;
+            down)
+              scripts/lab/pve-lab down
+              scripts/lab/pve-lab status
+              ;;
+            *)
+              echo "::error::unknown action ${action}"
+              exit 1
+              ;;
+          esac
+          }
+          main "$@" </dev/null
+          REMOTE

@@ -78,6 +78,13 @@ unless its destination is an NFS mount.
   - `hermes-lxc` – Open WebUI + SearXNG, a self-hosted AI workspace on local models only,
     reached through the `llm-router-lxc` gateway. State (SQLite, documents, vector index) on
     local disk, backed up to Synology (spec 065).
+    Also runs the upstream Hermes Agent (spec 083), reachable from the phone over ntfy (spec 095).
+  - `ntfy-lxc` – the estate's push channel (spec 082), two-way since spec 095:
+    phone (`owner`) → `hermes-in` → agent (read-only token) → replies on `hermes`. Only the owner can
+    write `hermes-in`, so a credential the agent holds can never talk to itself. Flagged commands
+    prompt on the phone (`/approve`, `/deny`, 15 min timeout). P2: alert buttons publish to
+    `actions` → action relay (monitoring stack) → Alertmanager silence → confirmation on `relay`.
+    Pushover stays the independent alert path.
 
 ## Tooling
 

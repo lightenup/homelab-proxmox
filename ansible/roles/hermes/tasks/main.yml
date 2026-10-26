@@ -38,6 +38,14 @@
     group: "{{ hermes_agent_uid }}"
     mode: '0750'
 
+- name: Ensure the agent log directory exists (095 T072, mounted at /opt/data/logs)
+  ansible.builtin.file:
+    path: "{{ hermes_agent_log_dir }}"
+    state: directory
+    owner: "{{ hermes_agent_uid }}"
+    group: "{{ hermes_agent_uid }}"
+    mode: '0755'
+
 - name: Ensure the agent scripts directory exists
   ansible.builtin.file:
     path: "{{ hermes_agent_data_dir }}/scripts"
@@ -86,6 +94,31 @@
     mode: '0644'
   notify: Restart hermes
 
+# ntfy chunking shim (095 R-018): overrides the bundled ntfy adapter so long replies are split,
+# not cut at 4096 characters. Root-owned and mounted :ro into the agent, so the agent (which can
+# write /opt/data) cannot change gateway-executed code. Remove with T076 (upstream fix released).
+- name: Install the agent plugin overrides (read-only mount source)
+  ansible.builtin.copy:
+    src: plugins/
+    dest: "{{ hermes_agent_plugins_dir }}/"
+    owner: root
+    group: root
+    mode: u=rwX,g=rX,o=rX
+    directory_mode: '0755'
+  notify: Restart hermes
+
+# Gateway hooks (095 T018/T029): Python the gateway runs on startup. Root-owned and mounted :ro,
+# so the agent (which can write /opt/data) cannot rewrite gateway-executed code.
+- name: Install the agent gateway hooks (read-only mount source)
+  ansible.builtin.copy:
+    src: hooks/
+    dest: "{{ hermes_agent_hooks_dir }}/"
+    owner: root
+    group: root
+    mode: u=rwX,g=rX,o=rX
+    directory_mode: '0755'
+  notify: Restart hermes
+
 - name: Deploy the agent environment (vault-rendered secrets)
   ansible.builtin.template:
     src: agent.env.j2
@@ -96,24 +129,61 @@
   notify: Restart hermes
   no_log: true
 
-# FR-014: the LAB stage must never hold the push credential. Check the rendered file, not the
-# inputs, so a template regression is caught. (LAB deploys the real LXC — backlog 067 — so
-# this is also what removes a token left by an earlier PROD deploy: the template re-renders.)
-- name: Read the rendered agent environment (LAB guard)
+# FR-014 (083) + FR-011 (095): the pipeline LAB stage must never hold the push credential;
+# the LAB rig may only ever hold the scratch pair. Check the rendered file, not the inputs,
+# so a template regression is caught. (LAB deploys the real LXC — backlog 067 — so this is
+# also what removes a token left by an earlier PROD deploy: the template re-renders.)
+- name: Read the rendered agent environment (LAB guards)
   ansible.builtin.slurp:
     src: "{{ hermes_agent_env_path }}"
   register: hermes_agent_env_rendered
-  when: not hermes_agent_operational
   no_log: true
 
-- name: Assert the LAB agent environment holds no push token (FR-014)
+- name: Assert the pipeline LAB stage environment holds no push credential (083 FR-014)
   ansible.builtin.assert:
     that:
       - (hermes_agent_env_rendered.content | b64decode).splitlines() | select('match', '^\\s*NTFY_TOKEN\\s*=') | list | length == 0
+      - (hermes_agent_env_rendered.content | b64decode).splitlines() | select('match', '^\\s*NTFY_TOPIC\\s*=') | list | length == 0
+      - (hermes_agent_env_rendered.content | b64decode).splitlines() | select('match', '^\\s*NTFY_ALLOWED_USERS\\s*=') | list | length == 0
     fail_msg: >-
-      The rendered agent environment contains NTFY_TOKEN on a non-operational (LAB) deploy.
-      The LAB stage must never be able to reach the phone (spec 083 FR-014).
-  when: not hermes_agent_operational
+      The rendered agent environment contains NTFY_TOKEN, NTFY_TOPIC or NTFY_ALLOWED_USERS on
+      a pipeline LAB deploy. The LAB stage must never be able to reach the phone
+      (spec 083 FR-014, 095 FR-011: the ntfy platform stays off there).
+  when: not hermes_agent_operational and not (lab_inventory | default(false) | bool)
+  no_log: true
+
+- name: Assert the LAB rig environment holds only the scratch pair (095 FR-011)
+  ansible.builtin.assert:
+    that:
+      - env_lines | select('match', '^NTFY_TOPIC=hermes-lab-in$') | list | length == 1
+      - env_lines | select('match', '^NTFY_PUBLISH_TOPIC=hermes-lab$') | list | length == 1
+      - env_lines | select('match', '^NTFY_TOPIC=hermes-in$') | list | length == 0
+      - env_lines | select('search', 'hermes-in') | list | length == 0
+      - env_lines | select('search', ntfy_hermes_token) | list | length == 0
+    fail_msg: >-
+      The LAB rig agent environment is not the scratch pair (hermes-lab-in / hermes-lab), or
+      leaks a production topic or the PROD token (spec 095 FR-011).
+  vars:
+    # Comment lines excluded (found 2026-10-26, T068 first real deploy to the rig): the
+    # template's own header explains all three modes by name, so its prose necessarily
+    # contains the literal text "hermes-in" when describing what the PROD branch does. An
+    # unanchored `search` over the full file (comments included) therefore failed every
+    # correct render, not just a leaking one. The anchored `match` conditions above were never
+    # affected -- comment lines start with `#`, never with a bare variable name.
+    env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() | reject('match', '^\\s*#') | list }}"
+  when: not hermes_agent_operational and (lab_inventory | default(false) | bool)
+  no_log: true
+
+- name: Assert no allow-all variable ever appears in the agent environment (095 FR-003)
+  ansible.builtin.assert:
+    that:
+      - env_lines | select('match', '^\\s*(NTFY_ALLOW_ALL_USERS|GATEWAY_ALLOW_ALL_USERS)\\s*=') | list | length == 0
+    fail_msg: >-
+      An *_ALLOW_ALL_USERS variable appears in the rendered agent environment. A topic that
+      can talk to the agent would be a shell credential (spec 095 FR-003).
+  vars:
+    env_lines: "{{ (hermes_agent_env_rendered.content | b64decode).splitlines() | reject('match', '^\\s*#') | list }}"
+  # Every mode, PROD included (095 T016): PROD is where hermes-in reaches the agent.
   no_log: true
 
 - name: Deploy SearXNG settings
@@ -219,10 +289,13 @@
       - (hermes_compose | from_yaml).services['hermes-agent'].get('cap_add', []) | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', 'docker.sock') | list | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].networks | list | sort == ['agent']
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/plugins') | reject('search', ':ro$') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/hooks') | reject('search', ':ro$') | list | length == 0
     fail_msg: >-
       The rendered hermes-agent service is not confined: it must have no published ports,
       no privileged mode, no cap_add, no Docker socket mount, and sit only on the `agent`
-      network (spec 083 FR-004/FR-007/FR-008). Fix docker-compose.yml.j2 before deploying.
+      network (spec 083 FR-004/FR-007/FR-008), and every /opt/data/plugins and /opt/data/hooks mount must
+      be :ro (095 R-018, R-007). Fix docker-compose.yml.j2 before deploying.
   vars:
     hermes_compose: "{{ hermes_compose_rendered.content | b64decode }}"
 

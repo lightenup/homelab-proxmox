@@ -8,24 +8,54 @@ ntfy_image: "binwiederhier/ntfy"
 # Publisher accounts (data-model.md § Account). One topic per publisher; no account
 # has role admin. The owner account is kept separate because it reads * and has no
 # topic of its own.
+#
+# spec 095 T004: grants move to an `access:` list of "<topic>:<perm>" strings so a
+# publisher can hold read on inbound topics (hermes-in) alongside its write-only grant.
+# Behaviour-preserving refactor: the rendered matrix is unchanged (guard test
+# python/tests/guardrails/test_ntfy_acl.py, T003).
+ntfy_owner_access:
+  - "*:read-only"
+  # 095 T007 (FR-011): read-write on the LAB scratch inbound topic (data-model § LAB pair).
+  - "hermes-lab-in:read-write"
+  # 095 T012 (FR-001/FR-002): the phone writes the agent's inbound topic. read-write, not
+  # write-only: the longer pattern replaces the wildcard read for this topic (research R-004).
+  # The owner is the ONLY writer of hermes-in (preflight + test_ntfy_acl.py enforce it).
+  - "hermes-in:read-write"
 ntfy_users:
   - name: "alertmanager"
-    topic: "alerts"
+    access:
+      - "alerts:write-only"
     password_hash: "{{ ntfy_alertmanager_password_hash }}"
     token: "{{ ntfy_alertmanager_token }}"
   - name: "hermes"
-    topic: "hermes"
+    access:
+      - "hermes:write-only"
+      # 095 T012: the agent subscribes to its inbound topic. Read only: a credential the
+      # agent holds (and can read from its own .env) must never write hermes-in (R-005).
+      - "hermes-in:read-only"
     password_hash: "{{ ntfy_hermes_password_hash }}"
     token: "{{ ntfy_hermes_token }}"
   - name: "pve_backup"
-    topic: "pve-backup"
+    access:
+      - "pve-backup:write-only"
     password_hash: "{{ ntfy_pve_backup_password_hash }}"
     token: "{{ ntfy_pve_backup_token }}"
   - name: "version_check"
-    topic: "versions"
+    access:
+      - "versions:write-only"
     password_hash: "{{ ntfy_version_check_password_hash }}"
     token: "{{ ntfy_version_check_token }}"
   - name: "mutation"
-    topic: "mutation"
+    access:
+      - "mutation:write-only"
     password_hash: "{{ ntfy_mutation_password_hash }}"
     token: "{{ ntfy_mutation_token }}"
+  # 095 T007 (FR-011): LAB scratch pair. Rendered on every ntfy server (the ACL is
+  # global), but the credential is only ever placed on the LAB rig (lab_inventory);
+  # no production topic grant exists for this user (guard test test_ntfy_acl.py).
+  - name: "hermes_lab"
+    access:
+      - "hermes-lab-in:read-only"
+      - "hermes-lab:write-only"
+    password_hash: "{{ ntfy_hermes_lab_password_hash }}"
+    token: "{{ ntfy_hermes_lab_token }}"

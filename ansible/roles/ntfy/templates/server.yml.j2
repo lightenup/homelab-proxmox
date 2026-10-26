@@ -19,9 +19,13 @@ auth-users:
   - "{{ user.name }}:{{ user.password_hash }}:user"
 {% endfor %}
 auth-access:
-  - "owner:*:read-only"
+{% for grant in ntfy_owner_access %}
+  - "owner:{{ grant }}"
+{% endfor %}
 {% for user in ntfy_users %}
-  - "{{ user.name }}:{{ user.topic }}:write-only"
+{% for grant in user.access %}
+  - "{{ user.name }}:{{ grant }}"
+{% endfor %}
 {% endfor %}
 auth-tokens:
   - "owner:{{ ntfy_owner_token }}:owner-phone"

@@ -157,10 +157,13 @@
         filename: pve-install-repo
         state: present
 
-    - name: Remove Enterprise Repository
+    - name: Remove Enterprise Repository (pre-install; harmless no-op on most templates)
       file:
-        path: /etc/apt/sources.list.d/pve-enterprise.list
+        path: "{{ item }}"
         state: absent
+      loop:
+        - /etc/apt/sources.list.d/pve-enterprise.list
+        - /etc/apt/sources.list.d/pve-enterprise.sources
 
     - name: Validate Repository Availability
       command: apt-cache policy
@@ -201,6 +204,28 @@
       delay: 10
       register: apt_res
       until: apt_res is success
+
+    # Found 2026-10-26, hermes_lab_rig.yml (spec 095 T068): pve-manager's own postinst adds its
+    # enterprise repo as a side effect of the install just above, re-introducing exactly what the
+    # pre-install removal task removed -- but in Debian 13 / PVE 9's deb822 .sources format, a
+    # different filename that task never matched. This stray, unauthenticated (401, no
+    # subscription) repo broke the first later apt-get update ANY role on this profile ran
+    # (geerlingguy.docker's own repo add), yet never failed PVE-001 below or "Validate Repository
+    # Availability" above, because both only read the existing apt cache (apt-cache policy,
+    # dpkg -l) -- neither does a real network fetch the way apt-get update does.
+    - name: Remove Enterprise Repository (post-install; PVE re-adds it as a side effect)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/pve-enterprise.list
+        - /etc/apt/sources.list.d/pve-enterprise.sources
+
+    - name: Verify apt can actually fetch, not just read its cache, after PVE install
+      apt:
+        update_cache: true
+      register: apt_update_after_pve_install
+      failed_when: apt_update_after_pve_install is failed
 
     # -------------------------------------------------------------------------
     # PVE Assertions (PVE-001 to PVE-005)

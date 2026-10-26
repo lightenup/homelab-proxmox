@@ -183,6 +183,16 @@ services:
       # Deploy-owned configuration, mounted READ-ONLY over the image's config path so the
       # agent cannot switch its own approvals off (FR-002, R-004).
       - "{{ hermes_agent_config_path }}:/opt/data/config.yaml:ro"
+      # Hermes's own logs (095 T072): a host folder outside the state folder, so alloy can read
+      # gateway.log (the audit lines, R-008) without access to state.db, memory or .env.
+      - "{{ hermes_agent_log_dir }}:/opt/data/logs"
+      # ntfy chunking shim (095 R-018), READ-ONLY for the same reason as config.yaml: the agent
+      # can write /opt/data, so gateway-executed code must not live there writable. Overrides
+      # the bundled ntfy adapter by directory name; enabled by plugins.enabled in config.yaml.
+      - "{{ hermes_agent_plugins_dir }}/platforms/ntfy:/opt/data/plugins/platforms/ntfy:ro"
+      # Gap-notice gateway hook (095 FR-006, R-007), READ-ONLY for the same reason: it is Python
+      # the gateway executes on every start.
+      - "{{ hermes_agent_hooks_dir }}/gap-notice:/opt/data/hooks/gap-notice:ro"
       # Heartbeat file for the scheduler watchdog (US4, R-007) — PROD only.
 {% if hermes_agent_operational %}
       - "{{ hermes_agent_heartbeat_dir }}:/heartbeat"

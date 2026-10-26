@@ -3,6 +3,11 @@
 **Feature Branch**: `082-ntfy-push-service`
 **Created**: 2026-10-16
 **Status**: **Implemented** — live on PROD since 2026-10-17 ([`specs/082-ntfy-push-service/`](../../specs/082-ntfy-push-service/)). Dual delivery with Pushover in a 4-week trial until 2026-11-14. Unblocks [`083`](./083-hermes-agent-runtime.md).
+**Amended by [`095`](./095-ntfy-two-way.md) (2026-10-26, FR-013)**: ntfy is no longer publish-only.
+The phone writes `hermes-in`, which only `owner` may write and which the agent's `hermes` token may only
+read. P2 adds `actions` (owner-only write) and `relay`, and the action relay replaces the
+Alertmanager → ntfy template. The rule of one publisher per topic still holds. The access matrix is in
+`specs/095-ntfy-two-way/contracts/acl-matrix.md`.
 **Input**: Run **ntfy** on its own LXC as the estate's push channel to the owner's Android phone.
 Two publishers from the start: **Alertmanager** (alongside Pushover, not replacing it) and the
 **Hermes Agent** scheduler from `083`. LAN and tailnet only, like every other service. Delivered as

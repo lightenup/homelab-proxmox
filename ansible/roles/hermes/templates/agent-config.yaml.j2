@@ -37,11 +37,13 @@ model:
 timezone: "{{ timezone | default('Europe/Oslo') }}"
 
 # Approvals (FR-002, R-004). manual = always prompt; the non-interactive surfaces (cron
-# jobs, the API server — i.e. every Open WebUI request) fail closed to deny. timeout is
-# upstream's default, stated explicitly.
+# jobs, the API server — i.e. every Open WebUI request) fail closed to deny.
+# timeout (095 FR-004): 15 minutes, not upstream's 300 s, so a prompt on the phone can be
+# answered away from the desk. The concurrent-tool authorization-gate lock derives from it
+# (agent/tool_executor.py:153-160), so it never expires while a prompt can still be answered.
 approvals:
   mode: manual
-  timeout: 300
+  timeout: 900
   cron_mode: deny
   single_query_mode: deny
   unattended_mode: deny
@@ -83,6 +85,41 @@ memory:
 # The key sits at the top level, named for the platform (verified at v0.21.6).
 ntfy:
   gateway_restart_notification: false
+  # Slash-command gating (095 FR-014, research R-002/R-014; keys verified at v0.21.6,
+  # gateway/config_loader.py:220 and gateway/slash_access.py). Gating is on only when
+  # allow_admin_from is non-empty. The value matches no sender: the adapter uses the TOPIC
+  # name as the sender id (R-003), so naming hermes-in or hermes-lab-in here would make
+  # whoever can write that topic an admin with every command. Nobody is admin over ntfy.
+  allow_admin_from: ["no-admin"]
+  # What a non-admin may run; help and whoami are always allowed upstream, and /help lists
+  # exactly this set. /yolo (switches approvals off for the session) and /update (changes
+  # the agent) are deliberately absent. The rest are conversation-scoped and match
+  # upstream's own error advice ("use /compress", "/retry", "/model"). /approve always
+  # cannot be blocked here: gating matches command names, not arguments (R-014); the
+  # HermesPermanentApprovalGranted alert is the control for it.
+  user_allowed_commands:
+    - approve
+    - deny
+    - new
+    - reset
+    - stop
+    - status
+    - compress
+    - retry
+    - undo
+    - usage
+    - title
+    - model
+    # Owner decision 2026-10-26 (T008): /undo and /new ask for confirmation with /approve,
+    # /always or /cancel. cancel only declines that confirmation; always stays out.
+    - cancel
+
+# Plugins (095 R-018). User plugins are opt-in; this file is read-only to the agent, so it
+# cannot enable anything else or switch the override off. platforms/ntfy is the chunking shim
+# that splits long replies instead of cutting them at 4096 characters. Remove with T076.
+plugins:
+  enabled:
+    - platforms/ntfy
 
 # MCP servers (FR-011, R-005): rendered from the single hermes_mcp_servers list — the same
 # list Open WebUI's TOOL_SERVER_CONNECTIONS is built from, so the two surfaces can never
