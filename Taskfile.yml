@@ -220,7 +220,7 @@ tasks:
       Check mode: task ansible:host -- --check
     dir: ansible
     cmds:
-      - ansible-playbook -i inventories/static/hosts.yml playbooks/host_proxmox.yml --vault-password-file .vault-pass.txt {{.CLI_ARGS}}
+      - ansible-playbook -i inventories/prod/hosts.yml playbooks/host_proxmox.yml --vault-password-file .vault-pass.txt {{.CLI_ARGS}}
 
   ansible:mounts:
     desc: "[PROD] Configure NAS NFS mounts on Proxmox host"
@@ -232,7 +232,7 @@ tasks:
       Check mode: task ansible:mounts -- --check
     dir: ansible
     cmds:
-      - ansible-playbook -i inventories/static/hosts.yml playbooks/host_proxmox.yml --vault-password-file .vault-pass.txt --tags mounts {{.CLI_ARGS}}
+      - ansible-playbook -i inventories/prod/hosts.yml playbooks/host_proxmox.yml --vault-password-file .vault-pass.txt --tags mounts {{.CLI_ARGS}}
 
   ansible:backup:
     desc: "[PROD] Deploy/update Proxmox backup system"
