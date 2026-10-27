@@ -90,7 +90,7 @@ groups:
             firing log rule may not reach Pushover/ntfy.
       - alert: LogLinesDiscarded
         expr: |
-          sum by (reason) (increase(loki_discarded_samples_total[10m])) > 0
+          sum by (reason) (increase(loki_discarded_samples_total{reason!="too_far_behind"}[10m])) > 0
         for: 0m
         labels:
           severity: info
@@ -99,7 +99,28 @@ groups:
           summary: "{% raw %}Loki discarded samples ({{ $labels.reason }}){% endraw %}"
           description: >-
             Loki rejected some incoming samples in the last 10 minutes (MR-004). Informational
-            at this rate; see LogLinesDiscardedSustained for a persistent problem.
+            at this rate; see LogLinesDiscardedSustained for a persistent problem. Replays
+            (too_far_behind) are reported by LogReplayRejected instead.
+      # RCA 2026-10-27: a collector re-sending a container's whole log (grafana/alloy#7036, a
+      # container stopped across a discovery refresh) makes Loki reject every line more than
+      # an hour behind as too_far_behind. Those lines are duplicates Loki already has; nothing
+      # is lost. A burst of them is a replay, not an outage. A sustained stream (an hour or
+      # more) is something else, e.g. a host clock running behind: LogLinesDiscardedSustained.
+      - alert: LogReplayRejected
+        expr: |
+          sum(increase(loki_discarded_samples_total{reason="too_far_behind"}[10m])) > 0
+        for: 0m
+        labels:
+          severity: info
+          component: logging
+        annotations:
+          summary: "Loki rejected a collector replay (duplicate log lines, nothing lost)"
+          description: >-
+            A collector re-sent old log lines and Loki rejected those more than an hour behind
+            as too_far_behind. They are duplicates of lines already stored. Usual cause: a
+            Docker container was stopped across Alloy's 15 s discovery refresh and lost its
+            read position (grafana/alloy#7036). Expected after an LXC reboot or a Docker
+            restart; if it keeps firing, see LogLinesDiscardedSustained.
       - alert: LogLinesDiscardedSustained
         expr: |
           sum by (reason) (increase(loki_discarded_samples_total[10m])) > 0
@@ -112,9 +133,15 @@ groups:
           description: >-
             Discards have persisted for an hour. Check limits_config against the source's
             actual volume.
+      # Alloy counts both "Loki refused the batch" (HTTP 4xx) and "could not reach Loki" as
+      # reason="ingester_error", so the reason label cannot tell them apart. Drops that come
+      # with too_far_behind rejections are a replay of duplicates (LogReplayRejected), not
+      # loss; they are excluded. Trade-off: a real outage in the same 15 minutes as a replay
+      # is hidden for that window; LogCollectorDown and LogHostSilent still cover outages.
       - alert: LogCollectorDropping
         expr: |
           sum by (instance) (increase(loki_write_dropped_entries_total{job="alloy"}[15m])) > 0
+          unless on() (sum(increase(loki_discarded_samples_total{reason="too_far_behind"}[15m])) > 0)
         for: 0m
         labels:
           severity: warning
@@ -122,8 +149,11 @@ groups:
         annotations:
           summary: "{% raw %}Collector on {{ $labels.instance }} is dropping log entries{% endraw %}"
           description: >-
-            loki_write_dropped_entries_total increased (MR-005). With max_backoff_retries=0 this
-            should not happen; check connectivity to the push target.
+            loki_write_dropped_entries_total increased (MR-005) and Loki reported no replay
+            rejections at the same time, so entries were really lost: Loki refused them for
+            another reason (rate or size limits, see LogLinesDiscarded) or the push target was
+            unreachable (max_backoff_retries=0 means no retry). Check the collector's journal
+            on that host and connectivity to the push target.
       - alert: LogRetentionStalled
         expr: |
           time() - loki_compactor_apply_retention_last_successful_run_timestamp_seconds > 7200

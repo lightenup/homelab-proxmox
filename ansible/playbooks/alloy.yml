@@ -1,0 +1,20 @@
+---
+# Roll the Alloy log collector (spec 092) to every host on its own: all service LXCs and pve.
+# For Alloy config or version changes, e.g. the position-key fix of 2026-10-27, or the
+# alloy_version bump once grafana/alloy#7036 ships. Alloy is PROD-only (the role asserts it),
+# so the pipeline's LAB stage adds nothing here; this is the operator path, like
+# host_proxmox.yml (root SSH + vault):
+#   task ansible:alloy
+#   cd ansible && ansible-playbook -i inventories/prod/hosts.yml playbooks/alloy.yml \
+#     --vault-password-file .vault-pass.txt [--limit hermes]
+#
+# A change to the Docker discovery labels changes every container's position key, so each
+# host re-sends its container logs once: silence LogReplayRejected/LogCollectorDropping first
+# (docs/operations/monitoring/logging.md section 7).
+
+- name: Roll out the Alloy log collector
+  hosts: services:proxmox_hosts
+  become: true
+  roles:
+    - role: alloy
+      when: (deploy_environment | default('prod')) != 'lab'

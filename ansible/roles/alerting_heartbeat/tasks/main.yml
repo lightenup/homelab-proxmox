@@ -1,0 +1,89 @@
+---
+# Role: alerting_heartbeat (pve only). See defaults/main.yml.
+
+# The vault is gitignored (`**/vault.yml`): it is on the operator machine (host_proxmox.yml's
+# only path) and in pve's store /var/lib/homelab-proxmox/vault/group_vars/monitoring/vault.yml.
+- name: Check the monitoring vault file is present
+  ansible.builtin.stat:
+    path: "{{ alerting_heartbeat_monitoring_vault_file }}"
+  register: alerting_heartbeat_vault_stat
+  delegate_to: localhost
+  become: false
+
+- name: Fail clearly if the monitoring vault file is missing
+  ansible.builtin.assert:
+    that: alerting_heartbeat_vault_stat.stat.exists
+    fail_msg: >-
+      {{ alerting_heartbeat_monitoring_vault_file }} not found. It is gitignored; copy it from
+      pve's vault store (/var/lib/homelab-proxmox/vault/group_vars/monitoring/vault.yml) or run
+      from a checkout that has it.
+
+- name: Load the monitoring vault (Pushover credentials), namespaced
+  ansible.builtin.include_vars:
+    file: "{{ alerting_heartbeat_monitoring_vault_file }}"
+    name: alerting_heartbeat_monitoring_vault
+  no_log: true
+
+- name: Assert the heartbeat has what it needs
+  ansible.builtin.assert:
+    that:
+      - "'monitoring' in hostvars"
+      - alerting_heartbeat_pushover_user_key | length > 0
+      - alerting_heartbeat_pushover_api_token | length > 0
+    fail_msg: >-
+      alerting_heartbeat needs the monitoring host in the inventory and pushover_user_key /
+      pushover_api_token in group_vars/monitoring/vault.yml.
+  no_log: true
+
+- name: Ensure curl and python3 are present (the script uses both)
+  ansible.builtin.apt:
+    name: [curl, python3]
+    state: present
+
+- name: Deploy the heartbeat script
+  ansible.builtin.copy:
+    src: alerting-heartbeat.sh
+    dest: "{{ alerting_heartbeat_script_path }}"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure the heartbeat state directory exists
+  ansible.builtin.file:
+    path: "{{ alerting_heartbeat_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Deploy the heartbeat environment (Pushover credentials)
+  ansible.builtin.template:
+    src: alerting-heartbeat.env.j2
+    dest: /etc/default/alerting-heartbeat
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+- name: Deploy the heartbeat systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - alerting-heartbeat.service
+    - alerting-heartbeat.timer
+  register: alerting_heartbeat_units
+
+- name: Reload systemd after unit changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: alerting_heartbeat_units.changed
+
+- name: Enable and start the heartbeat timer
+  ansible.builtin.systemd:
+    name: alerting-heartbeat.timer
+    enabled: true
+    state: started

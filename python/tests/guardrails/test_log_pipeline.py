@@ -437,6 +437,7 @@ PIPELINE_ALERT_NAMES = [
     "LogRuleEvaluationFailing",
     "LogRuleNotificationsFailing",
     "LogLinesDiscarded",
+    "LogReplayRejected",
     "LogLinesDiscardedSustained",
     "LogCollectorDropping",
     "LogRetentionStalled",

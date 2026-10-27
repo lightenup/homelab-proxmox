@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Homelab alerting path heartbeat (Watchdog in Alertmanager, pages Pushover directly)
+# Runbook: docs/operations/monitoring/alerting-heartbeat.md in the homelab-proxmox repo
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/alerting-heartbeat
+ExecStart={{ alerting_heartbeat_script_path }}
+# Exit 1 = alerting path down. Left as a unit failure on purpose, so `systemctl --failed` on
+# pve shows it; the timer keeps firing either way.
+TimeoutStartSec=60

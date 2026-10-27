@@ -104,7 +104,24 @@ top-level `namespace:` key that the local ruler rejects outright — stopping **
 not just the one being edited (research R10). Only `lokitool rules check <file>` is used, both
 locally (quickstart §1) and at deploy (`validate_alerts.yml`, before anything restarts).
 
-## 7. Accepted risks
+## 7. Replays: `LogReplayRejected`
+
+Alloy's Docker source can lose a container's read position and re-send that container's
+whole log. Loki then rejects every line more than an hour behind as `too_far_behind`. Those
+lines are duplicates of lines Loki already stores; nothing is lost. RCA 2026-10-27 found two
+triggers:
+
+| Trigger | Status |
+|---|---|
+| The container came back on another bridge IP (e.g. a compose stack restarted in place), so the position key changed | Fixed: `discovery.relabel "docker"` drops the address, network and port labels from the key (`config.alloy.j2`, `test_alloy_position_key.py`) |
+| The container was stopped across a 15 s discovery refresh (LXC reboot, Docker restart, `docker stop` + `start`), so the position was deleted | Upstream [grafana/alloy#7036](https://github.com/grafana/alloy/issues/7036), open. Bump `alloy_version` when it ships |
+
+A replay raises `LogReplayRejected` (info, silent). It does not raise `LogLinesDiscarded`, and
+`LogCollectorDropping` ignores drops in the same 15 minutes. If `too_far_behind` goes on for an
+hour, `LogLinesDiscardedSustained` fires: that is not a replay but something like a host clock
+running behind.
+
+## 8. Accepted risks
 
 - **Docker socket access**: the collector reads container logs over `/var/run/docker.sock` on
   every Docker host, which makes it root-equivalent there. Its only inbound surface is the
