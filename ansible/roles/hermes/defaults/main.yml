@@ -55,6 +55,9 @@ hermes_agent_hooks_dir: "/opt/hermes-agent-hooks"
 # Host directory for agent plugin overrides (095 R-018: the ntfy chunking shim). Root-owned,
 # outside the agent's data dir, bind-mounted read-only.
 hermes_agent_plugins_dir: "/opt/hermes-agent-plugins"
+# Host directory for the agent's /etc/profile.d drop-in (puts /opt/hermes/bin back on the
+# terminal tool's login-shell PATH). Root-owned, outside the agent's data dir, mounted read-only.
+hermes_agent_profile_dir: "/opt/hermes-agent-profile.d"
 # Names of job secrets exposed to cron scripts through terminal.env_passthrough (R-004).
 # Each name's value is read from the vault variable `name | lower` (the llm_router_clients
 # key_env convention). A job that needs a secret is the one case where adding a job costs a

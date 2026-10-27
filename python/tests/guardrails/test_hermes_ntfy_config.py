@@ -153,3 +153,30 @@ def test_gap_notice_hook_is_mounted_read_only() -> None:
 def test_confinement_assert_requires_ro_on_hook_mounts() -> None:
     tasks = (HERMES_TEMPLATES.parent / "tasks" / "main.yml").read_text()
     assert "select('search', ':/opt/data/hooks') | reject('search', ':ro$')" in tasks
+
+
+# --- Agent self-maintenance: the hermes CLI on the terminal PATH, and the skill curator ---
+
+
+def test_profile_drop_in_is_mounted_read_only_and_asserted() -> None:
+    """The terminal tool snapshots `bash -l`; Debian's /etc/profile drops /opt/hermes/bin for
+    non-root users, so without this drop-in `hermes` is "command not found" from the agent."""
+    compose = (HERMES_TEMPLATES / "docker-compose.yml.j2").read_text()
+    assert (
+        '"{{ hermes_agent_profile_dir }}/hermes-path.sh:/etc/profile.d/hermes-path.sh:ro"' in compose
+    )
+    tasks = (HERMES_TEMPLATES.parent / "tasks" / "main.yml").read_text()
+    assert "select('search', ':/etc/') | reject('search', ':ro$')" in tasks
+
+
+def test_profile_drop_in_prepends_the_hermes_launcher() -> None:
+    drop_in = (HERMES_TEMPLATES.parent / "files" / "profile.d" / "hermes-path.sh").read_text()
+    assert 'PATH="/opt/hermes/bin:${PATH}"' in drop_in
+    assert "export PATH" in drop_in
+
+
+def test_curator_is_enabled_with_consolidation() -> None:
+    curator = render_agent_config()["curator"]
+    assert curator["enabled"] is True
+    assert curator["consolidate"] is True
+    assert "prune_builtins" not in curator, "bundled skills stay out of the curator's reach"

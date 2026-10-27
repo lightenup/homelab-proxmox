@@ -193,6 +193,9 @@ services:
       # Gap-notice gateway hook (095 FR-006, R-007), READ-ONLY for the same reason: it is Python
       # the gateway executes on every start.
       - "{{ hermes_agent_hooks_dir }}/gap-notice:/opt/data/hooks/gap-notice:ro"
+      # Login-shell PATH drop-in, READ-ONLY: puts /opt/hermes/bin back after Debian's
+      # /etc/profile resets PATH, so `hermes` resolves from the agent's terminal tool.
+      - "{{ hermes_agent_profile_dir }}/hermes-path.sh:/etc/profile.d/hermes-path.sh:ro"
       # Heartbeat file for the scheduler watchdog (US4, R-007) — PROD only.
 {% if hermes_agent_operational %}
       - "{{ hermes_agent_heartbeat_dir }}:/heartbeat"
