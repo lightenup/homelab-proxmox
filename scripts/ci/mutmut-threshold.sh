@@ -45,6 +45,20 @@ fi
 
 echo ">> Running mutmut 3 over python/src/homelab_proxmox_orchestrator (fresh full run)..."
 rm -rf mutants
+
+# Per-run TMPDIR, deleted on every exit path (RCA 2026-10-27). mutmut 3 runs each mutant in
+# an os.fork() child that ends with os._exit(), so atexit never runs; pytest removes its
+# session lock via atexit and keeps any numbered basetemp dir whose lock is under 3 days old.
+# Each run on pve left ~1,576 /tmp/pytest-of-ci/pytest-N dirs, and three days of runs hit
+# the 1,048,576-inode cap of pve's /tmp tmpfs (a PR gate failed with ENOSPC). Everything
+# pytest and mutmut write to the temp dir now lives in this one directory.
+MUTMUT_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/mutmut-run.XXXXXX")"
+cleanup_tmpdir() { rm -rf "$MUTMUT_TMPDIR"; }
+trap cleanup_tmpdir EXIT
+caller_tmpdir_set="${TMPDIR+set}"
+caller_tmpdir="${TMPDIR-}"
+export TMPDIR="$MUTMUT_TMPDIR"
+
 # A non-zero exit means mutmut itself failed (e.g. the forced-fail sanity check), not
 # that mutants survived; never score a run like that (exit 2 = no valid results).
 if ! "$PYTHON_BIN" -m mutmut run; then
@@ -57,6 +71,12 @@ if ! "$PYTHON_BIN" -m mutmut export-cicd-stats; then
 fi
 
 version="$("$PYTHON_BIN" -m mutmut --version | awk '{print $NF}')"
+
+# `exec` replaces this shell, so the EXIT trap would never fire: clean up first, and give
+# the report the caller's TMPDIR back.
+cleanup_tmpdir
+trap - EXIT
+if [[ -n "$caller_tmpdir_set" ]]; then export TMPDIR="$caller_tmpdir"; else unset TMPDIR; fi
 
 exec "$PYTHON_BIN" scripts/ci/mutmut_report.py \
 	--mutants-dir mutants \
