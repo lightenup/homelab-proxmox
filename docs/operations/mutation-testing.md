@@ -195,3 +195,16 @@ busy"). Check and stop them:
 ssh ci@pve "pgrep -af '[m]utmut'"          # anything listed with no CI job running is an orphan
 ssh ci@pve "pkill -TERM -f '[m]utmut run'"
 ```
+
+**`No space left on device` under `/tmp` on `pve`** (seen 2026-10-27, in "failed to collect stats").
+pve's `/tmp` is a tmpfs capped at 1,048,576 inodes. mutmut 3 ends every forked mutant with
+`os._exit()`, so pytest's `atexit` lock removal never runs and pytest keeps each
+`pytest-of-ci/pytest-N` dir for 3 days (its lock timeout): about 1,576 dirs per run. Since
+2026-10-27 `scripts/ci/mutmut-threshold.sh` runs mutmut with a per-run `TMPDIR`
+(`mutmut-run.XXXXXX`) and deletes it on every exit path, so nothing accumulates.
+`FilesystemInodesWarning` (85%) and `FilesystemInodesCritical` (95%) watch it. Leftovers from
+before the fix are safe to delete when no mutation run is active:
+
+```bash
+ssh ci@pve "pgrep -af '[m]utmut' || rm -rf /tmp/pytest-of-ci"
+```

@@ -154,9 +154,20 @@ groups:
             another reason (rate or size limits, see LogLinesDiscarded) or the push target was
             unreachable (max_backoff_retries=0 means no retry). Check the collector's journal
             on that host and connectivity to the push target.
+      # The metric is 0 after every Loki restart until the compactor's first run (10-25 min
+      # observed), and `time() - 0` is always > 7200, so only the 30m `for:` kept a restart
+      # from paging (RCA 2026-10-27). A zero counts as stalled only once Loki has been up 2 h.
       - alert: LogRetentionStalled
         expr: |
-          time() - loki_compactor_apply_retention_last_successful_run_timestamp_seconds > 7200
+          (
+            time() - loki_compactor_apply_retention_last_successful_run_timestamp_seconds > 7200
+            and loki_compactor_apply_retention_last_successful_run_timestamp_seconds > 0
+          )
+          or
+          (
+            loki_compactor_apply_retention_last_successful_run_timestamp_seconds == 0
+            and on() (time() - max(process_start_time_seconds{job="loki"}) > 7200)
+          )
         for: 30m
         labels:
           severity: warning

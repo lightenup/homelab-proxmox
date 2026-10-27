@@ -66,3 +66,44 @@ groups:
         annotations:
           summary: "CRITICAL: Disk space on {{ $labels.instance }}:{{ $labels.mountpoint }}"
           description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}% full (threshold: 95%)."
+
+      # Inodes (RCA 2026-10-27): pve's /tmp tmpfs ran out of inodes (1,048,576) from leaked
+      # pytest dirs while 95% of its bytes were free, and a CI run failed with ENOSPC. No rule
+      # watched inodes, and DiskSpace* skip every tmpfs. Unlike bytes, tmpfs inodes are a real
+      # limit here, so tmpfs is included. node_filesystem_files == 0 (no inode accounting,
+      # e.g. some FUSE/NFS mounts) is excluded to avoid dividing by zero.
+      - alert: FilesystemInodesWarning
+        expr: |
+          100 * (1 - node_filesystem_files_free{fstype!~"overlay|squashfs|nsfs|autofs"} / node_filesystem_files{fstype!~"overlay|squashfs|nsfs|autofs"}) > 85
+          and node_filesystem_files > 0
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "Inodes running out on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+          description: "{{ $labels.mountpoint }} ({{ $labels.fstype }}) on {{ $labels.instance }} has used {{ $value | printf \"%.1f\" }}% of its inodes (threshold: 85%). Many small files; new files will fail with ENOSPC at 100% even with free space. On pve /tmp, look for leftover pytest-of-* dirs."
+
+      - alert: FilesystemInodesCritical
+        expr: |
+          100 * (1 - node_filesystem_files_free{fstype!~"overlay|squashfs|nsfs|autofs"} / node_filesystem_files{fstype!~"overlay|squashfs|nsfs|autofs"}) > 95
+          and node_filesystem_files > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "CRITICAL: inodes nearly exhausted on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+          description: "{{ $labels.mountpoint }} ({{ $labels.fstype }}) on {{ $labels.instance }} has used {{ $value | printf \"%.1f\" }}% of its inodes (threshold: 95%). File creation is about to fail with ENOSPC."
+
+      # /tmp is a RAM-backed tmpfs on pve (half of RAM); DiskSpace* skip tmpfs, so watch it here.
+      - alert: TmpSpaceWarning
+        expr: |
+          100 * (1 - node_filesystem_avail_bytes{mountpoint="/tmp", fstype="tmpfs"} / node_filesystem_size_bytes{mountpoint="/tmp", fstype="tmpfs"}) > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "/tmp is filling up on {{ $labels.instance }}"
+          description: "/tmp (tmpfs, held in RAM) on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}% full (threshold: 85%)."
