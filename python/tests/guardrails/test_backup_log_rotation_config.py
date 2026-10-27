@@ -60,7 +60,20 @@ def test_pve_backup_deploy_uses_prod_inventory() -> None:
                 )
 
 
-def test_pve_backup_doc_states_ci_limitation() -> None:
+def test_taskfile_never_references_the_nonexistent_static_inventory() -> None:
+    """`ansible/inventories/static/` does not exist (only generated/, prod/, lab/). A Task that
+    references it silently matches zero hosts rather than failing (`ansible-playbook -i
+    nonexistent-inventory ... --list-hosts` warns and runs the play against an empty host
+    list), so `ansible:host` and `ansible:mounts` did nothing for an unknown time before this
+    test existed (found 2026-10-27; the same bug in `ansible:backup` was fixed in #089, but
+    these two were left as a recorded follow-up, plan.md "Follow-ups")."""
+    repo_root = _find_repo_root(Path(__file__).resolve())
+    taskfile = (repo_root / "Taskfile.yml").read_text()
+    offenders = [line for line in taskfile.splitlines() if "inventories/static" in line]
+    assert not offenders, "Taskfile.yml references the nonexistent inventories/static/:\n  " + "\n  ".join(offenders)
+
+
+
     """FR-014: docs must state the CI limitation for PVE backup deploy."""
     repo_root = _find_repo_root(Path(__file__).resolve())
     doc = (repo_root / "docs/operations/backups-proxmox-config.md").read_text()
