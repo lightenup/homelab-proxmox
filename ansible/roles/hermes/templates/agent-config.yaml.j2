@@ -78,6 +78,16 @@ cron:
 memory:
   memory_enabled: true
 
+# Skill curator (keys verified at v0.21.6, hermes_cli/config_defaults.py "curator"). Upstream
+# already runs it every 7 days after 2 h idle, prune-only; no cron job is needed for it. This
+# file is read-only, so `hermes config set curator.*` cannot work: change it here.
+# consolidate: the LLM merge pass (aux model through the gateway, local inference). It rewrites
+# agent-created skills in place, after a snapshot to skills/.curator_backups/ (rollback with
+# `hermes curator rollback`). Bundled and hub skills are never touched (prune_builtins off).
+curator:
+  enabled: true
+  consolidate: true
+
 # Push channel (FR-012, R-006). By default the gateway posts a "Gateway online/restarted" notice
 # to a platform's home channel on every start and stop — here that would be a phone push on
 # every deploy and container restart. Silence has to mean "nothing to report" (FR-013), and a
