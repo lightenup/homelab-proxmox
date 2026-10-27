@@ -246,6 +246,30 @@ tasks:
     cmds:
       - ansible-playbook -i inventories/prod/hosts.yml playbooks/backup_proxmox.yml --vault-password-file .vault-pass.txt {{.CLI_ARGS}}
 
+  ansible:alloy:
+    desc: "[PROD] Roll the Alloy log collector to every service LXC and pve"
+    summary: |
+      Apply only the alloy role everywhere (config or version change). Alloy is PROD-only.
+      Target: PROD (all service LXCs + 192.168.1.112)
+      A discovery-label change makes each host re-send container logs once: silence the
+      log-pipeline alerts first (docs/operations/monitoring/logging.md section 7).
+      Example: task ansible:alloy
+      One host: task ansible:alloy -- --limit hermes
+    dir: ansible
+    cmds:
+      - ansible-playbook -i inventories/prod/hosts.yml playbooks/alloy.yml --vault-password-file .vault-pass.txt {{.CLI_ARGS}}
+
+  ansible:heartbeat:
+    desc: "[PROD] Deploy the alerting-path heartbeat timer on pve"
+    summary: |
+      Out-of-band check of the alerting path: pages Pushover directly if the Watchdog alert
+      is missing from Alertmanager (docs/operations/monitoring/alerting-heartbeat.md).
+      Target: PROD (192.168.1.112)
+      Example: task ansible:heartbeat
+    dir: ansible
+    cmds:
+      - ansible-playbook -i inventories/prod/hosts.yml playbooks/host_proxmox.yml --vault-password-file .vault-pass.txt --tags alerting_heartbeat {{.CLI_ARGS}}
+
   mutmut:pull:
     desc: "[LOCAL] Pull main's published mutation results from the NAS via ci@pve (spec 087)"
     summary: |

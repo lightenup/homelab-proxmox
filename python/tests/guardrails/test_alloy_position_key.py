@@ -112,6 +112,17 @@ def test_config_explains_the_upstream_issue():
     assert "7036" in block
 
 
+def test_alloy_rollout_playbook_reaches_every_collector_host():
+    # The fix only helps where it is deployed: the same host set the alloy scrape job and
+    # LogHostSilent expect (services + proxmox_hosts), never on the LAB path.
+    play = yaml.safe_load((ROOT / "ansible/playbooks/alloy.yml").read_text())[0]
+    assert set(play["hosts"].split(":")) == {"services", "proxmox_hosts"}
+    role = play["roles"][0]
+    assert role["role"] == "alloy" and "lab" in role["when"]
+    taskfile = yaml.safe_load((ROOT / "Taskfile.yml").read_text())
+    assert "playbooks/alloy.yml" in " ".join(taskfile["tasks"]["ansible:alloy"]["cmds"])
+
+
 # --- Alert side: replays (duplicates) inform, they do not page as connectivity loss --------
 
 def _rules() -> dict[str, dict]:
