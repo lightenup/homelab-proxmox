@@ -1,6 +1,23 @@
 ---
 # Role: alerting_heartbeat (pve only). See defaults/main.yml.
 
+# The vault is gitignored (`**/vault.yml`): it is on the operator machine (host_proxmox.yml's
+# only path) and in pve's store /var/lib/homelab-proxmox/vault/group_vars/monitoring/vault.yml.
+- name: Check the monitoring vault file is present
+  ansible.builtin.stat:
+    path: "{{ alerting_heartbeat_monitoring_vault_file }}"
+  register: alerting_heartbeat_vault_stat
+  delegate_to: localhost
+  become: false
+
+- name: Fail clearly if the monitoring vault file is missing
+  ansible.builtin.assert:
+    that: alerting_heartbeat_vault_stat.stat.exists
+    fail_msg: >-
+      {{ alerting_heartbeat_monitoring_vault_file }} not found. It is gitignored; copy it from
+      pve's vault store (/var/lib/homelab-proxmox/vault/group_vars/monitoring/vault.yml) or run
+      from a checkout that has it.
+
 - name: Load the monitoring vault (Pushover credentials), namespaced
   ansible.builtin.include_vars:
     file: "{{ alerting_heartbeat_monitoring_vault_file }}"

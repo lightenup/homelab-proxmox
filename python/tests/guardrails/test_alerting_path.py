@@ -221,9 +221,13 @@ def test_heartbeat_reads_pushover_from_the_monitoring_vault_file_namespaced():
     assert args["file"] == "{{ alerting_heartbeat_monitoring_vault_file }}"
     vault_file = _yaml(HEARTBEAT / "defaults/main.yml")["alerting_heartbeat_monitoring_vault_file"]
     # role_path is ansible/roles/alerting_heartbeat, so ../../group_vars is ansible/group_vars.
+    # The file itself is gitignored (`**/vault.yml`): it exists on the operator machine, which
+    # is the only path host_proxmox.yml runs from, and in pve's vault store for pipeline runs.
     assert vault_file == "{{ role_path }}/../../group_vars/monitoring/vault.yml"
-    assert (ANSIBLE / "group_vars/monitoring/vault.yml").exists()
     assert args["name"] == "alerting_heartbeat_monitoring_vault"
+    stat = next(t for t in tasks if "ansible.builtin.stat" in t)
+    assert stat["ansible.builtin.stat"]["path"] == "{{ alerting_heartbeat_monitoring_vault_file }}"
+    assert tasks.index(stat) < tasks.index(inc), "check the vault file exists before loading it"
     assert inc.get("no_log") is True
     defaults = (HEARTBEAT / "defaults/main.yml").read_text()
     assert "alerting_heartbeat_monitoring_vault.pushover_user_key" in defaults
