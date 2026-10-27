@@ -1,0 +1,59 @@
+# Alerting path alert rules: who watches the watchers.
+# RCA 2026-10-27: nothing watched Prometheus->Alertmanager or Alertmanager->receiver delivery,
+# and nothing outside the monitoring LXC noticed if the whole path died.
+# Guarded by python/tests/guardrails/test_alerting_path.py.
+
+groups:
+  - name: alerting_path_alerts
+    interval: 30s
+    rules:
+      # Always firing. Proves Prometheus is evaluating rules and delivering to Alertmanager.
+      # Routed to the receiver-less 'null' route (alertmanager.yml.j2), so it never pages.
+      # The alerting-heartbeat timer on pve asks Alertmanager for it every 5 minutes and pages
+      # Pushover directly when it is missing (role alerting_heartbeat). Never silence it: a
+      # silenced Watchdog reads as a dead alerting path and pages.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+          component: alerting
+        annotations:
+          summary: "Always-firing heartbeat of the alerting path"
+          description: >-
+            Not a problem. Checked from pve by alerting-heartbeat.timer; if this alert is ever
+            missing from Alertmanager, Pushover is paged directly.
+
+      # Alertmanager -> receiver. Each receiver delivers through Pushover and ntfy as separate
+      # integrations with separate retries, so when one integration fails this alert still
+      # arrives through the other.
+      - alert: AlertmanagerNotificationsFailing
+        expr: |
+          sum by (integration) (increase(alertmanager_notifications_failed_total[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          component: alerting
+        annotations:
+          summary: "Alertmanager failed to deliver notifications via {{ $labels.integration }}"
+          description: >-
+            Alertmanager's {{ $labels.integration }} integration (pushover = Pushover,
+            webhook = ntfy) failed at least once in 15 minutes. Alerts may be reaching only the
+            other channel. Check `docker logs alertmanager` on the monitoring LXC, and the
+            credentials if the failure reason is authError.
+
+      # Prometheus -> Alertmanager. The Loki ruler's own hop is LogRuleNotificationsFailing.
+      - alert: PrometheusNotificationsFailing
+        expr: |
+          increase(prometheus_notifications_errors_total[10m]) > 0
+          or
+          increase(prometheus_notifications_dropped_total[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          component: alerting
+        annotations:
+          summary: "Prometheus cannot deliver alerts to Alertmanager"
+          description: >-
+            Prometheus's notifications to alertmanager:9093 are failing or being dropped, so
+            metric alerts may not reach Pushover/ntfy. If Alertmanager itself is down this alert
+            cannot be delivered either; the pve heartbeat covers that case.

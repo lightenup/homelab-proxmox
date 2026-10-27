@@ -138,6 +138,19 @@ discovery.relabel "docker" {
     target_label = "source"
     replacement  = "docker"
   }
+
+  // Keep the read-position key stable (RCA 2026-10-27). loki.source.docker saves each
+  // container's position under its id plus this whole label set. The bridge IP and ports
+  // are in it, so a container restarted onto another IP got a new key, its old position was
+  // deleted and the whole log was re-sent (45,008 duplicates rejected by Loki on 2026-10-26).
+  // Without them the key follows the container. Every target of one container (one per
+  // port/network) also collapses to the same key. Upstream grafana/alloy#7036 is a second
+  // trigger this does not fix: a container stopped across a discovery refresh still loses
+  // its position; LogReplayRejected reports those replays without paging.
+  rule {
+    action = "labeldrop"
+    regex  = "__address__|__meta_docker_network_.+|__meta_docker_port_.+"
+  }
 }
 
 loki.source.docker "docker" {

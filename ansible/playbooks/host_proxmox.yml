@@ -10,9 +10,16 @@
           - healthcheck_profile is not defined or healthcheck_profile in ['lan', 'tailscale', 'both', 'none']
           - (healthcheck_profile is not defined or healthcheck_profile != 'none') or (healthcheck_verification_command is defined)
         fail_msg: "Invalid healthcheck configuration. See docs/operations/golden-paths-service-lifecycle.md"
+  # Tags let one role be applied on its own, e.g. after an Alloy config change:
+  #   ansible-playbook -i inventories/prod/hosts.yml playbooks/host_proxmox.yml --tags alloy
   roles:
     - proxmox_host
     - node_exporter
     - role: alloy
       when: (deploy_environment | default('prod')) != 'lab'
+      tags: [alloy]
     - tailscale_host
+    # Out-of-band check of the alerting path; must run outside the monitoring LXC it checks.
+    - role: alerting_heartbeat
+      when: (deploy_environment | default('prod')) != 'lab'
+      tags: [alerting_heartbeat]

@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Run the homelab alerting path heartbeat every {{ alerting_heartbeat_interval }}
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec={{ alerting_heartbeat_interval }}
+AccuracySec=30s
+Unit=alerting-heartbeat.service
+
+[Install]
+WantedBy=timers.target

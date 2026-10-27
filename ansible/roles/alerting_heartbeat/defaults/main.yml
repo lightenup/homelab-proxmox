@@ -1,0 +1,25 @@
+---
+# Role: alerting_heartbeat (pve only). Out-of-band check of the alerting path: a systemd timer
+# asks the monitoring LXC's Alertmanager for the always-firing Watchdog alert and pages
+# Pushover directly when it is missing. RCA 2026-10-27; runbook
+# docs/operations/monitoring/alerting-heartbeat.md.
+
+alerting_heartbeat_alertmanager_url: "http://{{ hostvars['monitoring'].ansible_host }}:9093"
+
+# Same Pushover application and user as Alertmanager. They live in
+# group_vars/monitoring/vault.yml, which Ansible never loads on its own (`monitoring` is a
+# host, not a group; monitoring.yml include_vars it explicitly). tasks/main.yml loads that
+# file under this name, so none of monitoring's other variables leak into the pve play.
+alerting_heartbeat_monitoring_vault_file: "{{ role_path }}/../../group_vars/monitoring/vault.yml"
+alerting_heartbeat_pushover_user_key: "{{ alerting_heartbeat_monitoring_vault.pushover_user_key }}"
+alerting_heartbeat_pushover_api_token: "{{ alerting_heartbeat_monitoring_vault.pushover_api_token }}"
+
+# 5-minute checks, page after 3 consecutive failures (~15 min). A monitoring deploy restarts
+# Alertmanager and Prometheus; Watchdog is back within about a minute, well inside that.
+alerting_heartbeat_interval: "5min"
+alerting_heartbeat_fail_threshold: 3
+# While still down, page again at most every 6 hours.
+alerting_heartbeat_repeat_seconds: 21600
+
+alerting_heartbeat_script_path: /usr/local/sbin/alerting-heartbeat
+alerting_heartbeat_state_dir: /var/lib/alerting-heartbeat

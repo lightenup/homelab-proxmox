@@ -25,8 +25,14 @@ route:
   group_wait: {{ alertmanager_group_wait }}
   group_interval: {{ alertmanager_group_interval }}
   repeat_interval: {{ alertmanager_repeat_interval }}
-{% if pushover_enabled | default(false) | bool %}
   routes:
+    # Watchdog (alerting_path_alerts.yml) fires forever by design. It must reach Alertmanager,
+    # where the pve heartbeat looks for it, and go no further: 'null' has no integrations.
+    # First, and without `continue`, so no other route ever sees it.
+    - receiver: 'null'
+      matchers:
+        - alertname = "Watchdog"
+{% if pushover_enabled | default(false) | bool %}
     - receiver: 'pushover-critical'
       matchers:
         - severity = "critical"
@@ -45,6 +51,7 @@ route:
 {% endif %}
 
 receivers:
+  - name: 'null'
 {% if not (pushover_enabled | default(false) | bool) %}
   - name: 'email-default'
     email_configs:

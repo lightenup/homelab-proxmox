@@ -37,6 +37,13 @@
     mode: '0644'
   notify: Reload prometheus
 
+- name: Deploy alerting path alert rules (Watchdog, delivery failures)
+  ansible.builtin.copy:
+    src: prometheus/alerts/alerting_path_alerts.yml
+    dest: "{{ prometheus_config_path }}/alerts/alerting_path_alerts.yml"
+    mode: '0644'
+  notify: Reload prometheus
+
 - name: Deploy Blackbox exporter configuration
   ansible.builtin.template:
     src: blackbox.yml.j2

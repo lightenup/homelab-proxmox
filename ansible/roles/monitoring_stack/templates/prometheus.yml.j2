@@ -63,6 +63,24 @@ scrape_configs:
         labels:
           instance: 'loki'
 
+  # Alerting path self-monitoring (RCA 2026-10-27): Alertmanager's notification counters are
+  # the only record of whether a page reached Pushover/ntfy, and were never scraped. Grafana
+  # is here for the same reason: every stack container with /metrics has a job
+  # (test_alerting_path.py). No no_down_alert: ServiceDown must cover both.
+  - job_name: 'alertmanager'
+    scrape_interval: {{ prometheus_scrape_interval }}
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          instance: 'alertmanager'
+
+  - job_name: 'grafana'
+    scrape_interval: {{ prometheus_scrape_interval }}
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          instance: 'grafana'
+
   - job_name: 'alloy'
     scrape_interval: {{ prometheus_scrape_interval }}
     static_configs:
