@@ -9,11 +9,3 @@
       homeassistant_version must be a pinned release tag (e.g. "2026.10.4"), not empty or
       a moving tag.
 
-# Without the proxy in trusted_proxies, Home Assistant answers every request that arrives
-# through Caddy with 400 Bad Request.
-- name: Assert the reverse proxy address is known
-  ansible.builtin.assert:
-    that:
-      - reverse_proxy_ip is defined
-      - reverse_proxy_ip is match('^\d+\.\d+\.\d+\.\d+$')
-    fail_msg: "reverse_proxy_ip must be set (group_vars/services/vars.yml) for http.trusted_proxies."

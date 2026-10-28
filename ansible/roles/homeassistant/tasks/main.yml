@@ -35,14 +35,23 @@
   loop_control:
     label: "{{ item.file }}"
 
-# The http: block is always rendered, unlike configuration.yaml: the reverse-proxy settings
-# are infrastructure, not owner configuration, and must track reverse_proxy_ip.
-- name: Deploy http.yaml (reverse-proxy trust)
-  ansible.builtin.template:
-    src: http.yaml.j2
-    dest: "{{ homeassistant_config_dir }}/http.yaml"
-    mode: '0644'
+# Since 2026.10 the http integration is configured in the UI (Settings > System > Network)
+# and stored in .storage/http. YAML is imported once as a *pending* config that an admin must
+# confirm within 5 minutes; on a fresh install there is no admin yet, so it is reverted and
+# YAML is ignored from then on. The reverse-proxy trust (use_x_forwarded_for, trusted_proxies
+# = reverse_proxy_ip) is therefore a one-time UI step after onboarding, not managed here.
+# These two tasks remove the earlier YAML approach from instances that were deployed with it.
+- name: Remove the http include from configuration.yaml (superseded by UI config)
+  ansible.builtin.lineinfile:
+    path: "{{ homeassistant_config_dir }}/configuration.yaml"
+    regexp: '^http: !include http\.yaml$'
+    state: absent
   notify: Restart homeassistant
+
+- name: Remove the superseded http.yaml
+  ansible.builtin.file:
+    path: "{{ homeassistant_config_dir }}/http.yaml"
+    state: absent
 
 - name: Deploy docker-compose.yml
   ansible.builtin.template:

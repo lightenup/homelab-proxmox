@@ -27,4 +27,5 @@ monitoring_contract:
       summary: !unsafe "Home Assistant is down on {{ $labels.instance }}"
       description: !unsafe >-
         The Home Assistant frontend probe through Caddy has failed for 5 minutes. A 400 here
-        (rather than a timeout) means http.trusted_proxies no longer matches the proxy.
+        (rather than a timeout) means the trusted proxies under Settings > System > Network
+        no longer include Caddy.
