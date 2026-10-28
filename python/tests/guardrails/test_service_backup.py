@@ -24,6 +24,7 @@ EXPECTED_SCHEDULES = {
     "financial-scenario": "*-*-* 04:15:00",
     "immich": "*-*-* 04:30:00",
     "hermes": "*-*-* 04:45:00",
+    "homeassistant": "*-*-* 05:15:00",
 }
 
 

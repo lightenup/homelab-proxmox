@@ -4,5 +4,28 @@ healthcheck_url:
   path: /manifest.json
 healthcheck_profile: both
 healthcheck_expect_status: 200
-healthcheck_enabled: false
-healthcheck_reason: "Service not yet installed"
+
+# monitoring_contract (shape: host_vars/ntfy.yml).
+#
+# scrape_targets: none. Home Assistant's /api/prometheus needs a bearer token; add it with
+# the token work for the Hermes MCP connection rather than now.
+#
+# liveness_targets: the blackbox http_2xx probe of the Caddy-routed frontend manifest. It
+# exercises Caddy -> TLS -> Home Assistant, including the trusted_proxies setting.
+monitoring_contract:
+  enabled: true
+  liveness_targets:
+    - job_name: "homeassistant-health"
+      url: "https://ha.{{ caddy_base_domain }}/manifest.json"
+      module: http_2xx
+  alert_rules:
+    - alert: HomeAssistantDown
+      expr: |
+        probe_success{job="homeassistant-health"} == 0
+      for: "5m"
+      severity: critical
+      summary: !unsafe "Home Assistant is down on {{ $labels.instance }}"
+      description: !unsafe >-
+        The Home Assistant frontend probe through Caddy has failed for 5 minutes. A 400 here
+        (rather than a timeout) means the trusted proxies under Settings > System > Network
+        no longer include Caddy.

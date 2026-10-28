@@ -41,6 +41,9 @@ alloy_redaction_patterns:
     expression: '(tk_[A-Za-z0-9]{29})'
   - name: litellm-key
     expression: '\b(sk-[A-Za-z0-9_-]{8,})'
+  # Home Assistant long-lived access tokens and other JWTs outside an Authorization header.
+  - name: jwt
+    expression: '\b(eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})'
   - name: tailscale-key
     expression: '(tskey-[A-Za-z0-9_-]+)'
   - name: query-credential

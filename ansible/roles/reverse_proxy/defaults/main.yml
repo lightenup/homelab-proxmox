@@ -11,9 +11,6 @@ caddy_xcaddy_plugins:
 # Go version for xcaddy build (R-002)
 go_version: "1.22.0"
 
-# Home Assistant conditional flag (FR-015, A-009)
-homeassistant_active: false
-
 # Apex landing page web root (045-landing-page)
 caddy_landing_root: /var/www/hus-sky
 

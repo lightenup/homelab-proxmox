@@ -38,6 +38,10 @@ And:
   llm-router, market-model, nextcloud and ntfy exist only on `pve`'s root disk (checked
   2026-10-28). Losing that disk means re-importing seven containers by hand. **Do this part
   first**, even before the rest of this item: it is a backup gap, not a tidiness problem.
+  **Fixed 2026-10-28 (PR #295)**: the PVE config backup now collects the plain directories under
+  `/var/lib/homelab-proxmox/state/services` into `iac-artifacts/local-state/` (they pass its
+  plaintext-secret scan; checked on `pve` before the change). Takes effect once `backup_proxmox.yml`
+  has been run on `pve`.
 - **Untracked containers are invisible.** Terraform cannot warn about a container it does not know,
   and nothing else compares `pct list` with the states. The new create-time guard
   (`scripts/lab/lib/ct_conflicts.sh`) only fires when a plan *creates* something.

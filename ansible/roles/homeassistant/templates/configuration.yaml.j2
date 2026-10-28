@@ -1,0 +1,10 @@
+# Home Assistant configuration. Seeded by Ansible on the first deploy only — edits here are
+# kept. There is no http: block on purpose: since 2026.10 the HTTP settings (including the
+# reverse-proxy trust for Caddy) live in Settings > System > Network.
+
+# Loads the default set of integrations. Do not remove.
+default_config:
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml

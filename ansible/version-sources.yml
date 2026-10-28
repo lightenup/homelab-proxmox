@@ -98,3 +98,7 @@ pins:
     file: ansible/group_vars/services/vars.yml
     policy: latest
     github: binwiederhier/ntfy
+  - variable: homeassistant_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: home-assistant/core

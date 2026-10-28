@@ -1,0 +1,10 @@
+---
+- name: Assert image version is pinned
+  ansible.builtin.assert:
+    that:
+      - homeassistant_version is defined
+      - homeassistant_version != ""
+      - homeassistant_version not in ["latest", "stable", "beta", "dev"]
+    fail_msg: >-
+      homeassistant_version must be a pinned release tag (e.g. "2026.10.4"), not empty or
+      a moving tag.

@@ -40,6 +40,12 @@ service_mountpoints = {
       volume = "/mnt/nas/homelab_jellyfin"
     }
   }
+  homeassistant = {
+    backups = {
+      mp     = "/mnt/homeassistant/backups"
+      volume = "/mnt/nas/homelab_homeassistant"
+    }
+  }
   nextcloud = {
     data = {
       mp     = "/mnt/nextcloud"

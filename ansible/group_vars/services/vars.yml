@@ -40,6 +40,7 @@ hermes_searxng_version: "2026.9.19-c0014f015"
 # and `ntfy` changes first, then bump and run the 083 quickstart LAB checks.
 hermes_agent_version: "v0.21.6"
 ntfy_version: "v2.28.0"
+homeassistant_version: "2026.10.4"
 
 # Euro-Office Configuration
 eurooffice_ip: "192.168.1.219"
@@ -437,8 +438,14 @@ jellyfin_ip: "192.168.1.215"
 jellyfin_port: 8096
 
 # Home Assistant Configuration
+# Container install (Docker), no add-ons, no USB passthrough: every device is Wi-Fi/cloud.
+# Pin to a release tag, never "latest"/"stable". The paths live here, not in role defaults,
+# because the service_backup snapshot reads homeassistant_config_dir too.
 homeassistant_ip: "192.168.1.212"
 homeassistant_port: 8123
+homeassistant_image: "ghcr.io/home-assistant/home-assistant"
+homeassistant_install_dir: "/opt/homeassistant"
+homeassistant_config_dir: "{{ homeassistant_install_dir }}/config"
 
 # Reverse Proxy — backend addresses (needed for Caddy site block templates)
 # These are defined here because the reverse_proxy host is in the services group,
@@ -556,5 +563,5 @@ caddy_services:
     port: "{{ homeassistant_port }}"
     title: "Home Assistant"
     desc: "Home automation"
-    enabled: false
+    enabled: true
     user_facing: true

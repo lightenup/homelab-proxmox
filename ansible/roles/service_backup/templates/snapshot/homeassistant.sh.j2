@@ -1,0 +1,29 @@
+# Home Assistant snapshot. Sourced into backup.sh.j2; defines snapshot(). The recorder
+# database is copied with SQLite's online backup (WAL mode, so a raw cp can be torn); the rest
+# of /config is copied as-is. .storage/ holds the auth store and refresh tokens, so the
+# archive is as sensitive as the instance itself — it stays on the NAS share.
+# Left out: HA's own backups/, regenerated tts/ and deps/, and the live -wal/-shm files.
+HA_CONFIG="{{ homeassistant_config_dir }}"
+HA_DB="$HA_CONFIG/home-assistant_v2.db"
+
+snapshot() {
+if [ ! -f "$HA_CONFIG/configuration.yaml" ]; then
+    echo "No configuration.yaml found (Home Assistant not deployed yet). Nothing to back up."
+    exit 0
+fi
+
+mkdir "$WORK_DIR/config"
+tar -C "$HA_CONFIG" \
+    --exclude='./home-assistant_v2.db' \
+    --exclude='./home-assistant_v2.db-wal' \
+    --exclude='./home-assistant_v2.db-shm' \
+    --exclude='./backups' \
+    --exclude='./tts' \
+    --exclude='./deps' \
+    -cf - . | tar -C "$WORK_DIR/config" -xf -
+
+if [ -f "$HA_DB" ]; then
+    python3 -c 'import sqlite3,sys; s=sqlite3.connect(sys.argv[1]); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' \
+        "$HA_DB" "$WORK_DIR/config/home-assistant_v2.db"
+fi
+}
