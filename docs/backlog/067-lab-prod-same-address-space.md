@@ -1,6 +1,7 @@
 # Backlog: the gated pipeline's "LAB" stage deploys to the production address space
 
-**Status**: Backlog — found during the `064-llm-router` deploy, 2026-09-19. Not fixed.
+**Status**: Backlog — found during the `064-llm-router` deploy, 2026-09-19. Direction 2 (honest
+labels) partly done 2026-10-28, see the update below; direction 1 (a real lab) remains open.
 **Scope**: every service, not just `064`.
 
 ## The gap
@@ -72,3 +73,45 @@ Confirm the blast radius before changing anything: for each service in the dropd
 lab plan and a prod plan would create. If they are identical for every service, this is a naming and
 documentation problem. If they differ for some, the pipeline has two behaviours and that is worth
 knowing before picking a direction.
+
+## Update 2026-10-28: the state is shared too, and it caused a duplicate IP
+
+Found while deploying Home Assistant (PR #293).
+
+**It is not only the addresses.** `USE_NAS_STATE` is unset in the pipeline, so
+`scripts/lab/lib/state.sh` returns the legacy path `/var/lib/homelab-proxmox/state/services/<svc>`
+for **both** environments. LAB and PROD read and write the same `terraform.tfstate`. That is why the
+PROD apply is close to a no-op: by the time it runs, LAB has already recorded the resource. (The
+state layout itself is [`096`](./096-terraform-state-layout.md).)
+
+**What it cost.** VMID 104 `homeassistant` (192.168.1.212) existed but no state tracked it. The
+homeassistant state was empty, so the LAB plan created VMID 112 on `pve` with the same IP, and both
+started at boot. The plan was correctly flagged non-destructive (it only created). The duplicate
+name check in `pve-service-deploy` should have stopped it, but it read the name from the `Lock`
+column of `pct list` and so had never matched anything.
+
+**Done (direction 2, partly):**
+
+- `pve-service-deploy` refuses a plan that creates an LXC whose hostname or IP is already used by
+  any container on the host (`scripts/lab/lib/ct_conflicts.sh`, in plan and apply, fails closed if
+  `pct` returns nothing; tests in `python/tests/guardrails/test_ct_conflict_guard.py`). It replaces
+  the broken name check.
+- The LAB jobs are named `Plan (LAB, prod host)` / `Apply (LAB, changes prod)`, the three workflows
+  carry a header note, and `AGENTS.md`, `docs/architecture/019` and the golden-paths runbook say that
+  a LAB apply changes production.
+
+**Still open: direction 1, a real isolated lab.** Feature-sized. It needs at least:
+
+1. A lab tfvars on `vmbr99`/`10.99.0.0/24` (or another isolated range) with its own service IPs,
+   and somewhere for those LXCs to run without crowding production (`pve` capacity, or the nested
+   `lab-pve-01`).
+2. Separate Terraform state per environment (depends on [`096`](./096-terraform-state-layout.md)).
+3. Lab-side reachability: DNS names, a lab Caddy (or direct access), and certificates, otherwise
+   every Caddy-routed healthcheck and blackbox probe fails or, worse, probes production.
+4. Lab NAS mounts that cannot touch production data (a separate share prefix), and backups switched
+   off or pointed elsewhere.
+5. A lab inventory with a `services` group, so the 072 monitoring guard has something real to
+   render, and a lab monitoring target that does not alert the phone.
+6. A decision on secrets: a lab vault, or prod secrets on lab hosts (which defeats part of the point).
+
+Until then, treat every LAB apply as a production change.

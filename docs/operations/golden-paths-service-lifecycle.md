@@ -12,6 +12,10 @@ This runbook defines the "Golden Paths" for service management. Following these 
 3.  **Cleanliness**: No orphaned configuration or "zombie" services.
 4.  **Safety**: Destructive changes require explicit confirmation.
 
+> **`environment: lab` is not isolated.** The lab tfvars point at the production host, bridge and
+> service IPs, and lab and prod share one Terraform state per service. A lab apply changes the
+> real LXC. See [`docs/backlog/067`](../backlog/067-lab-prod-same-address-space.md).
+
 ## Unified LXC Lifecycle Pipeline
 
 All add/change/delete operations use the single workflow: `.github/workflows/lxc-lifecycle.yml`.
