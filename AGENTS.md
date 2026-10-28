@@ -95,6 +95,26 @@ Service deploys go through the gated GitHub Actions pipeline
 branch ref — no merge to `main` is required to deploy. Trigger with `gh workflow run`. Per-feature
 runbooks live in `specs/*/quickstart.md`.
 
+### The "LAB" stage changes production
+
+Despite the name, **a LAB apply is a production change.** `lxc-deploy-lab.yml` and the
+`Apply (LAB)` job of `lxc-promote-prod.yml` run `pve-service-deploy --environment lab`, which
+uses `lab.tfvars` (the production PVE at `192.168.1.112`, bridge `vmbr0` and the **production
+service IPs**) and the **same Terraform state** as prod (`/var/lib/homelab-proxmox/state/services/<svc>`).
+So LAB creates or changes the real LXC at its real address, and the PROD apply that follows is
+usually a no-op for Terraform. Treat LAB as a canary on production, not a rehearsal. Background and
+the options for a real lab: [`docs/backlog/067`](docs/backlog/067-lab-prod-same-address-space.md);
+state layout: [`docs/backlog/096`](docs/backlog/096-terraform-state-layout.md).
+
+Before the **first** deploy of a service:
+
+- Check `ssh pve sudo pct list` for a container that already has the service's hostname or IP but is
+  not in Terraform state. `pve-service-deploy` now refuses a plan that would create a duplicate
+  (`scripts/lab/lib/ct_conflicts.sh`), but import or remove the stray yourself rather than finding
+  out from a failed run.
+- Read the plan's create count, not just the "destructive" flag. A create next to an untracked
+  container is not destructive, and it still causes a duplicate IP (Home Assistant, 2026-10-28).
+
 ## Running workflows locally with `act`
 
 `act` (with `~/.actrc` mapping `ubuntu-latest`/`self-hosted` to `catthehacker/ubuntu:act-latest`) is

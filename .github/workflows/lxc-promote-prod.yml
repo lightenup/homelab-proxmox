@@ -193,7 +193,7 @@ jobs:
           fi
 
   apply_lab:
-    name: Apply (LAB)
+    name: Apply (LAB, changes prod)
     runs-on: [self-hosted]
     needs: [setup]
     outputs:

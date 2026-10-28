@@ -22,6 +22,8 @@ source "${LIB_DIR}/state.sh"
 source "${LIB_DIR}/sudo.sh"
 # shellcheck source=lib/tfvars.sh
 source "${LIB_DIR}/tfvars.sh"
+# shellcheck source=lib/ct_conflicts.sh
+source "${LIB_DIR}/ct_conflicts.sh"
 
 # Evidence namespace for this feature (separate from lab harness)
 : "${ARTIFACT_RUNS_DIR:=service-deploy-runs}"
@@ -888,25 +890,10 @@ cmd_plan() {
         return 1
     fi
 
-    # Safety: prevent accidental duplicate service LXCs.
-    # If a container named $SERVICE already exists but Terraform doesn't track it,
-    # a targeted plan will happily create another one (leading to IP conflicts).
-    local existing_ctids=""
-    existing_ctids="$(sudo pct list 2>/dev/null | awk -v s="${SERVICE}" 'NR>1 && $4==s {print $1}' | xargs || true)"
-    local existing_count=0
-    if [[ -n "${existing_ctids}" ]]; then
-        existing_count="$(wc -w <<<"${existing_ctids}" | tr -d ' ' 2>/dev/null || echo 0)"
-    fi
-
-    local state_addr=""
-    state_addr="$(terraform_chdir state list -state="${state_path}" 2>/dev/null | grep -E "^module\.${SERVICE}_lxc\.proxmox_lxc\.this$" | head -n 1 || true)"
-
-    if [[ -z "${state_addr}" && ${existing_count} -gt 0 ]]; then
-        die "Found existing LXC(s) named '${SERVICE}' (CTID(s): ${existing_ctids}) but Terraform state does not track it; refusing to create a duplicate. Import it or destroy the stray CT(s)."
-    fi
-    if [[ -n "${state_addr}" && ${existing_count} -gt 1 ]]; then
-        die "Found multiple LXC(s) named '${SERVICE}' (CTID(s): ${existing_ctids}); expected exactly 1. Destroy stray duplicates to avoid IP conflicts."
-    fi
+    # Duplicate-LXC safety lives after the plan (enforce_no_ct_conflicts): it compares the
+    # hostname and IP of every LXC the plan creates against every container on the host. The
+    # name-only check that used to be here never matched (it read the Name from the Lock
+    # column of `pct list`) and could not see a CT whose hostname differs from the service.
 
     # terraform plan with -detailed-exitcode intentionally returns:
     #   0 = no changes, 2 = changes present
@@ -974,6 +961,16 @@ EOF
         return 1
     fi
     preflight_ok "bind-mount policy passed"
+
+    if ! enforce_no_ct_conflicts "${plan_json}" "${EVIDENCE_ROOT}/reports/plan/ct-conflict-guard.txt"; then
+        cat "${EVIDENCE_ROOT}/reports/plan/ct-conflict-guard.txt" >&2
+        write_plan_summary "blocked" "planned LXC conflicts with an existing container"
+        emit_error "${RUN_ID}" "planned LXC conflicts with an existing container"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+    preflight_ok "no hostname/IP conflict for planned LXCs"
 
     local intent="no-op"
     if [[ "${plan_rc}" -eq 2 ]]; then
@@ -1467,6 +1464,19 @@ cmd_apply() {
         return 1
     fi
     preflight_ok "bind-mount policy passed"
+
+    if ! enforce_no_ct_conflicts "${plan_json}" "${EVIDENCE_ROOT}/reports/apply/ct-conflict-guard.txt"; then
+        cat "${EVIDENCE_ROOT}/reports/apply/ct-conflict-guard.txt" >&2
+        {
+            echo "status=failure"
+            echo "reason=planned LXC conflicts with an existing container"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+        emit_error "${RUN_ID}" "planned LXC conflicts with an existing container"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+    preflight_ok "no hostname/IP conflict for planned LXCs"
 
     # Apply exactly the reviewed plan
     terraform_chdir apply -input=false -no-color -auto-approve \
