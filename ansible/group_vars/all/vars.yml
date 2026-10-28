@@ -51,6 +51,11 @@ service_backups:
     mount: /mnt/jellyfin/backups
     dir: /mnt/jellyfin/backups
     schedule: "*-*-* 05:00:00"
+  homeassistant:
+    host: homeassistant
+    mount: /mnt/homeassistant/backups
+    dir: /mnt/homeassistant/backups
+    schedule: "*-*-* 05:15:00"
 
 # Tailscale Configuration
 tailscale_tailnet_name: "-" # Use "-" to automatically detect tailnet from API key

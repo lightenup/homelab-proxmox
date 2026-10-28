@@ -1,0 +1,16 @@
+---
+- name: Configure base for Home Assistant
+  hosts: homeassistant
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure Home Assistant
+  hosts: homeassistant
+  become: true
+  roles:
+    - geerlingguy.docker
+    - homeassistant
+    - role: service_backup
+      service_backup_name: homeassistant
+      when: (deploy_environment | default('prod')) != 'lab'

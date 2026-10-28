@@ -1,0 +1,5 @@
+# Managed by Ansible — rewritten on every deploy.
+# Trust X-Forwarded-For from Caddy only; anything else proxying to Home Assistant gets 400.
+use_x_forwarded_for: true
+trusted_proxies:
+  - "{{ reverse_proxy_ip }}"
