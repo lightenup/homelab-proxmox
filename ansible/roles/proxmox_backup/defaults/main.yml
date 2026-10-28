@@ -22,6 +22,12 @@ proxmox_backup_age_key_path: "/root/.age/proxmox-backup.key"
 # proxmox_backup_age_public_key: defined in group_vars or vault
 # proxmox_backup_age_private_key: defined in group_vars or vault (git-ignored)
 
+# Per-service Terraform state written by pve-service-deploy (both LAB and PROD use this path;
+# backlog 067/096). Some entries are symlinks into the NAS infra_state, which is collected
+# separately; the plain directories exist only on this host's disk and were in no backup
+# until 2026-10-28 (backlog 096).
+proxmox_backup_local_state_root: "/var/lib/homelab-proxmox/state/services"
+
 # IaC repository (optional - if undefined, US2 skipped)
 # proxmox_backup_repo_path: "/root/homelab-proxmox"
 
