@@ -1,5 +1,10 @@
 name: Lab 2 - LXC Deploy
 
+# NOTE: "LAB" here is a canary on PRODUCTION, not an isolated environment. The lab tfvars use
+# the production PVE host, bridge and service IPs, and lab and prod share one Terraform state per
+# service, so this workflow creates/changes the real LXC. See docs/backlog/067 and AGENTS.md
+# ("The LAB stage changes production").
+
 env:
   # Optional internal toggle to call the Python runner on PVE.
   # Set repository variable USE_PY_RUNNER=true to enable.
@@ -9,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: "Service to deploy"
+        description: "Service to deploy. LAB runs on the PRODUCTION host, IPs and state: this changes the real LXC"
         required: true
         type: choice
         options:
@@ -38,7 +43,7 @@ on:
 
 jobs:
   plan:
-    name: Plan (LAB)
+    name: Plan (LAB, prod host)
     runs-on: [self-hosted]
     outputs:
       run_id: ${{ steps.capture_run_id.outputs.run_id }}
@@ -189,7 +194,7 @@ jobs:
             !evidence/**/*.tfplan
 
   apply:
-    name: Apply (LAB)
+    name: Apply (LAB, changes prod)
     runs-on: [self-hosted]
     needs: [plan]
     if: |

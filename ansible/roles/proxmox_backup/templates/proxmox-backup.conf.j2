@@ -19,6 +19,9 @@ AGE_PUBLIC_KEY="{{ proxmox_backup_age_public_key }}"
 RETENTION_DAILY={{ proxmox_backup_retention_daily }}
 RETENTION_MONTHLY={{ proxmox_backup_retention_monthly }}
 
+# Per-service Terraform state on this host (backlog 096)
+LOCAL_STATE_ROOT="{{ proxmox_backup_local_state_root }}"
+
 # Optional: IaC Repository (if undefined, US2 skipped)
 {% if proxmox_backup_repo_path is defined %}
 REPO_PATH="{{ proxmox_backup_repo_path }}"

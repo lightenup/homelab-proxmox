@@ -4,6 +4,12 @@
 **Status**: Active
 **Last Updated**: 2025-12-31
 
+> **Scope note (2026-10-28):** this harness (`pve-lab`, the nested VM rig on `vmbr99`) is **not**
+> what the service pipeline's "LAB" stage uses. `pve-service-deploy --environment lab` deploys
+> per-service LXCs to the **production** host, bridge, IPs and Terraform state. The isolated
+> topology below applies to the harness only. See
+> [`docs/backlog/067`](../backlog/067-lab-prod-same-address-space.md).
+
 ## Overview
 
 The Proxmox Lab Test Harness is a local CLI tool (`pve-lab`) that orchestrates the creation, testing, and destruction of ephemeral Proxmox environments. It enables safe, repeatable infrastructure testing without risking the production environment.

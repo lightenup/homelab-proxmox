@@ -1,5 +1,10 @@
 name: Lab 1 - LXC Promote
 
+# NOTE: "LAB" here is a canary on PRODUCTION, not an isolated environment. The lab tfvars use
+# the production PVE host, bridge and service IPs, and lab and prod share one Terraform state per
+# service, so this workflow creates/changes the real LXC. See docs/backlog/067 and AGENTS.md
+# ("The LAB stage changes production").
+
 on:
   workflow_dispatch:
     inputs:
@@ -28,7 +33,7 @@ on:
 
 jobs:
   plan_lab:
-    name: Plan (LAB)
+    name: Plan (LAB, prod host)
     runs-on: [self-hosted]
     outputs:
       run_id: ${{ steps.capture_run_id.outputs.run_id }}
@@ -227,7 +232,7 @@ jobs:
             !evidence/lab/${{ steps.capture_run_id.outputs.run_id }}/**/*.tfplan
 
   apply_lab:
-    name: Apply (LAB)
+    name: Apply (LAB, changes prod)
     runs-on: [self-hosted]
     needs: [plan_lab]
     concurrency:
