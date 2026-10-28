@@ -219,6 +219,25 @@ collect_iac_artifacts() {
   else
     log_warning "NAS state root not found: $nas_state_root (NFS mount issue?)"
   fi
+
+  # Per-service state on this host's disk (backlog 096). Symlinked entries point into the NAS
+  # infra_state collected above, so only plain directories are copied here.
+  local local_state_root="${LOCAL_STATE_ROOT:-/var/lib/homelab-proxmox/state/services}"
+  if [[ -d "$local_state_root" ]]; then
+    log_info "Collecting local Terraform state from: $local_state_root"
+    local state_dir state_service state_file
+    for state_dir in "${local_state_root}"/*; do
+      [[ -d "$state_dir" && ! -L "$state_dir" ]] || continue
+      state_service="$(basename "$state_dir")"
+      for state_file in "${state_dir}"/terraform.tfstate*; do
+        [[ -f "$state_file" ]] || continue
+        mkdir -p "$dest/local-state/${state_service}"
+        cp -a "$state_file" "$dest/local-state/${state_service}/"
+      done
+    done
+  else
+    log_warning "Local state root not found: $local_state_root"
+  fi
   
   # Legacy REPO_PATH collection (transitional, can be removed after migration complete)
   if [[ -n "${REPO_PATH:-}" && -d "$REPO_PATH" ]]; then
