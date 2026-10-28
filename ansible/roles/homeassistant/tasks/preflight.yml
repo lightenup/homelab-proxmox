@@ -8,4 +8,3 @@
     fail_msg: >-
       homeassistant_version must be a pinned release tag (e.g. "2026.10.4"), not empty or
       a moving tag.
-
