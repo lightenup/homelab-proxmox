@@ -218,3 +218,20 @@ def test_rig_vm_gets_a_public_nameserver():
     text = Path("scripts/lab/pve-lab").read_text(encoding="utf-8")
     assert 'LAB_NAMESERVER="1.1.1.1"' in text
     assert "--nameserver $LAB_NAMESERVER" in text
+
+
+def test_evidence_retention_keeps_the_newest_suite_pack_and_ignores_service_runs(tmp_path):
+    # 067 isolated-lab runs share the directory as lab-<service>-...; letters sort after digits,
+    # so a `lab-*` glob made retention delete the suite's newest pack (CI then found no provenance).
+    text = Path("scripts/lab/pve-lab").read_text(encoding="utf-8")
+    func = re.search(r"^enforce_evidence_retention\(\) \{.*?^\}", text, re.S | re.M).group(0)
+    names = [f"lab-2026102{d}-120000" for d in range(1, 8)] + [
+        "lab-ntfy-unknown-20261030-144950",
+        "lab-monitoring-unknown-20261030-150920",
+    ]
+    for n in names:
+        (tmp_path / n).mkdir()
+    script = f'log_info() {{ :; }}\nartifact_runs_path() {{ echo "{tmp_path}"; }}\n{func}\nenforce_evidence_retention 5\n'
+    subprocess.run(["bash", "-c", script], check=True)
+    left = sorted(p.name for p in tmp_path.iterdir())
+    assert left == sorted(names[2:7] + names[7:]), left
