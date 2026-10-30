@@ -59,6 +59,7 @@ EOF
 
 die() {
     echo "ERROR: $*" >&2
+    DIE_MESSAGE="$*"
     exit 1
 }
 
@@ -842,6 +843,10 @@ lab_finish() {
         fi
     fi
     rm -rf "${LAB_WORK:-}"
+
+    # A step that died (healthcheck, ansible, ...) leaves no reason of its own; surface its message
+    # instead of "see evidence pack".
+    [[ "${rc}" -ne 0 ]] && reason="${reason:-${DIE_MESSAGE:-run failed (rc=${rc}); see the job log}}"
 
     if [[ -n "${reason}" ]]; then
         if [[ "${LAB_CMD:-}" == "apply" ]]; then
