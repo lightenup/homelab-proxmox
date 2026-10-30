@@ -3,9 +3,12 @@
 # touching the live one. Follows the immich pattern (playbooks/restore-drill.yml).
 #
 #   ansible-playbook playbooks/hermes-restore-drill.yml -i inventories/prod/hosts.yml
+#   ... -e hermes_restore_archive=/path/to/hermes-backup-YYYYMMDD-HHMMSS.tar.gz
 #
 # Non-destructive by construction: a second container on {{ hermes_restore_test_port }}
-# against an extracted copy, torn down in `always:` whether the drill passes or fails.
+# against an extracted copy. Everything from extraction on sits in one block, so `always:`
+# tears it down and removes the extracted copy (webui.db holds accounts and conversations,
+# agent/ holds memory) whether the drill passes or fails at any step, a bad archive included.
 #
 # This answers "is the archive good". It does NOT prove the rebuild-from-code path — for
 # that the LXC has to actually be destroyed and rebuilt (spec 065, T048/SC-006).
@@ -27,47 +30,51 @@
       register: hermes_latest_backup_cmd
       changed_when: false
       failed_when: hermes_latest_backup_cmd.stdout == ""
+      when: hermes_restore_archive is not defined
 
     - name: Record the archive under test
       ansible.builtin.set_fact:
-        hermes_latest_backup: "{{ hermes_latest_backup_cmd.stdout }}"
-        hermes_restore_basename: "{{ hermes_latest_backup_cmd.stdout | basename | regex_replace('\\.tar\\.gz$', '') }}"
+        hermes_latest_backup: "{{ hermes_restore_archive | default(hermes_latest_backup_cmd.stdout) }}"
+
+    - name: Record the archive's top-level directory name
+      ansible.builtin.set_fact:
+        hermes_restore_basename: "{{ hermes_latest_backup | basename | regex_replace('\\.tar\\.gz$', '') }}"
 
     - name: Show which archive is being drilled
       ansible.builtin.debug:
         msg: "Drilling {{ hermes_latest_backup }}"
 
-    - name: Clean any previous drill directory
-      ansible.builtin.file:
-        path: "{{ hermes_restore_dir }}"
-        state: absent
-
-    - name: Create the drill directory
-      ansible.builtin.file:
-        path: "{{ hermes_restore_dir }}"
-        state: directory
-        mode: '0755'
-
-    - name: Extract the archive
-      ansible.builtin.unarchive:
-        src: "{{ hermes_latest_backup }}"
-        dest: "{{ hermes_restore_dir }}"
-        remote_src: true
-
-    - name: Assert the archive actually contains a database
-      ansible.builtin.stat:
-        path: "{{ hermes_restore_dir }}/{{ hermes_restore_basename }}/open-webui/webui.db"
-      register: hermes_restored_db
-      failed_when: not hermes_restored_db.stat.exists
-
-    - name: Deploy the restore-drill compose file
-      ansible.builtin.template:
-        src: ../roles/service_backup/templates/restore/hermes-compose.yml.j2
-        dest: "{{ hermes_restore_dir }}/docker-compose.restore.yml"
-        mode: '0640'
-
     - name: Restore drill
       block:
+        - name: Clean any previous drill directory
+          ansible.builtin.file:
+            path: "{{ hermes_restore_dir }}"
+            state: absent
+
+        - name: Create the drill directory
+          ansible.builtin.file:
+            path: "{{ hermes_restore_dir }}"
+            state: directory
+            mode: '0755'
+
+        - name: Extract the archive
+          ansible.builtin.unarchive:
+            src: "{{ hermes_latest_backup }}"
+            dest: "{{ hermes_restore_dir }}"
+            remote_src: true
+
+        - name: Assert the archive actually contains a database
+          ansible.builtin.stat:
+            path: "{{ hermes_restore_dir }}/{{ hermes_restore_basename }}/open-webui/webui.db"
+          register: hermes_restored_db
+          failed_when: not hermes_restored_db.stat.exists
+
+        - name: Deploy the restore-drill compose file
+          ansible.builtin.template:
+            src: ../roles/service_backup/templates/restore/hermes-compose.yml.j2
+            dest: "{{ hermes_restore_dir }}/docker-compose.restore.yml"
+            mode: '0640'
+
         - name: Start the restored instance
           community.docker.docker_compose_v2:
             project_src: "{{ hermes_restore_dir }}"
@@ -213,6 +220,13 @@
             success_msg: Restored agent lists its jobs and ran heartbeat; files match the manifest.
 
       always:
+        # A failure before the compose file was rendered (bad archive, no database) leaves
+        # nothing to tear down, and docker_compose_v2 would fail on the missing file.
+        - name: Check whether a drill stack was set up
+          ansible.builtin.stat:
+            path: "{{ hermes_restore_dir }}/docker-compose.restore.yml"
+          register: hermes_restore_compose
+
         - name: Tear down the restored instance
           community.docker.docker_compose_v2:
             project_src: "{{ hermes_restore_dir }}"
@@ -220,6 +234,7 @@
               - docker-compose.restore.yml
             state: absent
             remove_volumes: true
+          when: hermes_restore_compose.stat.exists
 
         - name: Remove the drill directory
           ansible.builtin.file:
