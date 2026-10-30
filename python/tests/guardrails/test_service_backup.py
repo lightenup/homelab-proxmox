@@ -237,6 +237,25 @@ def test_homeassistant_restore_drill_is_isolated_and_proves_the_restore() -> Non
     assert '"$WORK_DIR/config"' in snapshot, "the drill reads <top>/config/ (contract C5)"
 
 
+def test_restore_drills_extract_inside_their_cleanup_block() -> None:
+    """A drill extracts a copy of the service's state (accounts, tokens, conversations). If
+    extraction or the archive checks run before block/always:, a bad archive leaves that copy
+    in /tmp (review on #298). Every drill with a block must unarchive inside it, guard the
+    Compose teardown on the rendered file, and remove its directory in always:."""
+    for rel in ("ansible/playbooks/homeassistant-restore-drill.yml",
+                "ansible/playbooks/hermes-restore-drill.yml"):
+        tasks = yaml.safe_load(_read(rel))[0]["tasks"]
+        blocks = [t for t in tasks if "block" in t]
+        assert len(blocks) == 1, rel
+        outside = [t for t in tasks if "block" not in t]
+        assert not any("unarchive" in yaml.safe_dump(t) for t in outside), rel
+        assert "ansible.builtin.unarchive" in yaml.safe_dump(blocks[0]["block"]), rel
+        always = blocks[0]["always"]
+        teardown = next(t for t in always if "community.docker.docker_compose_v2" in t)
+        assert "stat.exists" in str(teardown.get("when", "")), rel
+        assert any(t.get("ansible.builtin.file", {}).get("state") == "absent" for t in always), rel
+
+
 def test_mount_parent_is_traversable_for_node_exporter() -> None:
     """FR-015: node_exporter must be able to stat the mount, so its parent is not 0700."""
     tasks = yaml.safe_load(_read("ansible/roles/service_backup/tasks/main.yml"))

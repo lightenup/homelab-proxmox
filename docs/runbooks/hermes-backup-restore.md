@@ -61,6 +61,11 @@ cd ansible
 ansible-playbook playbooks/hermes-restore-drill.yml -i inventories/prod/hosts.yml
 ```
 
+`-e hermes_restore_archive=<path>` drills one specific archive instead of the newest. Everything
+from extraction on is inside the drill's `always:` cleanup, so a bad archive (truncated, or
+without `webui.db`) fails the drill and still leaves no extracted copy or container behind
+(checked on PROD 2026-10-30 with both kinds).
+
 The drill instance is deliberately given **no gateway credentials and no tool servers** — the
 question is whether the state comes back, not whether every integration works, and a
 throwaway container has no business holding the gateway key or spending its request allowance.
