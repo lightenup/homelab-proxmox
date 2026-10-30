@@ -78,9 +78,26 @@ def render_agent_config() -> dict:
         "hermes_mcp_servers": [
             {"name": "market-model", "url": "http://mm.example.invalid:8001/mcp",
              "auth": "none", "credential_env": None, "enabled": True},
+            {"name": "homeassistant", "url": "http://ha.example.invalid:8123/api/mcp/assist",
+             "auth": "bearer", "credential_env": "AUXILIARY_MCP_HOMEASSISTANT_API_KEY",
+             "vault_var": "hermes_mcp_homeassistant_key", "enabled": True},
         ],
     }
     return yaml.load(env.get_template("agent-config.yaml.j2").render(**ctx), Loader=_BoolSafeLoader)
+
+
+# --- MCP bearer header (found on the first bearer deploy, 2026-10-30) ---
+
+
+def test_bearer_header_uses_the_braced_env_reference_hermes_resolves() -> None:
+    """Hermes interpolates only `${VAR}` in MCP headers (tools/mcp_tool_config.py
+    _ENV_VAR_PATTERN, v0.21.6). The template once wrote `${{ name }}`, which Jinja renders as
+    `$NAME`: the literal string would go to Home Assistant and every call would 401."""
+    servers = render_agent_config()["mcp_servers"]
+    assert servers["homeassistant"]["headers"] == {
+        "Authorization": "Bearer ${AUXILIARY_MCP_HOMEASSISTANT_API_KEY}"
+    }
+    assert "headers" not in servers["market-model"]
 
 
 def _ntfy_block() -> dict:
