@@ -135,7 +135,7 @@
 - name: Assert every bearer-auth MCP server names a non-empty vault variable
   ansible.builtin.assert:
     that:
-      - item.credential_env is defined and item.credential_env
+      - item.credential_env is defined and item.credential_env is string and item.credential_env | length > 0
       - lookup('vars', item.vault_var | default(item.credential_env | lower), default='') | length > 0
     fail_msg: >-
       MCP server '{{ item.name }}' declares auth: bearer but its vault variable

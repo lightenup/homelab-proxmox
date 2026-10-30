@@ -134,7 +134,10 @@ plugins:
 # MCP servers (FR-011, R-005): rendered from the single hermes_mcp_servers list — the same
 # list Open WebUI's TOOL_SERVER_CONNECTIONS is built from, so the two surfaces can never
 # drift apart. Bearer entries reference the token by env-var name only; the value is in
-# agent.env (vault-rendered) and interpolated at connect time.
+# agent.env (vault-rendered) and interpolated at connect time. Hermes resolves only the braced
+# form `${VAR}` (tools/mcp_tool_config.py _ENV_VAR_PATTERN); a bare `$VAR` is sent literally.
+# Built as a Jinja string: a literal dollar sign directly before an expression's opening braces
+# renders as `$NAME`, because Jinja consumes the braces.
 {% set enabled_mcp_servers = hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | list %}
 {% if enabled_mcp_servers | length > 0 %}
 mcp_servers:
@@ -143,7 +146,7 @@ mcp_servers:
     url: "{{ server.url }}"
 {% if server.auth == 'bearer' %}
     headers:
-      Authorization: "Bearer ${{ server.credential_env }}"
+      Authorization: "Bearer {{ '${' ~ server.credential_env ~ '}' }}"
 {% endif %}
 {% endfor %}
 {% else %}
