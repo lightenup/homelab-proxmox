@@ -1,0 +1,153 @@
+# Honcho v3.5.0 server config for spike 097 ("sparing" profile). Mounted read-only at
+# /app/config.toml in both the API and the deriver. Env vars would override; none of the
+# LLM/embedding settings are set by env, so this file is the single source.
+#
+# Every LLM module points at llmproxy (the spike's only route out) with model `coder`;
+# no module may fall back to the upstream defaults (openai/gpt-5.4-mini,
+# text-embedding-3-small): every model_config below names transport, model and base_url.
+[app]
+LOG_LEVEL = "INFO"
+EMBED_MESSAGES = true
+
+[auth]
+USE_AUTH = true            # JWT_SECRET comes from runs/honcho/secret.env (AUTH_JWT_SECRET)
+
+[sentry]
+ENABLED = false
+
+[telemetry]
+ENABLED = false            # CloudEvents analytics: off (default, stated explicitly)
+
+[metrics]
+ENABLED = false
+
+[cache]
+ENABLED = false            # no Redis: one less container; cache is an optimisation only
+
+[llm]
+DEFAULT_MAX_TOKENS = 2500
+# Global OpenAI-transport client (src/llm/registry.py) also points at the proxy, so a module
+# without an explicit override still cannot reach api.openai.com.
+OPENAI_BASE_URL = "http://llmproxy:4000/v1"
+OPENAI_API_KEY = "spike-proxy-injects-the-real-key"
+
+[embedding]
+# Qwen3-Embedding-0.6B through the gateway alias `embed`: 1024 dims. The pgvector columns are
+# created at 1536 by the migrations and ALTERed to 1024 by scripts/configure_embeddings.py at
+# startup (dimension is immutable after the first write: changing model or dim = new deployment).
+VECTOR_DIMENSIONS = 1024
+MAX_INPUT_TOKENS = 8192
+
+[embedding.model_config]
+transport = "openai"
+model = "embed"
+dimensions_mode = "never"  # LiteLLM/oMLX: do not forward `dimensions=`; the model is natively 1024
+[embedding.model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[deriver]
+ENABLED = true
+WORKERS = 1
+# Batching is the main LLM lever: the deriver waits until a work unit has >= 512 tokens
+# of new messages (or is MAX_AGE old) before one LLM call extracts observations for it.
+# Upstream MAX_AGE is 1800 s; the spike's short sessions would then never be derived before
+# the probes, so it is 60 s here. PROD would keep a larger age (fewer, bigger batches).
+REPRESENTATION_BATCH_WORK_UNIT_TARGET_TOKENS = 512
+REPRESENTATION_BATCH_TARGET_INPUT_TOKENS = 1024
+REPRESENTATION_BATCH_MAX_AGE_SECONDS = 60
+POLLING_STARTUP_JITTER_SECONDS = 0.0
+FLUSH_ENABLED = false
+
+[deriver.model_config]
+transport = "openai"
+model = "coder"
+[deriver.model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[peer_card]
+ENABLED = true             # the biographical user card is the feature Honcho is chosen for
+
+[dialectic]
+MAX_OUTPUT_TOKENS = 1024
+SESSION_HISTORY_MAX_TOKENS = 2048
+
+[dialectic.levels.minimal]
+MAX_TOOL_ITERATIONS = 1
+MAX_OUTPUT_TOKENS = 250
+TOOL_CHOICE = "auto"
+[dialectic.levels.minimal.model_config]
+transport = "openai"
+model = "coder"
+[dialectic.levels.minimal.model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[dialectic.levels.low]
+MAX_TOOL_ITERATIONS = 2
+TOOL_CHOICE = "auto"
+[dialectic.levels.low.model_config]
+transport = "openai"
+model = "coder"
+[dialectic.levels.low.model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[dialectic.levels.medium]
+MAX_TOOL_ITERATIONS = 2
+[dialectic.levels.medium.model_config]
+transport = "openai"
+model = "coder"
+[dialectic.levels.medium.model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[dialectic.levels.high]
+MAX_TOOL_ITERATIONS = 4
+[dialectic.levels.high.model_config]
+transport = "openai"
+model = "coder"
+[dialectic.levels.high.model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[dialectic.levels.max]
+MAX_TOOL_ITERATIONS = 10
+[dialectic.levels.max.model_config]
+transport = "openai"
+model = "coder"
+[dialectic.levels.max.model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[summary]
+# OFF: short/long summaries fire every 20/60 messages per session. Hermes compresses its own
+# context, and the owner's chats are short, so summaries would add LLM calls for little.
+ENABLED = false
+[summary.model_config]
+transport = "openai"
+model = "coder"
+[summary.model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[dream]
+# OFF: background consolidation with up to 20 tool iterations per dream. The heaviest
+# LLM consumer and not needed for recall of stated facts.
+ENABLED = false
+[dream.deduction_model_config]
+transport = "openai"
+model = "coder"
+[dream.deduction_model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+[dream.induction_model_config]
+transport = "openai"
+model = "coder"
+[dream.induction_model_config.overrides]
+base_url = "http://llmproxy:4000/v1"
+api_key = "spike-proxy-injects-the-real-key"
+
+[vector_store]
+TYPE = "pgvector"

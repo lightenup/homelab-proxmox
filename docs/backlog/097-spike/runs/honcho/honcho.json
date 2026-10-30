@@ -1,0 +1,21 @@
+{
+  "baseUrl": "http://honcho:8000",
+  "apiKey": "<workspace JWT, generated locally into runs/honcho/admin.jwt>",
+  "enabled": true,
+  "workspace": "hermes",
+  "aiPeer": "hermes",
+  "peerName": "owner",
+  "pinUserPeer": true,
+  "sessionStrategy": "per-session",
+  "writeFrequency": "async",
+  "saveMessages": true,
+  "recallMode": "hybrid",
+  "recallSync": true,
+  "contextCadence": 1,
+  "dialecticCadence": 3,
+  "dialecticDepth": 1,
+  "dialecticReasoningLevel": "minimal",
+  "reasoningLevelCap": "low",
+  "dialecticDynamic": false,
+  "queryRewrite": false
+}

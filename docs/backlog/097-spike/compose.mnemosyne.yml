@@ -1,0 +1,46 @@
+# Mnemosyne candidate: derived Hermes image (mnemosyne-memory 4.0.0 + mnemosyne-hermes 0.7.7,
+# installed at build time, see mnemosyne/Dockerfile) plus the Mnemosyne MCP server as a
+# second client on the SAME SQLite store, to test shared memory and concurrent access.
+x-mnemosyne-env: &mnemosyne-env
+  MNEMOSYNE_DATA_DIR: /opt/data/mnemosyne/data
+  # Embeddings through the gateway path. A non-OpenRouter URL routes every model name to it.
+  MNEMOSYNE_EMBEDDING_API_URL: http://llmproxy:4000/v1
+  MNEMOSYNE_EMBEDDING_MODEL: embed
+  MNEMOSYNE_EMBEDDING_DIM: "1024"
+  # No key on purpose: 4.0.0 refuses to send any key over http:// (embeddings.py
+  # _cleartext_refusal_applies), and falls back to OPENAI_API_KEY. The spike proxy injects
+  # the real key. PROD (router on plain http://192.168.1.220:4000) needs TLS or this fails.
+  MNEMOSYNE_EMBEDDING_API_KEY: ""
+  OPENAI_API_KEY: ""
+  # Consolidation LLM through the gateway path; never the local GGUF (the [llm] extra and
+  # huggingface_hub are not installed, so a download cannot even be attempted).
+  MNEMOSYNE_LLM_ENABLED: "true"
+  MNEMOSYNE_LLM_BASE_URL: http://llmproxy:4000/v1
+  MNEMOSYNE_LLM_MODEL: coder
+  MNEMOSYNE_HOST_LLM_ENABLED: "false"
+  MNEMOSYNE_LLM_CONFLICT_DETECTION: "false"
+  MNEMOSYNE_SYNC_REMOTE: ""
+  HF_HUB_OFFLINE: "1"
+  # fastembed's cache stays empty: the API path is taken, so ONNX models are never fetched.
+services:
+  hermes:
+    image: memspike-mnemosyne:4.0.0-0.7.7
+    environment:
+      <<: *mnemosyne-env
+  mnemosyne-mcp:
+    image: memspike-mnemosyne:4.0.0-0.7.7
+    # Bypass s6 /init: a bare MCP server process as the same uid as the agent.
+    user: "10000:10000"
+    entrypoint: ["/opt/hermes/.venv/bin/mnemosyne", "mcp"]
+    command: ["--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8090", "--path", "/mcp"]
+    environment:
+      <<: *mnemosyne-env
+      HOME: /opt/data
+      HERMES_HOME: /opt/data
+      # Named tokens: the name becomes the authoritative author id per client.
+      MNEMOSYNE_MCP_TOKENS: '{"openwebui":"spike-openwebui-token","claude-code":"spike-claude-token"}'
+      MNEMOSYNE_MCP_ALLOWED_HOSTS: "mnemosyne-mcp:*,localhost:*"
+    volumes:
+      - hermes_data:/opt/data
+    networks: [int]
+    depends_on: [hermes]

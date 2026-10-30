@@ -1,0 +1,109 @@
+== counts
+documents|30
+chunks|39
+memory_units|70
+entities|81
+mental_models|0
+== memory units by type
+experience|1
+world|69
+== memory units (newest first)
+ fact_type |                                                                     text                                                                     |             document_id
+-----------+----------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------
+ world     | User bruker en UniFi Dream Router med Telenor fiber. | Involving: user                                                                       | api-a54ed75d6b7dd25e
+ world     | User bor på 3. etasje på Møllenberg. | Involving: user                                                                                       | api-a54ed75d6b7dd25e
+ world     | User liker ramen med tofu, chili og mye grønnløk, og foretrekker laktosefri og nøttefri mat | Involving: user | Matpreferanser               | api-e096306364d95c22
+ world     | User's next on-call week starts on Monday, November 9, 2026 | Involving: user                                                                | api-9a0df5371248c308
+ world     | User's band is named Fjordfunk and rehearses every Wednesday at 19:00 in Svartlamon. | Involving: user                                       | api-b0e705a44618479b
+ world     | User's winter tires are stored at Dekkhotellet in Leangen. | Involving: user                                                                 | api-c7e2496d359e2d31
+ world     | Håkon, som er brukers bror og elektriker i Stavanger, hjelper med det elektriske arbeidet i badstua. Dette skjer påske 2027. | When: 2027 |  | api-e503b410e2c3b917
+ world     | User and family are planning a surprise party for the user's mother at Fjellstua for her 70th birthday | When: March 14, 2027 | Involving: u | api-165a21a08319994b
+ world     | User's mother turns 70 years old on March 14, 2027 | When: March 14, 2027 | Involving: user, user's mother                                   | api-165a21a08319994b
+ world     | Ingrid (user's sister) lives in Tromsø and works as a marine biologist. | Involving: Ingrid (user's sister), user                            | api-3d85ba1c1a2fa4b5
+ world     | User has a border collie named Tinde | Involving: user                                                                                       | api-8deafa43929600c1
+ world     | Den nattlige backupen kjører kl 03:00 om natten.                                                                                             | api-99793858b5f8c7d3
+ world     | User switched from coffee to green tea for their morning drink | When: 2026-10-30 | Involving: user | Preference change                      | api-fd671e4c531a7b13
+ world     | User is building a sauna at their cabin in Hemsedal | Involving: user                                                                        | api-d059b69fd0053b85
+ world     | User uses Helix as their code editor. | Involving: user                                                                                      | api-a612965173512831
+ world     | User is nut-free and lactose-free | Involving: user | Dietary constraint implied by the assistant's snack recommendation                     | api-b6fa6b24f9b077f6
+ world     | User's dog is named Tinde and is a border collie | Involving: user                                                                           | api-e57b4c6bdc3a5bff
+ world     | User bor i Trondheim. | Involving: user                                                                                                      | api-087847f47657744e
+ world     | The cabin's property tax is paid in two instalments, in March and September. | Involving: user                                               | api-50ff27726a236779
+ world     | User's bank is Sparebank 1 SMN. | Involving: user                                                                                            | api-50ff27726a236779
+ world     | User's goal is to have the cabin loan paid off by 2032. | Involving: user                                                                    | api-50ff27726a236779
+ world     | The user prefers that the assistant does not suggest network changes without asking first. | Involving: user | User preference for control o | api-50ff27726a236779
+ world     | User's apartment is located on Møllenberg, 3rd floor, and has fiber internet from Telenor. | Involving: user                                 | api-50ff27726a236779
+ world     | The user's home router is a UniFi Dream Router. | Involving: user                                                                            | api-50ff27726a236779
+ world     | User previously drank havreflat white every morning but has switched to green tea. | Involving: user | Change in daily habit                 | api-6398a40b1a859224
+ world     | User prefers Japanese food, especially ramen. | Involving: user | Food preference                                                            | api-6398a40b1a859224
+ world     | User is lactose intolerant and has a nut allergy. | Involving: user | Health constraints                                                     | api-6398a40b1a859224
+ world     | User runs 10 km every Sunday morning. | Involving: user | Regular exercise routine                                                           | api-6398a40b1a859224
+ world     | User's resting heart rate target is under 55. | Involving: user | Health goal                                                                | api-6398a40b1a859224
+ world     | User's team uses Grafana and Kafka, and the on-call phone number is stored in PagerDuty, not in the user's contacts. | Involving: user       | api-6398a40b1a859224
+ world     | User's manager is Siri Lund and their team owns the turbine telemetry pipeline. | Involving: user, Siri Lund (manager)                       | api-6398a40b1a859224
+ world     | User is on call every fourth week starting 9 November 2026. | When: Starting 2026-11-09 | Involving: user                                    | api-6398a40b1a859224
+ world     | Ola's manager at the hydro-power company is Siri Lund | Involving: Ola, Siri Lund (Ola's manager)                                            | a0e63026-e6d5-4ba6-b645-9447973a4a0a
+ world     | Ola is on call every fourth week starting 9 November 2026 | When: Starting 2026-11-09, recurring every 4 weeks | Involving: Ola              | a0e63026-e6d5-4ba6-b645-9447973a4a0a
+ world     | Ola's team uses Grafana and Kafka for monitoring and telemetry | Involving: Ola's team                                                       | a0e63026-e6d5-4ba6-b645-9447973a4a0a
+ world     | The on-call phone number is stored in PagerDuty, not in Ola's contacts | Involving: Ola                                                      | a0e63026-e6d5-4ba6-b645-9447973a4a0a
+ world     | Ola's team owns the turbine telemetry pipeline | Involving: Ola's team                                                                       | a0e63026-e6d5-4ba6-b645-9447973a4a0a
+ world     | Fjordfunk har en konsert 6. desember 2026 på Lokal 7. | When: 2026-12-06 | Involving: user, Fjordfunk                                        | api-789e9c270c8f5624
+ world     | User spiller bass i et coverband som heter Fjordfunk. | Involving: user, Fjordfunk                                                           | api-789e9c270c8f5624
+ world     | Fjordfunk øver hver onsdag kl 19 i Svartlamon. | When: Hver onsdag | Involving: user, Fjordfunk                                              | api-789e9c270c8f5624
+ world     | User's winter tyres are stored at Dekkhotellet in Leangen | Involving: user                                                                  | api-789e9c270c8f5624
+ world     | User drives a 2019 Hyundai Kona Electric with licence plate EL 48213 | Involving: user                                                       | api-789e9c270c8f5624
+ world     | Next EU-kontroll for user's car is due in May 2027 | When: May 2027 | Involving: user                                                        | api-789e9c270c8f5624
+ world     | Ola's winter tyres are stored at Dekkhotellet in Leangen. | Involving: Ola                                                                   | 7a5f4a19-0a55-4166-ae75-d52524e827fa
+ world     | Ola drives a 2019 Hyundai Kona Electric with licence plate EL 48213. | Involving: Ola                                                        | 7a5f4a19-0a55-4166-ae75-d52524e827fa
+ world     | The next EU-kontroll (vehicle inspection) for Ola's car is due in May 2027. | When: 2027-05-01 to 2027-05-31 | Involving: Ola                | 7a5f4a19-0a55-4166-ae75-d52524e827fa
+ world     | Brukerens bror Håkon er elektriker i Stavanger og har lovet å hjelpe med det elektriske i badstua i påsken. | When: Påske (2027) | Involving | api-5086a2390e228d2b
+ world     | Ingrid has two children: Sindre (7) and Mia (4) | Involving: Ingrid, Sindre, Mia                                                             | api-5086a2390e228d2b
+ world     | User has a nut allergy | Involving: user                                                                                                     | api-5086a2390e228d2b
+ world     | User is planning a surprise party for Berit at Fjellstua | Involving: user, Berit                                                            | api-5086a2390e228d2b
+ world     | User's mother Berit will turn 70 on March 14, 2027 | Involving: user, Berit (user's mother)                                                  | api-5086a2390e228d2b
+ world     | User's sister Ingrid lives in Tromsø and works as a marine biologist | Involving: user, Ingrid (user's sister)                               | api-5086a2390e228d2b
+ world     | Ola's mother Berit turns 70 on 14 March 2027, and the family is planning a surprise party for her at Fjellstua. | When: 2027-03-14 | Involvi | 08275e4a-ca7c-49e1-b3ab-ccf05e61a265
+ world     | Ola's sister Ingrid lives in Tromsø and works as a marine biologist. | Involving: Ingrid (Ola's sister), Ola                                 | 8fd2c2ab-9cc0-418d-9e4e-7dbc4085abb9
+ world     | Ingrid has two children: Sindre (age 7) and Mia (age 4). | Involving: Ingrid, Sindre (age 7), Mia (age 4)                                    | 8fd2c2ab-9cc0-418d-9e4e-7dbc4085abb9
+ world     | User has stopped drinking coffee and now drinks green tea in the morning instead. | When: 2026-10-30 | Involving: user                       | api-876f3bbdc64a0a6a
+ world     | User moved from Bergen to Trondheim | When: last week (mid-October 2026) | Involving: user (Ola)                                             | api-876f3bbdc64a0a6a
+ world     | User started a new job at a hydro-power company | When: last week (mid-October 2026) | Involving: user (Ola)                                 | api-876f3bbdc64a0a6a
+ world     | User prefers to receive casual chat responses in Norwegian bokmål, but code and code comments should remain in English. | Involving: user |  | api-bf4854183ca09e11
+ world     | User decided to change the nightly backup schedule to run at 03:00 instead of midnight. | When: 2026-10-30 | Involving: user                 | api-bf4854183ca09e11
+(60 rows)
+
+== documents per session
+api-d10e4b275ded5468|971
+api-6d892d9612b76279|2564
+api-506009d7a5cf07ba|1092
+269dde7b-442d-4339-a9a4-47728fd2f54c|89
+api-bf4854183ca09e11|787
+api-876f3bbdc64a0a6a|769
+8fd2c2ab-9cc0-418d-9e4e-7dbc4085abb9|113
+08275e4a-ca7c-49e1-b3ab-ccf05e61a265|107
+api-5086a2390e228d2b|1156
+7a5f4a19-0a55-4166-ae75-d52524e827fa|181
+api-789e9c270c8f5624|905
+a0e63026-e6d5-4ba6-b645-9447973a4a0a|285
+api-6398a40b1a859224|1205
+api-50ff27726a236779|1047
+api-087847f47657744e|216
+api-e57b4c6bdc3a5bff|270
+api-b6fa6b24f9b077f6|312
+api-a612965173512831|221
+api-d059b69fd0053b85|284
+api-fd671e4c531a7b13|278
+api-99793858b5f8c7d3|237
+api-8deafa43929600c1|386
+api-3d85ba1c1a2fa4b5|276
+api-165a21a08319994b|338
+api-e503b410e2c3b917|346
+api-c7e2496d359e2d31|241
+api-b0e705a44618479b|287
+api-9a0df5371248c308|279
+api-e096306364d95c22|304
+api-a54ed75d6b7dd25e|1742
+== async operations
+batch_retain|completed|35
+graph_maintenance|completed|1
+retain|completed|35

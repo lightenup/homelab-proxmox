@@ -1,0 +1,61 @@
+# Candidate: Hindsight 1.1.0 (slim) + pgvector Postgres, layered on compose.base.yml.
+# Variants share this file; each reads its own runs/${CANDIDATE}/server.env:
+#   hindsight         concise fact extraction (1 LLM call per retained turn), observations and
+#                     auto-consolidation OFF, prefetch = recall (no LLM on read)
+#   hindsight-chunks  chunks mode: verbatim storage, zero LLM calls
+# Everything sits on `int`: no egress, LLM/embeddings/rerank only via llmproxy.
+volumes:
+  hindsight_pg: {}
+services:
+  hindsight-db:
+    image: pgvector/pgvector:0.8.1-pg17
+    environment:
+      POSTGRES_USER: hindsight
+      POSTGRES_PASSWORD: hindsight-spike
+      POSTGRES_DB: hindsight
+    volumes: [hindsight_pg:/var/lib/postgresql/data]
+    networks: [int]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hindsight -d hindsight"]
+      interval: 5s
+      retries: 20
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:1.1.0-slim
+    env_file:
+      - ./runs/${CANDIDATE}/server.env
+      - ./runs/${CANDIDATE}/secret.env
+    environment:
+      HINDSIGHT_ENABLE_CP: "false"            # control-plane UI (node) not needed: saves RAM
+      HINDSIGHT_API_DATABASE_URL: postgresql://hindsight:hindsight-spike@hindsight-db:5432/hindsight
+      HINDSIGHT_API_LLM_PROVIDER: openai
+      HINDSIGHT_API_LLM_BASE_URL: http://llmproxy:4000/v1
+      HINDSIGHT_API_LLM_API_KEY: spike-proxy-injects-the-real-key
+      HINDSIGHT_API_LLM_MODEL: coder
+      HINDSIGHT_API_SKIP_LLM_VERIFICATION: "true"   # no LLM call at startup
+      HINDSIGHT_API_EMBEDDINGS_PROVIDER: openai
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_BASE_URL: http://llmproxy:4000/v1
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY: spike-proxy-injects-the-real-key
+      HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL: embed  # Qwen3-Embedding-0.6B, 1024 dims, multilingual
+      HINDSIGHT_API_RERANKER_PROVIDER: litellm
+      HINDSIGHT_API_RERANKER_LITELLM_API_BASE: http://llmproxy:4000
+      HINDSIGHT_API_RERANKER_LITELLM_API_KEY: spike-proxy-injects-the-real-key
+      HINDSIGHT_API_RERANKER_LITELLM_MODEL: rerank  # Qwen3-Reranker-0.6B
+      HINDSIGHT_API_TENANT_EXTENSION: hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    networks: [int]
+    depends_on:
+      hindsight-db: {condition: service_healthy}
+      llmproxy: {condition: service_started}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8888/health',timeout=3)\""]
+      interval: 10s
+      retries: 30
+      start_period: 30s
+  hermes:
+    image: memspike-hermes-hindsight:v0.21.6-hs1.2.1   # built from hindsight/image/Dockerfile
+    volumes:
+      - ./hindsight/plugin:/opt/data/plugins/hindsight:ro
+      - ./runs/${CANDIDATE}/hindsight-config.json:/opt/data/hindsight/config.json:ro
+    depends_on:
+      hindsight: {condition: service_healthy}

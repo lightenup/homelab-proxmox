@@ -1,0 +1,116 @@
+== counts
+workspaces|1
+peers|2
+sessions|25
+messages|70
+message_embeddings|70
+documents (observations/conclusions)|120
+queue pending|2
+queue processed|57
+queue errors|0
+== queue by task type
+representation|f|f|2
+representation|t|f|33
+webhook|t|f|24
+== queue errors (first 5)
+== documents by level (observer -> observed)
+explicit|hermes|owner|65
+explicit|owner|owner|55
+== documents (newest first)
+  level   | observed |                                                                   content
+----------+----------+----------------------------------------------------------------------------------------------------------------------------------------------
+ explicit | owner    | owner belongs to a band.
+ explicit | owner    | owner belongs to a band.
+ explicit | owner    | owner has winter tires.
+ explicit | owner    | owner's winter tires are stored in a location unknown to owner.
+ explicit | owner    | owner has winter tires.
+ explicit | owner    | owner's winter tires are stored in a location unknown to owner.
+ explicit | owner    | Bygger badstue på hytta i Hemsedal. Broren Håkon (elektriker i Stavanger) hjelper med det elektriske i påsken.
+ explicit | owner    | owner is doing a construction project.
+ explicit | owner    | owner is doing a construction project.
+ explicit | owner    | owner has a female dog
+ explicit | owner    | owner has a female dog
+ explicit | owner    | owner wants to have the cabin loan paid off by 2032.
+ explicit | owner    | owner's cabin property tax is paid in two instalments in March and September.
+ explicit | owner    | owner's bank is Sparebank 1 SMN.
+ explicit | owner    | owner's cabin property tax is paid in two instalments in March and September.
+ explicit | owner    | owner wants to have the cabin loan paid off by 2032.
+ explicit | owner    | owner's bank is Sparebank 1 SMN.
+ explicit | owner    | owner's home router is a UniFi Dream Router.
+ explicit | owner    | owner prefers that network changes are not suggested without asking first.
+ explicit | owner    | owner's home apartment is located on Møllenberg, 3rd floor.
+ explicit | owner    | owner's home internet service is provided by Telenor fiber.
+ explicit | owner    | owner's home internet service is provided by Telenor fiber.
+ explicit | owner    | owner prefers that network changes are not suggested without asking first.
+ explicit | owner    | owner's home router is a UniFi Dream Router.
+ explicit | owner    | owner's home apartment is located on Møllenberg, 3rd floor.
+ explicit | owner    | Bank: Sparebank 1 SMN. Hyttelån skal betales ferdig innen 2032. Eigedomsskatt for hytta betales i to rater (mars og september).
+ explicit | owner    | owner's resting heart rate target is under 55.
+ explicit | owner    | owner is lactose intolerant.
+ explicit | owner    | owner has a nut allergy.
+ explicit | owner    | owner's on-call phone number is not stored in owner's contacts.
+ explicit | owner    | owner's on-call phone number is stored in PagerDuty.
+ explicit | owner    | owner's team uses Kafka.
+ explicit | owner    | owner's team uses Grafana.
+ explicit | owner    | owner's team owns the turbine telemetry pipeline.
+ explicit | owner    | owner is on call every fourth week starting 9 November 2026.
+ explicit | owner    | owner's manager is Siri Lund.
+ explicit | owner    | owner especially prefers ramen.
+ explicit | owner    | owner prefers Japanese food.
+ explicit | owner    | owner runs 10 km every Sunday morning.
+ explicit | owner    | owner's team owns the turbine telemetry pipeline.
+ explicit | owner    | owner's team uses Grafana.
+ explicit | owner    | owner's team uses Kafka.
+ explicit | owner    | owner's resting heart rate target is under 55.
+ explicit | owner    | owner prefers Japanese food.
+ explicit | owner    | owner especially prefers ramen.
+ explicit | owner    | owner's on-call phone number is stored in PagerDuty.
+ explicit | owner    | owner's on-call phone number is not stored in owner's contacts.
+ explicit | owner    | owner has a nut allergy.
+ explicit | owner    | owner is lactose intolerant.
+ explicit | owner    | owner runs 10 km every Sunday morning.
+ explicit | owner    | owner's manager is Siri Lund.
+ explicit | owner    | owner is on call every fourth week starting 9 November 2026.
+ explicit | owner    | Bor i leilighet på Møllenberg i Trondheim, 3. etasje. Fiber fra Telenor. Rutere: UniFi Dream Router. Ikke foreslå nettverksendringer uten å
+ explicit | owner    | owner drives a 2019 Hyundai Kona Electric with licence plate EL 48213.
+ explicit | owner    | owner stores the winter tyres for their 2019 Hyundai Kona Electric at Dekkhotellet in Leangen.
+ explicit | owner    | owner's band Fjordfunk has a concert scheduled for December 6, 2026, at Lokal 7.
+ explicit | owner    | owner's band Fjordfunk rehearses every Wednesday at 19:00 at Svartlamon.
+ explicit | owner    | owner plays bass in a cover band named Fjordfunk.
+ explicit | owner    | The next EU-kontroll for owner's 2019 Hyundai Kona Electric is due in May 2027.
+ explicit | owner    | owner's band Fjordfunk has a concert scheduled for December 6, 2026, at Lokal 7.
+(60 rows)
+
+== peer cards
+  name  | card
+--------+------
+ hermes | {}
+ owner  | {}
+(2 rows)
+
+== messages per session
+api-087847f47657744e|2
+api-165a21a08319994b|2
+api-3d85ba1c1a2fa4b5|2
+api-506009d7a5cf07ba|4
+api-5086a2390e228d2b|4
+api-50ff27726a236779|4
+api-6398a40b1a859224|4
+api-6d892d9612b76279|4
+api-789e9c270c8f5624|4
+api-876f3bbdc64a0a6a|4
+api-8deafa43929600c1|2
+api-99793858b5f8c7d3|2
+api-9a0df5371248c308|2
+api-a54ed75d6b7dd25e|2
+api-a612965173512831|2
+api-b0e705a44618479b|2
+api-b6fa6b24f9b077f6|2
+api-bf4854183ca09e11|4
+api-c7e2496d359e2d31|2
+api-d059b69fd0053b85|2
+api-d10e4b275ded5468|6
+api-e096306364d95c22|2
+api-e503b410e2c3b917|2
+api-e57b4c6bdc3a5bff|2
+api-fd671e4c531a7b13|2

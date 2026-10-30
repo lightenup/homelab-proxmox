@@ -1,0 +1,20 @@
+p1  update            PASS  'you live in trondheim, in an apartment on møllenberg on the 3rd floor.'
+p2  fact-no           PASS  'hunden heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'a yogurt bowl with fresh berries and a drizzle of honey — nut-free and quick to grab.'
+p4  update-no         FAIL  'du nevner at du løper 10 km hver søndag morgen, men ikke hva du drikker. jeg har ingen info om din morgenrutin'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  FAIL  'jeg fant ingenting i minnet eller i historikken om en byggprosjekt du har fortalt meg om. de eneste tingene je'
+p7  decision-no       FAIL  'jeg finner ingen nattlig backup her — ingen crontab, ingen systemd-timers, ingen hermes cron-jobbs, og /opt/da'
+p8  negative          PASS  'jeg har ingen opplysninger om en katt i minne mitt. jeg vet at du har en border collie som heter tinde, men in'
+p9  volume-no         PASS  'søsteren din, ingrid, bor i tromsø og jobber som marinbiolog.'
+p10 volume-en         PASS  'your mother berit turns 70 on 14 march 2027, and the family is planning a surprise party at fjellstua.'
+p11 volume-crossref   PASS  "håkon — your brother, an electrician in stavanger — is helping with the sauna's electrical work during easter "
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         FAIL  'jeg har ingen info om bandet ditt i minnotatene mine — verken navnet eller øvingsplanen. har du fortalt meg de'
+p14 volume-en         PASS  'your next on-call week starts monday, 9 november 2026.'
+p15 volume-constraint PASS  'en steikt biffbiff med stekt løk, potetmos og en god vin — kjappt og velfortjent etter jobben.'
+p16 volume-preference PASS  "i can help with that, but i'm not going to touch your router settings without your explicit go-ahead first.\n\nw"
+recall: 12/16
+calls final chat 200 1
+calls probes chat 200 78
+calls sessions chat 200 51

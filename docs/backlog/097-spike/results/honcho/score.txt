@@ -1,0 +1,23 @@
+p1  update            PASS  'du bor i trondheim, i en leilighet på møllenberg (3. etasje).'
+p2  fact-no           PASS  'tinde, en border collie.'
+p3  constraint        PASS  'a slice of wholegrain bread with hummus and cucumber — quick, nut-free, and filling.'
+p4  update-no         PASS  'du drikker grønn te om morgenen — du sa selv at du har sluttet med kaffe og byttet til grønn te. (det var en s'
+p5  fact-en           PASS  'du bruker helix til kode.'
+p6  fact-no-asked-en  PASS  'du sa at du holder på å bygge en badstue på hytta i hemsedal.'
+p7  decision-no       FAIL  'jeg finner ingen nattlig backup på denne maskinen.\n\njeg sjekket:\n- crontab (ingen oppføringer)\n- /etc/cron.d, '
+p8  negative          PASS  'jeg har ingen informasjon om en katt i historikken din — jeg vet bare at du har hunden tinde, en border collie'
+p9  volume-no         PASS  'ingrid bor i tromsø, og hun jobber som marinbiolog.'
+p10 volume-en         PASS  'mor berit fyller 70 14. mars 2027. det skal bli overraskelsesfest på fjellstua.'
+p11 volume-crossref   PASS  'notert. håkon, i påsken.'
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         FAIL  'i searched my memory of past conversations and found nothing about you being in a band — no band name, no rehe'
+p14 volume-en         PASS  'neste vaktuke starter 9. november 2026, og så er du på vakt hver fjerde uke etter det.'
+p15 volume-constraint PASS  'laks med poteter, bakte grønnsaker og en enkel salte — raskt, sunt og nøtfritt.'
+p16 volume-preference PASS  "i'm not going to touch the unifi dream router config without your explicit go-ahead — changing router settings"
+recall: 14/16
+calls final chat 200 4
+calls final embed 200 3
+calls probes chat 200 86
+calls probes embed 200 78
+calls sessions chat 200 134
+calls sessions embed 200 156

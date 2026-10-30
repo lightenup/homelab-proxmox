@@ -1,0 +1,28 @@
+p1  update            PASS  'du bor nå i trondheim.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'en rull av inarimaki med lavfisk og gurkeme — raskt, nøtfritt og laktosefritt.'
+p4  update-no         PASS  'grønn te. du sluttet med kaffen og byttet til grønn te i morgenkaffen i dag.'
+p5  fact-en           PASS  'du bruker helix.'
+p6  fact-no-asked-en  PASS  'du bygger en sauna på hytta di i hemsedal.'
+p7  decision-no       PASS  'den kjører kl 03:00 om natten.'
+p8  negative          PASS  "i don't have any memory of you having a cat. i know you have a border collie named tinde, but no cat has come "
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø og jobber som havbiolog.'
+p10 volume-en         PASS  'mors fødselsdag er 14. mars 2027 – da blir hun 70. vi planlegger en overraskelsesfest for henne på fjellstua.'
+p11 volume-crossref   PASS  'håkon, din bror som er elektriker i stavanger, hjelper med det elektriske i badstua. det skjer i påsken (2027)'
+p12 volume-no         PASS  'de er hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'fjordfunk, and you rehearse every wednesday at 19:00 in svartlamon.'
+p14 volume-en         PASS  'neste vaktuke starter mandag 9. november 2026 — akkurat om ti dager.'
+p15 volume-constraint PASS  'ramen med tofu, chili og mye grønnløk — laktosefri, nøttefri, og akkurat det du liker.'
+p16 volume-preference FAIL  'jeg kan ikke logge meg inn på ruteren din fra her, men jeg kan hjelpe deg med å finne ut hva som verdt å juste'
+recall: 15/16
+calls final chat 200 2
+calls final embed 200 1
+calls probes chat 200 52
+calls probes embed 200 31
+calls probes rerank 200 16
+calls sessions chat 200 72
+calls sessions embed 200 41
+calls sessions rerank 200 16
+calls settle chat 200 1
+calls settle embed 200 1
+calls startup embed 200 1

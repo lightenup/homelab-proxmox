@@ -1,0 +1,84 @@
+== counts
+documents|29
+chunks|38
+memory_units|38
+entities|0
+mental_models|0
+== memory units by type
+world|38
+== memory units (newest first)
+ fact_type |                                                                     text                                                                     |             document_id
+-----------+----------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------
+ world     | [[{"role": "user", "content": "User: Can you tweak my home router settings to speed up Wi-Fi?", "timestamp": "2026-10-30T16:38:20+01:00"}, { | api-a54ed75d6b7dd25e
+ world     | [[{"role": "user", "content": "User: Foreslå en middag til meg i kveld, én linje.", "timestamp": "2026-10-30T16:37:55+01:00"}, {"role": "ass | api-e096306364d95c22
+ world     | [[{"role": "user", "content": "User: When does my next on-call week start?", "timestamp": "2026-10-30T16:37:47+01:00"}, {"role": "assistant" | api-9a0df5371248c308
+ world     | [[{"role": "user", "content": "User: What's my band called and when do we rehearse?", "timestamp": "2026-10-30T16:37:30+01:00"}, {"role": "a | api-b0e705a44618479b
+ world     | [[{"role": "user", "content": "User: Hvor er vinterdekkene mine lagret?", "timestamp": "2026-10-30T16:37:23+01:00"}, {"role": "assistant", " | api-c7e2496d359e2d31
+ world     | [[{"role": "user", "content": "User: Who is helping me with the sauna's electrical work, and when?", "timestamp": "2026-10-30T16:37:18+01:00 | api-e503b410e2c3b917
+ world     | [[{"role": "user", "content": "User: When is my mother's birthday, and what are we planning?", "timestamp": "2026-10-30T16:37:11+01:00"}, {" | api-165a21a08319994b
+ world     | [[{"role": "user", "content": "User: Hvor bor søsteren min, og hva jobber hun med?", "timestamp": "2026-10-30T16:36:50+01:00"}, {"role": "as | api-3d85ba1c1a2fa4b5
+ world     | [[{"role": "user", "content": "User: What is my cat's name?", "timestamp": "2026-10-30T16:36:44+01:00"}, {"role": "assistant", "content": "A | api-8deafa43929600c1
+ world     | [[{"role": "user", "content": "User: Når kjører den nattlige backupen?", "timestamp": "2026-10-30T16:36:36+01:00"}, {"role": "assistant", "c | api-99793858b5f8c7d3
+ world     | [[{"role": "user", "content": "User: What construction project did I tell you I'm doing, and where is it?", "timestamp": "2026-10-30T16:36:2 | api-d059b69fd0053b85
+ world     | [[{"role": "user", "content": "User: Which editor do I use for code?", "timestamp": "2026-10-30T16:36:22+01:00"}, {"role": "assistant", "con | api-a612965173512831
+ world     | [[{"role": "user", "content": "User: Hva drikker jeg om morgenen?", "timestamp": "2026-10-30T16:36:14+01:00"}, {"role": "assistant", "conten | api-fd671e4c531a7b13
+ world     | [[{"role": "user", "content": "User: Suggest a quick snack for my afternoon. Keep it to one line.", "timestamp": "2026-10-30T16:36:09+01:00" | api-b6fa6b24f9b077f6
+ world     | [[{"role": "user", "content": "User: Hva heter hunden min, og hvilken rase er hun?", "timestamp": "2026-10-30T16:35:59+01:00"}, {"role": "as | api-e57b4c6bdc3a5bff
+ world     | [[{"role": "user", "content": "User: Where do I live now?", "timestamp": "2026-10-30T16:35:49+01:00"}, {"role": "assistant", "content": "Ass | api-087847f47657744e
+ world     | [[{"role": "user", "content": "User: Finance and admin: my bank is Sparebank 1 SMN, the cabin's property tax is paid in two instalments (Mar | api-50ff27726a236779
+ world     | [[{"role": "user", "content": "User: Hjemme: leiligheten min er på Møllenberg, 3. etasje, og vi har fiber fra Telenor. Ruteren er en UniFi D | api-50ff27726a236779
+ world     | [[{"role": "user", "content": "User: Health and food: besides the nut allergy, I'm lactose intolerant, I run 10 km every Sunday morning, and | api-6398a40b1a859224
+ world     | [[{"role": "user", "content": "User: Work notes: my manager is Siri Lund, our team owns the turbine telemetry pipeline, and I'm on call ever | api-6398a40b1a859224
+ world     | [[{"role": "user", "content": "User: Jeg spiller bass i et coverband som heter Fjordfunk. Vi øver hver onsdag kl 19 i Svartlamon, og neste k | api-789e9c270c8f5624
+ world     | [[{"role": "user", "content": "User: Car stuff: I drive a 2019 Hyundai Kona Electric, licence plate EL 48213. The winter tyres are stored at | api-789e9c270c8f5624
+ world     | Ola drives a 2019 Hyundai Kona Electric, licence plate EL 48213. Winter tyres are stored at Dekkhotellet in Leangen. The next EU-kontroll (N | 1fa1c0c2-7b16-4c15-9eff-cf44bf36758b
+ world     | [[{"role": "user", "content": "User: Min bror Håkon er elektriker i Stavanger, og han har lovet å hjelpe meg med det elektriske i badstua i  | api-5086a2390e228d2b
+ world     | [[{"role": "user", "content": "User: Some family context for you: my sister Ingrid lives in Tromsø and works as a marine biologist. Her kids | api-5086a2390e228d2b
+ world     | Ola's family: sister Ingrid lives in Tromsø and works as a marine biologist; her kids are Sindre (7) and Mia (4). Ola's mother Berit turns 7 | 641506b6-4d06-4429-a657-f86d4650cf1d
+ world     | [[{"role": "user", "content": "User: Og jeg har sluttet med kaffe. Nå drikker jeg grønn te om morgenen i stedet.", "timestamp": "2026-10-30T | api-876f3bbdc64a0a6a
+ world     | [[{"role": "user", "content": "User: Big news: I moved from Bergen to Trondheim last week. New job at a hydro-power company.", "timestamp":  | api-876f3bbdc64a0a6a
+ world     | Ola moved from Bergen to Trondheim in late October 2026 (moved "last week" as of 2026-10-30). New job at a hydro-power company, started arou | e022d906-4958-4bb7-a9c2-70e70c5295cb
+ world     | [[{"role": "user", "content": "User: Also, for casual chat please answer me in Norwegian bokmål, but keep code and code comments in English. | api-bf4854183ca09e11
+ world     | [[{"role": "user", "content": "User: Vi bestemte i dag at den nattlige backupen skal kjøre klokka 03:00 i stedet for midnatt.", "timestamp": | api-bf4854183ca09e11
+ world     | Ola decided (2026-10-30) that the nightly backup should run at 03:00 instead of midnight (00:00).                                            | 55fca1d4-d410-4de6-8167-e2b7cc04cc83
+ world     | [[{"role": "user", "content": "User: Hva er forskjellen på TCP og UDP, kort fortalt?", "timestamp": "2026-10-30T16:29:59+01:00"}, {"role": " | api-506009d7a5cf07ba
+ world     | [[{"role": "user", "content": "User: Explain in two sentences what a Bloom filter is.", "timestamp": "2026-10-30T16:29:51+01:00"}, {"role":  | api-506009d7a5cf07ba
+ world     | [[{"role": "user", "content": "User: Every morning I drink an oat-milk flat white before I start work. What's a good grinder setting for tha | api-6d892d9612b76279
+ world     | [[{"role": "user", "content": "User: Jeg holder på å bygge en badstue på hytta i Hemsedal. Kan du gi meg tre tips om ventilasjon?", "timesta | api-6d892d9612b76279
+ world     | [[{"role": "user", "content": "User: Thanks, that's all for now.", "timestamp": "2026-10-30T16:28:51+01:00"}, {"role": "assistant", "content | api-d10e4b275ded5468
+ world     | [[{"role": "user", "content": "User: Hi! Quick intro so you know me: I'm Ola, I write most of my code in the Helix editor, and I'm allergic  | api-d10e4b275ded5468
+(38 rows)
+
+== documents per session
+api-d10e4b275ded5468|1040
+api-6d892d9612b76279|2751
+api-506009d7a5cf07ba|894
+55fca1d4-d410-4de6-8167-e2b7cc04cc83|97
+api-bf4854183ca09e11|773
+e022d906-4958-4bb7-a9c2-70e70c5295cb|154
+api-876f3bbdc64a0a6a|1388
+641506b6-4d06-4429-a657-f86d4650cf1d|212
+api-5086a2390e228d2b|1135
+1fa1c0c2-7b16-4c15-9eff-cf44bf36758b|183
+api-789e9c270c8f5624|1247
+api-6398a40b1a859224|1828
+api-50ff27726a236779|1181
+api-087847f47657744e|267
+api-e57b4c6bdc3a5bff|270
+api-b6fa6b24f9b077f6|355
+api-fd671e4c531a7b13|211
+api-a612965173512831|211
+api-d059b69fd0053b85|302
+api-99793858b5f8c7d3|262
+api-8deafa43929600c1|358
+api-3d85ba1c1a2fa4b5|280
+api-165a21a08319994b|470
+api-e503b410e2c3b917|393
+api-c7e2496d359e2d31|241
+api-b0e705a44618479b|271
+api-9a0df5371248c308|352
+api-e096306364d95c22|322
+api-a54ed75d6b7dd25e|1132
+== async operations
+batch_retain|completed|35
+retain|completed|35

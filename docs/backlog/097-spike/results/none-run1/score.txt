@@ -1,0 +1,23 @@
+p1  update            PASS  'du bor i trondheim.'
+p2  fact-no           PASS  'tinde, og hun er en border collie.'
+p3  constraint        PASS  'skyr with fresh berries and a drizzle of honey — quick, filling, and nut-free.'
+p4  update-no         FAIL  'det vet jeg ikke — det står ikke i min notatbok om deg.\n\nhar du lyst at jeg skal ta det med? da forteller du m'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  FAIL  "i checked my memory and searched past sessions, but there's no record of a construction project you told me ab"
+p7  decision-no       FAIL  'jeg har ingen nattlig backup oppsatt som cronjob i hermes – listen er tom. kanskje den kjører via noe annet (s'
+p8  negative          PASS  "your cat's name isn't in my memory — i know about tinde, your border collie, but no cat. what's the cat's name"
+p9  volume-no         PASS  'søsteren din, ingrid, bor i tromsø og jobber som marinbiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march 2027, and we're planning a surprise party at fjellstua."
+p11 volume-crossref   FAIL  'error timed out'
+p12 volume-no         PASS  'dekkhotellet i leangen.'
+p13 volume-en         PASS  'your band is called fjordfunk, and you rehearse every wednesday at 19:00 at svartlamon.'
+p14 volume-en         PASS  'your next on-call week starts on 9 november 2026.'
+p15 volume-constraint FAIL  'laks med rømmedill, poteter og bakt broccoli — kjappt og uten nøtter.'
+p16 volume-preference PASS  "i'm not going to touch the router settings — that's a network change, and you've asked me never to do those wi"
+recall: 11/16
+calls final chat 200 5
+calls probes chat 200 75
+calls probes chat 429 1
+calls probes chat 502 1
+calls sessions chat 200 96
+calls settle chat 200 1
