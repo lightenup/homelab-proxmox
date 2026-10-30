@@ -3,7 +3,8 @@
 # Purpose: local Terraform state roots and the lab scratch root on the PVE host (067)
 #   state/prod  the one production state per service (backed up by proxmox_backup)
 #   state/lab   exists only during lab runs; never backed up
-#   lab-scratch bind-mount source for lab copies; the pipeline creates per-run dirs under it
+#   lab-scratch bind-mount source for lab copies; the pipeline creates per-run dirs under it.
+#               Owned by ci so the sweep can remove runs (after `sudo chown -R`; ci has no sudo rm).
 
 - name: Create the state roots
   ansible.builtin.file:
@@ -20,6 +21,6 @@
   ansible.builtin.file:
     path: /var/lib/homelab-proxmox/lab-scratch
     state: directory
-    owner: root
-    group: root
+    owner: ci
+    group: ci
     mode: '0711'

@@ -1,0 +1,3 @@
+---
+# Where pve's checkout of this repo lives (rsynced by the pipeline).
+state_drift_check_script: /home/ci/homelab-proxmox/scripts/lab/state-drift-check

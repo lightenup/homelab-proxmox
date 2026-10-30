@@ -24,3 +24,5 @@ node_exporter_disabled_collectors:
 # from node_exporter itself (e.g. a cron/timer-driven canary). Backward compatible: an empty
 # or absent directory means node_exporter reports nothing extra (added for spec 064-llm-router).
 node_exporter_textfile_directory: "/var/lib/node_exporter/textfile_collector"
+# 0775 on pve only (host_vars/proxmox.yml): the state-drift timer runs as ci with this group.
+node_exporter_textfile_directory_mode: "0755"

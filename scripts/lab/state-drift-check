@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# scripts/lab/state-drift-check - nightly check that Terraform state matches the host (067, FR-014)
+#
+# Runs as `ci` on pve from state-drift-check.timer. It
+#   1. takes the lab lock (state/lab/.lock); if a LAB run holds it, exits 0 and changes nothing
+#   2. sweeps leftover lab copies (identity rule in lib/ct_conflicts.sh) plus stale lab scratch
+#      and lab state
+#   3. compares every container on the host with the vmids in state/prod/*/terraform.tfstate
+# and writes latest.json plus the node_exporter textfile state_drift.prom. See
+# specs/067-isolated-lab/contracts/state-drift-metrics.md.
+#
+# Env (defaults in brackets): STATE_ROOT, ARTIFACT_ROOT, TEXTFILE_DIR, SCRATCH_ROOT,
+# DRIFT_IGNORE_FILE [scripts/lab/state-drift-ignore.txt].
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_ROOT="${STATE_ROOT:-/var/lib/homelab-proxmox/state}"
+ARTIFACT_ROOT="${ARTIFACT_ROOT:-/var/lib/homelab-proxmox/artifacts}"
+TEXTFILE_DIR="${TEXTFILE_DIR:-/var/lib/node_exporter/textfile_collector}"
+SCRATCH_ROOT="${SCRATCH_ROOT:-/var/lib/homelab-proxmox/lab-scratch}"
+IGNORE_FILE="${DRIFT_IGNORE_FILE:-${SCRIPT_DIR}/state-drift-ignore.txt}"
+REPORT_DIR="${ARTIFACT_ROOT}/state-drift"
+
+# shellcheck source=lib/ct_conflicts.sh
+source "${SCRIPT_DIR}/lib/ct_conflicts.sh"
+
+say() { echo "[state-drift] $*"; }
+
+mkdir -p "${STATE_ROOT}/lab" "${REPORT_DIR}"
+exec 9>"${STATE_ROOT}/lab/.lock"
+if ! flock -n 9; then
+  say "a LAB run holds ${STATE_ROOT}/lab/.lock; skipping (timestamp unchanged)"
+  exit 0
+fi
+
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+
+# 1. Sweep lab leftovers. The identity rule (hostname ^lab-, vmbr99, .200-.254) is the only thing
+#    this ever destroys; a production container cannot match it.
+list_lab_copies >"${work}/lab.tsv"
+: >"${work}/swept.tsv"
+while IFS=$'\t' read -r vmid hostname _ip; do
+  [[ -n "${vmid}" ]] || continue
+  swept=false
+  say "lab copy ${vmid} (${hostname}) left over; destroying"
+  sudo -n pct stop "${vmid}" >/dev/null 2>&1 || true
+  if sudo -n pct destroy "${vmid}" --purge >/dev/null 2>&1 || sudo -n pct destroy "${vmid}" >/dev/null 2>&1; then
+    swept=true
+  fi
+  printf '%s\t%s\t%s\n' "${vmid}" "${hostname}" "${swept}" >>"${work}/swept.tsv"
+done <"${work}/lab.tsv"
+
+# Stale lab scratch and lab state. Scratch is owned by the container's root uid, so take ownership
+# first (chown is the one privileged step `ci` may run without a password).
+shopt -s nullglob
+for dir in "${SCRATCH_ROOT}"/* "${STATE_ROOT}"/lab/*/; do
+  [[ -d "${dir}" ]] || continue
+  sudo -n chown -R "$(id -un):$(id -gn)" "${dir}" 2>/dev/null || true
+  rm -rf "${dir}"
+done
+shopt -u nullglob
+
+# 2. Inventory vs state. An empty inventory means pct failed, not that the host is empty.
+ct_inventory >"${work}/inventory.tsv"
+if [[ ! -s "${work}/inventory.tsv" ]]; then
+  say "ERROR: could not list containers (sudo -n pct list/config returned nothing)"
+  exit 1
+fi
+
+# 3. Compare and write the report and metrics (each by rename). Python because the state files
+#    are JSON and the report needs sorted, typed output.
+python3 - "${work}" "${STATE_ROOT}" "${IGNORE_FILE}" "${REPORT_DIR}" "${TEXTFILE_DIR}" <<'PY'
+import glob, json, os, re, sys, tempfile, time
+from datetime import datetime, timezone
+
+work, state_root, ignore_file, report_dir, textfile_dir = sys.argv[1:6]
+
+def rows(name):
+    with open(os.path.join(work, name), encoding="utf-8") as f:
+        return [line.rstrip("\n").split("\t") for line in f if line.strip()]
+
+inventory = {}
+for vmid, hostname, _ip in rows("inventory.tsv"):
+    inventory.setdefault(int(vmid), hostname)
+lab = [(int(v), h, sw == "true") for v, h, sw in rows("swept.tsv")]
+lab_ids = {v for v, _, _ in lab}
+
+tracked = {}  # vmid -> services
+for path in sorted(glob.glob(os.path.join(state_root, "prod", "*", "terraform.tfstate"))):
+    service = os.path.basename(os.path.dirname(path))
+    with open(path, encoding="utf-8") as f:
+        state = json.load(f)
+    for res in state.get("resources") or []:
+        if res.get("type") != "proxmox_lxc":
+            continue
+        for inst in res.get("instances") or []:
+            tracked.setdefault(int(str(inst["attributes"]["id"]).split("/")[-1]), []).append(service)
+
+ignored = set()
+if os.path.exists(ignore_file):
+    with open(ignore_file, encoding="utf-8") as f:
+        ignored = {int(m.group(1)) for line in f if (m := re.match(r"\s*(\d+)\b", line))}
+
+untracked = [
+    {"vmid": v, "hostname": h}
+    for v, h in sorted(inventory.items())
+    if v not in tracked and v not in lab_ids and v not in ignored
+]
+double_tracked = [{"vmid": v, "states": sorted(s)} for v, s in sorted(tracked.items()) if len(s) > 1]
+lab_leftover = [{"vmid": v, "hostname": h, "swept": sw} for v, h, sw in lab]
+
+def atomic_write(directory, name, text):
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix="." + name + ".")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, os.path.join(directory, name))  # mv -f
+
+report = {
+    "run_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "ok": not (untracked or double_tracked or lab_leftover),
+    "untracked": untracked,
+    "double_tracked": double_tracked,
+    "lab_leftover": lab_leftover,
+}
+atomic_write(report_dir, "latest.json", json.dumps(report, indent=2) + "\n")
+atomic_write(
+    textfile_dir,
+    "state_drift.prom",
+    "# HELP homelab_state_drift_containers Containers found by the last state-drift check.\n"
+    "# TYPE homelab_state_drift_containers gauge\n"
+    f'homelab_state_drift_containers{{kind="untracked"}} {len(untracked)}\n'
+    f'homelab_state_drift_containers{{kind="double_tracked"}} {len(double_tracked)}\n'
+    f'homelab_state_drift_containers{{kind="lab_leftover"}} {len(lab_leftover)}\n'
+    "# HELP homelab_state_drift_last_success_timestamp_seconds Unix time of the last completed check.\n"
+    "# TYPE homelab_state_drift_last_success_timestamp_seconds gauge\n"
+    f"homelab_state_drift_last_success_timestamp_seconds {int(time.time())}\n",
+)
+print(f"[state-drift] untracked={len(untracked)} double_tracked={len(double_tracked)} lab_leftover={len(lab_leftover)}")
+PY

@@ -8,3 +8,6 @@ healthcheck_expect_status: 401
 
 # Alloy log collector (spec 092): pve has no Docker.
 alloy_docker_logs: false
+
+# ci (state-drift-check.service) writes state_drift.prom here via the node_exporter group (067).
+node_exporter_textfile_directory_mode: "0775"

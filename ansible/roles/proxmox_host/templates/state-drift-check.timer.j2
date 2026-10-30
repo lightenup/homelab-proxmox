@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Nightly Terraform state-drift check (067)
+
+[Timer]
+OnCalendar=*-*-* 06:30:00
+Persistent=true
+Unit=state-drift-check.service
+
+[Install]
+WantedBy=timers.target

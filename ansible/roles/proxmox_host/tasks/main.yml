@@ -55,3 +55,34 @@
 - name: Restart Immich LXC to apply mount
   ansible.builtin.command: "pct reboot {{ immich_vmid | default(101) }}"
   when: immich_mount.changed
+
+# Nightly state-drift check (067). Apply on its own with: host_proxmox.yml --tags state-drift
+- name: Let ci write the node_exporter textfile directory (state_drift.prom)
+  ansible.builtin.file:
+    path: "{{ node_exporter_textfile_directory }}"
+    state: directory
+    owner: "{{ node_exporter_user }}"
+    group: "{{ node_exporter_user }}"
+    mode: "{{ node_exporter_textfile_directory_mode }}"
+  tags: [state-drift]
+
+- name: Install state-drift-check systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - state-drift-check.service
+    - state-drift-check.timer
+  register: state_drift_units
+  tags: [state-drift]
+
+- name: Enable the state-drift-check timer
+  ansible.builtin.systemd:
+    name: state-drift-check.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ state_drift_units.changed }}"
+  tags: [state-drift]

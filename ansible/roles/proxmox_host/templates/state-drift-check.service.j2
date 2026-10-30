@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Compare Terraform state with the containers on this host, sweep leftover lab copies (067)
+# Runbook: docs/runbooks/state-drift.md in the homelab-proxmox repo
+
+[Service]
+Type=oneshot
+User=ci
+# Lets ci write state_drift.prom into the root-managed textfile collector directory.
+SupplementaryGroups={{ node_exporter_user }}
+ExecStart={{ state_drift_check_script }}
+TimeoutStartSec=15min
