@@ -313,6 +313,18 @@ an audit of the vault. Implementation classifies **every** vault key matching `*
 `*_secret`, `*_password` (and `*_api_*`) as `internet`, `lan` or `internal`, and lists the result
 in this section. Any `internet` key gets a row in the table above.
 
+**Classification (T031/T032, `python/tests/guardrails/test_lab_switches.py`)**: the test scans every
+role template for secret-like variables (`*_token`, `*_key`, `*_secret`, `*_password`, `*_api_*`)
+and fails on one it does not know.
+
+- `internet`: `domeneshop_api_token/secret` (reverse_proxy, task skipped in lab), `pushover_*` and
+  `smtp_password` (Alertmanager, lab renders the `null` receiver only; the `proxmox_backup` and
+  `alerting_heartbeat` roles run on `pve` only), `alerting_heartbeat_pushover_*`.
+- `lan`: `ntfy_*_token` (the ntfy server lives in the lab copy, and the prod ntfy is unreachable by
+  the isolation), `snmp_*_password`, `proxmox_backup_ntfy_token`.
+- `internal`: everything else (database passwords, JWT secrets, per-service API keys).
+- llm-router provider keys are rendered as `''` in lab, so no copy holds a paid key.
+
 A guardrail test lists the vault variables that are internet credentials (`domeneshop_*`,
 `tailscale_*`, `pushover_*`, `smtp_*`, provider API keys). It fails if a template that uses one is
 not covered by a `deploy_environment` gate or by an entry in this table. This enforces "a service

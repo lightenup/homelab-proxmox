@@ -4,7 +4,8 @@ caddy_conf_dir: /etc/caddy/conf.d
 # HTTPS and DNS-01 ACME configuration (FR-001, FR-011, FR-012)
 # caddy_base_domain is defined in group_vars/services/vars.yml (shared with monitoring_stack)
 caddy_acme_dns_provider: "domainnameshop"
-caddy_custom_binary: true
+# The DNS-provider build is only for the real ACME DNS challenge; a lab copy uses local_certs (067).
+caddy_custom_binary: "{{ (deploy_environment | default('prod')) != 'lab' }}"
 caddy_xcaddy_plugins:
   - "github.com/caddy-dns/domainnameshop"
 

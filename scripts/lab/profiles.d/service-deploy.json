@@ -66,6 +66,24 @@
       "description": "LAB tfvars hash (required for LAB runs)"
     },
     {
+      "path": "reports/lab/fingerprint.before.json",
+      "type": "file",
+      "condition": "environment == 'lab'",
+      "description": "Production fingerprint before the LAB run (067)"
+    },
+    {
+      "path": "reports/lab/fingerprint.after.json",
+      "type": "file",
+      "condition": "environment == 'lab'",
+      "description": "Production fingerprint after teardown (067; written even on failure)"
+    },
+    {
+      "path": "reports/lab/teardown.json",
+      "type": "file",
+      "condition": "environment == 'lab'",
+      "description": "LAB teardown result (067); must report ok=true"
+    },
+    {
       "path": "reports/apply/lxc-mountpoints.txt",
       "type": "file",
       "condition": "service has host-path bind mounts",

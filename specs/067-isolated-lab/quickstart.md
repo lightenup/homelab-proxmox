@@ -132,3 +132,20 @@ with `lab.tfvars` (prod IPs); the duplicate-container guard is what stops it. Do
 - Lifecycle `environment=lab, action=delete` fails at once with the "no standing lab copy" message.
   `environment=lab, action=add|change` runs the rehearsal.
 - `act -l` lists the workflows, and `act -n -W .github/workflows/lxc-promote-prod.yml workflow_dispatch` parses.
+
+## T052 record (2026-10-30, `pve`, as `ci`)
+
+`apply --environment lab` for six services, each ending with a clean host (12 production containers, empty
+`lab-scratch`, no lab state), `teardown.json` ok, and no fingerprint diff:
+
+| Service | Result | Duration |
+|---|---|---|
+| ntfy | pass | 214 s |
+| reverse_proxy | pass | 216 s |
+| monitoring | pass | 420 s |
+| immich | pass | 482 s |
+| homeassistant | pass | 346 s |
+| hermes | first run failed (egress probe of absent peers); pass after the lab skip | 740 s / ~600 s |
+
+Hermes' skipped probes are recorded in `reports/lab/skipped-checks.txt`. A second run while the lock was
+held refused with exit 1 and left the other run untouched.

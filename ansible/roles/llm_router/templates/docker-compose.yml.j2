@@ -71,7 +71,8 @@ services:
       # LiteLLM and gained MAC_LITELLM_KEY. The vault variable name is always the lowercased
       # api_key_env, the same convention llm_router_clients uses below.
 {% for env in llm_router_aliases | map(attribute='deployments') | flatten | selectattr('api_key_env', 'defined') | map(attribute='api_key_env') | unique | sort %}
-      {{ env }}: "{{ lookup('vars', env | lower, default='') }}"
+{# LAB (067): a lab copy never holds a real provider credential; it only needs to be alive. #}
+      {{ env }}: "{{ '' if (deploy_environment | default('prod')) == 'lab' else lookup('vars', env | lower, default='') }}"
 {% endfor %}
 {% for c in llm_router_clients %}
       {{ c.key_env }}: "{{ lookup('vars', c.key_env | lower, default='') }}"

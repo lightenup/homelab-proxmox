@@ -416,6 +416,33 @@
     hermes_agent_egress_probe_blocked_full: >-
       {{ hermes_agent_egress_probe_blocked + [{'name': 'hermes-own-node-exporter', 'host': hermes_ip, 'port': 9100}] }}
 
+# A lab copy holds only this service (067): the peers below do not exist there, so probing them
+# would time out. Probe what the copy has (searxng) and record the rest (R-010).
+- name: Set aside egress probes to peer services a lab copy does not have
+  ansible.builtin.set_fact:
+    hermes_agent_egress_probe_skipped: "{{ hermes_agent_egress_probe_allowed | rejectattr('host', 'equalto', 'searxng') | list }}"
+  when: (deploy_environment | default('prod')) == 'lab'
+
+- name: Keep only the in-copy destinations in the allowlist probe
+  ansible.builtin.set_fact:
+    hermes_agent_egress_probe_allowed: "{{ hermes_agent_egress_probe_allowed | selectattr('host', 'equalto', 'searxng') | list }}"
+  when: (deploy_environment | default('prod')) == 'lab'
+
+- name: Record the skipped lab checks
+  ansible.builtin.lineinfile:
+    path: "{{ evidence_dir }}/reports/lab/skipped-checks.txt"
+    create: true
+    mode: "0644"
+    line: "hermes egress probe {{ item.name }} ({{ item.host }}:{{ item.port }}): peer service is not part of the lab copy"
+  loop: "{{ hermes_agent_egress_probe_skipped | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: localhost
+  become: false
+  when:
+    - (deploy_environment | default('prod')) == 'lab'
+    - evidence_dir is defined
+
 - name: Probe allowlisted destinations from inside the agent (must connect)
   ansible.builtin.command:
     argv:

@@ -1,0 +1,19 @@
+---
+# Lab overrides (067, R-010): layered over group_vars with `-e @inventories/lab/lab-overrides.yml`
+# on every LAB run, so a lab copy only ever talks to lab addresses. Each production service
+# address 192.168.1.N is mirrored to 10.99.0.N; test_lab_overrides.py keeps this list complete.
+deploy_environment: lab
+
+eurooffice_ip: "10.99.0.219"
+market_model_ip: "10.99.0.218"
+llm_router_ip: "10.99.0.220"
+hermes_ip: "10.99.0.221"
+ntfy_ip: "10.99.0.222"
+financial_scenario_ip: "10.99.0.217"
+immich_ip: "10.99.0.213"
+reverse_proxy_ip: "10.99.0.211"
+nextcloud_ip: "10.99.0.216"
+jellyfin_ip: "10.99.0.215"
+homeassistant_ip: "10.99.0.212"
+monitoring_ip: "10.99.0.214"
+monitoring_host_ip: "10.99.0.214"
