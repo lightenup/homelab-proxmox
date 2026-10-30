@@ -34,6 +34,16 @@ sudo systemctl start proxmox-config-backup.service   # then the manifest lists s
 Then, for each service, `pve-service-deploy plan --environment prod --service <svc>` → `No changes`
 (SC-005).
 
+**Observed run (T021, 2026-10-30)**: `migrate-state-067` planned all 12 services against
+`state/prod/<svc>` with `No changes`, then `--remove-old-layout` removed `state/services` and
+`infra_state/{lab,prod}`. **Defect found:** the dated backup `state-backup-067-<date>` was never
+written (`/var/lib/homelab-proxmox` is root-owned, so `ci` got `Permission denied`) and the script
+carried on, because `set -e` is off inside a function called with `||`. Result: no pre-migration
+copy exists. The new states are proven by the 12 clean plans (each holds one `proxmox_lxc`), and
+`/home/ci/state-backup-067-20261030/` was taken right after as a copy of `state/prod`. Fixed in the
+script (`run` now exits on a failed step) with a regression test. Lesson: a one-off that deletes
+must prove its backup exists before it deletes.
+
 ## 1. A LAB run leaves production untouched (US1, SC-001/002)
 
 Start "Prod 1 - LXC Promote" for `ntfy` (or, from a laptop, run the same command over SSH, as in
