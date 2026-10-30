@@ -65,16 +65,17 @@ SECRET_VAR_NAMES = [
     "llm_router_client_scout_probe_key",
     "ntfy_hermes_token",
     "ntfy_hermes_lab_token",
+    "hermes_mcp_homeassistant_key",
 ]
 
 
 def _base_context() -> dict:
     ctx: dict = {
         "caddy_base_domain": "example.invalid",
-        # Mirrors ansible/roles/hermes/defaults/main.yml hermes_mcp_servers: market-model is
-        # auth: none, so the bearer-only loop in agent.env.j2 never fires. If a bearer-auth
-        # server is ever enabled by default, its credential_env joins SECRET_VAR_NAMES and
-        # whichever pinned set(s) it renders into (R-016 decision).
+        # Mirrors group_vars/services/vars.yml hermes_mcp_servers. market-model is auth: none,
+        # so the bearer-only loop in agent.env.j2 skips it. homeassistant is auth: bearer and
+        # enabled only when hermes_agent_operational (PROD); _render sets that per mode, the
+        # same way the vars.yml template does (R-016, 2026-10-30 addendum).
         "hermes_mcp_servers": [
             {
                 "name": "market-model",
@@ -82,7 +83,14 @@ def _base_context() -> dict:
                 "auth": "none",
                 "credential_env": None,
                 "enabled": True,
-            }
+            },
+            {
+                "name": "homeassistant",
+                "url": "http://homeassistant.example.invalid:8123/api/mcp/assist",
+                "auth": "bearer",
+                "credential_env": "HERMES_MCP_HOMEASSISTANT_KEY",
+                "enabled": None,
+            },
         ],
         # Mirrors hermes_agent_env_passthrough (backlog 088 scout-assess probe).
         "hermes_agent_env_passthrough": ["LLM_ROUTER_CLIENT_SCOUT_PROBE_KEY"],
@@ -118,6 +126,9 @@ def _render(hermes_agent_operational: bool, lab_inventory: bool) -> str:
     ctx = _base_context()
     ctx["hermes_agent_operational"] = hermes_agent_operational
     ctx["lab_inventory"] = lab_inventory
+    for server in ctx["hermes_mcp_servers"]:
+        if server["name"] == "homeassistant":
+            server["enabled"] = hermes_agent_operational
     return env.get_template("agent.env.j2").render(**ctx)
 
 
@@ -210,6 +221,7 @@ PROD_SECRETS = {
     "llm_router_client_hermes_agent_key",
     "llm_router_client_scout_probe_key",
     "ntfy_hermes_token",
+    "hermes_mcp_homeassistant_key",
 }
 LAB_RIG_SECRETS = {
     "hermes_agent_api_server_key",
@@ -236,6 +248,22 @@ def test_credential_freeze_lab_rig() -> None:
 
 def test_credential_freeze_pipeline_lab_stage() -> None:
     assert _secrets_present(render_pipeline_lab_stage()) == PIPELINE_LAB_STAGE_SECRETS
+
+
+def test_homeassistant_mcp_is_gated_on_prod_in_group_vars() -> None:
+    """The render tests above set homeassistant's `enabled` per mode by hand. This pins the real
+    entry to the same gate, so the Home Assistant token cannot reach the LAB rig or the pipeline
+    LAB stage by an edit to vars.yml alone (R-016, 2026-10-30 addendum)."""
+    group_vars = yaml.safe_load(
+        (ROOT / "ansible" / "group_vars" / "services" / "vars.yml").read_text()
+    )
+    entries = [s for s in group_vars["hermes_mcp_servers"] if s["name"] == "homeassistant"]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["auth"] == "bearer"
+    assert entry["credential_env"] == "HERMES_MCP_HOMEASSISTANT_KEY"
+    assert entry["url"].endswith("/api/mcp/assist"), "non-admin access needs the Assist-only path"
+    assert re.fullmatch(r"\{\{\s*hermes_agent_operational\s*\|\s*bool\s*\}\}", entry["enabled"])
 
 
 # --- docker-compose.yml.j2: the vault variables it references directly (not via agent.env) ---
