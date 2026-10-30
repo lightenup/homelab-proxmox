@@ -45,16 +45,6 @@ def _assert_input(inputs: dict, name: str, *, type_: str) -> None:
     assert spec.get("type") == type_, f"Input {name} type expected {type_}, got {spec.get('type')}"
 
 
-def test_lxc_deploy_lab_inputs_contract():
-    path = Path(".github/workflows/lxc-deploy-lab.yml")
-    doc = _load_yaml(path)
-    inputs = _workflow_dispatch_inputs(doc)
-
-    _assert_input(inputs, "service", type_="choice")
-    _assert_input(inputs, "apply", type_="boolean")
-    _assert_input(inputs, "confirm_destructive", type_="boolean")
-
-
 def test_lxc_apply_prod_inputs_contract():
     path = Path(".github/workflows/lxc-apply-prod.yml")
     doc = _load_yaml(path)

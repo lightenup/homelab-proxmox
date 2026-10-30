@@ -11,7 +11,7 @@ This repository provides a gated GitHub Actions workflow for deploying a single 
 
 ## Workflow
 
-- Workflow file (LAB): `.github/workflows/lxc-deploy-lab.yml`
+- Workflow file: `.github/workflows/lxc-lifecycle.yml` (`environment=lab` is an isolated, ephemeral rehearsal)
 - Orchestrator (runs on PVE): `scripts/lab/pve-service-deploy`
 - Optional internal toggle: set repository variable `USE_PY_RUNNER=true` to invoke the Python runner on PVE (workflow_dispatch inputs remain unchanged)
 - Evidence storage (on PVE): `/var/lib/homelab-proxmox/artifacts/service-deploy-runs/<run_id>`
@@ -208,8 +208,8 @@ The workflow fetches the evidence bundle from PVE and runs offline verification 
 
 When changing the deploy orchestration or evidence semantics, validate against LAB with a real GitHub Actions run:
 
-1. Trigger `.github/workflows/lxc-deploy-lab.yml` with:
-	- `apply=false` (plan-only)
+1. Trigger `.github/workflows/lxc-lifecycle.yml` with:
+	- `action=change`, `environment=lab`
 	- `service=<service>`
 2. Download the evidence artifact and run offline verification:
 	- `./scripts/lab/ci-verify.sh evidence/<run_id>`
@@ -233,12 +233,12 @@ ${EDITOR:-nano} .act.secrets
 2. Create a `workflow_dispatch` event payload with inputs:
 
 ```bash
-cat > /tmp/act-lxc-deploy-lab.json <<'JSON'
+cat > /tmp/act-lxc-lifecycle.json <<'JSON'
 {
 	"inputs": {
 		"service": "jellyfin",
-		"apply": "false",
-		"confirm_destructive": "false"
+		"action": "change",
+		"environment": "lab"
 	}
 }
 JSON
@@ -248,9 +248,9 @@ JSON
 
 ```bash
 act workflow_dispatch \
-	-W .github/workflows/lxc-deploy-lab.yml \
+	-W .github/workflows/lxc-lifecycle.yml \
 	-j plan \
-	-e /tmp/act-lxc-deploy-lab.json \
+	-e /tmp/act-lxc-lifecycle.json \
 	--secret-file .act.secrets \
 	--container-options "-v $(pwd)/.act-ssh:/root/.ssh:ro"
 ```
@@ -259,8 +259,8 @@ act workflow_dispatch \
 
 ```bash
 act workflow_dispatch \
-	-W .github/workflows/lxc-deploy-lab.yml \
-	-e /tmp/act-lxc-deploy-lab.json \
+	-W .github/workflows/lxc-lifecycle.yml \
+	-e /tmp/act-lxc-lifecycle.json \
 	--secret-file .act.secrets \
 	--container-options "-v $(pwd)/.act-ssh:/root/.ssh:ro"
 ```

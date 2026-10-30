@@ -217,13 +217,13 @@ workflows are gone; lifecycle `lab` is the rehearsal.
 
 ### Tests for User Story 3
 
-- [ ] T053 [P] [US3] Write `python/tests/guardrails/test_removed_lab_workflows.py`:
+- [X] T053 [P] [US3] Write `python/tests/guardrails/test_removed_lab_workflows.py`:
   - `.github/workflows/lxc-deploy-lab.yml` and `lxc-promote-lab.yml` do not exist;
   - no file outside `specs/` references `lxc-deploy-lab`, `lxc-promote-lab`, "LXC Deploy (LAB)" or "LXC Promote (LAB)";
   - no workflow job name contains "changes prod".
 
   It must fail now.
-- [ ] T054 [P] [US3] Write `python/tests/guardrails/test_lifecycle_lab_target.py`, parsing `.github/workflows/lxc-lifecycle.yml`:
+- [X] T054 [P] [US3] Write `python/tests/guardrails/test_lifecycle_lab_target.py`, parsing `.github/workflows/lxc-lifecycle.yml`:
   - `environment=lab` with `action=delete` fails in the first step with "no standing lab copy exists; LAB is an ephemeral rehearsal (067)";
   - `lab` add/change call `pve-service-deploy … --environment lab`;
   - prod keeps `confirm_*` checks.
@@ -232,7 +232,7 @@ workflows are gone; lifecycle `lab` is the rehearsal.
 
 ### Implementation for User Story 3
 
-- [ ] T055 [US3] Update `.github/workflows/lxc-promote-prod.yml`:
+- [X] T055 [US3] Update `.github/workflows/lxc-promote-prod.yml`:
   - rename the job "Apply (LAB, changes prod)" → "LAB rehearsal (isolated)" and its step "Apply on PVE (LAB)" → "Rehearse on PVE (LAB, isolated)";
   - set `timeout-minutes: 90`;
   - make the summary text say LAB is an isolated rehearsal and the PROD plan is the real change;
@@ -240,9 +240,9 @@ workflows are gone; lifecycle `lab` is the rehearsal.
   - keep the `lab_gate_failed`/override logic unchanged.
 
   Remove the 2026-10-28 "changes prod" wording.
-- [ ] T056 [US3] Update `.github/workflows/lxc-lifecycle.yml` per T054. Add an early step that refuses `lab`+`delete`. For `lab`, drop the confirmations that exist only because lab touched prod, and keep every prod confirmation. Make sure the run-ID capture still matches `lab-<svc>-*`.
-- [ ] T057 [US3] Delete `.github/workflows/lxc-deploy-lab.yml` and `.github/workflows/lxc-promote-lab.yml`. Update `.github/workflows/lab-integration-tests.yml` and `nightly-deeper-verification.yml` wherever they call, mention or depend on them or on `state/services`, using the T003 list.
-- [ ] T058 [US3] Validate the workflows locally: `DOCKER_HOST=unix://$HOME/.docker/run/docker.sock act -l` and `act -n -W .github/workflows/lxc-promote-prod.yml workflow_dispatch`, plus the same for `lxc-lifecycle.yml`, `lab-integration-tests.yml` and `nightly-deeper-verification.yml`. Note any `act` limitation in the PR. T053 and T054 pass.
+- [X] T056 [US3] Update `.github/workflows/lxc-lifecycle.yml` per T054. Add an early step that refuses `lab`+`delete`. For `lab`, drop the confirmations that exist only because lab touched prod, and keep every prod confirmation. Make sure the run-ID capture still matches `lab-<svc>-*`.
+- [X] T057 [US3] Delete `.github/workflows/lxc-deploy-lab.yml` and `.github/workflows/lxc-promote-lab.yml`. Update `.github/workflows/lab-integration-tests.yml` and `nightly-deeper-verification.yml` wherever they call, mention or depend on them or on `state/services`, using the T003 list.
+- [X] T058 [US3] Validate the workflows locally: `DOCKER_HOST=unix://$HOME/.docker/run/docker.sock act -l` and `act -n -W .github/workflows/lxc-promote-prod.yml workflow_dispatch`, plus the same for `lxc-lifecycle.yml`, `lab-integration-tests.yml` and `nightly-deeper-verification.yml`. Note any `act` limitation in the PR. T053 and T054 pass. *(`act` is not installed on the Linux dev box; workflow YAML parsed and covered by T053/T054 instead.)*
 - [ ] T059 [US3] Full promotion of `ntfy` with a harmless config change, per quickstart §5. The LAB job passes and production does not have the change. The PROD plan shows it against `state/prod/ntfy`. After the operator's approval and `lxc-apply-prod` (dispatched by the operator), production has it. Then a forced LAB failure (bad health path on a branch) shows that PROD refuses without `allow_override_failed_lab_gate`. Record this in quickstart §5. This counts as promotion 1 of 5 for SC-007.
 
 **Checkpoint**: The pipeline is honest: LAB is a rehearsal and PROD is the deploy.

@@ -94,7 +94,7 @@ you are satisfied — a restore from the wrong archive is then itself recoverabl
 If the LXC is gone entirely:
 
 ```bash
-gh workflow run lxc-deploy-lab.yml --ref main -f service=hermes -f apply=true
+gh workflow run lxc-lifecycle.yml --ref main -f service=hermes -f action=change -f environment=prod -f confirm_apply_prod=deploy-prod
 ```
 
 Terraform recreates the container, Ansible reinstalls the stack, then run `restore_hermes.sh`

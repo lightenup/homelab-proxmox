@@ -95,16 +95,16 @@ Service deploys go through the gated GitHub Actions pipeline
 branch ref — no merge to `main` is required to deploy. Trigger with `gh workflow run`. Per-feature
 runbooks live in `specs/*/quickstart.md`.
 
-### The "LAB" stage changes production
+### The "LAB" stage is an isolated rehearsal (067)
 
-Despite the name, **a LAB apply is a production change.** `lxc-deploy-lab.yml` and the
-`Apply (LAB)` job of `lxc-promote-prod.yml` run `pve-service-deploy --environment lab`, which
-uses `lab.tfvars` (the production PVE at `192.168.1.112`, bridge `vmbr0` and the **production
-service IPs**) and the **same Terraform state** as prod (`/var/lib/homelab-proxmox/state/services/<svc>`).
-So LAB creates or changes the real LXC at its real address, and the PROD apply that follows is
-usually a no-op for Terraform. Treat LAB as a canary on production, not a rehearsal. Background and
-the options for a real lab: [`docs/backlog/067`](docs/backlog/067-lab-prod-same-address-space.md);
-state layout: [`docs/backlog/096`](docs/backlog/096-terraform-state-layout.md).
+`pve-service-deploy --environment lab` (the `LAB rehearsal (isolated)` job of `lxc-promote-prod.yml`,
+and `lxc-lifecycle.yml` with `environment=lab`) creates a throwaway copy of the service on `vmbr99`
+(`10.99.0.0/24`, LAN blocked by nftables), configures it with Ansible, probes isolation from inside,
+destroys it, and proves production did not change (fingerprint before/after). It has its own state
+(`state/lab/<svc>`, removed afterwards) and its tfvars are derived from `prod.tfvars`. It does **not**
+change production; the PROD plan that follows is the real change. LAB cannot be deleted or kept:
+there is no standing lab copy. Evidence: `reports/lab/` in the run's evidence pack. Contract:
+[`specs/067-isolated-lab/contracts/pve-service-deploy-lab.md`](specs/067-isolated-lab/contracts/pve-service-deploy-lab.md).
 
 Before the **first** deploy of a service:
 

@@ -48,4 +48,4 @@ jobs:
               run: |
                   set -euo pipefail
                   echo "TODO: Add a real lab-backed validation step (remote plan/apply + evidence fetch)."
-                  echo "Hint: patterns exist in .github/workflows/lxc-deploy-lab.yml and scripts/lab/pve-service-deploy."
+                  echo "Hint: patterns exist in .github/workflows/lxc-promote-prod.yml and scripts/lab/pve-service-deploy."
