@@ -255,3 +255,59 @@ def test_heartbeat_timer_runs_every_five_minutes_and_after_boot():
     service = (HEARTBEAT / "templates/alerting-heartbeat.service.j2").read_text()
     assert "EnvironmentFile=/etc/default/alerting-heartbeat" in service
     assert "Type=oneshot" in service
+
+
+# ---------------------------------------------------------------------------
+# 5. State-drift alerts (067): the nightly check's findings reach a phone
+# ---------------------------------------------------------------------------
+
+
+def _backup_alert_rules(deploy_environment: str) -> dict[str, dict]:
+    template = (STACK / "templates/backup_alerts.yml.j2").read_text()
+    rendered = jinja2.Template(template).render(
+        deploy_environment=deploy_environment,
+        service_backups={"immich": {}},
+        groups={"proxmox_hosts": ["proxmox"]},
+    )
+    groups = yaml.safe_load(rendered)["groups"]
+    return {r["alert"]: r for g in groups for r in g["rules"]}
+
+
+def test_state_drift_alerts_exist_with_the_contract_expressions():
+    rules = _backup_alert_rules("prod")
+    found = rules["StateDriftContainers"]
+    assert found["expr"].strip() == "max by (kind) (homelab_state_drift_containers) > 0"
+    assert found["for"] == "0m"
+    stale = rules["StateDriftCheckStale"]
+    assert stale["expr"].strip() == "time() - homelab_state_drift_last_success_timestamp_seconds > 26 * 3600"
+    assert stale["for"] == "15m"
+    absent = rules["StateDriftCheckAbsent"]
+    assert absent["expr"].strip() == "absent(homelab_state_drift_last_success_timestamp_seconds)"
+    assert absent["for"] == "26h"
+
+
+def test_state_drift_alerts_page_like_the_backup_alert():
+    rules = _backup_alert_rules("prod")
+    for name in ("StateDriftContainers", "StateDriftCheckStale", "StateDriftCheckAbsent"):
+        assert rules[name]["labels"] == rules["BackupStale"]["labels"]
+    assert "state-drift-check" in rules["StateDriftContainers"]["annotations"]["description"]
+    assert "latest.json" in rules["StateDriftContainers"]["annotations"]["description"]
+
+
+def test_state_drift_alerts_are_absent_in_lab():
+    rules = _backup_alert_rules("lab")
+    assert not [name for name in rules if name.startswith("StateDrift")]
+
+
+def test_state_drift_timer_runs_on_pve_daily_after_the_backups():
+    host = ANSIBLE / "roles/proxmox_host"
+    timer = (host / "templates/state-drift-check.timer.j2").read_text()
+    assert "OnCalendar=*-*-* 06:30:00" in timer
+    assert "Persistent=true" in timer
+    service = (host / "templates/state-drift-check.service.j2").read_text()
+    assert "User=ci" in service
+    assert "SupplementaryGroups={{ node_exporter_user }}" in service
+    tasks = _yaml(host / "tasks/main.yml")
+    drift = [t for t in tasks if "state-drift" in (t.get("tags") or [])]
+    assert len(drift) == 3
+    assert "0775" in (ANSIBLE / "host_vars/proxmox.yml").read_text()

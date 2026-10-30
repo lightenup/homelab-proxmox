@@ -82,7 +82,7 @@ manifest lists 12 prod states. A deliberately untracked CT appears in `latest.js
 - [X] T014 [US2] Rewrite `scripts/lab/lib/state.sh`. `resolve_state_root <env>` → `${STATE_ROOT:-/var/lib/homelab-proxmox/state}/<env>` for `lab|prod` only. Remove the `USE_NAS_STATE` branch and the legacy root. Keep `get_service_state_path` and `verify_state_access`, and make `get_inventory_path` local. T011 passes (lib part).
 - [X] T015 [US2] In `scripts/lab/pve-service-deploy` `ensure_state_path`, use `get_service_state_path "${ENVIRONMENT}" "${SERVICE}"`. Remove `STATE_PATH_DEFAULT_ROOT` and the `state/services` default. Keep `SEED_STATE_FROM_REPO` prod-only. Create the directory as `0700` `ci`.
 - [X] T016 [P] [US2] Remove `USE_NAS_STATE`/`infra_state` handling from `scripts/lab/validate-existing-state.sh`, `scripts/lab/guardrails.sh` and `scripts/lab/lib/rebuild.sh`, pointing each at `state/prod/<svc>`. Delete `scripts/lab/migrate-state-to-nas.sh`.
-- [X] T017 [P] [US2] Repurpose `ansible/roles/proxmox_state_dirs/tasks/main.yml` to create `/var/lib/homelab-proxmox/state/{prod,lab}` (`0700`, `ci`) and `/var/lib/homelab-proxmox/lab-scratch` (`0711`, root), with no NAS paths. Delete `ansible/roles/proxmox_state_symlinks/` and `ansible/playbooks/setup-state-symlinks.yml`. Update `ansible/playbooks/setup-state-dirs.yml` if its comments name the NAS.
+- [X] T017 [P] [US2] Repurpose `ansible/roles/proxmox_state_dirs/tasks/main.yml` to create `/var/lib/homelab-proxmox/state/{prod,lab}` (`0700`, `ci`) and `/var/lib/homelab-proxmox/lab-scratch` (`0711`, owned by `ci` since PR C: `ci` has no sudo `rm`, so the sweep does `sudo chown -R` then `rm -rf`), with no NAS paths. Delete `ansible/roles/proxmox_state_symlinks/` and `ansible/playbooks/setup-state-symlinks.yml`. Update `ansible/playbooks/setup-state-dirs.yml` if its comments name the NAS.
 - [X] T018 [US2] In `ansible/roles/proxmox_backup/defaults/main.yml`, set `proxmox_backup_local_state_root` to `/var/lib/homelab-proxmox/state/prod`. In `templates/proxmox-config-backup.sh.j2`, remove the NAS `infra_state` collector (around line 185) and the symlink-skipping branch, and collect `${LOCAL_STATE_ROOT}/*/terraform.tfstate*` through the existing secret scan. T012 passes.
 - [X] T019 [US2] Write `scripts/lab/migrate-state-067` (Bash, `set -euo pipefail`, run as `ci` on `pve`, `--dry-run` flag) per R-012:
   - Order: ntfy, market-model, financial-scenario, eurooffice, llm-router, jellyfin, homeassistant, nextcloud, immich, hermes, monitoring, reverse_proxy.
@@ -103,7 +103,7 @@ manifest lists 12 prod states. A deliberately untracked CT appears in `latest.js
   4. Trigger `proxmox-config-backup.service` and check that the manifest lists `state/prod/<svc>` ×12.
 
   Record the outputs in `specs/067-isolated-lab/quickstart.md` §M (observed run, date).
-- [ ] T022 [P] [US2] Write `python/tests/guardrails/test_state_drift.py` for `scripts/lab/state-drift-check`, with fake `pct`, a fake `state/prod` and a temp textfile dir. Cases:
+- [X] T022 [P] [US2] Write `python/tests/guardrails/test_state_drift.py` for `scripts/lab/state-drift-check`, with fake `pct`, a fake `state/prod` and a temp textfile dir. Cases:
   - a CT in no state → `homelab_state_drift_containers{kind="untracked"} 1` and its VMID/hostname in `latest.json`;
   - a VMID in two states → `double_tracked` 1;
   - a lab copy (identity rule) → swept and `lab_leftover` 1;
@@ -112,7 +112,7 @@ manifest lists 12 prod states. A deliberately untracked CT appears in `latest.js
   - the textfile written atomically (temp + rename).
 
   The metric names are exactly `homelab_state_drift_containers` (labels `kind` = `untracked` | `double_tracked` | `lab_leftover`) and `homelab_state_drift_last_success_timestamp_seconds`. It must fail now.
-- [ ] T023 [US2] Write `scripts/lab/state-drift-check` per `contracts/state-drift-metrics.md`:
+- [X] T023 [US2] Write `scripts/lab/state-drift-check` per `contracts/state-drift-metrics.md`:
   - take a non-blocking `flock` on `state/lab/.lock`;
   - sweep lab copies with `list_lab_copies` + `pct stop`/`pct destroy`, and remove stale `lab-scratch/*` and `state/lab/*/`;
   - read `vmid` from every `proxmox_lxc` in `state/prod/*/terraform.tfstate` with `jq`;
@@ -120,9 +120,9 @@ manifest lists 12 prod states. A deliberately untracked CT appears in `latest.js
   - write `/var/lib/homelab-proxmox/artifacts/state-drift/latest.json` and `${TEXTFILE_DIR:-/var/lib/node_exporter/textfile_collector}/state_drift.prom`.
 
   Create an empty `scripts/lab/state-drift-ignore.txt` with a header comment (`<vmid> <reason>`). T022 passes.
-- [ ] T024 [US2] Add the systemd units `state-drift-check.service` (User=`ci`, `ExecStart=/home/ci/homelab-proxmox/scripts/lab/state-drift-check`) and `state-drift-check.timer` (`OnCalendar=*-*-* 06:30:00`, `Persistent=true`) to the role that owns host units for `pve` (`ansible/roles/proxmox_host`, tag `state-drift`). Wire it into `ansible/playbooks/host_proxmox.yml`. Make sure `ci` can write the textfile (group or ACL on `node_exporter_textfile_directory`).
-- [ ] T025 [P] [US2] Extend `python/tests/guardrails/test_alerting_path.py` (or the test that covers `backup_alerts.yml.j2`) to assert `StateDriftContainers` (`max by (kind) (homelab_state_drift_containers) > 0`, for 0m), `StateDriftCheckStale` (`time() - homelab_state_drift_last_success_timestamp_seconds > 26 * 3600`, for 15m) and `StateDriftCheckAbsent` (`absent(...)`, for 26h), all with the same severity/receiver labels as the backup-staleness alerts and present only when `deploy_environment != 'lab'`. It must fail now.
-- [ ] T026 [US2] Add the three rules to `ansible/roles/monitoring_stack/templates/backup_alerts.yml.j2`, with annotations pointing to `journalctl -u state-drift-check` and `latest.json`. T025 passes. Run `promtool check rules` through the existing `validate_alerts.yml` path.
+- [X] T024 [US2] Add the systemd units `state-drift-check.service` (User=`ci`, `ExecStart=/home/ci/homelab-proxmox/scripts/lab/state-drift-check`) and `state-drift-check.timer` (`OnCalendar=*-*-* 06:30:00`, `Persistent=true`) to the role that owns host units for `pve` (`ansible/roles/proxmox_host`, tag `state-drift`). Wire it into `ansible/playbooks/host_proxmox.yml`. Make sure `ci` can write the textfile (group or ACL on `node_exporter_textfile_directory`).
+- [X] T025 [P] [US2] Extend `python/tests/guardrails/test_alerting_path.py` (or the test that covers `backup_alerts.yml.j2`) to assert `StateDriftContainers` (`max by (kind) (homelab_state_drift_containers) > 0`, for 0m), `StateDriftCheckStale` (`time() - homelab_state_drift_last_success_timestamp_seconds > 26 * 3600`, for 15m) and `StateDriftCheckAbsent` (`absent(...)`, for 26h), all with the same severity/receiver labels as the backup-staleness alerts and present only when `deploy_environment != 'lab'`. It must fail now.
+- [X] T026 [US2] Add the three rules to `ansible/roles/monitoring_stack/templates/backup_alerts.yml.j2`, with annotations pointing to `journalctl -u state-drift-check` and `latest.json`. T025 passes. Run `promtool check rules` through the existing `validate_alerts.yml` path.
 - [ ] T027 [US2] After the merge: the operator applies `host_proxmox.yml --tags state-drift`. Promote `monitoring` with the new rules (an explicit operator "promote monitoring to prod"). Run `sudo systemctl start state-drift-check.service` and check `latest.json` has empty lists. Do the negative test from quickstart §6 (a `drift-test` CT on `vmbr99`, no `lab-` prefix), check that the alert fires, then destroy it. Record the results in quickstart §6.
 
 **Checkpoint**: Production state is honest, local and backed up; the drift alert works. US1 can begin.
@@ -263,7 +263,7 @@ workflows are gone; lifecycle `lab` is the rehearsal.
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [ ] T062 [P] Update the operator docs from the T003 list: `README.md`, `AGENTS.md`, `docs/operations/backups-proxmox-config.md`, `docs/operations/backups-proxmox-config-restore.md`, `docs/operations/rebuild-orchestrator.md`, `docs/runbooks/rebuild-orchestrator-restore.md`, `docs/runbooks/laptop-nfs-setup.md`, and any pipeline runbook. Make them say: LAB = isolated rehearsal; PROD = real deploy; state lives at `state/{prod,lab}`; the drift alert and how to respond. Replace the 2026-10-28 "a LAB apply changes production" warnings.
-- [ ] T063 [P] Add a runbook `docs/runbooks/state-drift.md`: what each `kind` means, how to read `latest.json`, and how to resolve each case (import into state, destroy a stray, or add an ignore line with a reason), plus how to clear a stale-check alert.
+- [X] T063 [P] Add a runbook `docs/runbooks/state-drift.md`: what each `kind` means, how to read `latest.json`, and how to resolve each case (import into state, destroy a stray, or add an ignore line with a reason), plus how to clear a stale-check alert.
 - [ ] T064 [P] Update the memory note that "lab deploy is prod" (`lab-is-prod.md` in the agent memory) once T059 passes, and CLAUDE.md's "Working with Git"-adjacent notes if they mention the LAB workflows.
 - [ ] T065 Mark backlog `docs/backlog/067-lab-prod-same-address-space.md` and `096-terraform-state-layout.md` as done in `docs/backlog/backlog.md`, with links to this spec.
 - [ ] T066 Delete `scripts/lab/migrate-state-067`, `python/tests/guardrails/test_migrate_state_067.py` and `specs/067-isolated-lab/refs-to-remove.txt` (one-off, R-012). Keep the dated `state-backup-067-*` on `pve` for 30 days, then remove them by hand (noted in the runbook).

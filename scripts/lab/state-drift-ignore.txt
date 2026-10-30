@@ -1,0 +1,2 @@
+# Containers the nightly state-drift check must not report as untracked (067).
+# One per line: <vmid> <reason>. Empty on purpose; add a line only with a reason.

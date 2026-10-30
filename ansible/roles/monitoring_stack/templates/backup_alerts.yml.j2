@@ -32,3 +32,45 @@ groups:
             Backup {% raw %}{{ $labels.backup }}{% endraw %} has no successful run in the last
             36 hours, or has never succeeded. Check `journalctl -u {% raw %}{{ $labels.backup }}{% endraw %}-backup.service`
             on its host (Proxmox: `proxmox-backup.service`).
+{% if (deploy_environment | default('prod')) != 'lab' %}
+
+  # Nightly Terraform state-drift check on pve (067): state-drift-check.timer, 06:30. Metrics come
+  # from the node_exporter textfile collector. The container names are in latest.json, not here.
+  - name: state_drift_alerts
+    interval: 30s
+    rules:
+      - alert: StateDriftContainers
+        expr: max by (kind) (homelab_state_drift_containers) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container drift on pve: {% raw %}{{ $labels.kind }}{% endraw %}"
+          description: >-
+            The nightly state-drift check found containers of kind
+            {% raw %}{{ $labels.kind }}{% endraw %} (untracked = in no Terraform state,
+            double_tracked = in two states, lab_leftover = a lab copy that was swept). Names:
+            `jq . /var/lib/homelab-proxmox/artifacts/state-drift/latest.json` and
+            `journalctl -u state-drift-check` on pve. Runbook: docs/runbooks/state-drift.md.
+      - alert: StateDriftCheckStale
+        expr: time() - homelab_state_drift_last_success_timestamp_seconds > 26 * 3600
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "State-drift check has not completed in 26 hours"
+          description: >-
+            The check did not finish its nightly run, or kept skipping because a LAB run held the
+            lock. Check `journalctl -u state-drift-check` and `systemctl list-timers state-drift-check`
+            on pve.
+      - alert: StateDriftCheckAbsent
+        expr: absent(homelab_state_drift_last_success_timestamp_seconds)
+        for: 26h
+        labels:
+          severity: warning
+        annotations:
+          summary: "State-drift check has never reported"
+          description: >-
+            No state_drift.prom was ever collected from pve. Apply
+            `host_proxmox.yml --tags state-drift` and check the timer and the textfile directory.
+{% endif %}
