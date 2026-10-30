@@ -165,35 +165,37 @@ Score = killed / (killed + survived); floor in `python/mutmut-threshold.txt`, ga
 The PR gate (`mutation.yml`) only runs for paths in `scripts/ci/mutation-gate-paths.txt`. Do not
 add incremental/seeded modes. Details: `docs/operations/mutation-testing.md`.
 
-## PR gotcha: the protected-path label must exist *before* the event fires
+## The `allow-protected-path-changes` label
 
-`ci.yml`'s **Guardrail: protected paths must not change** reads labels from the webhook payload:
+**What it is.** `ci.yml`'s "Guardrail: protected paths must not change" fails any PR that touches a
+protected path unless the PR carries this label. Protected paths (`.guardrails/protected-paths.json`):
+`.specify/**`, `adapter/**`, `scripts/lab/**`, `mkdir/**`.
 
-```js
-const labels = (context.payload.pull_request.labels || []).map(l => l.name);
+**When it is used.** Only when the PR changes one of those paths on purpose, for example
+`scripts/lab/pve-service-deploy` or `scripts/lab/lib/*`, a new entry in
+`scripts/lab/service-scope-allowlist.json`, or an edit to `.specify/memory/constitution.md`. Check
+each PR with `git diff --name-only origin/main... | grep -E '^(\.specify|adapter|scripts/lab|mkdir)/'`;
+do not assume from the previous PR (a follow-up often touches no protected path and needs no label).
+
+**Who approves it.** The operator. The label switches off a safety check, so an agent adds it only
+after the operator has said so for that PR, and approval for one PR does not carry to the next. Ask
+when you open the PR, list the protected files in the PR body, and add the label once approved.
+
+**How to add it.** Use REST, not `gh pr edit` (which needs a scope the token lacks behind Zscaler):
+
+```bash
+gh api repos/OWNER/REPO/issues/N/labels -f 'labels[]=allow-protected-path-changes'
 ```
 
-That payload is a **snapshot taken when the event fired**. Two consequences that look like bugs:
-
-- Adding `allow-protected-path-changes` *after* opening the PR does not fix a failed run.
-  `gh run rerun` replays the original, label-less payload — so it fails identically, forever.
-- `ci.yml` declares bare `pull_request:` with no `types:`, so it defaults to
-  `opened, synchronize, reopened`. **`labeled` is not among them**, so adding the label triggers
-  nothing on its own.
-
-**Fix:** force a fresh event carrying the label — close and reopen the PR:
+**Timing.** `ci.yml` runs on `opened, synchronize, reopened, labeled, unlabeled`, so adding the label
+after opening re-runs the guardrail with the label in the payload. Do not use `gh run rerun` for this:
+it replays the old, label-less payload and fails the same way. If a run still reads the old labels,
+close and reopen the PR:
 
 ```bash
 gh api -X PATCH repos/OWNER/REPO/pulls/N -f state=closed
 gh api -X PATCH repos/OWNER/REPO/pulls/N -f state=open
 ```
-
-Protected paths are `.specify/**`, `adapter/**`, `scripts/lab/**`, `mkdir/**`
-(`.guardrails/protected-paths.json`). Any new service touching
-`scripts/lab/service-scope-allowlist.json` hits this, so label such PRs at creation time.
-
-A durable alternative, if this keeps biting: add `types: [opened, synchronize, reopened, labeled]`
-to `ci.yml` so labelling retriggers naturally.
 
 ## Note on `gh` and Zscaler
 
