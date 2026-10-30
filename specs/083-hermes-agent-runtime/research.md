@@ -156,6 +156,16 @@ PROD check in [quickstart.md](./quickstart.md). Facts marked
     `_is_hermes_internal_secret` strips from every child. Upstream bridges `AUXILIARY_<TASK>_*` only
     for `vision`, `approval` and plugin tasks, so the name activates nothing. The router side keeps
     `LLM_ROUTER_CLIENT_HERMES_AGENT_KEY` (vault naming convention). Verified on PROD 2026-10-18 (quickstart).
+  - **Extended to MCP bearer tokens (2026-10-30, PR #296, raised in review)**: the first bearer
+    entry was first named `HERMES_MCP_HOMEASSISTANT_KEY`, and `_sanitize_subprocess_env` in the
+    pinned image passed it through to children (checked in the PROD container with dummy values).
+    Every bearer `credential_env` must now match `AUXILIARY_*_API_KEY`
+    (`AUXILIARY_MCP_<NAME>_API_KEY`; the `MCP_` keeps clear of plugin auxiliary-task keys, which
+    get an `AUXILIARY_<KEY>_*` bridge). A new optional `vault_var` keeps the vault name. Enforced by
+    a role preflight assert and `test_hermes_env_modes.py`. Same limit as above: the scrub
+    covers the environment only. `$HERMES_HOME/.env` is owned by the UID the agent and its
+    children run as, so a command that gets approved can still read the file. The approval gate is
+    the control for that.
 
 ## Observed in the pinned image (2026-10-17, local run of `nousresearch/hermes-agent:v0.21.6` with the rendered config mounted read-only)
 

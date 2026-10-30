@@ -374,21 +374,40 @@ hermes_enable_title_generation: true
 # entry at launch (research R-008, decided 2026-09-20) — `financial-scenario` is omitted
 # because its MCP secret is baked into a third-party image this repo does not hold.
 #
-# The `auth: bearer` branch is exercised by NO entry below on purpose. It is still validated
-# in preflight (T036) so the schema — not a code change — is what adding a credentialed
-# server later costs (FR-013).
+# `homeassistant` is the first `auth: bearer` entry (2026-10-30). It uses HA's built-in MCP
+# Server integration at /api/mcp/assist: that path admits a non-admin user while the
+# integration's "Require an administrator account" stays on, and it only serves the Assist API,
+# so Hermes reaches exactly the entities exposed to Assist. The token belongs to the non-admin,
+# local-only HA user `hermes` (vault: hermes_mcp_homeassistant_key). It is enabled on PROD only:
+# the LAB rig and the pipeline LAB stage get neither the token nor the egress rule, because this
+# credential switches things in the house (095 research R-016, 2026-10-30 addendum).
+#
+# Bearer entries: `credential_env` is the env-var name the agent reads, and it MUST match
+# AUXILIARY_*_API_KEY. That is the only name shape Hermes strips from every child process
+# (terminal commands, cron scripts; `_is_hermes_internal_secret`, 083 research R-004), so any
+# other name hands the token to whatever the agent runs. Keep `MCP_` after the prefix: Hermes
+# bridges AUXILIARY_<KEY>_* into plugin auxiliary-task config, and a bare service name could
+# collide with a future plugin task key. `vault_var` names the vault variable holding the value
+# (default: credential_env lowercased). Guarded by test_hermes_env_modes.py.
 hermes_mcp_servers:
   - name: "market-model"
     url: "http://{{ market_model_ip }}:{{ market_model_mcp_port }}/mcp"
     auth: none
     credential_env: null
     enabled: true
+  - name: "homeassistant"
+    url: "http://{{ homeassistant_ip }}:{{ homeassistant_port }}/api/mcp/assist"
+    auth: bearer
+    credential_env: AUXILIARY_MCP_HOMEASSISTANT_API_KEY
+    vault_var: hermes_mcp_homeassistant_key
+    enabled: "{{ hermes_agent_operational | bool }}"
   # Re-arm when the personal-financial-scenarios image makes its MCP secret configurable
   # (research R-008). At that point this is the one list entry FR-013 promises:
   # - name: "financial-scenario"
   #   url: "http://{{ financial_scenario_ip }}:{{ financial_scenario_gui_port }}/mcp"
   #   auth: bearer
-  #   credential_env: HERMES_MCP_FINANCIAL_SCENARIO_KEY
+  #   credential_env: AUXILIARY_MCP_FINANCIAL_SCENARIO_API_KEY
+  #   vault_var: hermes_mcp_financial_scenario_key
   #   enabled: true
 
 # Web search (FR-022) — SearXNG as a sidecar in the same compose stack (research R-005), not

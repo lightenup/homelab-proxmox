@@ -458,6 +458,18 @@ Reviewed 2026-10-25 after T062–T066 landed, before any rig is brought up.
   rig-specific router keys (needs an `llm_router` PROD deploy to mint them), a rig-correct
   `hermes-own-node-exporter` probe, and an expiry or alert for a forgotten rig. Revisit before
   the rig is used by a second feature (plan, Constitution IV watch item 2).
+- **Addendum 2026-10-30: the Home Assistant MCP token is PROD-only.** `hermes_mcp_servers`
+  gained its first `auth: bearer` entry, `homeassistant` (HA's MCP Server at
+  `/api/mcp/assist`, token of the non-admin, local-only HA user `hermes`, vault
+  `hermes_mcp_homeassistant_key`, env `AUXILIARY_MCP_HOMEASSISTANT_API_KEY` so child processes
+  never inherit it; 083 R-004). Unlike the router keys accepted in condition 1, this
+  credential switches things in the house, and the rig can reach `192.168.1.212` through the
+  egress allowlist like PROD does. Decision: the entry is `enabled: "{{ hermes_agent_operational
+  | bool }}"`, so the LAB rig and the pipeline LAB stage render neither the token (agent.env,
+  Open WebUI's tool-server key) nor its egress rule. The credential freeze (T070) pins the key
+  in `PROD_SECRETS` only, and `test_homeassistant_mcp_is_gated_on_prod_in_group_vars` pins the
+  gate in `vars.yml`. Cost: Home Assistant tools disappear from the PROD agent between the
+  pipeline's LAB apply and its PROD apply (both deploy the same LXC, backlog 067).
 
 ## R-017: `ntfy-acl-check.sh` crosses ntfy's default rate limit (found running T067 on PROD)
 

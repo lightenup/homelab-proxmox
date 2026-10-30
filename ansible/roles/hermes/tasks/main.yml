@@ -221,7 +221,7 @@
         'type': 'mcp',
         'url': item.url,
         'auth_type': item.auth,
-        'key': (lookup('vars', item.credential_env | lower) if item.auth == 'bearer' else ''),
+        'key': (lookup('vars', item.vault_var | default(item.credential_env | lower)) if item.auth == 'bearer' and item.enabled else ''),
         'config': {'enable': item.enabled},
         'info': {
           'id': item.name | lower | regex_replace('[^a-z0-9]+', '-'),
@@ -231,7 +231,8 @@
   loop: "{{ hermes_mcp_servers }}"
   loop_control:
     label: "{{ item.name }}"
-  # Facts land in hostvars, and a future auth: bearer entry puts a real token in this one.
+  # Facts land in hostvars, and an auth: bearer entry puts a real token in this one. A
+  # disabled entry carries no key, so a mode that switches a server off holds no token for it.
   no_log: true
 
 # Retiring Open WebUI Automations (083 US3, FR-015): list any that exist and stop, rather than

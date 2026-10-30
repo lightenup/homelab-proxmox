@@ -49,10 +49,12 @@ Lives in `ansible/group_vars/services/vars.yml`. The single artefact an operator
 | `name` | string | Display name. |
 | `url` | string | Streamable HTTP endpoint. |
 | `auth` | enum | `none` \| `bearer`. |
-| `credential_env` | string \| null | Vault variable name when `auth: bearer`; never the value (Constitution II). |
+| `credential_env` | string \| null | Env-var name the agent reads the token from when `auth: bearer`; never the value (Constitution II). Must match `AUXILIARY_*_API_KEY`, the only shape Hermes strips from child processes (083 research R-004; amended 2026-10-30). |
+| `vault_var` | string, optional | Vault variable holding the token. Defaults to `credential_env` lowercased. Added 2026-10-30 so the env name can follow Hermes' scrub rule while the vault keeps its own naming. |
 | `enabled` | bool | Lets a server be disabled without deleting its configuration. |
 
-**Validation**: `auth: bearer` ⇒ `credential_env` names a non-empty vault variable.
+**Validation**: `auth: bearer` ⇒ `credential_env` matches `AUXILIARY_*_API_KEY`, and `vault_var`
+(or `credential_env` lowercased) names a non-empty vault variable.
 
 **Initial population**: `market-model` (`auth: none`) — **the only entry at launch**, decided
 2026-09-20. `financial-scenario` is omitted: its gate uses a secret baked into a third-party image
