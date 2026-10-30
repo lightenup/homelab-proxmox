@@ -24,6 +24,10 @@ source "${LIB_DIR}/sudo.sh"
 source "${LIB_DIR}/tfvars.sh"
 # shellcheck source=lib/ct_conflicts.sh
 source "${LIB_DIR}/ct_conflicts.sh"
+# shellcheck source=lib/fingerprint.sh
+source "${LIB_DIR}/fingerprint.sh"
+# shellcheck source=lib/lab_run.sh
+source "${LIB_DIR}/lab_run.sh"
 
 # Evidence namespace for this feature (separate from lab harness)
 : "${ARTIFACT_RUNS_DIR:=service-deploy-runs}"
@@ -479,6 +483,8 @@ ensure_state_path() {
 }
 
 run_offline_verify() {
+    # A LAB run verifies once, after teardown and the production fingerprint (lab_finish).
+    [[ "${LAB_DEFER_VERIFY:-}" == "1" ]] && return 0
     "${REPO_ROOT}/scripts/lab/ci-verify.sh" "${EVIDENCE_ROOT}"
 }
 
@@ -736,6 +742,124 @@ enforce_plan_scope_guard() {
     return 0
 }
 
+# --- LAB run (067) ---------------------------------------------------------------------------
+# `--environment lab` is an ephemeral, isolated rehearsal. lab_begin takes the lock, sweeps,
+# and fingerprints production; lab_finish (EXIT trap, so it also runs after die/set -e) tears the
+# copy down, fingerprints again, and only then lets the offline verifier run.
+
+lab_abort() {
+    LAB_REASON="$1"
+    echo "${LAB_REASON}" >&2
+    exit 1
+}
+
+lab_begin() {
+    LAB_CMD="$1"
+    [[ "${ENVIRONMENT}" == "lab" ]] || return 0
+    LAB_ACTIVE=1
+    LAB_DEFER_VERIFY=1
+    LAB_WORK="$(mktemp -d -t lab-run.XXXXXX)"
+    LAB_TFVARS_FILE="${LAB_WORK}/lab.tfvars"
+    local lab_dir="${EVIDENCE_ROOT}/reports/lab"
+    mkdir -p "${lab_dir}" "${EVIDENCE_ROOT}/reports/plan" "${EVIDENCE_ROOT}/reports/apply"
+    trap lab_finish EXIT
+
+    if [[ -n "${FROM_PLAN_RUN_ID:-}" ]]; then
+        echo "lab: ignoring --from-plan-run-id; scratch paths are per run, so LAB always plans fresh" >&2
+        FROM_PLAN_RUN_ID=""
+    fi
+
+    lab_lock_acquire || lab_abort "lab: another LAB run holds $(lab_state_root)/.lock"
+    LAB_LOCK_HELD=1
+    lab_sweep "${lab_dir}/sweep.json" || lab_abort "lab pre-run sweep failed; see reports/lab/sweep.json"
+    prod_fingerprint "${lab_dir}/fingerprint.before.json" before \
+        || lab_abort "cannot fingerprint production before the LAB run"
+}
+
+# Derive this run's tfvars (LAB) or provision them (PROD), then export TFVARS_PATH.
+provision_run_tfvars() {
+    local tfvars_dir="$1"
+    if [[ "${ENVIRONMENT}" == "lab" ]]; then
+        _tfvars_lab_provision_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}" \
+            "$(lab_scratch_root)/${RUN_ID}" "${LAB_TFVARS_FILE}" || return 1
+        TFVARS_PATH="${LAB_TFVARS_FILE}"
+        export TFVARS_PATH
+        lab_scratch_create "${RUN_ID}" "${SERVICE}" "${LAB_TFVARS_FILE}" \
+            "${EVIDENCE_ROOT}/reports/lab/scratch.json" || return 1
+        return 0
+    fi
+    _tfvars_provision_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}" "${ENVIRONMENT}" || return 1
+    if [[ -f "${tfvars_dir%/}/${ENVIRONMENT}.tfvars" ]]; then
+        TFVARS_PATH="${tfvars_dir%/}/${ENVIRONMENT}.tfvars"
+        export TFVARS_PATH
+    fi
+}
+
+# Bridge invariant for both environments; memory margin for lab. Messages go to stderr.
+enforce_lab_plan_guards() {
+    local plan_json="$1"
+    lab_bridge_invariant "${ENVIRONMENT}" "${plan_json}" || return 1
+    [[ "${ENVIRONMENT}" == "lab" ]] || return 0
+    lab_capacity_check "${plan_json}" "${EVIDENCE_ROOT}/reports/lab/capacity.json"
+}
+
+lab_write_copy_json() {
+    local state="$1" out="${EVIDENCE_ROOT}/reports/lab/copy.json"
+    [[ -f "${state}" ]] || return 0
+    python3 - "${state}" "${out}" <<'PY'
+import json, sys
+copies = []
+for r in json.load(open(sys.argv[1], encoding="utf-8")).get("resources") or []:
+    if r.get("type") == "proxmox_lxc":
+        for i in r.get("instances") or []:
+            a = i["attributes"]
+            net = (a.get("network") or [{}])[0]
+            copies.append({"vmid": str(a.get("id", "")).split("/")[-1], "hostname": a.get("hostname"),
+                           "ip": str(net.get("ip", "")).split("/")[0], "bridge": net.get("bridge")})
+json.dump(copies, open(sys.argv[2], "w", encoding="utf-8"))
+PY
+}
+
+lab_finish() {
+    local rc=$?
+    trap - EXIT ERR
+    set +e +u
+    [[ "${LAB_ACTIVE:-}" == "1" ]] || exit "${rc}"
+    local lab_dir="${EVIDENCE_ROOT}/reports/lab" reason="${LAB_REASON:-}"
+
+    if [[ "${LAB_LOCK_HELD:-}" == "1" ]]; then
+        lab_teardown "${SERVICE}" "${RUN_ID}" "${LAB_TFVARS_FILE}" "${lab_dir}/teardown.json" \
+            terraform_chdir destroy -input=false -no-color -auto-approve \
+            || reason="${reason:-lab teardown failed; see reports/lab/teardown.json}"
+        if [[ -f "${lab_dir}/fingerprint.before.json" ]]; then
+            if ! prod_fingerprint "${lab_dir}/fingerprint.after.json" after; then
+                reason="${reason:-cannot fingerprint production after the LAB run}"
+            elif ! fingerprint_diff "${lab_dir}/fingerprint.before.json" "${lab_dir}/fingerprint.after.json" \
+                "${lab_dir}/fingerprint.diff.txt"; then
+                echo "production changed during LAB run; see reports/lab/fingerprint.diff.txt" >&2
+                reason="${reason:-production changed during LAB run; see reports/lab/fingerprint.diff.txt}"
+            fi
+        fi
+    fi
+    rm -rf "${LAB_WORK:-}"
+
+    if [[ -n "${reason}" ]]; then
+        if [[ "${LAB_CMD:-}" == "apply" ]]; then
+            grep -q '^status=failure' "${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null \
+                || printf 'status=failure\nreason=%s\n' "${reason}" >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+        else
+            grep -q '^intent=blocked' "${EVIDENCE_ROOT}/reports/plan/summary.txt" 2>/dev/null \
+                || write_plan_summary "blocked" "${reason}"
+        fi
+        emit_error "${RUN_ID}" "${reason}"
+        [[ "${rc}" -eq 0 ]] && rc=1
+    fi
+
+    LAB_DEFER_VERIFY=0
+    run_offline_verify || { [[ "${rc}" -eq 0 ]] && rc=1; }
+    exit "${rc}"
+}
+
 cmd_plan() {
     parse_common_flags "$@"
     init_evidence_pack
@@ -770,6 +894,8 @@ cmd_plan() {
     emit_event "inputs" "${RUN_ID}" "environment=${ENVIRONMENT}" "service=${SERVICE}"
 
     assert_no_target_env || { run_offline_verify || true; return 1; }
+
+    lab_begin plan
 
     local state_path
     state_path="$(ensure_state_path "${SERVICE}")"
@@ -808,18 +934,12 @@ cmd_plan() {
     # tfvars automation: provision/validate and emit redacted proof before Terraform.
     local tfvars_dir="${TFVARS_DIR:-/var/lib/homelab-proxmox/tfvars}"
 
-    if ! _tfvars_provision_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}" "${ENVIRONMENT}"; then
+    if ! provision_run_tfvars "${tfvars_dir}"; then
         write_plan_summary "blocked" "${ENVIRONMENT} tfvars provisioning/validation failed"
         emit_error "${RUN_ID}" "${ENVIRONMENT} tfvars provisioning/validation failed"
         run_offline_verify || true
         trap - ERR
         return 1
-    fi
-
-    # Prefer the rendered/provisioned tfvars path.
-    if [[ -f "${tfvars_dir%/}/${ENVIRONMENT}.tfvars" ]]; then
-        TFVARS_PATH="${tfvars_dir%/}/${ENVIRONMENT}.tfvars"
-        export TFVARS_PATH
     fi
 
     local tfvars_path
@@ -940,6 +1060,15 @@ EOF
         return 1
     fi
     preflight_ok "scope guard passed"
+
+    if ! enforce_lab_plan_guards "${plan_json}"; then
+        write_plan_summary "blocked" "lab plan guard violation (bridge invariant or capacity)"
+        emit_error "${RUN_ID}" "lab plan guard violation (bridge invariant or capacity)"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+    preflight_ok "bridge invariant and capacity passed"
 
     if ! enforce_bind_mount_policy "${plan_json}"; then
         write_plan_summary "blocked" "bind-mount policy violation"
@@ -1128,18 +1257,15 @@ cmd_apply() {
 
     assert_no_target_env || { run_offline_verify || true; return 1; }
 
+    lab_begin apply
+
     # tfvars automation: provision/validate and emit redacted proof before Terraform.
     local tfvars_dir="${TFVARS_DIR:-/var/lib/homelab-proxmox/tfvars}"
 
-    if ! _tfvars_provision_and_write_proof "${EVIDENCE_ROOT}/reports" "${tfvars_dir}" "${ENVIRONMENT}"; then
+    if ! provision_run_tfvars "${tfvars_dir}"; then
         emit_error "${RUN_ID}" "${ENVIRONMENT} tfvars provisioning/validation failed"
         run_offline_verify || true
         return 1
-    fi
-
-    if [[ -f "${tfvars_dir%/}/${ENVIRONMENT}.tfvars" ]]; then
-        TFVARS_PATH="${tfvars_dir%/}/${ENVIRONMENT}.tfvars"
-        export TFVARS_PATH
     fi
 
     # Ansible consumes vault secrets via a password file.
@@ -1441,6 +1567,18 @@ cmd_apply() {
     fi
     preflight_ok "scope guard passed"
 
+    if ! enforce_lab_plan_guards "${plan_json}"; then
+        {
+            echo "status=failure"
+            echo "reason=lab plan guard violation (bridge invariant or capacity)"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt"
+        emit_error "${RUN_ID}" "lab plan guard violation (bridge invariant or capacity)"
+        run_offline_verify
+        trap - ERR
+        return 1
+    fi
+    preflight_ok "bridge invariant and capacity passed"
+
     if ! enforce_bind_mount_policy "${plan_json}"; then
         {
             echo "status=failure"
@@ -1472,30 +1610,25 @@ cmd_apply() {
         "${planfile}" \
         | tee "${EVIDENCE_ROOT}/reports/apply/terraform-apply.txt"
 
-    # Backup state to Synology after successful apply.
-    # Proof is captured into evidence to satisfy SD-002.
-    #
-    # In PROD this is mandatory and failures must fail the run.
-    # In LAB we record the failure but do not fail the apply, since LAB hosts
-    # may not have the Synology mount available.
-    if "${REPO_ROOT}/scripts/backup_tfstate.sh" --state-path "${state_path}" --prefix "${ENVIRONMENT}-${SERVICE}" \
+    # Backup state to Synology after successful apply (PROD only; mandatory there).
+    # Proof is captured into evidence to satisfy SD-002. LAB state is ephemeral (067).
+    if [[ "${ENVIRONMENT}" == "lab" ]]; then
+        echo "skipped: LAB state is ephemeral and is destroyed with the copy" >"${EVIDENCE_ROOT}/reports/apply/state-backup.txt"
+        lab_write_copy_json "${state_path}"
+    elif "${REPO_ROOT}/scripts/backup_tfstate.sh" --state-path "${state_path}" --prefix "${ENVIRONMENT}-${SERVICE}" \
         >"${EVIDENCE_ROOT}/reports/apply/state-backup.txt" 2>&1; then
         preflight_ok "state backup succeeded"
     else
-        if [[ "${ENVIRONMENT}" == "prod" ]]; then
-            preflight_fail "state backup failed"
-            {
-                echo "status=failure"
-                echo "reason=state backup failed"
-                echo "hint=see reports/apply/state-backup.txt"
-            } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
-            emit_error "${RUN_ID}" "state backup failed"
-            run_offline_verify
-            trap - ERR
-            return 1
-        fi
-
-        preflight_fail "state backup failed (lab non-fatal)"
+        preflight_fail "state backup failed"
+        {
+            echo "status=failure"
+            echo "reason=state backup failed"
+            echo "hint=see reports/apply/state-backup.txt"
+        } >"${EVIDENCE_ROOT}/reports/apply/summary.txt" 2>/dev/null || true
+        emit_error "${RUN_ID}" "state backup failed"
+        run_offline_verify
+        trap - ERR
+        return 1
     fi
 
     # LAB idempotency verification: a second plan must be a no-op.
@@ -1984,11 +2117,27 @@ sys.exit(3)
     if [[ ! -f "${bootstrap_playbook}" ]]; then
         die "missing bootstrap playbook: ${bootstrap_playbook}"
     fi
-    ansible-playbook -i "${inventory_file}" "${bootstrap_playbook}" \
+
+    # LAB: layer the committed 10.99.0.0/24 inventory under the generated one, force the lab
+    # overrides, and refuse unless every host resolves inside the lab network (contract 8b).
+    local -a play_inventory_args=(-i "${inventory_file}")
+    local -a lab_extra_vars=()
+    if [[ "${ENVIRONMENT}" == "lab" ]]; then
+        play_inventory_args=(-i "${REPO_ROOT}/ansible/inventories/lab/hosts.yml" -i "${inventory_file}")
+        lab_extra_vars=(-e "@${REPO_ROOT}/ansible/inventories/lab/lab-overrides.yml" -e "deploy_environment=lab")
+        local lab_inv_json="${LAB_WORK}/inventory.json"
+        ansible-inventory "${play_inventory_args[@]}" "${lab_extra_vars[@]}" --list >"${lab_inv_json}" 2>"${LAB_WORK}/inventory.err" \
+            || lab_abort "lab inventory could not be enumerated: $(head -3 "${LAB_WORK}/inventory.err" | tr '\n' ' ')"
+        lab_inventory_guard "${lab_inv_json}" "${EVIDENCE_ROOT}/reports/lab/inventory-guard.txt" \
+            || lab_abort "lab inventory guard failed; see reports/lab/inventory-guard.txt"
+    fi
+
+    ansible-playbook "${play_inventory_args[@]}" "${bootstrap_playbook}" \
         --limit "${SERVICE}" \
         --ssh-common-args "${ssh_common_args}" \
         -u root \
         -e ansible_user=root \
+        "${lab_extra_vars[@]}" \
         2>&1 | tee "${EVIDENCE_ROOT}/reports/apply/ansible-bootstrap.txt"
 
     # Configure inside the LXC
@@ -2008,7 +2157,7 @@ sys.exit(3)
     # other service's targets/alerts/dashboards. Layer the committed environment inventory
     # first to make those hosts available; --limit monitoring still restricts execution (and
     # any SSH connection) to the monitoring host only.
-    local -a inventory_args=(-i "${inventory_file}")
+    local -a inventory_args=("${play_inventory_args[@]}")
     if [[ "${SERVICE}" == "monitoring" ]]; then
         local committed_inventory="${REPO_ROOT}/ansible/inventories/${ENVIRONMENT}/hosts.yml"
         if [[ -f "${committed_inventory}" ]]; then
@@ -2058,7 +2207,14 @@ print(len(json.load(sys.stdin).get("services", {}).get("hosts", [])))')"
         -e "evidence_dir=${EVIDENCE_ROOT}" \
         -e "run_id=${RUN_ID}" \
         -e "profile_id=${PROFILE_ID}" \
+        "${lab_extra_vars[@]}" \
         2>&1 | tee "${EVIDENCE_ROOT}/reports/apply/ansible-${SERVICE}.txt"
+
+    # LAB: prove from inside the copy that production is unreachable (contract step 10).
+    if [[ "${ENVIRONMENT}" == "lab" && -n "${ctid}" ]]; then
+        lab_isolation_probe "${ctid}" "${EVIDENCE_ROOT}/reports/lab/isolation.json" \
+            || lab_abort "lab isolation probe failed; see reports/lab/isolation.json"
+    fi
 
     # Healthcheck
     # We intentionally read healthcheck_enabled directly from host_vars to avoid
@@ -2283,6 +2439,14 @@ compute_blast_radius() {
 enforce_bind_mount_policy() {
         local plan_json="$1"
 
+        if [[ "${ENVIRONMENT}" == "lab" ]]; then
+                if ! bind_mount_policy_check lab "${plan_json}" "${EVIDENCE_ROOT}/reports/plan/bind-mount-guard.txt"; then
+                        preflight_fail "bind-mount policy violation (lab)"
+                        return 1
+                fi
+                return 0
+        fi
+
         if ! command -v jq >/dev/null 2>&1; then
                 preflight_fail "jq not available; cannot enforce bind-mount policy"
                 return 1
@@ -2353,15 +2517,16 @@ extract_host_path_mounts() {
 validate_bind_mount_allowlist() {
     local mounts_json="${1:?validate_bind_mount_allowlist requires mounts_json}"
     local any_rejected=0
-    local volume
+    local volume allowed_prefix="/mnt/nas/"
+    [[ "${ENVIRONMENT}" == "lab" ]] && allowed_prefix="$(lab_scratch_root)/"
     while IFS= read -r volume; do
         if [[ -z "${volume}" ]]; then
             continue
         fi
-        if [[ "${volume}" == "/mnt/nas/"* ]]; then
+        if [[ "${volume}" == "${allowed_prefix}"* ]]; then
             continue
         fi
-        echo "ERROR: Bind mount rejected — path ${volume} is outside the allowlist (/mnt/nas/); review service_mountpoints in tfvars" >&2
+        echo "ERROR: Bind mount rejected — path ${volume} is outside the allowlist (${allowed_prefix}); review service_mountpoints in tfvars" >&2
         any_rejected=1
     done < <(printf '%s' "${mounts_json}" | python3 -c "import json,sys; [print(m['volume']) for m in json.load(sys.stdin)]" 2>/dev/null || true)
     return "${any_rejected}"

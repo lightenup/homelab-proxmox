@@ -448,3 +448,109 @@ _tfvars_provision_and_write_proof() {
 	chmod 600 "${rendered_path}" 2>/dev/null || true
 	return 0
 }
+
+# Derive the lab tfvars from prod tfvars (067, R-002).
+#   _tfvars_derive_lab <prod.tfvars> <out.tfvars> <scratch_root>
+# Overrides only: services_bridge, network_gateway, hostname_prefix, every service_ips entry
+# (192.168.1.N/24 -> 10.99.0.N/24, N must be 200-254) and every service_mountpoints volume
+# (-> <scratch_root>/<mount-key>). Everything else, including credential placeholders, is
+# carried over unchanged. Writes <out> 0600; writes nothing and fails on a refused address.
+_tfvars_derive_lab() {
+	local prod="${1:?_tfvars_derive_lab requires prod.tfvars}"
+	local out="${2:?_tfvars_derive_lab requires an output path}"
+	local scratch_root="${3:?_tfvars_derive_lab requires a scratch root}"
+	local tmp
+	tmp="$(umask 077 && mktemp -t lab.tfvars.XXXXXX)"
+	if ! python3 - "${prod}" "${tmp}" "${scratch_root%/}" <<'PY'; then
+import re
+import sys
+
+src, dst, scratch = sys.argv[1:4]
+lines = open(src, encoding="utf-8").read().splitlines()
+out, errors = [], []
+section, stack = None, []  # section = top-level block name; stack = nested block names
+
+for line in lines:
+    code = line.split("#", 1)[0]
+    top = re.match(r"^(\w+)\s*=\s*\{\s*$", code)
+    if not stack and top:
+        section, stack = top.group(1), []
+    nested = re.match(r"^\s+([\w-]+)\s*=\s*\{\s*$", code)
+
+    if re.match(r"^services_bridge\s*=", code):
+        line = 'services_bridge = "vmbr99"'
+    elif re.match(r"^network_gateway\s*=", code):
+        line = 'network_gateway = "10.99.0.1"'
+    elif section == "service_ips":
+        m = re.search(r'"(\d+)\.(\d+)\.(\d+)\.(\d+)/(\d+)"', code)
+        if m:
+            octets = list(map(int, m.groups()[:4]))
+            if octets[:3] != [192, 168, 1] or not 200 <= octets[3] <= 254:
+                errors.append(
+                    f"service_ips {m.group(0)} cannot mirror into 10.99.0.200-254 "
+                    "(.1 is the host, .10/.11 are the lab rig)"
+                )
+            else:
+                line = line.replace(m.group(0), f'"10.99.0.{octets[3]}/{m.group(5)}"')
+    elif section == "service_mountpoints" and len(stack) == 2:
+        m = re.match(r'^(\s*volume\s*=\s*)"[^"]*"', code)
+        if m:
+            line = f'{m.group(1)}"{scratch}/{stack[1]}"'
+
+    if section == "service_mountpoints" and nested and len(stack) <= 1:
+        stack.append(nested.group(1))
+    elif section and (top or nested) and section != "service_mountpoints":
+        stack.append("x")
+    elif code.strip() == "}" and stack:
+        stack.pop()
+    elif code.strip() == "}" and section:
+        section = None
+    out.append(line)
+
+if errors:
+    print("\n".join(f"ERROR: {e}" for e in errors), file=sys.stderr)
+    sys.exit(1)
+out += ["", "# Lab copy (067): derived from prod.tfvars", 'hostname_prefix = "lab-"']
+open(dst, "w", encoding="utf-8").write("\n".join(out) + "\n")
+PY
+		rm -f "${tmp}"
+		return 1
+	fi
+	chmod 600 "${tmp}"
+	mv -f "${tmp}" "${out}"
+}
+
+# Derive the lab tfvars for this run and write the redacted proof (067, T035).
+#   _tfvars_lab_provision_and_write_proof <reports_dir> <tfvars_dir> <scratch_root> <out.tfvars>
+# Reads <tfvars_dir>/prod.tfvars read-only. The derived file lives only at <out>.
+_tfvars_lab_provision_and_write_proof() {
+	local reports_dir="$1" tfvars_dir="$2" scratch_root="$3" out="$4"
+	local prod="${tfvars_dir%/}/prod.tfvars"
+	local proof_dir="${reports_dir%/}/lab-tfvars"
+	mkdir -p "${proof_dir}"
+
+	local ts hash status="pass" errors="[]"
+	ts="$(_tfvars_now_utc)"
+	if [[ ! -f "${prod}" ]]; then
+		status="fail"
+		errors='["missing prod.tfvars; the lab tfvars are derived from it"]'
+	elif ! _tfvars_derive_lab "${prod}" "${out}" "${scratch_root}" 2>"${proof_dir}/derive.err"; then
+		status="fail"
+		errors='["lab tfvars derivation refused; see derive.err"]'
+	fi
+	hash=""
+	[[ "${status}" == "pass" ]] && hash="$(_tfvars_sha256 "${out}")"
+
+	_tfvars_write_validation_json "${proof_dir}/validation.json" "${ts}" "derived:prod.tfvars" "${out}" \
+		"${status}" "terraform@pve!terraform-token" "true" "${hash}" "${errors}" \
+		'{"provisioning_gaps": [], "manual_additions": []}'
+	{
+		echo "timestamp=${ts}"
+		echo "template_source=derived:prod.tfvars"
+		echo "rendered_path=${out}"
+		echo "validation_status=${status}"
+		echo "file_hash=${hash}"
+	} >"${proof_dir}/provisioning.txt"
+	printf '%s\n' "${hash}" >"${proof_dir}/lab.tfvars.sha256"
+	[[ "${status}" == "pass" ]]
+}

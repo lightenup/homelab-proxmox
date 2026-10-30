@@ -117,6 +117,7 @@
     mode: '0600'
     owner: root
     group: root
+  when: (deploy_environment | default('prod')) != 'lab'
   notify: Restart caddy
 
 - name: Deploy systemd drop-in override for Caddy secrets injection
@@ -126,6 +127,7 @@
     mode: '0644'
     owner: root
     group: root
+  when: (deploy_environment | default('prod')) != 'lab'
   notify: Restart caddy
 
 - name: Ensure Caddy configuration directory exists
@@ -211,7 +213,5 @@
 - name: Validate full Caddy configuration
   ansible.builtin.command:
     cmd: caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile
-  environment:
-    DOMENESHOP_API_TOKEN: "{{ domeneshop_api_token }}"
-    DOMENESHOP_API_SECRET: "{{ domeneshop_api_secret }}"
+  environment: "{{ {} if (deploy_environment | default('prod')) == 'lab' else {'DOMENESHOP_API_TOKEN': domeneshop_api_token, 'DOMENESHOP_API_SECRET': domeneshop_api_secret} }}"
   changed_when: false

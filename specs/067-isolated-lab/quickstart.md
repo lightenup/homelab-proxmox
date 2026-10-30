@@ -112,6 +112,19 @@ Negative test: create a container that no state tracks (`sudo pct create 199 …
 on `vmbr99`, no `lab-` prefix). Run the check. `untracked` lists VMID 199, and Prometheus fires
 `StateDriftContainers`. Destroy 199 afterwards.
 
+**Observed run (T027, 2026-10-30)**: `monitoring` was deployed with `pve-service-deploy apply
+--environment prod` directly on `pve` (plan exit 0, so no Terraform change; the pipeline's LAB
+stage was unusable between PR B and PR D, see below). promtool validated the rules, Prometheus
+reloaded, and `StateDriftContainers`, `StateDriftCheckStale`, `StateDriftCheckAbsent` were loaded
+with all 61 scrape targets up. Clean run: `latest.json` `ok: true`, all three kinds 0, timestamp
+metric present, timer enabled (next 06:30). Negative test: CT 199 `drift-test` on `vmbr99`
+(no `lab-` prefix) was reported `untracked`, **not destroyed**, and `StateDriftContainers{kind="untracked"}`
+fired; after `pct destroy 199` the next run was clean again.
+
+**Note**: between PR B and PR D the pipeline's LAB stage reads the now-empty `state/lab/<svc>`
+with `lab.tfvars` (prod IPs); the duplicate-container guard is what stops it. Do not dispatch
+`lxc-promote-prod` until PR D.
+
 ## 7. Removed workflows and lifecycle (FR-018/020)
 
 - `.github/workflows/lxc-deploy-lab.yml` and `lxc-promote-lab.yml` are gone, and
@@ -119,3 +132,20 @@ on `vmbr99`, no `lab-` prefix). Run the check. `untracked` lists VMID 199, and P
 - Lifecycle `environment=lab, action=delete` fails at once with the "no standing lab copy" message.
   `environment=lab, action=add|change` runs the rehearsal.
 - `act -l` lists the workflows, and `act -n -W .github/workflows/lxc-promote-prod.yml workflow_dispatch` parses.
+
+## T052 record (2026-10-30, `pve`, as `ci`)
+
+`apply --environment lab` for six services, each ending with a clean host (12 production containers, empty
+`lab-scratch`, no lab state), `teardown.json` ok, and no fingerprint diff:
+
+| Service | Result | Duration |
+|---|---|---|
+| ntfy | pass | 214 s |
+| reverse_proxy | pass | 216 s |
+| monitoring | pass | 420 s |
+| immich | pass | 482 s |
+| homeassistant | pass | 346 s |
+| hermes | first run failed (egress probe of absent peers); pass after the lab skip | 740 s / ~600 s |
+
+Hermes' skipped probes are recorded in `reports/lab/skipped-checks.txt`. A second run while the lock was
+held refused with exit 1 and left the other run untouched.

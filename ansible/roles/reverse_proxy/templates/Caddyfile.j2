@@ -1,5 +1,11 @@
 {
+{% if (deploy_environment | default('prod')) == 'lab' %}
+    # LAB (067): no DNS-provider credential and no certificate authority traffic; a lab copy
+    # signs its own certificates.
+    local_certs
+{% else %}
     acme_dns {{ caddy_acme_dns_provider }} {$DOMENESHOP_API_TOKEN} {$DOMENESHOP_API_SECRET}
+{% endif %}
 {% if caddy_metrics_enabled | default(false) %}
     servers {
         metrics

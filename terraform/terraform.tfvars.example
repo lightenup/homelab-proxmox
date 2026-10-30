@@ -1,12 +1,11 @@
 # This file is an example only.
 # Use per-environment tfvars files under terraform/environments/:
-# - terraform/environments/lab.tfvars.example
 # - terraform/environments/prod.tfvars.example
 #
 # Create local copies (ignored by git):
-# - terraform/environments/lab.tfvars
 # - terraform/environments/prod.tfvars
 #
+# LAB has no tfvars file of its own: pve-service-deploy derives it from prod.tfvars (067).
 # The workflow / scripts select the appropriate tfvars based on environment.
 
 # Minimal placeholder to show required variable names (do not commit secrets)

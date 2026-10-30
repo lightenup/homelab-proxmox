@@ -323,6 +323,9 @@ class EvidenceVerifier:
                 remediation="Regenerate reports/lab-snapshot.json to match schema"
             )
 
+            if environment == "lab":
+                self._verify_lab_run()
+
             if environment in ("prod", "lab"):
                 env_tfvars_dir = f"reports/{environment}-tfvars"
                 env_upper = environment.upper()
@@ -396,6 +399,22 @@ class EvidenceVerifier:
                         f"Profile ID mismatch: summary.profile_id '{profile_id}' != provenance.profile_id '{prov_profile_id}'",
                         "Ensure all artifacts belong to the same profile"
                     )
+
+    def _verify_lab_run(self):
+        """067: a LAB run must prove it cleaned up after itself and left production untouched."""
+        lab_dir = self.pack_path / "reports" / "lab"
+        teardown = lab_dir / "teardown.json"
+        if teardown.exists():
+            try:
+                ok = json.loads(teardown.read_text(encoding="utf-8")).get("ok") is True
+            except ValueError:
+                ok = False
+            if not ok:
+                self.add_error("LAB-001", "reports/lab/teardown.json does not report ok=true",
+                               "The lab copy, scratch dirs or lab state were not fully removed; sweep and re-run")
+        if (lab_dir / "fingerprint.diff.txt").exists():
+            self.add_error("LAB-002", "reports/lab/fingerprint.diff.txt exists: production changed during the LAB run",
+                           "Read the diff; the lab run must never change production")
 
     def _validate_report_schema(self, report_relpath: str, schema_filename: str, error_code: str, remediation: str):
         report_path = self.pack_path / report_relpath
