@@ -119,3 +119,15 @@ def test_dry_run_changes_nothing(tmp_path):
     assert not t["backup"].exists()
     assert not (tmp_path / "planned.txt").exists()
     assert t["old"].exists() and (t["nas"] / "lab").exists()
+
+
+def test_failed_backup_stops_before_anything_is_planned_or_removed(tmp_path):
+    t = _tree(tmp_path)
+    blocker = tmp_path / "blocker"
+    blocker.write_text("a file, so mkdir under it fails")
+    t["backup"] = blocker / "backup"
+    proc = _run(tmp_path, t, "--remove-old-layout")
+    assert proc.returncode != 0
+    assert "step failed" in proc.stdout
+    assert not (tmp_path / "planned.txt").exists()
+    assert t["old"].exists() and (t["nas"] / "lab").exists()

@@ -35,7 +35,10 @@ for arg in "$@"; do
 done
 
 say() { echo "[migrate-067] $*"; }
-run() { if $DRY_RUN; then say "dry-run: $*"; else "$@"; fi; }
+# `set -e` is off inside a function called from `||`, so a failed step must exit explicitly.
+run() {
+  if $DRY_RUN; then say "dry-run: $*"; else "$@" || { say "ERROR: step failed: $*"; exit 1; }; fi
+}
 
 # Newest run directory for a service, created after the marker file.
 newest_run_since() {
