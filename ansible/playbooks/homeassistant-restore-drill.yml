@@ -1,0 +1,183 @@
+---
+# Home Assistant restore drill — proves the latest backup brings back a WORKING instance with
+# its owner, integrations and history, without touching the live one. Follows the hermes
+# pattern (playbooks/hermes-restore-drill.yml).
+#
+#   ansible-playbook playbooks/homeassistant-restore-drill.yml -i inventories/prod/hosts.yml
+#   ... -e homeassistant_restore_archive=/path/to/homeassistant-backup-YYYYMMDD-HHMMSS.tar.gz
+#
+# Non-destructive by construction: a second container with NO network against an extracted
+# copy (see roles/service_backup/templates/restore/homeassistant-compose.yml.j2 for why no
+# network). Everything from extraction on sits in one block, so `always:` removes the extracted
+# config (it holds .storage/auth and its tokens) whether the drill passes, or fails at any
+# step, the archive checks included.
+#
+# This answers "is the archive good". A real restore is a manual procedure:
+# docs/runbooks/homeassistant-backup-restore.md.
+- name: Home Assistant Restore Drill
+  hosts: homeassistant
+  become: true
+  vars:
+    homeassistant_restore_dir: "/tmp/homeassistant-restore-drill"
+
+  tasks:
+    - name: Find the latest backup
+      ansible.builtin.shell: "ls -t {{ service_backups['homeassistant'].dir }}/homeassistant-backup-*.tar.gz | head -n 1"
+      register: homeassistant_latest_backup_cmd
+      changed_when: false
+      failed_when: homeassistant_latest_backup_cmd.stdout == ""
+      when: homeassistant_restore_archive is not defined
+
+    - name: Record the archive under test
+      ansible.builtin.set_fact:
+        homeassistant_latest_backup: "{{ homeassistant_restore_archive | default(homeassistant_latest_backup_cmd.stdout) }}"
+
+    - name: Record the archive's top-level directory name
+      ansible.builtin.set_fact:
+        homeassistant_restore_basename: "{{ homeassistant_latest_backup | basename | regex_replace('\\.tar\\.gz$', '') }}"
+
+    - name: Show which archive is being drilled
+      ansible.builtin.debug:
+        msg: "Drilling {{ homeassistant_latest_backup }}"
+
+    - name: Restore drill
+      block:
+        - name: Clean any previous drill directory
+          ansible.builtin.file:
+            path: "{{ homeassistant_restore_dir }}"
+            state: absent
+
+        # 0700: the extracted .storage/ holds the auth store and refresh tokens.
+        - name: Create the drill directory
+          ansible.builtin.file:
+            path: "{{ homeassistant_restore_dir }}"
+            state: directory
+            mode: '0700'
+
+        - name: Extract the archive
+          ansible.builtin.unarchive:
+            src: "{{ homeassistant_latest_backup }}"
+            dest: "{{ homeassistant_restore_dir }}"
+            remote_src: true
+
+        # The archive's own contents, before anything runs on them: the files the snapshot
+        # promises (roles/service_backup/templates/snapshot/homeassistant.sh.j2), a sound
+        # recorder database, and an auth store with a real (non-system) user.
+        - name: Read the archived state
+          ansible.builtin.command:
+            argv:
+              - python3
+              - "-c"
+              - |
+                import json, os, sqlite3, sys
+                cfg = sys.argv[1]
+                out = {f: os.path.isfile(os.path.join(cfg, f)) for f in (
+                    'configuration.yaml', '.storage/auth', '.storage/core.config_entries',
+                    'home-assistant_v2.db')}
+                auth = json.load(open(os.path.join(cfg, '.storage/auth')))['data']
+                out['users'] = sum(1 for u in auth['users'] if not u.get('system_generated'))
+                entries = json.load(open(os.path.join(cfg, '.storage/core.config_entries')))['data']
+                out['config_entries'] = len(entries['entries'])
+                con = sqlite3.connect('file:' + os.path.join(cfg, 'home-assistant_v2.db') + '?mode=ro', uri=True)
+                out['db_integrity'] = con.execute('pragma integrity_check').fetchone()[0]
+                out['db_states'] = con.execute('select count(*) from states').fetchone()[0]
+                print(json.dumps(out))
+              - "{{ homeassistant_restore_dir }}/{{ homeassistant_restore_basename }}/config"
+          register: homeassistant_archive_state
+          changed_when: false
+
+        - name: Show the archived state
+          ansible.builtin.debug:
+            msg: "{{ homeassistant_archive_state.stdout | from_json }}"
+
+        - name: Assert the archive is complete and sound
+          ansible.builtin.assert:
+            that:
+              - (homeassistant_archive_state.stdout | from_json)['configuration.yaml']
+              - (homeassistant_archive_state.stdout | from_json)['.storage/auth']
+              - (homeassistant_archive_state.stdout | from_json)['.storage/core.config_entries']
+              - (homeassistant_archive_state.stdout | from_json)['home-assistant_v2.db']
+              - (homeassistant_archive_state.stdout | from_json).users | int > 0
+              - (homeassistant_archive_state.stdout | from_json).config_entries | int > 0
+              - (homeassistant_archive_state.stdout | from_json).db_integrity == 'ok'
+              - (homeassistant_archive_state.stdout | from_json).db_states | int > 0
+            fail_msg: "The archive is incomplete or unsound: {{ homeassistant_archive_state.stdout }}"
+
+        - name: Deploy the restore-drill compose file
+          ansible.builtin.template:
+            src: ../roles/service_backup/templates/restore/homeassistant-compose.yml.j2
+            dest: "{{ homeassistant_restore_dir }}/docker-compose.restore.yml"
+            mode: '0640'
+
+        - name: Start the restored instance
+          community.docker.docker_compose_v2:
+            project_src: "{{ homeassistant_restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            state: present
+
+        # No network, so ask from inside the container. A first start with integrations that
+        # cannot connect takes a while; allow 5 minutes.
+        - name: Wait for the restored instance to serve its frontend
+          ansible.builtin.command:
+            argv: [docker, exec, homeassistant_restore, curl, -fsS, -o, /dev/null, "http://localhost:8123/manifest.json"]
+          register: homeassistant_restore_health
+          until: homeassistant_restore_health.rc == 0
+          retries: 60
+          delay: 5
+          changed_when: false
+
+        # Booting only proves the image runs. A fresh instance serves /api/onboarding (200, the
+        # steps still to do); one that came back with its owner and setup has finished
+        # onboarding, and Home Assistant then no longer serves that view (404). /api/ answering
+        # 401 shows the API is up and enforcing auth against the restored auth store.
+        - name: Ask the restored instance whether it is onboarded
+          ansible.builtin.command:
+            argv:
+              - docker
+              - exec
+              - homeassistant_restore
+              - sh
+              - "-c"
+              - >-
+                printf '%s %s' "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8123/api/onboarding)"
+                "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8123/api/)"
+          register: homeassistant_restore_api
+          changed_when: false
+
+        - name: Assert the restored instance is the onboarded one, not a fresh install
+          ansible.builtin.assert:
+            that:
+              - homeassistant_restore_api.stdout.split()[0] == '404'
+              - homeassistant_restore_api.stdout.split()[1] == '401'
+            fail_msg: >-
+              The restored instance answered onboarding/api with {{ homeassistant_restore_api.stdout }}
+              (expected "404 401"). A 200 for onboarding means it booted as a FRESH install: the
+              archive's .storage did not come back.
+            success_msg: >-
+              Restored instance is healthy and onboarded —
+              {{ (homeassistant_archive_state.stdout | from_json).users }} user(s),
+              {{ (homeassistant_archive_state.stdout | from_json).config_entries }} integration
+              entries, {{ (homeassistant_archive_state.stdout | from_json).db_states }} recorded states.
+
+      always:
+        # A failure before the compose file was rendered (bad archive, failed checks) leaves
+        # nothing to tear down, and docker_compose_v2 would fail on the missing file.
+        - name: Check whether a drill stack was set up
+          ansible.builtin.stat:
+            path: "{{ homeassistant_restore_dir }}/docker-compose.restore.yml"
+          register: homeassistant_restore_compose
+
+        - name: Tear down the restored instance
+          community.docker.docker_compose_v2:
+            project_src: "{{ homeassistant_restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            state: absent
+            remove_volumes: true
+          when: homeassistant_restore_compose.stat.exists
+
+        - name: Remove the drill directory
+          ansible.builtin.file:
+            path: "{{ homeassistant_restore_dir }}"
+            state: absent
