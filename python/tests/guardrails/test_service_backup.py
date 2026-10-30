@@ -227,6 +227,11 @@ def test_homeassistant_restore_drill_is_isolated_and_proves_the_restore() -> Non
     assert "/api/onboarding" in dumped and "'404'" in dumped
     always = yaml.safe_dump(block["always"])
     assert "state: absent" in always and "homeassistant_restore_dir" in always
+    # Extraction and the archive checks sit inside the block, so a bad archive still gets its
+    # extracted tokens removed (review on #298).
+    outside = [t for t in plays[0]["tasks"] if "block" not in t]
+    assert not any("unarchive" in yaml.safe_dump(t) for t in outside)
+    assert "ansible.builtin.unarchive" in dumped
 
     snapshot = _read("ansible/roles/service_backup/templates/snapshot/homeassistant.sh.j2")
     assert '"$WORK_DIR/config"' in snapshot, "the drill reads <top>/config/ (contract C5)"

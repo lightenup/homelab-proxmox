@@ -41,7 +41,8 @@ cd ansible
 ansible-playbook playbooks/homeassistant-restore-drill.yml -i inventories/prod/hosts.yml
 ```
 
-From a machine that can SSH to the LXC as root. `ci@pve` can, using the vault password file the
+Add `-e homeassistant_restore_archive=<path>` to drill one specific archive instead of the newest.
+Run it from a machine that can SSH to the LXC as root. `ci@pve` can, using the vault password file the
 pipeline uses (`--vault-password-file /var/lib/homelab-proxmox/vault/.ansible_vault_pass`).
 
 It extracts the newest archive into a `0700` directory under `/tmp`, then:
@@ -57,31 +58,68 @@ It extracts the newest archive into a `0700` directory under `/tmp`, then:
 3. **Asks it whether it is onboarded:** `/api/onboarding` must answer `404`. A fresh install
    answers `200` with the onboarding steps, so `200` means `.storage` did not come back. `/api/`
    must answer `401`.
-4. **Tears everything down** in `always:`, whether it passed or not.
+4. **Tears everything down** in `always:`, whether it passed or failed at any step. That includes
+   a bad archive: extraction and the archive checks are inside the block, so the extracted
+   tokens never stay behind.
 
 First run, 2026-10-30, archive `homeassistant-backup-20261030-051506`: 2 users, 16 integration
 entries, 2,065 recorded states, onboarding `404`, API `401`, 13 s in total. The same check on an
-empty `/config` answered onboarding `200`, so the assert fails on an empty restore.
+empty `/config` answered onboarding `200`, so the assert fails on an empty restore. A truncated
+archive (fails at extraction) and one without `.storage/auth` (fails the archive check) both
+left nothing behind.
 
 ## Disaster recovery (real restore)
 
-There is no restore script; the steps are short. On the LXC (`ssh pve`, then
-`sudo pct exec 112 -- bash`):
+There is no restore script; the steps are short. Two rules shape them:
+
+- **Check the archive while Home Assistant is still running.** A bad archive found after the
+  stack is down turns a restore into an outage.
+- **Stop at the first error.** If the steps run on after a failed one, `docker compose up` starts
+  on an empty `config/`. Home Assistant then comes up as a *fresh install waiting for
+  onboarding*, reachable at `ha.hus-sky.no`, and whoever opens it first creates the owner.
+
+On the LXC (`ssh pve`, then `sudo pct exec 112 -- bash`), pick the archive:
 
 ```bash
-ls -t /mnt/homeassistant/backups/homeassistant-backup-*.tar.gz | head -3   # pick one
-A=/mnt/homeassistant/backups/homeassistant-backup-YYYYMMDD-HHMMSS.tar.gz
-tar -tzf "$A" > /dev/null && echo archive-readable                          # check BEFORE stopping
-cd /opt/homeassistant && docker compose down
-mv config "config.superseded-$(date +%Y%m%d-%H%M%S)"                         # set aside, not deleted
-mkdir -p /tmp/ha-restore && tar -xzf "$A" -C /tmp/ha-restore
-mv /tmp/ha-restore/"$(basename "$A" .tar.gz)"/config ./config
-docker compose up -d
-curl -fsS -o /dev/null http://localhost:8123/manifest.json && echo up
+ls -t /mnt/homeassistant/backups/homeassistant-backup-*.tar.gz | head -3
 ```
 
-Then check `https://ha.hus-sky.no` (the trusted-proxy setting is in `.storage/http`, so it comes
-back with the archive) and that Hermes still lists its Home Assistant tools. The `hermes` token is
-in the restored `.storage/auth`. If the LXC itself was rebuilt, deploy `homeassistant` through the
-pipeline first; it seeds `configuration.yaml` only when missing, so restore over the fresh config
-afterwards. Remove the superseded directory once you are satisfied.
+Then paste this block as a whole, with `A` set to the chosen archive. `bash -euo pipefail`
+stops at the first failing command, and nothing is stopped until the archive is extracted and
+checked:
+
+```bash
+A=/mnt/homeassistant/backups/homeassistant-backup-YYYYMMDD-HHMMSS.tar.gz bash -euo pipefail <<'EOF'
+STAGE=$(mktemp -d /tmp/ha-restore.XXXXXX)            # 0700
+tar -xzf "$A" -C "$STAGE"
+NEW="$STAGE/$(basename "$A" .tar.gz)/config"
+for f in configuration.yaml .storage/auth .storage/core.config_entries; do
+  test -f "$NEW/$f" || { echo "archive lacks $f, nothing was stopped"; exit 1; }
+done
+echo "archive checked: $NEW"
+
+cd /opt/homeassistant
+docker compose down
+OLD="config.superseded-$(date +%Y%m%d-%H%M%S)"
+mv config "$OLD"                                      # set aside, not deleted
+mv "$NEW" ./config
+docker compose up -d
+for i in $(seq 1 36); do
+  curl -fsS -o /dev/null http://localhost:8123/manifest.json && { echo "up; old config in /opt/homeassistant/$OLD"; exit 0; }
+  sleep 5
+done
+echo "not up after 3 minutes: check 'docker logs homeassistant'; old config in /opt/homeassistant/$OLD"
+exit 1
+EOF
+```
+
+If it stops before `docker compose down`, the live instance was never touched. If it fails after
+the swap, the old config is in `/opt/homeassistant/config.superseded-*`: stop the stack, move
+`config` aside, move the superseded copy back and start it again.
+
+Then check `https://ha.hus-sky.no`. The trusted-proxy setting is in `.storage/http`, so it comes
+back with the archive. Also check that Hermes still lists its Home Assistant tools; the `hermes`
+token is in the restored `.storage/auth`. If the LXC itself was rebuilt, deploy `homeassistant`
+through the pipeline first. It seeds `configuration.yaml` only when missing, so restore over the
+fresh config afterwards. Remove the superseded directory and the `/tmp/ha-restore.*` staging
+directory once you are satisfied.
