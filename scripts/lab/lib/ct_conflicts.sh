@@ -117,3 +117,31 @@ enforce_no_ct_conflicts() {
     rm -rf "${tmp}"
     return 0
 }
+
+# Lab-copy identity (067): hostname ^lab-, net0 on vmbr99, and an IP in 10.99.0.200-254. All
+# three must hold; the lab-rig VMs (.10/.11) and any production CT fail at least one.
+# Usage: is_lab_copy <vmid>   (exit 0 when the container is a lab copy)
+is_lab_copy() {
+    local vmid="${1:?is_lab_copy requires a vmid}" config hostname net0 bridge ip last
+    config="$(sudo -n pct config "${vmid}" 2>/dev/null)" || return 1
+    hostname="$(awk '/^hostname:/ {print $2; exit}' <<<"${config}")"
+    [[ "${hostname}" == lab-* ]] || return 1
+    net0="$(grep -E '^net0:' <<<"${config}" | head -n1)"
+    bridge="$(grep -oE '(^|,| )bridge=[^,]+' <<<"${net0}" | sed -E 's/^[, ]?bridge=//')"
+    [[ "${bridge}" == "vmbr99" ]] || return 1
+    ip="$(grep -oE '(^|,)ip=[^,/]+' <<<"${net0}" | sed -E 's/^,?ip=//')"
+    [[ "${ip}" =~ ^10\.99\.0\.([0-9]+)$ ]] || return 1
+    last="${BASH_REMATCH[1]}"
+    ((last >= 200 && last <= 254))
+}
+
+# Print "<vmid>\t<hostname>\t<ip>" for every container that is_lab_copy accepts.
+list_lab_copies() {
+    local vmid hostname ip
+    while IFS=$'\t' read -r vmid hostname ip; do
+        [[ -n "${vmid}" ]] || continue
+        if is_lab_copy "${vmid}"; then
+            printf '%s\t%s\t%s\n' "${vmid}" "${hostname}" "${ip}"
+        fi
+    done < <(ct_inventory)
+}

@@ -112,7 +112,14 @@ the run.
 configuration, so Ansible owns them (constitution III). A separate table leaves the existing
 `iptables-nft` MASQUERADE untouched and is easy to inspect (`nft list table inet lab_isolation`).
 
-**Risk to check in implementation**: the lab-rig VMs (`.10`, `.11`) share `vmbr99`. Their workflow
+**T002 result (2026-10-30)**: `.github/workflows/lab-rig.yml` (`up`) runs `rig_probe` from the
+rig VMs against `https://ntfy.<domain>/v1/health` (the reverse proxy, `192.168.1.211:443`) and
+`http://192.168.1.220:4000/health/liveliness` (llm-router). Both are LAN destinations, so the rig
+VMs need a source-scoped exception: `10.99.0.10` and `10.99.0.11` only, to those two
+address:port pairs. `lab_setup.yml`, `lab_tier2_pve.yml` and `lab_bootstrap.yml` reach only
+internet hosts. Recorded in `contracts/lab-network.md`.
+
+**Risk that was checked**: the lab-rig VMs (`.10`, `.11`) share `vmbr99`. Their workflow
 (`lab-rig.yml`) must still pass with the isolation in place. If it needs a LAN destination, it gets
 a source-scoped exception for `.10`/`.11` only, never for the lab-copy range.
 
@@ -330,7 +337,11 @@ After all 12 report no changes in the same session:
 - remove `state/services/` (5 symlinks and 7 directories), `infra_state/lab`, and `infra_state/prod`;
 - remove the 10 `module "*_lxc"` blocks from `terraform/main.tf` and `terraform state rm` them
   from the combined root's state (no destroy). Their real resources are managed by the per-service
-  roots. The combined-root state location is confirmed at the start of implementation;
+  roots. **T001 (2026-10-30, read-only on `pve`): the combined root has no state anywhere.** No
+  `*.tfstate` exists outside `state/services/*` (7 local) and `infra_state/lab/*` (5 symlink
+  targets). `infra_state/prod/{immich,monitoring,reverse_proxy}` are empty dirs and
+  `infra_state/*/ansible` holds only inventories. So there is nothing to `state rm`; T020 is only
+  the removal of the 10 `*_lxc` module blocks;
 - trigger the PVE config backup and check that the manifest lists `state/prod/<svc>` for all 12.
 
 The procedure is in [quickstart.md](./quickstart.md), section M.

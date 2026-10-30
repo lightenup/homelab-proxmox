@@ -7,7 +7,7 @@ module "immich_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "immich-lxc"
-  hostname     = "immich"
+  hostname     = "${var.hostname_prefix}immich"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

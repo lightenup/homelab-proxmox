@@ -2,7 +2,7 @@ module "ntfy_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "ntfy-lxc"
-  hostname     = "ntfy"
+  hostname     = "${var.hostname_prefix}ntfy"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

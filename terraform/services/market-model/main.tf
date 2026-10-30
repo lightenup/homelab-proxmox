@@ -2,7 +2,7 @@ module "market_model_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "market-model-lxc"
-  hostname     = "market-model"
+  hostname     = "${var.hostname_prefix}market-model"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

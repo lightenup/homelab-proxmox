@@ -7,7 +7,7 @@ module "monitoring_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "monitoring-lxc"
-  hostname     = "monitoring"
+  hostname     = "${var.hostname_prefix}monitoring"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

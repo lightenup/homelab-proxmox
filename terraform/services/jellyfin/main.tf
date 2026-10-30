@@ -7,7 +7,7 @@ module "jellyfin_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "jellyfin-lxc"
-  hostname     = "jellyfin"
+  hostname     = "${var.hostname_prefix}jellyfin"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

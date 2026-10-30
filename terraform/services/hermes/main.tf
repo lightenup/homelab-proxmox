@@ -2,7 +2,7 @@ module "hermes_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "hermes-lxc"
-  hostname     = "hermes"
+  hostname     = "${var.hostname_prefix}hermes"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

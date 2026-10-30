@@ -23,6 +23,8 @@ table inet lab_isolation {
   chain forward { type filter hook forward priority filter; policy accept;
     iifname "vmbr99" ct state established,related accept
     iifname "vmbr99" ip daddr 10.99.0.0/24 accept
+    ip saddr { 10.99.0.10, 10.99.0.11 } ip daddr 192.168.1.211 tcp dport 443 accept
+    ip saddr { 10.99.0.10, 10.99.0.11 } ip daddr 192.168.1.220 tcp dport 4000 accept
     iifname "vmbr99" ip daddr @lan_private drop
   }
   chain input { type filter hook input priority filter; policy accept;
@@ -39,7 +41,8 @@ The rules are loaded on `vmbr99` `post-up` from `/etc/nftables.d/lab-isolation.n
 
 | Destination | Source | Reason |
 |---|---|---|
-| *(none)* | | |
+| `192.168.1.211:443` (reverse proxy; `ntfy.<domain>`) | `10.99.0.10`, `10.99.0.11` only | lab-rig `rig_probe` health check (T002) |
+| `192.168.1.220:4000` (llm-router) | `10.99.0.10`, `10.99.0.11` only | lab-rig `rig_probe` health check (T002) |
 
 Adding a row requires a reason, and the change must update the isolation probe's expectations.
 

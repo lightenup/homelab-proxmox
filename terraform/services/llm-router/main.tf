@@ -2,7 +2,7 @@ module "llm_router_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "llm-router-lxc"
-  hostname     = "llm-router"
+  hostname     = "${var.hostname_prefix}llm-router"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool
