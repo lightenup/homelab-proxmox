@@ -52,6 +52,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Refuse lab delete
+        run: |
+          set -euo pipefail
+          if [[ "${ENVIRONMENT}" == "lab" && "${ACTION}" == "delete" ]]; then
+            echo "ERROR: no standing lab copy exists; LAB is an ephemeral rehearsal (067)" >&2
+            exit 1
+          fi
+
       - name: Fail fast on forbidden inputs
         run: |
           set -euo pipefail

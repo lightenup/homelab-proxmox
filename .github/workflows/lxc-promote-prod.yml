@@ -193,8 +193,9 @@ jobs:
           fi
 
   apply_lab:
-    name: Apply (LAB, changes prod)
+    name: LAB rehearsal (isolated)
     runs-on: [self-hosted]
+    timeout-minutes: 90
     needs: [setup]
     outputs:
       run_id: ${{ steps.capture_run_id.outputs.run_id }}
@@ -221,7 +222,7 @@ jobs:
             --exclude 'artifacts/' \
             ./ "ci@${PROXMOX_HOST:-pve}:/home/ci/homelab-proxmox/"
 
-      - name: Apply on PVE (LAB)
+      - name: Rehearse on PVE (LAB, isolated)
         id: apply_on_pve
         continue-on-error: true
         env:
@@ -322,7 +323,9 @@ jobs:
           if [[ "${sha_ok}" == "true" ]]; then
             if [[ "${{ steps.apply_on_pve.outcome }}" == "success" ]]; then
               ok=true
-            elif [[ "${{ steps.verify_evidence.outputs.verified }}" == "true" ]]; then
+            elif [[ "${{ steps.verify_evidence.outputs.verified }}" == "true" ]] \
+              && grep -q '^status=success' "evidence/lab/${{ steps.capture_run_id.outputs.run_id }}/reports/apply/summary.txt" 2>/dev/null; then
+              # Offline verification passing is not enough: a failed rehearsal also verifies.
               ok=true
             fi
           fi
@@ -335,13 +338,21 @@ jobs:
           outcome="${{ steps.apply_on_pve.outcome }}"
           run_id="${{ steps.capture_run_id.outputs.run_id }}"
 
+          reason="$(sed -n 's/^reason=//p' "evidence/lab/${run_id}/reports/apply/summary.txt" 2>/dev/null | head -1 || true)"
+          {
+            echo "## LAB rehearsal (isolated)"
+            echo "LAB ran on a throwaway copy on vmbr99 and was destroyed afterwards. It did **not** change production."
+            echo "The PROD plan below is the real change."
+          } >>"$GITHUB_STEP_SUMMARY"
+
           if [[ "${outcome}" != "success" ]]; then
             ./scripts/lab/render_github_annotations.sh \
               --level error \
-              --title "LAB apply failed" \
-              --message "LAB apply failed. See evidence pack for details (RUN_ID=${run_id})."
+              --title "LAB rehearsal failed" \
+              --message "LAB rehearsal failed: ${reason:-see evidence pack} (RUN_ID=${run_id})."
             {
-              echo "## LAB apply failed"
+              echo "## LAB rehearsal failed"
+              echo "- Reason: ${reason:-unknown} (capacity, isolation, teardown, fingerprint or a step failure)"
               echo "- RUN_ID: \`${run_id}\`"
               echo "- Evidence dir: \`/var/lib/homelab-proxmox/artifacts/service-deploy-runs/${run_id}\`"
             } >>"$GITHUB_STEP_SUMMARY"

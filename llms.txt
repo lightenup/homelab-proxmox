@@ -20,8 +20,6 @@
 
 ## CI/CD
 - .github/workflows/ci.yml
-- .github/workflows/lxc-deploy-lab.yml
-- .github/workflows/lxc-promote-lab.yml
 - .github/workflows/lxc-promote-prod.yml
 - .github/workflows/lxc-apply-prod.yml
 - .github/workflows/lxc-lifecycle.yml
