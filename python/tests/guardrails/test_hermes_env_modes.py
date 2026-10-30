@@ -88,7 +88,8 @@ def _base_context() -> dict:
                 "name": "homeassistant",
                 "url": "http://homeassistant.example.invalid:8123/api/mcp/assist",
                 "auth": "bearer",
-                "credential_env": "HERMES_MCP_HOMEASSISTANT_KEY",
+                "credential_env": "AUXILIARY_MCP_HOMEASSISTANT_API_KEY",
+                "vault_var": "hermes_mcp_homeassistant_key",
                 "enabled": None,
             },
         ],
@@ -250,18 +251,45 @@ def test_credential_freeze_pipeline_lab_stage() -> None:
     assert _secrets_present(render_pipeline_lab_stage()) == PIPELINE_LAB_STAGE_SECRETS
 
 
+# Hermes' child-process filter (083 R-004): `_is_hermes_internal_secret` in the pinned image strips
+# AUXILIARY_*_API_KEY / _BASE_URL from every spawn. A bearer token under any other name is readable
+# by terminal commands and cron scripts (checked in the v0.21.6 container 2026-10-30:
+# HERMES_MCP_HOMEASSISTANT_KEY survived `_sanitize_subprocess_env`, AUXILIARY_MCP_..._API_KEY did not).
+_SCRUBBED_BEARER_ENV_RE = re.compile(r"AUXILIARY_[A-Z0-9_]+_API_KEY")
+
+
+def _group_vars_mcp_servers() -> list[dict]:
+    group_vars = yaml.safe_load(
+        (ROOT / "ansible" / "group_vars" / "services" / "vars.yml").read_text()
+    )
+    return group_vars["hermes_mcp_servers"]
+
+
+def test_every_bearer_mcp_token_uses_a_scrubbed_env_name() -> None:
+    bearer = [s for s in _group_vars_mcp_servers() if s.get("auth") == "bearer"]
+    assert bearer, "expected at least one bearer entry (homeassistant)"
+    for server in bearer:
+        assert _SCRUBBED_BEARER_ENV_RE.fullmatch(server["credential_env"]), (
+            f"{server['name']}: credential_env {server['credential_env']!r} is not stripped from "
+            "Hermes child processes; use AUXILIARY_MCP_<NAME>_API_KEY and set vault_var"
+        )
+
+
+def test_bearer_token_renders_under_its_env_name_from_its_vault_var() -> None:
+    rendered = render_prod()
+    assert f"AUXILIARY_MCP_HOMEASSISTANT_API_KEY={_stub('hermes_mcp_homeassistant_key')}" in rendered
+
+
 def test_homeassistant_mcp_is_gated_on_prod_in_group_vars() -> None:
     """The render tests above set homeassistant's `enabled` per mode by hand. This pins the real
     entry to the same gate, so the Home Assistant token cannot reach the LAB rig or the pipeline
     LAB stage by an edit to vars.yml alone (R-016, 2026-10-30 addendum)."""
-    group_vars = yaml.safe_load(
-        (ROOT / "ansible" / "group_vars" / "services" / "vars.yml").read_text()
-    )
-    entries = [s for s in group_vars["hermes_mcp_servers"] if s["name"] == "homeassistant"]
+    entries = [s for s in _group_vars_mcp_servers() if s["name"] == "homeassistant"]
     assert len(entries) == 1
     entry = entries[0]
     assert entry["auth"] == "bearer"
-    assert entry["credential_env"] == "HERMES_MCP_HOMEASSISTANT_KEY"
+    assert entry["credential_env"] == "AUXILIARY_MCP_HOMEASSISTANT_API_KEY"
+    assert entry["vault_var"] == "hermes_mcp_homeassistant_key"
     assert entry["url"].endswith("/api/mcp/assist"), "non-admin access needs the Assist-only path"
     assert re.fullmatch(r"\{\{\s*hermes_agent_operational\s*\|\s*bool\s*\}\}", entry["enabled"])
 

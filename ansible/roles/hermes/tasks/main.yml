@@ -221,7 +221,7 @@
         'type': 'mcp',
         'url': item.url,
         'auth_type': item.auth,
-        'key': (lookup('vars', item.credential_env | lower) if item.auth == 'bearer' and item.enabled else ''),
+        'key': (lookup('vars', item.vault_var | default(item.credential_env | lower)) if item.auth == 'bearer' and item.enabled else ''),
         'config': {'enable': item.enabled},
         'info': {
           'id': item.name | lower | regex_replace('[^a-z0-9]+', '-'),

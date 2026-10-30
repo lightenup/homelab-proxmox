@@ -461,7 +461,8 @@ Reviewed 2026-10-25 after T062–T066 landed, before any rig is brought up.
 - **Addendum 2026-10-30: the Home Assistant MCP token is PROD-only.** `hermes_mcp_servers`
   gained its first `auth: bearer` entry, `homeassistant` (HA's MCP Server at
   `/api/mcp/assist`, token of the non-admin, local-only HA user `hermes`, vault
-  `hermes_mcp_homeassistant_key`). Unlike the router keys accepted in condition 1, this
+  `hermes_mcp_homeassistant_key`, env `AUXILIARY_MCP_HOMEASSISTANT_API_KEY` so child processes
+  never inherit it; 083 R-004). Unlike the router keys accepted in condition 1, this
   credential switches things in the house, and the rig can reach `192.168.1.212` through the
   egress allowlist like PROD does. Decision: the entry is `enabled: "{{ hermes_agent_operational
   | bool }}"`, so the LAB rig and the pipeline LAB stage render neither the token (agent.env,
