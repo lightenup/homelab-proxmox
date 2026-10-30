@@ -208,6 +208,30 @@ def test_immich_archive_has_no_env() -> None:
     assert "extracted_folder }}/.env" not in drill
 
 
+def test_homeassistant_restore_drill_is_isolated_and_proves_the_restore() -> None:
+    """The HA drill restores a config with live integrations and automations. Without a network
+    a second instance cannot act on the house. It must also tell an onboarded restore from a
+    fresh boot, and always tear down (docs/runbooks/homeassistant-backup-restore.md)."""
+    compose = yaml.safe_load(
+        re.sub(r"\{\{.*?\}\}", "X", _read(
+            "ansible/roles/service_backup/templates/restore/homeassistant-compose.yml.j2"))
+    )
+    service = compose["services"]["homeassistant-restore"]
+    assert service["network_mode"] == "none"
+    assert "ports" not in service
+    assert service["container_name"] != "homeassistant"
+
+    plays = yaml.safe_load(_read("ansible/playbooks/homeassistant-restore-drill.yml"))
+    block = next(t for t in plays[0]["tasks"] if "block" in t)
+    dumped = yaml.safe_dump(block["block"])
+    assert "/api/onboarding" in dumped and "'404'" in dumped
+    always = yaml.safe_dump(block["always"])
+    assert "state: absent" in always and "homeassistant_restore_dir" in always
+
+    snapshot = _read("ansible/roles/service_backup/templates/snapshot/homeassistant.sh.j2")
+    assert '"$WORK_DIR/config"' in snapshot, "the drill reads <top>/config/ (contract C5)"
+
+
 def test_mount_parent_is_traversable_for_node_exporter() -> None:
     """FR-015: node_exporter must be able to stat the mount, so its parent is not 0700."""
     tasks = yaml.safe_load(_read("ansible/roles/service_backup/tasks/main.yml"))

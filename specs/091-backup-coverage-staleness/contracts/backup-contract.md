@@ -51,6 +51,7 @@ these is a breaking change for the alert, the restore drills or `092`.
 |--------|---------|-----------------------------|
 | immich | `playbooks/restore-drill.yml` | `<top>/dump.sql`; `.env` rendered from `roles/immich/templates/.env.j2`, not read from the archive |
 | hermes | `playbooks/hermes-restore-drill.yml`, `/usr/local/bin/restore_hermes.sh` | `<top>/open-webui/webui.db`, `<top>/agent/`, `<top>/agent-manifest.sha256` |
+| homeassistant | `playbooks/homeassistant-restore-drill.yml` (no-network second instance); real restore manual, `docs/runbooks/homeassistant-backup-restore.md` | `<top>/config/` with `configuration.yaml`, `.storage/auth`, `.storage/core.config_entries`, `home-assistant_v2.db` |
 | nextcloud, financial-scenario, jellyfin | manual, steps in the quickstart and the service runbook | data-model table |
 
 Restore compose templates live at `roles/service_backup/templates/restore/<key>-compose.yml.j2`.
