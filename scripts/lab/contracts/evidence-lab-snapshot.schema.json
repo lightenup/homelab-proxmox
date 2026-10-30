@@ -179,12 +179,12 @@
       "services": [
         {
           "service": "immich",
-          "state_path": "/var/lib/homelab-proxmox/state/services/immich",
+          "state_path": "/var/lib/homelab-proxmox/state/prod/immich",
           "terraform_module": "module.immich_lxc"
         },
         {
           "service": "jellyfin",
-          "state_path": "/var/lib/homelab-proxmox/state/services/jellyfin",
+          "state_path": "/var/lib/homelab-proxmox/state/prod/jellyfin",
           "terraform_module": "module.jellyfin_lxc"
         }
       ],

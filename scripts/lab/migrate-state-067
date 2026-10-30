@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# scripts/lab/migrate-state-067 - one-off move of Terraform state to state/prod/<svc> (067, R-012)
+#
+# Run once on pve as `ci`, with the same credentials the workflow gives pve-service-deploy.
+# For each of the 12 services, in a fixed order:
+#   1. copy the old state (symlinks resolved) to state-backup-067-<date>/<svc>/
+#   2. install it as state/prod/<svc>/terraform.tfstate (0600)
+#   3. run `pve-service-deploy plan --environment prod --service <svc>` and require plan exit 0
+# It stops at the first service that does not plan clean; services already done stay done.
+# Nothing is removed unless --remove-old-layout is given AND all 12 services planned clean.
+# Deleted again in the clean-up PR (T066).
+#
+# Usage: migrate-state-067 [--dry-run] [--remove-old-layout]
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_ROOT="${STATE_ROOT:-/var/lib/homelab-proxmox/state}"
+OLD_STATE_ROOT="${OLD_STATE_ROOT:-${STATE_ROOT}/services}"
+NAS_OLD_ROOT="${NAS_OLD_ROOT:-/mnt/nas/homelab_ci/infra_state}"
+BACKUP_ROOT="${BACKUP_ROOT:-/var/lib/homelab-proxmox/state-backup-067-$(date +%Y%m%d)}"
+DEPLOY_BIN="${DEPLOY_BIN:-${SCRIPT_DIR}/pve-service-deploy}"
+RUNS_DIR="${RUNS_DIR:-${ARTIFACT_ROOT:-/var/lib/homelab-proxmox/artifacts}/service-deploy-runs}"
+
+SERVICES=(ntfy market-model financial-scenario eurooffice llm-router jellyfin
+          homeassistant nextcloud immich hermes monitoring reverse_proxy)
+
+DRY_RUN=false
+REMOVE_OLD=false
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=true ;;
+    --remove-old-layout) REMOVE_OLD=true ;;
+    *) echo "ERROR: unknown argument '$arg'" >&2; exit 64 ;;
+  esac
+done
+
+say() { echo "[migrate-067] $*"; }
+run() { if $DRY_RUN; then say "dry-run: $*"; else "$@"; fi; }
+
+# Newest run directory for a service, created after the marker file.
+newest_run_since() {
+  local svc="$1" marker="$2" dir
+  while IFS= read -r dir; do
+    [[ "$dir" -nt "$marker" ]] && { echo "$dir"; return 0; }
+  done < <(ls -dt "${RUNS_DIR}"/prod-"${svc}"-* 2>/dev/null)
+  return 1
+}
+
+migrate_service() {
+  local svc="$1"
+  local old="${OLD_STATE_ROOT}/${svc}"
+  local dest_dir="${STATE_ROOT}/prod/${svc}"
+  local dest="${dest_dir}/terraform.tfstate"
+
+  if [[ -f "${old}/terraform.tfstate" ]]; then
+    if [[ -f "$dest" ]] && ! cmp -s "${old}/terraform.tfstate" "$dest"; then
+      say "ERROR: ${dest} exists and differs from ${old}/terraform.tfstate; not overwriting"
+      return 1
+    fi
+    run mkdir -p "${BACKUP_ROOT}/${svc}"
+    run cp -LRp "${old}/." "${BACKUP_ROOT}/${svc}/"
+    if [[ ! -f "$dest" ]]; then
+      run mkdir -p "$dest_dir"
+      run chmod 0700 "$dest_dir"
+      run install -m 0600 "${old}/terraform.tfstate" "$dest"
+    fi
+  elif [[ -f "$dest" ]]; then
+    say "${svc}: already installed at ${dest}, old state gone"
+  else
+    say "ERROR: no state for ${svc} at ${old} or ${dest}"
+    return 1
+  fi
+
+  if $DRY_RUN; then
+    say "dry-run: plan --environment prod --service ${svc}"
+    return 0
+  fi
+
+  local marker run_dir rc
+  marker="$(mktemp)"
+  touch -d "1 second ago" "$marker"
+  if ! "$DEPLOY_BIN" plan --environment prod --service "$svc"; then
+    rm -f "$marker"
+    say "ERROR: ${svc}: pve-service-deploy plan failed"
+    return 1
+  fi
+  run_dir="$(newest_run_since "$svc" "$marker")" || { rm -f "$marker"; say "ERROR: ${svc}: no run directory found"; return 1; }
+  rm -f "$marker"
+  rc="$(tr -d '\r\n' <"${run_dir}/reports/plan/exitcode.txt" 2>/dev/null || echo missing)"
+  if [[ "$rc" != "0" ]]; then
+    say "ERROR: ${svc}: plan exit code ${rc} (expected 0 = No changes); see ${run_dir}"
+    return 1
+  fi
+  say "${svc}: No changes"
+}
+
+done_count=0
+for svc in "${SERVICES[@]}"; do
+  migrate_service "$svc" || { say "stopped at ${svc}: ${done_count}/${#SERVICES[@]} done"; exit 1; }
+  done_count=$((done_count + 1))
+done
+say "${done_count}/${#SERVICES[@]} No changes"
+
+old_layout=("${OLD_STATE_ROOT}" "${NAS_OLD_ROOT}/lab" "${NAS_OLD_ROOT}/prod")
+if $REMOVE_OLD; then
+  say "removing old layout:"
+  printf '  %s\n' "${old_layout[@]}"
+  for path in "${old_layout[@]}"; do
+    run rm -rf "$path"
+  done
+else
+  say "old layout kept (re-run with --remove-old-layout to remove):"
+  printf '  %s\n' "${old_layout[@]}"
+fi

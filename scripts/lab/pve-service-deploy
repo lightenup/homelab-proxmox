@@ -35,9 +35,7 @@ PROD_CONFIRM_STRING="deploy-prod"
 
 SERVICE_SCOPE_ALLOWLIST_PATH_DEFAULT="${REPO_ROOT}/scripts/lab/service-scope-allowlist.json"
 
-# State root is resolved dynamically via lib/state.sh (respects USE_NAS_STATE and ENVIRONMENT)
-# Legacy default preserved when USE_NAS_STATE not set
-STATE_PATH_DEFAULT_ROOT="${STATE_PATH_DEFAULT_ROOT:-}"
+# State lives at ${STATE_ROOT:-/var/lib/homelab-proxmox/state}/<prod|lab>/<svc>, resolved by lib/state.sh.
 
 # Terraform working directory (repo-local). For Spec 023 hardening we prefer
 # per-service roots to avoid cross-service plans.
@@ -414,7 +412,7 @@ EOF
 
     # Snapshot is required evidence for this profile.
     # Keep failures non-fatal, but always attempt to write a schema-shaped JSON.
-    if ! write_lab_snapshot "${EVIDENCE_ROOT}/reports/lab-snapshot.json" "${ENVIRONMENT}" "${STATE_PATH_DEFAULT_ROOT}"; then
+    if ! write_lab_snapshot "${EVIDENCE_ROOT}/reports/lab-snapshot.json" "${ENVIRONMENT}"; then
         echo "WARN: snapshot generation failed" >>"${EVIDENCE_ROOT}/preflight.txt"
     fi
 }
@@ -459,35 +457,25 @@ assert_no_target_env() {
 
 ensure_state_path() {
     local service="${1:?ensure_state_path requires a service name}"
+    local state_path
+    state_path="$(get_service_state_path "${ENVIRONMENT}" "$service")" || return 1
 
-    # Use new state library if available
-    if command -v get_service_state_path >/dev/null 2>&1; then
-        local state_path
-        state_path="$(get_service_state_path "$service")" || return 1
+    (umask 077 && mkdir -p "$(dirname "$state_path")")
 
-        mkdir -p "$(dirname "$state_path")"
-
-        # Safety: do NOT implicitly seed state from repo-local terraform.tfstate.
-        # That file (if present) may represent a different environment and can cause
-        # cross-environment drift (e.g., refreshing non-existent CTIDs in LAB).
-        # If you need to migrate legacy state, opt-in explicitly.
-        if [[ "${SEED_STATE_FROM_REPO:-}" == "1" ]]; then
-            if [[ "${ENVIRONMENT:-}" != "prod" ]]; then
-                die "Refusing to seed state from repo for non-prod environment (ENVIRONMENT=${ENVIRONMENT:-unknown}). Remove SEED_STATE_FROM_REPO or switch to prod."
-            fi
-            if [[ ! -f "${state_path}" && -f "${REPO_ROOT}/terraform/terraform.tfstate" ]]; then
-                cp "${REPO_ROOT}/terraform/terraform.tfstate" "${state_path}"
-            fi
+    # Safety: do NOT implicitly seed state from repo-local terraform.tfstate.
+    # That file (if present) may represent a different environment and can cause
+    # cross-environment drift (e.g., refreshing non-existent CTIDs in LAB).
+    # If you need to migrate legacy state, opt-in explicitly.
+    if [[ "${SEED_STATE_FROM_REPO:-}" == "1" ]]; then
+        if [[ "${ENVIRONMENT:-}" != "prod" ]]; then
+            die "Refusing to seed state from repo for non-prod environment (ENVIRONMENT=${ENVIRONMENT:-unknown}). Remove SEED_STATE_FROM_REPO or switch to prod."
         fi
-
-        echo "${state_path}"
-    else
-        # Fallback to legacy behavior
-        local dir="${STATE_PATH_DEFAULT_ROOT:-/var/lib/homelab-proxmox/state/services}/${service}"
-        local state_path="${dir}/terraform.tfstate"
-        mkdir -p "${dir}"
-        echo "${state_path}"
+        if [[ ! -f "${state_path}" && -f "${REPO_ROOT}/terraform/terraform.tfstate" ]]; then
+            cp "${REPO_ROOT}/terraform/terraform.tfstate" "${state_path}"
+        fi
     fi
+
+    echo "${state_path}"
 }
 
 run_offline_verify() {

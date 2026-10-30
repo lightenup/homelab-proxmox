@@ -1,8 +1,7 @@
 """PVE config backup collects the per-service Terraform state on the host (backlog 096).
 
-Until 2026-10-28 the backup copied only the NAS infra_state and the legacy repo state, so the
-seven services whose state lives as plain directories under /var/lib/homelab-proxmox/state/services
-had no backup. These tests run the real collect_iac_artifacts() from the template.
+Since 067 every service has one production state at /var/lib/homelab-proxmox/state/prod/<svc>;
+the NAS infra_state collector is gone and lab state is never backed up. These tests run the real collect_iac_artifacts() from the template.
 """
 
 from __future__ import annotations
@@ -45,24 +44,29 @@ def _collect(tmp_path: Path, state_root: Path) -> subprocess.CompletedProcess[st
 
 
 def _state_root(tmp_path: Path) -> Path:
-    root = tmp_path / "services"
+    root = tmp_path / "prod"
     (root / "hermes").mkdir(parents=True)
     (root / "hermes/terraform.tfstate").write_text('{"version": 4, "resources": []}\n')
     (root / "hermes/terraform.tfstate.backup").write_text('{"version": 4}\n')
-    nas = tmp_path / "nas/homeassistant"
-    nas.mkdir(parents=True)
-    (nas / "terraform.tfstate").write_text('{"version": 4}\n')
-    (root / "homeassistant").symlink_to(nas)
+    (root / "ntfy").mkdir()
+    (root / "ntfy/terraform.tfstate").write_text('{"version": 4}\n')
     return root
 
 
-def test_copies_plain_state_dirs_and_skips_nas_symlinks(tmp_path: Path) -> None:
+def test_collects_every_prod_state(tmp_path: Path) -> None:
     proc = _collect(tmp_path, _state_root(tmp_path))
     assert proc.returncode == 0, proc.stderr
     local = tmp_path / "staging/iac-artifacts/local-state"
     assert (local / "hermes/terraform.tfstate").is_file()
     assert (local / "hermes/terraform.tfstate.backup").is_file()
-    assert not (local / "homeassistant").exists(), "symlinked (NAS) state is collected elsewhere"
+    assert (local / "ntfy/terraform.tfstate").is_file()
+
+
+def test_lab_state_is_not_collected_and_nas_collector_is_gone() -> None:
+    text = SCRIPT.read_text()
+    assert "infra_state" not in text
+    assert "nas-state" not in text
+    assert "state/lab" not in text
 
 
 def test_collected_state_goes_through_the_secret_scan(tmp_path: Path) -> None:
@@ -81,7 +85,7 @@ def test_missing_state_root_only_warns(tmp_path: Path) -> None:
 
 
 def test_role_wires_the_state_root_into_the_config() -> None:
-    assert 'proxmox_backup_local_state_root: "/var/lib/homelab-proxmox/state/services"' in (
+    assert 'proxmox_backup_local_state_root: "/var/lib/homelab-proxmox/state/prod"' in (
         ROLE / "defaults/main.yml"
     ).read_text()
     assert 'LOCAL_STATE_ROOT="{{ proxmox_backup_local_state_root }}"' in (

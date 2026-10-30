@@ -51,9 +51,7 @@
       tags: [lab-network]
 
     - name: Load the lab LAN-isolation table now (idempotent)
-      ansible.builtin.shell: |
-        nft delete table inet lab_isolation 2>/dev/null || true
-        nft -f /etc/nftables.d/lab-isolation.nft
+      ansible.builtin.command: nft -f /etc/nftables.d/lab-isolation.nft
       changed_when: true
       tags: [lab-network]
 

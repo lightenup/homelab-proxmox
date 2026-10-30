@@ -181,53 +181,13 @@ collect_iac_artifacts() {
   local dest="${STAGING_DIR}/iac-artifacts"
   mkdir -p "$dest"
   
-  # Collect NAS-backed state (primary source)
-  local nas_state_root="/mnt/nas/homelab_ci/infra_state"
-  if [[ -d "$nas_state_root" ]]; then
-    log_info "Collecting NAS-backed state from: $nas_state_root"
-    mkdir -p "$dest/nas-state"
-    
-    # Copy all environment state directories
-    for env_dir in "${nas_state_root}"/*; do
-      [[ -d "$env_dir" ]] || continue
-      local env_name
-      env_name="$(basename "$env_dir")"
-      
-      log_info "  Environment: $env_name"
-      mkdir -p "$dest/nas-state/${env_name}"
-      
-      # Terraform state files per service
-      for service_dir in "${env_dir}"/*; do
-        [[ -d "$service_dir" ]] || continue
-        local service_name
-        service_name="$(basename "$service_dir")"
-        
-        if [[ -f "${service_dir}/terraform.tfstate" ]]; then
-          mkdir -p "$dest/nas-state/${env_name}/${service_name}"
-          cp -a "${service_dir}/terraform.tfstate" "$dest/nas-state/${env_name}/${service_name}/" 2>/dev/null || true
-          cp -a "${service_dir}/terraform.tfstate.backup" "$dest/nas-state/${env_name}/${service_name}/" 2>/dev/null || true
-        fi
-      done
-      
-      # Ansible inventory
-      local inventory_file="${env_dir}/ansible/inventories/generated/hosts.yml"
-      if [[ -f "$inventory_file" ]]; then
-        mkdir -p "$dest/nas-state/${env_name}/ansible/inventories/generated"
-        cp -a "$inventory_file" "$dest/nas-state/${env_name}/ansible/inventories/generated/"
-      fi
-    done
-  else
-    log_warning "NAS state root not found: $nas_state_root (NFS mount issue?)"
-  fi
-
-  # Per-service state on this host's disk (backlog 096). Symlinked entries point into the NAS
-  # infra_state collected above, so only plain directories are copied here.
-  local local_state_root="${LOCAL_STATE_ROOT:-/var/lib/homelab-proxmox/state/services}"
+  # Production Terraform state on this host's disk (067: state/prod/<svc>)
+  local local_state_root="${LOCAL_STATE_ROOT:-/var/lib/homelab-proxmox/state/prod}"
   if [[ -d "$local_state_root" ]]; then
     log_info "Collecting local Terraform state from: $local_state_root"
     local state_dir state_service state_file
     for state_dir in "${local_state_root}"/*; do
-      [[ -d "$state_dir" && ! -L "$state_dir" ]] || continue
+      [[ -d "$state_dir" ]] || continue
       state_service="$(basename "$state_dir")"
       for state_file in "${state_dir}"/terraform.tfstate*; do
         [[ -f "$state_file" ]] || continue

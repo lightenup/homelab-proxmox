@@ -1038,16 +1038,14 @@ rebuild_phase_services() {
         return 1
     fi
 
-    # Enable NAS state for laptop execution
-    export USE_NAS_STATE=true
     export ENVIRONMENT="${REBUILD_ENVIRONMENT}"
 
-    # Verify state access before starting
-    if ! verify_state_access; then
-        record_check "SRV-003" "State storage accessible" "blocker" "PASS" "FAIL" "Cannot write to NAS state: $(resolve_state_root 2>&1)" "reports/services"
+    # Verify state access before starting (state is local to pve, state/<env>/<svc>)
+    if ! verify_state_access "${ENVIRONMENT}"; then
+        record_check "SRV-003" "State storage accessible" "blocker" "PASS" "FAIL" "Cannot write to local state: $(resolve_state_root "${ENVIRONMENT}" 2>&1)" "reports/services"
         return 1
     fi
-    record_check "SRV-003" "State storage accessible" "low" "PASS" "PASS" "NAS state verified: $(resolve_state_root)" "reports/services"
+    record_check "SRV-003" "State storage accessible" "low" "PASS" "PASS" "Local state verified: $(resolve_state_root "${ENVIRONMENT}")" "reports/services"
 
     # Load Proxmox API credentials for Terraform provider
     # These must be set by operator before running rebuild with services phase
@@ -1095,7 +1093,7 @@ rebuild_phase_services() {
 
         # Get state file path using state library
         local state_file
-        if ! state_file="$(get_service_state_path "$service")"; then
+        if ! state_file="$(get_service_state_path "${ENVIRONMENT}" "$service")"; then
             record_check "$check_id" "Service ${service} state path" "high" "PASS" "FAIL" "State path resolution failed" "reports/services/${service}.log"
             failed=1
             continue

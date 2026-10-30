@@ -69,6 +69,12 @@ jq . <evidence>/reports/lab/isolation.json     # every LAN target ok:true (unrea
 During a run, from `pve`, also run `sudo pct exec <lab vmid> -- timeout 3 bash -c '</dev/tcp/192.168.1.216/80'`.
 It must fail.
 
+**Observed run (T007, 2026-10-30)**: operator ran `lab_setup.yml --tags lab-network -k`
+(`ok=6 changed=5 failed=0`). `nft list table inet lab_isolation` showed the intended rules, each
+chain **twice** (PR A loaded the file with `nft -f`, which appends). Fixed in PR B: the file now
+starts with `table …` / `delete table …` so a load replaces the table. Re-run the same command
+once after PR B merges and check each rule appears once.
+
 ## 4. Laptop parity (US4, SC-008)
 
 From the laptop, run the same `pve-service-deploy apply --environment lab --service ntfy` over SSH

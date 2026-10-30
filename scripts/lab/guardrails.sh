@@ -12,15 +12,8 @@ SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o Ch
 ARTIFACT_ROOT="/var/lib/homelab-proxmox/artifacts"
 VAULT_ROOT="/var/lib/homelab-proxmox/vault"
 
-# State root: use NAS if enabled, otherwise legacy path
-if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
-    # Source state library for dynamic resolution
-    # shellcheck source=lib/state.sh
-    source "${LIB_DIR}/state.sh" 2>/dev/null || true
-    STATE_ROOT="$(ENVIRONMENT="${ENVIRONMENT:-lab}" resolve_state_root 2>/dev/null || echo '/var/lib/homelab-proxmox/state')"
-else
-    STATE_ROOT="/var/lib/homelab-proxmox/state"
-fi
+# State root: production state per service lives under state/prod (067).
+STATE_ROOT="${STATE_ROOT:-/var/lib/homelab-proxmox/state}"
 
 TFVARS_ROOT="/var/lib/homelab-proxmox/tfvars"
 
@@ -62,12 +55,12 @@ ensure_ci_artifact_root() {
     if is_local_proxmox_target; then
         echo "Ensuring artifact root ${ARTIFACT_ROOT} locally (PROXMOX_HOST=${PROXMOX_HOST})" >&2
 
-        if ! sudo -n mkdir -p "${ARTIFACT_ROOT}" "${VAULT_ROOT}" "${STATE_ROOT}/services" "${TFVARS_ROOT}"; then
+        if ! sudo -n mkdir -p "${ARTIFACT_ROOT}" "${VAULT_ROOT}" "${STATE_ROOT}/prod" "${TFVARS_ROOT}"; then
             echo "Failed to create ${ARTIFACT_ROOT} / ${VAULT_ROOT}" >&2
             return 1
         fi
 
-        if ! sudo -n chown "${SSH_USER}:${SSH_USER}" "${ARTIFACT_ROOT}" "${VAULT_ROOT}" "${STATE_ROOT}" "${STATE_ROOT}/services" "${TFVARS_ROOT}"; then
+        if ! sudo -n chown "${SSH_USER}:${SSH_USER}" "${ARTIFACT_ROOT}" "${VAULT_ROOT}" "${STATE_ROOT}" "${STATE_ROOT}/prod" "${TFVARS_ROOT}"; then
             echo "Failed to chown ${ARTIFACT_ROOT} / ${VAULT_ROOT} to ${SSH_USER}" >&2
             return 1
         fi
@@ -77,7 +70,7 @@ ensure_ci_artifact_root() {
             return 1
         fi
 
-        if ! sudo -n chmod 700 "${STATE_ROOT}" "${STATE_ROOT}/services" "${TFVARS_ROOT}"; then
+        if ! sudo -n chmod 700 "${STATE_ROOT}" "${STATE_ROOT}/prod" "${TFVARS_ROOT}"; then
             echo "Failed to chmod state/tfvars roots" >&2
             return 1
         fi
@@ -86,7 +79,7 @@ ensure_ci_artifact_root() {
 
         echo "Ensuring artifact root ${ARTIFACT_ROOT} on ${ssh_target}" >&2
 
-        if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p '${ARTIFACT_ROOT}' '${VAULT_ROOT}' '${STATE_ROOT}/services' '${TFVARS_ROOT}' && sudo -n chown '${SSH_USER}:${SSH_USER}' '${ARTIFACT_ROOT}' '${VAULT_ROOT}' '${STATE_ROOT}' '${STATE_ROOT}/services' '${TFVARS_ROOT}' && sudo -n chmod 700 '${VAULT_ROOT}' '${STATE_ROOT}' '${STATE_ROOT}/services' '${TFVARS_ROOT}'"; then
+        if ! ssh ${SSH_OPTS} "${ssh_target}" "sudo -n mkdir -p '${ARTIFACT_ROOT}' '${VAULT_ROOT}' '${STATE_ROOT}/prod' '${TFVARS_ROOT}' && sudo -n chown '${SSH_USER}:${SSH_USER}' '${ARTIFACT_ROOT}' '${VAULT_ROOT}' '${STATE_ROOT}' '${STATE_ROOT}/prod' '${TFVARS_ROOT}' && sudo -n chmod 700 '${VAULT_ROOT}' '${STATE_ROOT}' '${STATE_ROOT}/prod' '${TFVARS_ROOT}'"; then
             echo "Failed to ensure artifact root at ${ARTIFACT_ROOT}" >&2
             return 1
         fi
