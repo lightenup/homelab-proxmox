@@ -278,7 +278,8 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
 - **FR-018**: The promotion workflow (LAB rehearsal, then the approved PROD stage) MUST be the only
   pipeline entry point for deploying a service. The standalone LAB workflows ("LXC Deploy (LAB)" and
   "LXC Promote (LAB)") MUST be removed, along with every reference to them: other workflows,
-  documentation, runbooks and the agent guide. The pipeline's job names and the operator
+  documentation, runbooks and the agent guide. Historical feature specs (`specs/0NN-*/`) are records
+  of past work and keep their references. The pipeline's job names and the operator
   documentation MUST describe the new behaviour: LAB is an isolated rehearsal and PROD is the real
   deployment. The 2026-10-28 warnings that "a LAB apply changes production" are replaced.
 
@@ -301,7 +302,8 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
 
 - **FR-021**: Every LAB run MUST record a fingerprint of production before the lab copy is created
   and again after it is removed. The fingerprint covers a checksum of every production state, and
-  the production containers' IDs, names, addresses and configuration. Any difference MUST fail the
+  the production containers' IDs, names, addresses, configuration and running workload identity
+  (as defined in SC-001). Any difference MUST fail the
   run, even if the lab copy itself passed. Both fingerprints and the difference MUST be kept in the
   run's evidence, so a failed run shows what changed. A failure here triggers the PROD stage's
   existing refusal to proceed after a failed LAB stage.
@@ -327,7 +329,9 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
 
 - **SC-001**: For each of the 12 services, a LAB run leaves production unchanged. Every production
   state, the production container list and the service's production configuration are identical
-  before and after the run. This is checked automatically by every LAB run (FR-021), not only once
+  before and after the run. "Production configuration" means each production container's Proxmox
+  configuration plus the identity of the workload running in it (its application containers),
+  so a redeploy or restart inside a production container counts as a change. This is checked automatically by every LAB run (FR-021), not only once
   at acceptance, and a deliberately injected production change during a test run makes that run
   fail.
 - **SC-002**: After any LAB run, passed, failed or aborted, no lab copy and no scratch storage

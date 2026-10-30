@@ -28,7 +28,8 @@ override exists for tests only.
 | 5 | Create scratch dirs for the service's mounts | `mkdir`/`chown` fails | `reports/lab/scratch.json` |
 | 6 | `terraform plan` with `-state=state/lab/<svc>/…` | plan error; any resource off `vmbr99`; guards (CT conflicts, bind-mount policy for lab, scope) deny | existing plan reports |
 | 7 | Capacity check: `MemAvailable − memory ≥ 6144 MiB` | below margin (message gives both figures) | `reports/lab/capacity.json` |
-| 8 | `terraform apply` → lab copy | apply error | existing apply reports, `reports/lab/copy.json` |
+| 8 | `terraform apply` → lab copy (after-apply `backup_tfstate.sh` is skipped for lab) | apply error | existing apply reports, `reports/lab/copy.json` |
+| 8b | Inventory guard: every `ansible_host` in the layered lab inventory is in `10.99.0.0/24` | any host outside it | `reports/lab/inventory-guard.txt` |
 | 9 | Ansible: `-i inventories/lab/hosts.yml -i inventories/generated/hosts.yml -e @inventories/lab/lab-overrides.yml -e deploy_environment=lab` | playbook fails | existing |
 | 10 | Isolation probe from inside the lab copy (`pct exec`) | any production target reachable, or the internet unreachable | `reports/lab/isolation.json` |
 | 11 | Health check at the lab address (`healthcheck.py`, lab profile) | unhealthy after the existing retry window | `reports/healthcheck/` |
@@ -58,3 +59,4 @@ refused.
 - `bind-mount policy (lab): <volume> is not under /var/lib/homelab-proxmox/lab-scratch/`
 - `production changed during LAB run; see reports/lab/fingerprint.diff.txt`
 - `lab isolation broken: <ip>:<port> reachable from lab copy`
+- `lab inventory resolves <host> to <ip>, outside 10.99.0.0/24`

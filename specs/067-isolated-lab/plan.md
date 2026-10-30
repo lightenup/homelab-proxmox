@@ -75,7 +75,7 @@ in `scripts/lab/`, 12 service roots (one variable each), about 8 Ansible roles/p
 | IV. Code Economy | No new module or role. One new variable per root (`hostname_prefix`, two consumers: lab and prod). New files only where separation needs them: `lib/fingerprint.sh`, `state-drift-check`, a one-off `migrate-state-067` deleted after use, and `lab-overrides.yml`. Removes 2 workflows, 3 lab tfvars files, `USE_NAS_STATE` and the NAS state tree, `migrate-state-to-nas.sh` and 10 combined-root modules. Net code should shrink | ✅ |
 | V. Dual-Provisioning Parity | the lab path stays in `pve-service-deploy`, with the same CLI from the laptop over SSH. Host-only pieces (nftables, timer) are documented with the laptop equivalent (R-014) | ✅ |
 | Token tiers | Tier 1 for Terraform plan, apply and destroy. Tier 2 (`sudo pct`, `mkdir`, `chown`) for scratch dirs, teardown fallback and probes. Tier 3 unused | ✅ |
-| Tier-2 enforcement text ("rejects host paths outside `/mnt/nas/`") | lab uses a **narrower** rule: only `lab-scratch/`, and `/mnt/nas/` denied. The text needs a one-line amendment → Complexity Tracking | ⚠️ justified |
+| Tier-2 enforcement text ("rejects host paths outside `/mnt/nas/`") | lab uses a **narrower** rule: only `lab-scratch/`, and `/mnt/nas/` denied. The text is amended in Phase 2 (before the lab path's code) → Complexity Tracking | ⚠️ justified, amended first |
 | State Management (local on PVE, backed up to Synology) | today's layout breaks it (5 states on the NAS). After migration it complies fully | ✅ (improves) |
 | CI/CD: no destructive automation without barriers | automatic teardown destroys containers. Barriers: the destroy guard (lab state may only hold `lab-*` on `vmbr99` in `10.99.0.200–254`), the three-attribute sweep rule, `pct` only (never `qm`), and the fingerprint proving production unchanged | ✅ |
 | Networking: IPs defined centrally | lab IPs are derived from `service_ips` by rule, not written out. `lab-overrides.yml` repeats the `*_ip` keys with lab values, and a test enforces full coverage | ✅ |
@@ -158,7 +158,9 @@ one-off migration, each required by a single FR (FR-014, FR-021, FR-013).
 
 Ordered so that production is never in a half-migrated state:
 
-1. **Isolation first** (no behaviour change): nftables table, isolation probe, lab-rig check (R-004).
+1. **Isolation first** (no behaviour change): nftables table, isolation probe, lab-rig check (R-004),
+   and the constitution's Tier-2 enforcement amendment. The amendment lands before any code
+   allows a lab bind-mount prefix (analysis D1).
 2. **State migration** (supervised, one session): new `state.sh` layout, `migrate-state-067`, backup
    paths, combined-root clean-up (R-003, R-012). The pipeline still deploys prod as before, now
    from `state/prod`.
@@ -168,7 +170,7 @@ Ordered so that production is never in a half-migrated state:
 4. **Pipeline**: `lxc-promote-prod` wording and timeout, lifecycle lab target, delete the two
    workflows and their references (R-013).
 5. **Drift check**: script, timer, metrics, alerts (R-008).
-6. **Docs and clean-up**: runbooks, AGENTS/README, constitution amendment, delete
+6. **Docs and clean-up**: runbooks, AGENTS/README, delete
    `migrate-state-067`.
 
 Every slice touching `scripts/lab/**` or `.specify/**` needs the `allow-protected-path-changes`

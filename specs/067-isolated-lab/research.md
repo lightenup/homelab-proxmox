@@ -65,7 +65,11 @@ owns tfvars provisioning (`lib/tfvars.sh`), and Ansible does not run before Terr
 └── lab/<svc>/terraform.tfstate    # exists only during a LAB run; removed after teardown
 ```
 
-Both live on the host's local disk. `lib/state.sh` resolves `state/<env>/<svc>`. The
+Both live on the host's local disk. The existing after-apply state backup
+(`scripts/backup_tfstate.sh`, called by `pve-service-deploy` around line 1493, the constitution's
+"backed up after successful apply") keeps running for prod against `state/prod/<svc>`. It is
+**skipped** for lab, which would otherwise copy throwaway lab states to the NAS (analysis C2).
+`lib/state.sh` resolves `state/<env>/<svc>`. The
 `USE_NAS_STATE` branch, the `state/services` legacy root, the 5 symlinks and the whole
 `/mnt/nas/homelab_ci/infra_state/{lab,prod}` tree are removed after migration (R-012). The
 `proxmox_backup` role collects `state/prod/**`. Its NAS `infra_state` collector and its
@@ -220,13 +224,26 @@ records:
 - for every container that is **not** a lab copy (R-006 match): VMID, status, and the `sha256` of
   `pct config <vmid>` with the volatile `lock:` line removed, plus the hostname and `net*` lines in
   clear text;
-- `sha256` of `prod.tfvars`.
+- `sha256` of `prod.tfvars`;
+- for every running production container, its workload identity: the full IDs and created times
+  of its application containers (`pct exec <vmid> -- docker ps -a --no-trunc --format
+  '{{.ID}} {{.CreatedAt}} {{.Names}}'`, sorted). Containers without Docker record `none`. A
+  redeploy, recreate or restart inside production changes this line, while `pct config` would
+  not.
 
 It is taken after the pre-run sweep and before the lab plan (`reports/lab/fingerprint.before.json`),
 and again after teardown (`fingerprint.after.json`). Any difference writes `fingerprint.diff.txt`
 and fails the run with `reason=production changed during LAB run`, which sets `lab_gate_failed`.
 
-**Rationale**: It covers exactly what FR-021 lists. `pct config` is static unless something changes
+**Why the workload identity is needed (analysis C1)**: the isolation only blocks traffic *from*
+`vmbr99`. Ansible runs *on* `pve`, which can reach every production container. A lab play that
+resolved a production address (a missed override, `delegate_to`, inventory layering) would change
+production inside the container, and the Proxmox-level fingerprint would not see it. Two layers
+close this. First, a pre-play guard refuses any host in the layered lab inventory whose
+`ansible_host` is outside `10.99.0.0/24` (R-010). Second, the workload identity in the fingerprint
+catches anything the guard misses.
+
+**Rationale**: It covers exactly what FR-021 and SC-001 list. `pct config` is static unless something changes
 the container, so it does not flap. Status catches a stop or restart. A tfstate checksum catches
 any write to production state, including a `serial` bump from a refresh.
 
@@ -247,6 +264,10 @@ a refresh could itself write state.
   a config that points at `{{ llm_router_ip }}`, then targets the lab network, never production.
   A test asserts that every `*_ip` in `group_vars/services/vars.yml` has a lab override, so a new
   service cannot forget one.
+- **Inventory guard (analysis C1)**: before the bootstrap and main plays, the script runs
+  `ansible-inventory --list` on the layered lab inventory with the overrides, and refuses if any
+  host's `ansible_host` is outside `10.99.0.0/24`, with the message
+  `lab inventory resolves <host> to <ip>, outside 10.99.0.0/24`.
 - `-e deploy_environment=lab` stays on the command line too, because existing gates read it
   (`lxc_base`, `alloy`, `monitoring_stack`, `hermes_agent_operational`).
 - New gates with the existing idiom `(deploy_environment | default('prod')) != 'lab'`:
@@ -279,6 +300,11 @@ while one overrides file covers every reference.
 | monitoring | Alertmanager → email + Pushover | Only the `null` receiver, and every route goes to it | `alertmanager.yml.j2` on `deploy_environment` |
 | hermes | ntfy push, heartbeat, Home Assistant MCP | Already PROD-only via `hermes_agent_operational` (083/095) | none new |
 | others | none that act on the internet with prod credentials | unchanged | none |
+
+**Unverified at plan time (analysis C3)**: "others: none" is based on reading the roles, not on
+an audit of the vault. Implementation classifies **every** vault key matching `*_token`, `*_key`,
+`*_secret`, `*_password` (and `*_api_*`) as `internet`, `lan` or `internal`, and lists the result
+in this section. Any `internet` key gets a row in the table above.
 
 A guardrail test lists the vault variables that are internet credentials (`domeneshop_*`,
 `tailscale_*`, `pushover_*`, `smtp_*`, provider API keys). It fails if a template that uses one is

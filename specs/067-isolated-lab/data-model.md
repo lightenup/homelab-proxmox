@@ -79,12 +79,17 @@ The list is in [contracts/lab-network.md](./contracts/lab-network.md). **It is e
   "tfvars_prod": "sha256:…",
   "containers": [
     {"vmid": 109, "hostname": "ntfy", "status": "running",
-     "net": ["net0: name=eth0,bridge=vmbr0,…,ip=192.168.1.222/24"], "config_sha256": "…"}
+     "net": ["net0: name=eth0,bridge=vmbr0,…,ip=192.168.1.222/24"], "config_sha256": "…",
+     "workload": ["<docker id> <created> ntfy"]}
   ]
 }
 ```
 
-Comparison: `states`, `tfvars_prod` and the `containers` set (by VMID) must be equal. The
+`workload` is the sorted `docker ps -a --no-trunc` identity of the application containers
+(`["none"]` without Docker; `["unreadable"]` if `pct exec` fails, which also fails the comparison).
+
+Comparison: `states`, `tfvars_prod` and the `containers` set (by VMID, including `workload`) must
+be equal. The
 difference is written to `fingerprint.diff.txt`.
 
 ## LAB run result
