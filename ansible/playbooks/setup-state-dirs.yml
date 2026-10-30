@@ -1,8 +1,7 @@
 ---
-# Create NAS-backed state directory structure
-# Task: D-001 from specs/033-idempotent-rebuild/plan-delta-state-storage.md
+# Create the local Terraform state and lab-scratch directories on the PVE host (067)
 
-- name: Setup Proxmox state directories on NAS
+- name: Setup Proxmox state directories
   hosts: proxmox_hosts
   become: true
   roles:

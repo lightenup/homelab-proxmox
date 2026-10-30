@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # scripts/lab/lib/state.sh
-# State path resolution for NAS-backed storage
-# Task: D-004 from specs/033-idempotent-rebuild/plan-delta-state-storage.md
+# Terraform state paths on the PVE host's local disk (067, constitution State Management).
+#
+#   <STATE_ROOT>/prod/<svc>/terraform.tfstate   the one production state per service
+#   <STATE_ROOT>/lab/<svc>/terraform.tfstate    exists only while a lab run is in flight
+#
+# STATE_ROOT defaults to /var/lib/homelab-proxmox/state. The prod tree is backed up to Synology
+# by the PVE config backup; the lab tree never is.
 
-# Resolve state root based on platform and environment
+# Print the state root for an environment ("lab" or "prod").
 resolve_state_root() {
-  local env="${ENVIRONMENT:?ENVIRONMENT must be set}"
+  local env="${1:?resolve_state_root requires an environment}"
 
-  # Validate environment
   case "$env" in
     lab|prod) ;;
     *)
@@ -16,83 +20,35 @@ resolve_state_root() {
       ;;
   esac
 
-  # Platform-specific NAS mount points
-  local nas_base
-  if [[ "$(uname)" == "Darwin" ]]; then
-    nas_base="/Volumes/nas/homelab_ci"
-  else
-    nas_base="/mnt/nas/homelab_ci"
-  fi
-
-  # Check if NAS-backed state enabled
-  if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
-    local state_root="${nas_base}/infra_state/${env}"
-
-    # Verify NAS mount accessible
-    if [[ ! -d "$nas_base" ]]; then
-      echo "ERROR: NAS mount not found at $nas_base" >&2
-      echo "  On PVE: Ensure /mnt/nas/homelab_ci mounted (ansible/roles/proxmox_mounts)" >&2
-      echo "  On macOS: Run setup from docs/runbooks/laptop-nfs-setup.md" >&2
-      return 1
-    fi
-
-    # Verify state root exists
-    if [[ ! -d "$state_root" ]]; then
-      echo "ERROR: State root not found at $state_root" >&2
-      echo "  Run: ansible-playbook ansible/playbooks/setup-state-dirs.yml" >&2
-      return 1
-    fi
-
-    echo "$state_root"
-  else
-    # Legacy path (existing behavior)
-    echo "/var/lib/homelab-proxmox/state/services"
-  fi
+  echo "${STATE_ROOT:-/var/lib/homelab-proxmox/state}/${env}"
 }
 
-# Get state file path for a specific service
+# Print the state file path for a service in an environment.
 get_service_state_path() {
-  local service="${1:?Service name required}"
+  local env="${1:?Environment required}"
+  local service="${2:?Service name required}"
   local state_root
 
-  state_root="$(resolve_state_root)" || return 1
-
-  if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
-    # NAS: <root>/<service>/terraform.tfstate
-    echo "${state_root}/${service}/terraform.tfstate"
-  else
-    # Legacy: <root>/<service>/terraform.tfstate
-    echo "${state_root}/${service}/terraform.tfstate"
-  fi
+  state_root="$(resolve_state_root "$env")" || return 1
+  echo "${state_root}/${service}/terraform.tfstate"
 }
 
-# Get Ansible inventory path for environment
+# Generated Ansible inventory path (repo-local).
 get_inventory_path() {
-  local env="${ENVIRONMENT:?ENVIRONMENT must be set}"
-  local state_root
-
-  state_root="$(resolve_state_root)" || return 1
-
-  if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
-    # NAS: <root>/ansible/inventories/generated/hosts.yml
-    echo "${state_root}/ansible/inventories/generated/hosts.yml"
-  else
-    # Legacy: Repo-local generated inventory
-    local repo_root="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")}"
-    echo "${repo_root}/ansible/inventories/generated/hosts.yml"
-  fi
+  local repo_root="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")}"
+  echo "${repo_root}/ansible/inventories/generated/hosts.yml"
 }
 
-# Verify state path accessible (fail-fast)
+# Verify the state root is writable (fail-fast).
 verify_state_access() {
+  local env="${1:?verify_state_access requires an environment}"
   local state_root
-  state_root="$(resolve_state_root)" || return 1
+  state_root="$(resolve_state_root "$env")" || return 1
 
-  # Test write access
   local test_file="${state_root}/.state-access-test-$$"
   if ! touch "$test_file" 2>/dev/null; then
     echo "ERROR: Cannot write to state root: $state_root" >&2
-    echo "  Check NFS mount permissions" >&2
+    echo "  State is local to the PVE host; run this on pve as ci (setup: ansible/playbooks/setup-state-dirs.yml)" >&2
     return 1
   fi
   rm -f "$test_file"

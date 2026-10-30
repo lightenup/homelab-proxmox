@@ -1,25 +1,21 @@
 #!/usr/bin/env bash
 # scripts/lab/validate-existing-state.sh
-# Purpose: Document current Terraform state files before migration to NAS
-# Task: D-003 from specs/033-idempotent-rebuild/plan-delta-state-storage.md
-# Usage: Run on PVE host to inventory existing state files
+# Purpose: Inventory the production Terraform state files (state/prod/<svc>, 067)
+# Usage: Run on PVE host to list existing state files
 
 set -euo pipefail
 
-LEGACY_STATE_ROOT="/var/lib/homelab-proxmox/state/services"
+STATE_ROOT="${STATE_ROOT:-/var/lib/homelab-proxmox/state}/prod"
 SERVICES=(
-  "immich"
-  "monitoring"
-  "reverse_proxy"
-  "homeassistant"
-  "jellyfin"
+  "ntfy" "market-model" "financial-scenario" "eurooffice" "llm-router" "jellyfin"
+  "homeassistant" "nextcloud" "immich" "hermes" "monitoring" "reverse_proxy"
 )
 
 echo "======================================"
 echo "Existing Terraform State Inventory"
 echo "======================================"
 echo ""
-echo "Legacy state root: ${LEGACY_STATE_ROOT}"
+echo "State root: ${STATE_ROOT}"
 echo "Survey date: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
@@ -31,7 +27,7 @@ echo "Scanning for state files"
 echo "----------------------------------------"
 
 for svc in "${SERVICES[@]}"; do
-  state_file="${LEGACY_STATE_ROOT}/${svc}/terraform.tfstate"
+  state_file="${STATE_ROOT}/${svc}/terraform.tfstate"
 
   if [[ -f "${state_file}" ]]; then
     # Get file size (cross-platform: stat -c for Linux, stat -f for macOS)
@@ -73,13 +69,6 @@ echo "Total state files found: ${total_found}"
 echo "Total state files missing: ${total_missing}"
 echo ""
 
-if [[ ${total_found} -gt 0 ]]; then
-  echo "⚠️  Migration Required:"
-  echo "   These state files should be migrated to NAS before switching to USE_NAS_STATE=true"
-  echo "   Use: scripts/lab/migrate-state-to-nas.sh (Task D-008)"
-  echo ""
-fi
-
 if [[ ${total_missing} -eq ${#SERVICES[@]} ]]; then
   echo "✓ No state files found - fresh infrastructure (no migration needed)"
   echo ""
@@ -87,7 +76,7 @@ fi
 
 # Exit with status indicating if any state files exist
 if [[ ${total_found} -gt 0 ]]; then
-  exit 0  # State files exist (migration needed)
+  exit 0  # State files exist
 else
   exit 1  # No state files (fresh start)
 fi

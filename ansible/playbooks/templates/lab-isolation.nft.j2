@@ -1,6 +1,9 @@
 # {{ ansible_managed }}
 # Isolates the vmbr99 lab bridge from the production LAN (067, contracts/lab-network.md).
 # Loaded on vmbr99 post-up, deleted on post-down. Exceptions are source-scoped to the lab-rig VMs.
+# The two leading lines make `nft -f` replace the table instead of appending to it.
+table inet lab_isolation
+delete table inet lab_isolation
 table inet lab_isolation {
   set lan_private { type ipv4_addr; flags interval;
     elements = { 10.0.0.0/8, 100.64.0.0/10, 172.16.0.0/12, 192.168.0.0/16 } }

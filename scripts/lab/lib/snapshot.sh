@@ -138,9 +138,9 @@ write_lab_snapshot() {
 
     # Use state library if available
     if command -v resolve_state_root >/dev/null 2>&1; then
-        state_root="$(ENVIRONMENT="${environment}" resolve_state_root 2>/dev/null)" || state_root="${3:-/var/lib/homelab-proxmox/state/services}"
+        state_root="$(resolve_state_root "${environment}" 2>/dev/null)" || state_root="${3:-/var/lib/homelab-proxmox/state/${environment}}"
     else
-        state_root="${3:-/var/lib/homelab-proxmox/state/services}"
+        state_root="${3:-/var/lib/homelab-proxmox/state/${environment}}"
     fi
 
     local generated_at
