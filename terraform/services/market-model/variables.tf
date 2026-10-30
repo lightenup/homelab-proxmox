@@ -63,3 +63,9 @@ variable "searchdomain" {
   description = "LXC DNS search domain (e.g. 'home.arpa'). If null, provider defaults apply."
   default     = null
 }
+
+variable "hostname_prefix" {
+  description = "Prefix for the container hostname. Empty in prod; \"lab-\" for an isolated lab copy (067)."
+  type        = string
+  default     = ""
+}

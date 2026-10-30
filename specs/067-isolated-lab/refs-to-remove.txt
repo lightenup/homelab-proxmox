@@ -1,0 +1,171 @@
+.github/workflows/lab-integration-tests.yml:51:                  echo "Hint: patterns exist in .github/workflows/lxc-deploy-lab.yml and scripts/lab/pve-service-deploy."
+.github/workflows/lxc-promote-lab.yml:6:# ("The LAB stage changes production").
+.github/workflows/lxc-promote-lab.yml:235:    name: Apply (LAB, changes prod)
+.github/workflows/lxc-promote-lab.yml:239:      group: lxc-promote-lab-${{ github.event.inputs.service }}
+.github/workflows/lxc-deploy-lab.yml:6:# ("The LAB stage changes production").
+.github/workflows/lxc-deploy-lab.yml:197:    name: Apply (LAB, changes prod)
+.github/workflows/lxc-deploy-lab.yml:204:      group: lxc-deploy-lab-${{ github.event.inputs.service }}
+.github/workflows/lxc-promote-prod.yml:196:    name: Apply (LAB, changes prod)
+scripts/lab/validate-existing-state.sh:9:LEGACY_STATE_ROOT="/var/lib/homelab-proxmox/state/services"
+scripts/lab/validate-existing-state.sh:78:  echo "   These state files should be migrated to NAS before switching to USE_NAS_STATE=true"
+scripts/lab/migrate-state-to-nas.sh:19:LEGACY_ROOT="/var/lib/homelab-proxmox/state/services"
+scripts/lab/migrate-state-to-nas.sh:20:NAS_ROOT="/mnt/nas/homelab_ci/infra_state/${ENVIRONMENT}"
+scripts/lab/migrate-state-to-nas.sh:136:  echo "     USE_NAS_STATE=true ENVIRONMENT=${ENVIRONMENT} bash -c 'source scripts/lab/lib/state.sh && resolve_state_root'"
+scripts/lab/guardrails.sh:16:if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
+scripts/lab/pve-service-deploy:38:# State root is resolved dynamically via lib/state.sh (respects USE_NAS_STATE and ENVIRONMENT)
+scripts/lab/pve-service-deploy:39:# Legacy default preserved when USE_NAS_STATE not set
+scripts/lab/pve-service-deploy:486:        local dir="${STATE_PATH_DEFAULT_ROOT:-/var/lib/homelab-proxmox/state/services}/${service}"
+scripts/lab/fixtures/evidence-packs/service-deploy-valid/reports/lab-tfvars/validation.json:4:  "rendered_path": "/var/lib/homelab-proxmox/tfvars/lab.tfvars",
+scripts/lab/fixtures/evidence-packs/service-deploy-valid/reports/lab-tfvars/provisioning.txt:3:rendered_path=/var/lib/homelab-proxmox/tfvars/lab.tfvars
+scripts/lab/lib/state.sh:28:  if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
+scripts/lab/lib/state.sh:29:    local state_root="${nas_base}/infra_state/${env}"
+scripts/lab/lib/state.sh:49:    echo "/var/lib/homelab-proxmox/state/services"
+scripts/lab/lib/state.sh:60:  if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
+scripts/lab/lib/state.sh:76:  if [[ "${USE_NAS_STATE:-}" == "true" ]]; then
+scripts/lifecycle/remove_checks.py:205:        env_paths.append(terraform_root / "environments" / "lab.tfvars")
+scripts/lab/lib/rebuild.sh:1042:    export USE_NAS_STATE=true
+scripts/lab/contracts/evidence-lab-snapshot.schema.json:182:          "state_path": "/var/lib/homelab-proxmox/state/services/immich",
+scripts/lab/contracts/evidence-lab-snapshot.schema.json:187:          "state_path": "/var/lib/homelab-proxmox/state/services/jellyfin",
+scripts/lab/profiles.d/service-deploy.json:63:      "path": "reports/lab-tfvars/lab.tfvars.sha256",
+scripts/lab/lib/snapshot.sh:141:        state_root="$(ENVIRONMENT="${environment}" resolve_state_root 2>/dev/null)" || state_root="${3:-/var/lib/homelab-proxmox/state/services}"
+scripts/lab/lib/snapshot.sh:143:        state_root="${3:-/var/lib/homelab-proxmox/state/services}"
+ansible/roles/proxmox_state_dirs/tasks/main.yml:13:- name: Create infra_state root directory
+ansible/roles/proxmox_state_dirs/tasks/main.yml:15:    path: /mnt/nas/homelab_ci/infra_state
+ansible/roles/proxmox_state_dirs/tasks/main.yml:21:    path: "/mnt/nas/homelab_ci/infra_state/{{ item }}"
+ansible/roles/proxmox_state_dirs/tasks/main.yml:30:    path: "/mnt/nas/homelab_ci/infra_state/lab/{{ item }}"
+ansible/roles/proxmox_state_dirs/tasks/main.yml:42:    path: "/mnt/nas/homelab_ci/infra_state/prod/{{ item }}"
+ansible/roles/proxmox_state_dirs/tasks/main.yml:52:    path: /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated
+ansible/roles/proxmox_state_dirs/tasks/main.yml:58:    path: /mnt/nas/homelab_ci/infra_state/prod/ansible/inventories/generated
+ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2:185:  local nas_state_root="/mnt/nas/homelab_ci/infra_state"
+ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2:224:  # infra_state collected above, so only plain directories are copied here.
+ansible/roles/proxmox_backup/templates/proxmox-config-backup.sh.j2:225:  local local_state_root="${LOCAL_STATE_ROOT:-/var/lib/homelab-proxmox/state/services}"
+ansible/roles/proxmox_backup/defaults/main.yml:26:# backlog 067/096). Some entries are symlinks into the NAS infra_state, which is collected
+ansible/roles/proxmox_backup/defaults/main.yml:29:proxmox_backup_local_state_root: "/var/lib/homelab-proxmox/state/services"
+ansible/roles/proxmox_state_symlinks/tasks/main.yml:8:    path: /var/lib/homelab-proxmox/state/services
+ansible/roles/proxmox_state_symlinks/tasks/main.yml:26:        src: /var/lib/homelab-proxmox/state/services/
+ansible/roles/proxmox_state_symlinks/tasks/main.yml:48:        path: "/var/lib/homelab-proxmox/state/services/{{ item }}"
+ansible/roles/proxmox_state_symlinks/tasks/main.yml:56:        src: "/mnt/nas/homelab_ci/infra_state/{{ proxmox_state_environment | default('lab') }}/{{ item }}"
+ansible/roles/proxmox_state_symlinks/tasks/main.yml:57:        dest: "/var/lib/homelab-proxmox/state/services/{{ item }}"
+ansible/roles/proxmox_state_symlinks/tasks/main.yml:71:      - Legacy path: /var/lib/homelab-proxmox/state/services/<service>
+ansible/roles/proxmox_state_symlinks/tasks/main.yml:72:      - Target: /mnt/nas/homelab_ci/infra_state/{{ proxmox_state_environment | default('lab') }}/<service>
+python/tests/guardrails/test_pve_backup_local_state.py:3:Until 2026-10-28 the backup copied only the NAS infra_state and the legacy repo state, so the
+python/tests/guardrails/test_pve_backup_local_state.py:4:seven services whose state lives as plain directories under /var/lib/homelab-proxmox/state/services
+python/tests/guardrails/test_pve_backup_local_state.py:84:    assert 'proxmox_backup_local_state_root: "/var/lib/homelab-proxmox/state/services"' in (
+python/tests/workflows/test_workflow_inputs.py:49:    path = Path(".github/workflows/lxc-deploy-lab.yml")
+docs/backlog/064-llm-router.md:145:  in `lxc-deploy-lab.yml`, `lxc-promote-lab.yml`, `lxc-promote-prod.yml`.
+docs/backlog/067-lab-prod-same-address-space.md:10:`lxc-deploy-lab.yml` reads as a rehearsal: plan, apply, verify, *then* promote to PROD. For
+docs/backlog/067-lab-prod-same-address-space.md:17:$ diff terraform/environments/lab.tfvars.template terraform/environments/prod.tfvars.template
+docs/backlog/067-lab-prod-same-address-space.md:19:< # CI template — real non-secret values. Do not copy for local use; see lab.tfvars.example instead.
+docs/backlog/067-lab-prod-same-address-space.md:31:`terraform/environments/lab.tfvars` — the file that *does* describe a separate `192.168.20.0/24`
+docs/backlog/067-lab-prod-same-address-space.md:82:**It is not only the addresses.** `USE_NAS_STATE` is unset in the pipeline, so
+docs/backlog/067-lab-prod-same-address-space.md:83:`scripts/lab/lib/state.sh` returns the legacy path `/var/lib/homelab-proxmox/state/services/<svc>`
+docs/backlog/067-lab-prod-same-address-space.md:100:- The LAB jobs are named `Plan (LAB, prod host)` / `Apply (LAB, changes prod)`, the three workflows
+docs/backlog/067-lab-prod-same-address-space.md:102:  a LAB apply changes production.
+docs/backlog/067-lab-prod-same-address-space.md:135:| 5 | State (absorbs `096`) | One state location per service **per environment**, honestly named (for example `infra_state/{lab,prod}/<svc>`), with backups. Migrate the existing states (copy first, one service at a time, `No changes` after), remove the `lab/` symlinks, the empty `prod/` folders and the legacy `USE_NAS_STATE` branch, and add the nightly "every CT on `pve` tracked by exactly one state" check from `096`. |
+docs/backlog/083-hermes-agent-runtime.md:373:  Ansible run goes through the pipeline (`lxc-deploy-lab` → `lxc-promote-*` → `lxc-apply-prod`).
+docs/backlog/backlog.md:23:| — | ["LAB" deploys to the production address space](./067-lab-prod-same-address-space.md) | **Ready for spec** (2026-10-30) — found during the `064` deploy; 2026-10-28: state is shared too (duplicate IP for Home Assistant). Duplicate-LXC guard and honest LAB labels done. Real isolated lab decided: ephemeral lab LXCs on `vmbr99`, LAN blocked, all services, absorbs `096` | `lab.tfvars.template` and `prod.tfvars.template` are byte-identical, so a LAB apply creates the real LXC at its prod address on `pve`/`vmbr0` — the gate is not a rehearsal. Mirror image for Ansible: the lab *inventory* has one host and no services, so a lab-path monitoring deploy silently renders no scrape config and no alerts, for every service. Affects the whole pipeline, not one feature. |
+docs/backlog/backlog.md:39:| — | [One clear Terraform state location per service](./096-terraform-state-layout.md) | **Folded into `067`** (2026-10-30); backup gap fixed (#295) | LAB and PROD share `/var/lib/homelab-proxmox/state/services/<svc>`. Five of those are symlinks into the NAS folder `infra_state/lab/`, seven sit on `pve`'s local disk, and `infra_state/prod/` has been empty since February. **The seven local states have no backup** (the PVE config backup copies only the NAS states). An untracked VMID 104 went unnoticed for months. Inventory every CT against the states, move to one honestly named location with backups, remove the leftovers, and add a nightly "every CT tracked exactly once" check. |
+docs/backlog/096-terraform-state-layout.md:14:`USE_NAS_STATE`, so it takes the legacy branch and uses
+docs/backlog/096-terraform-state-layout.md:15:`/var/lib/homelab-proxmox/state/services/<svc>/terraform.tfstate` for **both** `lab` and `prod`.
+docs/backlog/096-terraform-state-layout.md:18:| Service | `/var/lib/homelab-proxmox/state/services/<svc>` |
+docs/backlog/096-terraform-state-layout.md:20:| homeassistant, immich, jellyfin, monitoring, reverse_proxy | symlink to `/mnt/nas/homelab_ci/infra_state/lab/<svc>` (created 2026-02-09 by `setup-state-symlinks.yml`) |
+docs/backlog/096-terraform-state-layout.md:25:- `/mnt/nas/homelab_ci/infra_state/prod/{immich,monitoring,reverse_proxy}` exist and have been
+docs/backlog/096-terraform-state-layout.md:38:  `/mnt/nas/homelab_ci/infra_state/*` and the old repo `terraform/terraform.tfstate`, nothing under
+docs/backlog/096-terraform-state-layout.md:44:  `/var/lib/homelab-proxmox/state/services` into `iac-artifacts/local-state/` (they pass its
+docs/backlog/096-terraform-state-layout.md:59:   neutral `infra_state/services/<svc>/` on the NAS (with `pve`'s local copy only as a cache, or not
+docs/backlog/096-terraform-state-layout.md:61:   ahead, split into `infra_state/{lab,prod}/<svc>` at that point, not before.
+docs/backlog/096-terraform-state-layout.md:64:4. **Remove the leftovers**: the `lab/` symlinks, the empty `prod/` folders, `USE_NAS_STATE`'s legacy
+docs/backlog/072-lab-monitoring-deploy-wipes-prod.md:4:**Impact while live**: one `gh workflow run lxc-deploy-lab.yml -f service=monitoring`
+docs/runbooks/laptop-nfs-setup.md:74:Expected: Directory listing showing NAS contents (infra_state/, mutmut-cache/, etc.)
+docs/runbooks/laptop-nfs-setup.md:79:ls -la /Volumes/nas/homelab_ci/infra_state/lab/
+docs/runbooks/laptop-nfs-setup.md:153:ls /Volumes/nas/homelab_ci/infra_state/lab/ | wc -l
+docs/runbooks/laptop-nfs-setup.md:157:cat /Volumes/nas/homelab_ci/infra_state/lab/immich/.gitkeep 2>/dev/null || echo "No .gitkeep yet (OK)"
+docs/runbooks/laptop-nfs-setup.md:161:touch /Volumes/nas/homelab_ci/infra_state/lab/.laptop-test-$(date +%s)
+docs/runbooks/laptop-nfs-setup.md:165:rm /Volumes/nas/homelab_ci/infra_state/lab/.laptop-test-*
+docs/runbooks/laptop-nfs-setup.md:169:echo "Lab state root: /Volumes/nas/homelab_ci/infra_state/lab"
+docs/runbooks/laptop-nfs-setup.md:179:export USE_NAS_STATE=true
+AGENTS.md:98:### The "LAB" stage changes production
+AGENTS.md:100:Despite the name, **a LAB apply is a production change.** `lxc-deploy-lab.yml` and the
+AGENTS.md:102:uses `lab.tfvars` (the production PVE at `192.168.1.112`, bridge `vmbr0` and the **production
+AGENTS.md:103:service IPs**) and the **same Terraform state** as prod (`/var/lib/homelab-proxmox/state/services/<svc>`).
+docs/runbooks/rebuild-orchestrator-restore.md:50:ssh pve "ls -ld /mnt/nas/homelab_ci/infra_state/{lab,prod}/"
+docs/runbooks/rebuild-orchestrator-restore.md:53:# drwxr-xr-x 9 1024 users 4096 /mnt/nas/homelab_ci/infra_state/lab/
+docs/runbooks/rebuild-orchestrator-restore.md:54:# drwxr-xr-x 6 1024 users 4096 /mnt/nas/homelab_ci/infra_state/prod/
+docs/runbooks/rebuild-orchestrator-restore.md:130:ls /Volumes/nas/homelab_ci/infra_state/
+docs/runbooks/rebuild-orchestrator-restore.md:137:ls /Volumes/nas/homelab_ci/infra_state/lab/
+docs/runbooks/rebuild-orchestrator-restore.md:144:touch /Volumes/nas/homelab_ci/infra_state/lab/.test-$(date +%s) && \
+docs/runbooks/rebuild-orchestrator-restore.md:145:  rm /Volumes/nas/homelab_ci/infra_state/lab/.test-*
+docs/runbooks/rebuild-orchestrator-restore.md:186:export USE_NAS_STATE=true
+docs/runbooks/rebuild-orchestrator-restore.md:192:# Expected: /Volumes/nas/homelab_ci/infra_state/lab
+docs/runbooks/rebuild-orchestrator-restore.md:238:USE_NAS_STATE=true ENVIRONMENT=lab bash -c '
+docs/runbooks/rebuild-orchestrator-restore.md:248:State root: /Volumes/nas/homelab_ci/infra_state/lab
+docs/runbooks/rebuild-orchestrator-restore.md:249:Monitoring state: /Volumes/nas/homelab_ci/infra_state/lab/monitoring/terraform.tfstate
+docs/runbooks/rebuild-orchestrator-restore.md:250:Inventory path: /Volumes/nas/homelab_ci/infra_state/lab/ansible/inventories/generated/hosts.yml
+docs/runbooks/rebuild-orchestrator-restore.md:309:[INFO] State path: /Volumes/nas/homelab_ci/infra_state/lab/immich/terraform.tfstate
+docs/runbooks/rebuild-orchestrator-restore.md:342:ls -la /Volumes/nas/homelab_ci/infra_state/lab/
+docs/runbooks/rebuild-orchestrator-restore.md:491:- [ ] Prod state exists on NAS: `/mnt/nas/homelab_ci/infra_state/prod/`
+docs/runbooks/rebuild-orchestrator-restore.md:500:USE_NAS_STATE=true ENVIRONMENT=prod bash -c '
+docs/runbooks/rebuild-orchestrator-restore.md:509:Prod state root: /Volumes/nas/homelab_ci/infra_state/prod
+docs/runbooks/rebuild-orchestrator-restore.md:510:Monitoring state: /Volumes/nas/homelab_ci/infra_state/prod/monitoring/terraform.tfstate
+docs/runbooks/rebuild-orchestrator-restore.md:587:- [ ] State on NAS at `/mnt/nas/homelab_ci/infra_state/prod/`
+docs/runbooks/rebuild-orchestrator-restore.md:608:ssh pve "ls /mnt/nas/homelab_ci/infra_state/lab/ | wc -l"
+docs/runbooks/rebuild-orchestrator-restore.md:611:ssh pve "ls /mnt/nas/homelab_ci/infra_state/prod/ | wc -l"
+docs/runbooks/rebuild-orchestrator-restore.md:614:ssh pve "diff -r /mnt/nas/homelab_ci/infra_state/lab/ /mnt/nas/homelab_ci/infra_state/prod/ || echo 'Isolated (expected)'"
+docs/runbooks/rebuild-orchestrator-restore.md:628:ssh pve "ls -la /var/lib/homelab-proxmox/state/services/ | grep '^l' | wc -l"
+docs/runbooks/rebuild-orchestrator-restore.md:635:ssh pve "readlink /var/lib/homelab-proxmox/state/services/monitoring"
+docs/runbooks/rebuild-orchestrator-restore.md:637:# Expected: /mnt/nas/homelab_ci/infra_state/lab/monitoring
+docs/runbooks/rebuild-orchestrator-restore.md:643:ssh pve "cat /var/lib/homelab-proxmox/state/services/monitoring/terraform.tfstate | jq -r .version"
+docs/runbooks/rebuild-orchestrator-restore.md:661:  for statefile in /Volumes/nas/homelab_ci/infra_state/$env/*/terraform.tfstate; do
+docs/runbooks/rebuild-orchestrator-restore.md:826:ls -la /Volumes/nas/homelab_ci/infra_state/
+docs/runbooks/rebuild-orchestrator-restore.md:833:touch /Volumes/nas/homelab_ci/infra_state/lab/.test
+docs/runbooks/rebuild-orchestrator-restore.md:834:rm /Volumes/nas/homelab_ci/infra_state/lab/.test
+docs/runbooks/rebuild-orchestrator-restore.md:852:USE_NAS_STATE=true bash -c 'source scripts/lab/lib/state.sh && resolve_state_root'
+docs/runbooks/rebuild-orchestrator-restore.md:854:# Expected for prod: /Volumes/nas/homelab_ci/infra_state/prod
+docs/runbooks/rebuild-orchestrator-restore.md:855:# Expected for lab: /Volumes/nas/homelab_ci/infra_state/lab
+docs/runbooks/rebuild-orchestrator-restore.md:892:   unset USE_NAS_STATE
+docs/runbooks/rebuild-orchestrator-restore.md:898:   ssh pve "ls -la /var/lib/homelab-proxmox/state/services/"
+docs/backlog/074-prod-apply-pat-expiry-and-vestigial-pipeline.md:62:   entirely through `lxc-deploy-lab.yml`; so did `065` (Hermes) on 2026-09-21. That works
+docs/backlog/074-prod-apply-pat-expiry-and-vestigial-pipeline.md:63:   because of [`067`](./067-lab-prod-same-address-space.md): `lab.tfvars.template` and
+docs/runbooks/hermes-backup-restore.md:97:gh workflow run lxc-deploy-lab.yml --ref main -f service=hermes -f apply=true
+docs/operations/rebuild-orchestrator.md:71:- Path: `/mnt/nas/homelab_ci/infra_state/<environment>/<service>/terraform.tfstate`
+docs/operations/rebuild-orchestrator.md:76:  - **GH Actions**: via symlinks at `/var/lib/homelab-proxmox/state/services/<service>/` (transitional)
+docs/operations/rebuild-orchestrator.md:79:- Path: `/var/lib/homelab-proxmox/state/services/<service>/terraform.tfstate`
+docs/operations/rebuild-orchestrator.md:82:- Removal: After all workflows migrated to USE_NAS_STATE mode
+docs/operations/rebuild-orchestrator.md:87:- **Lab**: `infra_state/lab/<service>/` - Testing and development
+docs/operations/rebuild-orchestrator.md:88:- **Production**: `infra_state/prod/<service>/` - Production services
+docs/operations/rebuild-orchestrator.md:96:export USE_NAS_STATE=true
+docs/operations/rebuild-orchestrator.md:105:Without `USE_NAS_STATE=true`, scripts use legacy paths (backward compatible).
+docs/operations/README.md:20:- **LAB-only**: `.github/workflows/lxc-promote-lab.yml` (plan+apply to LAB; never touches PROD)
+docs/operations/backups-proxmox-config-restore.md:273:**⚠️ IMPORTANT**: As of spec 033-idempotent-rebuild, Terraform state and Ansible inventory are stored on NAS (`/mnt/nas/homelab_ci/infra_state/`) instead of the PVE filesystem.
+docs/operations/backups-proxmox-config-restore.md:279:- Verify state directories exist: `ls /mnt/nas/homelab_ci/infra_state/{lab,static}/`
+docs/operations/backups-proxmox-config-restore.md:291:  /mnt/nas/homelab_ci/infra_state/lab/
+docs/operations/backups-proxmox-config-restore.md:294:ls -lh /mnt/nas/homelab_ci/infra_state/lab/*/terraform.tfstate
+docs/operations/backups-proxmox-config-restore.md:305:  /mnt/nas/homelab_ci/infra_state/prod/
+docs/operations/backups-proxmox-config-restore.md:308:ls -lh /mnt/nas/homelab_ci/infra_state/prod/*/terraform.tfstate
+docs/operations/backups-proxmox-config-restore.md:315:mkdir -p /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated
+docs/operations/backups-proxmox-config-restore.md:317:  /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated/hosts.yml
+docs/operations/backups-proxmox-config-restore.md:320:mkdir -p /mnt/nas/homelab_ci/infra_state/prod/ansible/inventories/generated
+docs/operations/backups-proxmox-config-restore.md:322:  /mnt/nas/homelab_ci/infra_state/prod/ansible/inventories/generated/hosts.yml
+docs/operations/backups-proxmox-config-restore.md:330:find /mnt/nas/homelab_ci/infra_state/ -type f -ls
+docs/operations/backups-proxmox-config-restore.md:334:  for service_dir in /mnt/nas/homelab_ci/infra_state/$env/*/; do
+docs/operations/backups-proxmox-config.md:535:Since spec 033, Terraform state lives on the NAS under `infra_state/{lab,prod}/`.
+docs/operations/backups-proxmox-config.md:538:- ✅ Per-service Terraform state: `infra_state/<env>/<service>/terraform.tfstate`
+docs/operations/backups-proxmox-config.md:539:- ✅ Ansible inventory snapshot: `infra_state/<env>/ansible/hosts.yml`
+README.md:38:- `.github/workflows/lxc-deploy-lab.yml` — LAB-only plan or plan+apply.
+README.md:39:- `.github/workflows/lxc-promote-lab.yml` — LAB-only promote (plan+apply), no PROD steps.
+README.md:52:- LAB workflow internal toggle: set repository variable `USE_PY_RUNNER=true` to have `.github/workflows/lxc-deploy-lab.yml` invoke the Python runner on PVE via `scripts/lab/python.sh` (workflow_dispatch inputs remain unchanged)
+docs/operations/ci-deploy.md:14:- Workflow file (LAB): `.github/workflows/lxc-deploy-lab.yml`
+docs/operations/ci-deploy.md:195:- `/var/lib/homelab-proxmox/state/services/<service>/terraform.tfstate`
+docs/operations/ci-deploy.md:211:1. Trigger `.github/workflows/lxc-deploy-lab.yml` with:
+docs/operations/ci-deploy.md:236:cat > /tmp/act-lxc-deploy-lab.json <<'JSON'
+docs/operations/ci-deploy.md:251:	-W .github/workflows/lxc-deploy-lab.yml \
+docs/operations/ci-deploy.md:253:	-e /tmp/act-lxc-deploy-lab.json \
+docs/operations/ci-deploy.md:262:	-W .github/workflows/lxc-deploy-lab.yml \
+docs/operations/ci-deploy.md:263:	-e /tmp/act-lxc-deploy-lab.json \
+docs/backlog/046-financial-scenario-deploy.md:54:**Independent Test**: Run `.github/workflows/lxc-deploy-lab.yml` with `service: financial-scenario`.
+docs/backlog/046-financial-scenario-deploy.md:65:   `lxc-deploy-lab` workflow, **Then** `financial-scenario` is a selectable service and passes the
+docs/backlog/046-financial-scenario-deploy.md:185:- **Lab vs prod parity**: The `service_ips` entry must be added to **both** `lab.tfvars` and
+docs/backlog/046-financial-scenario-deploy.md:203:  `terraform/environments/lab.tfvars.template` and `prod.tfvars.template` (and the live tfvars).
+docs/backlog/046-financial-scenario-deploy.md:251:  `financial-scenario` to the `service` choice options in `.github/workflows/lxc-deploy-lab.yml`
+docs/backlog/046-financial-scenario-deploy.md:252:  **and in both promotion workflows (`lxc-promote-lab.yml`, `lxc-promote-prod.yml`)** so lab→prod
+docs/backlog/046-financial-scenario-deploy.md:283:- **SC-001**: Running `lxc-deploy-lab` with `service: financial-scenario` provisions the LXC, logs

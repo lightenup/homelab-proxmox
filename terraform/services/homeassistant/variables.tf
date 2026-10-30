@@ -77,3 +77,9 @@ variable "service_mountpoints" {
   description = "Per-service bind mounts (host path in volume, container path in mp). Keys under service name."
   default     = {}
 }
+
+variable "hostname_prefix" {
+  description = "Prefix for the container hostname. Empty in prod; \"lab-\" for an isolated lab copy (067)."
+  type        = string
+  default     = ""
+}

@@ -14,6 +14,22 @@
 
   tasks:
     # 1. Network Bridge
+    - name: Render the lab LAN-isolation nftables table
+      ansible.builtin.file:
+        path: /etc/nftables.d
+        state: directory
+        mode: "0755"
+      tags: [lab-network]
+
+    - name: Install /etc/nftables.d/lab-isolation.nft
+      ansible.builtin.template:
+        src: lab-isolation.nft.j2
+        dest: /etc/nftables.d/lab-isolation.nft
+        owner: root
+        group: root
+        mode: "0644"
+      tags: [lab-network]
+
     - name: Ensure vmbr99 exists in /etc/network/interfaces
       blockinfile:
         path: /etc/network/interfaces
@@ -28,8 +44,18 @@
               post-up   echo 1 > /proc/sys/net/ipv4/ip_forward
               post-up   iptables -t nat -A POSTROUTING -s '10.99.0.0/24' -o vmbr0 -j MASQUERADE
               post-down iptables -t nat -D POSTROUTING -s '10.99.0.0/24' -o vmbr0 -j MASQUERADE
+              post-up   nft -f /etc/nftables.d/lab-isolation.nft
+              post-down nft delete table inet lab_isolation
               comment Proxmox Lab Network
       notify: Reload Networking
+      tags: [lab-network]
+
+    - name: Load the lab LAN-isolation table now (idempotent)
+      ansible.builtin.shell: |
+        nft delete table inet lab_isolation 2>/dev/null || true
+        nft -f /etc/nftables.d/lab-isolation.nft
+      changed_when: true
+      tags: [lab-network]
 
     # 2. Template Creation
     - name: Check if template exists

@@ -2,7 +2,7 @@ module "financial_scenario_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "financial-scenario-lxc"
-  hostname     = "financial-scenario"
+  hostname     = "${var.hostname_prefix}financial-scenario"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

@@ -7,7 +7,7 @@ module "reverse_proxy_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "proxy-lxc"
-  hostname     = "proxy"
+  hostname     = "${var.hostname_prefix}proxy"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

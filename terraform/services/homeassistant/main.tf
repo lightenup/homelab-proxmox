@@ -7,7 +7,7 @@ module "homeassistant_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "ha-lxc"
-  hostname     = "homeassistant"
+  hostname     = "${var.hostname_prefix}homeassistant"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

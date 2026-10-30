@@ -7,7 +7,7 @@ module "nextcloud_lxc" {
   source = "../../modules/lxc_service"
 
   name         = "nextcloud-lxc"
-  hostname     = "nextcloud"
+  hostname     = "${var.hostname_prefix}nextcloud"
   node         = var.proxmox_node
   ostemplate   = var.lxc_template
   storage_pool = var.storage_pool

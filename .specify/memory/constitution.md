@@ -64,7 +64,7 @@ All automated operations use a three-tier privilege model. No tier may be substi
 2. Tier 2 is exercised only by the orchestrator post-create step (`pct set` via `sudo`). Never used for Terraform.
 3. Tier 3 is never referenced in automated flows (CI/CD). Manual use only for disaster recovery.
 
-**Enforcement**: Enforced by `scripts/lab/ci-validate-iac.sh` (Tier 1 boundary — rejects `root@pam` in any `.tf` file) and orchestrator bind-mount allowlist (Tier 2 boundary — rejects host paths outside `/mnt/nas/`).
+**Enforcement**: Enforced by `scripts/lab/ci-validate-iac.sh` (Tier 1 boundary — rejects `root@pam` in any `.tf` file) and orchestrator bind-mount allowlist (Tier 2 boundary — for `prod`, rejects host paths outside `/mnt/nas/`; for `lab` (067), allows only `/var/lib/homelab-proxmox/lab-scratch/` and rejects `/mnt/nas/`, so an isolated lab copy can never mount production data).
 
 ## Baseline Decisions
 
@@ -174,4 +174,4 @@ iterations) to converge on quality before declaring a feature complete.
 ## Governance
 This constitution supersedes all other practices. Amendments require documentation and approval. All PRs and reviews must verify compliance with these principles.
 
-**Version**: 1.4.0 | **Ratified**: 2026-02-22 | **Last Amended**: 2026-03-01
+**Version**: 1.5.0 | **Ratified**: 2026-02-22 | **Last Amended**: 2026-10-30
