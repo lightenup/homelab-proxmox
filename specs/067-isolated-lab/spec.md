@@ -19,6 +19,24 @@ per service) is folded into this feature.
   alerts) behave in lab? → A: Switched off in lab, per service, and listed (FR-011).
 - Q: When does each service's state move to the new layout? → A: All 12 at once, in one supervised
   step, each verified with a production plan reporting "No changes" before the next (FR-013).
+- Q: Once LAB no longer touches production, what happens to the standalone LAB workflows ("LXC
+  Deploy (LAB)" and "LXC Promote (LAB)")? → A: Both are removed. The promotion workflow (LAB
+  rehearsal, then PROD) is the only entry point (FR-018).
+- Q: How does the nightly check report a container that is tracked by no state, or by more than
+  one? → A: Through the existing alerting path. It publishes a metric that monitoring collects from
+  the host, and an alert fires for "untracked or double-tracked > 0" and for "check is stale"
+  (FR-014).
+- Q: How much memory must stay free on the host while a lab copy runs? → A: 6 GB. A lab copy is
+  not started when the host's available memory minus the lab copy's configured memory would be
+  below 6 GB (FR-004).
+- Q: What does the lifecycle workflow (add / change / delete a service) do with its `lab` target?
+  → A: `prod` stays the real target. `lab` runs the same ephemeral, isolated rehearsal as the
+  promotion's first stage, for add and change. `lab` with delete is refused, with an explanation
+  (FR-020).
+- Q: Does every LAB run prove on its own that production was not touched? → A: Yes. Each LAB run
+  fingerprints production before and after (production states, plus the production containers'
+  IDs, addresses and configuration), and any difference fails the run and is stored in its
+  evidence (FR-021).
 
 ## Background
 
@@ -163,8 +181,9 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
 - **Large images** (the AI workspace pulls about 12 GB): the run is slower (see SC-004) but must
   not fail on time limits sized for today's runs.
 - **Host short on memory**: at most one lab copy exists at a time. A lab copy must not start if
-  doing so would leave the host below a safe free-memory margin; the run fails with a clear message
-  instead.
+  doing so would leave less than 6 GB of the host's memory available. The run fails with a message
+  giving the available and required figures instead. With today's figures (about 20 GB available,
+  at most about 6 GB for the largest lab copy) every service fits.
 - **State migration interrupted part-way**: the one supervised migration step stops at the first
   service whose plan does not report "No changes". Services already migrated stay migrated, and the
   dated copies allow the rest to be redone. No production container is changed at any point.
@@ -186,7 +205,8 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
   whether it passed or failed. Leftovers from aborted runs MUST be removed before a new LAB run
   proceeds, and also by a scheduled clean-up, so none survives longer than a day.
 - **FR-004**: At most one lab copy MUST exist at a time. A LAB run MUST refuse to start a lab copy
-  when the host's free memory would fall below a safe margin.
+  when the host's currently available memory, minus the lab copy's configured memory, would be
+  below **6 GB**. The run then fails with a message that gives both figures.
 - **FR-005**: LAB verification MUST check the lab copy directly at its lab address from the host.
   It MUST NOT use the reverse proxy, public DNS names, certificates or external probes. No LAB check
   may contact a production endpoint.
@@ -237,7 +257,12 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
   new layouts side by side.
 - **FR-014**: A nightly check MUST compare the containers on the host with the production states
   and report any container that is tracked by no state or by more than one, and name it. Lab
-  copies found outside a running LAB run count as leftovers and are reported too.
+  copies found outside a running LAB run count as leftovers and are reported too. It reports
+  through the existing alerting path, the same one the backup-staleness alerts use: it publishes
+  the counts and the time of its last successful run as metrics that monitoring collects from the
+  host. An alert reaches the operator's phone when either count is above zero, and when the check
+  has not completed successfully for more than 26 hours. The names of the offending containers
+  are available to the operator from the check's own output.
 
 **Pipeline behaviour (Story 3)**
 
@@ -250,15 +275,36 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
 - **FR-017**: The existing guard against a lab monitoring deploy overwriting production monitoring
   (backlog 072) MUST keep working. The lab inventory MUST list the lab copies, so lab deploys have
   real targets, and production monitoring MUST be unaffected by any LAB run.
-- **FR-018**: The pipeline's job names and the operator documentation MUST describe the new
-  behaviour: LAB is an isolated rehearsal and PROD is the real deployment. The 2026-10-28 warnings
-  that "a LAB apply changes production" are replaced.
+- **FR-018**: The promotion workflow (LAB rehearsal, then the approved PROD stage) MUST be the only
+  pipeline entry point for deploying a service. The standalone LAB workflows ("LXC Deploy (LAB)" and
+  "LXC Promote (LAB)") MUST be removed, along with every reference to them: other workflows,
+  documentation, runbooks and the agent guide. The pipeline's job names and the operator
+  documentation MUST describe the new behaviour: LAB is an isolated rehearsal and PROD is the real
+  deployment. The 2026-10-28 warnings that "a LAB apply changes production" are replaced.
 
 **Parity (Story 4)**
 
 - **FR-019**: The lab rehearsal MUST run from a developer laptop with the same arguments and the
   same isolation, clean-up and verification as in the pipeline (constitution V). Any step that
   can only run on the host is documented, with the equivalent way to run it from a laptop.
+
+**Lifecycle workflow**
+
+- **FR-020**: The lifecycle workflow (add, change or delete a service) MUST act on production when
+  its target is `prod`, keeping its existing confirmations for destructive changes, data deletion
+  and production applies. With target `lab`, add and change MUST run the same ephemeral, isolated
+  rehearsal as the promotion's LAB stage (FR-001 to FR-009) and change nothing in production.
+  Delete with target `lab` MUST be refused, with a message explaining that there is no standing lab
+  copy to delete. The `lab` target MUST NOT resolve to any production container or state.
+
+**Proof on every run (Story 1)**
+
+- **FR-021**: Every LAB run MUST record a fingerprint of production before the lab copy is created
+  and again after it is removed. The fingerprint covers a checksum of every production state, and
+  the production containers' IDs, names, addresses and configuration. Any difference MUST fail the
+  run, even if the lab copy itself passed. Both fingerprints and the difference MUST be kept in the
+  run's evidence, so a failed run shows what changed. A failure here triggers the PROD stage's
+  existing refusal to proceed after a failed LAB stage.
 
 ### Key Entities
 
@@ -272,8 +318,8 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
   manages. One for production, which is durable and backed up. One for lab, which is temporary.
 - **Isolation exception**: a single production-LAN destination a lab copy may reach, with its
   justification. The list is expected to be empty or nearly so.
-- **LAB run result**: pass or fail, with the evidence that production was untouched. It feeds the
-  PROD stage's gate.
+- **LAB run result**: pass or fail, with the production fingerprints from before and after the run
+  (FR-021) as evidence that production was untouched. It feeds the PROD stage's gate.
 
 ## Success Criteria *(mandatory)*
 
@@ -281,7 +327,9 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
 
 - **SC-001**: For each of the 12 services, a LAB run leaves production unchanged. Every production
   state, the production container list and the service's production configuration are identical
-  before and after the run (checked by comparing them).
+  before and after the run. This is checked automatically by every LAB run (FR-021), not only once
+  at acceptance, and a deliberately injected production change during a test run makes that run
+  fail.
 - **SC-002**: After any LAB run, passed, failed or aborted, no lab copy and no scratch storage
   remains longer than one day; after a run that ends normally, none remains at all.
 - **SC-003**: From a lab copy, 100% of attempts to reach production services are refused, apart
@@ -291,8 +339,9 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
   (backlog 067, "Measured cost of 2"); no run fails on a time limit.
 - **SC-005**: After migration, a production plan for every service reports no changes, and every
   production state appears in the next nightly configuration backup.
-- **SC-006**: A container that no state tracks (or that two states track) is reported within 24
-  hours of appearing.
+- **SC-006**: A container that no state tracks (or that two states track) raises an alert on the
+  operator's phone within 24 hours of appearing, and a check that stops running raises its own
+  alert within 26 hours.
 - **SC-007**: Over the first five promotions after the feature ships, every PROD plan shows the
   change being promoted rather than "no changes", and no production change happens before the
   PROD stage is approved.
@@ -305,8 +354,8 @@ checks and removes the lab copy exactly as the pipeline does, and leaves product
   `10.99.0.0/24`). Measured on 2026-10-30: about 20 GB of the host's 31 GB is free, and the
   services' addresses (`.211`–`.222`) do not collide with what already uses the lab range (`.1`,
   `.10`, `.11`).
-- There is one pipeline runner, so LAB runs are serialised. The free-memory margin of FR-004 only
-  ever has to fit one lab copy (the largest, the AI workspace, about 6 GB).
+- There is one pipeline runner, so LAB runs are serialised. The 6 GB margin of FR-004 only ever has
+  to fit one lab copy (the largest, the AI workspace, about 6 GB configured).
 - A lab copy starts empty every run. Restores and migrations of real data are not exercised in
   lab; the restore drills cover the backups.
 - Name resolution for lab copies uses public resolvers rather than a production-LAN exception,
