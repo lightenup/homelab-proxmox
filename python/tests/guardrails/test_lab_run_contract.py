@@ -7,6 +7,7 @@ these tests pin the parts that must not silently regress.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -94,3 +95,39 @@ def test_stable_refusal_messages_exist_in_the_scripts():
         "lab inventory resolves",
     ):
         assert needle in text or needle.replace("${margin}", "{margin}") in text, needle
+
+
+def _run_lab_finish(tmp_path: Path, body: str) -> subprocess.CompletedProcess:
+    """Run the real die() and lab_finish() with the external steps stubbed out."""
+    funcs = "\n".join(re.search(rf"^{n}\(\) \{{.*?^\}}", DEPLOY, re.S | re.M).group(0) for n in ("die", "lab_finish"))
+    (tmp_path / "reports" / "apply").mkdir(parents=True)
+    (tmp_path / "reports" / "plan").mkdir(parents=True)
+    script = f"""
+EVIDENCE_ROOT={tmp_path}; RUN_ID=r1; LAB_ACTIVE=1; LAB_CMD=apply
+emit_error() {{ :; }}; run_offline_verify() {{ :; }}
+{funcs}
+trap lab_finish EXIT
+{body}
+"""
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+
+
+def test_a_died_step_is_named_in_the_apply_summary(tmp_path: Path):
+    # Before, a healthcheck failure left no reason, so the pipeline said "see evidence pack".
+    r = _run_lab_finish(tmp_path, 'die "healthcheck failed for service=ntfy after 180s (rc=1)"')
+    assert r.returncode == 1
+    summary = (tmp_path / "reports" / "apply" / "summary.txt").read_text()
+    assert "status=failure" in summary
+    assert "reason=healthcheck failed for service=ntfy after 180s (rc=1)" in summary
+
+
+def test_a_lab_specific_reason_is_not_overwritten_by_the_die_message(tmp_path: Path):
+    r = _run_lab_finish(tmp_path, 'LAB_REASON="production changed during LAB run"; die "something else"')
+    assert r.returncode == 1
+    assert "reason=production changed during LAB run" in (tmp_path / "reports" / "apply" / "summary.txt").read_text()
+
+
+def test_a_successful_run_writes_no_failure_summary(tmp_path: Path):
+    r = _run_lab_finish(tmp_path, "true")
+    assert r.returncode == 0
+    assert not (tmp_path / "reports" / "apply" / "summary.txt").exists()
