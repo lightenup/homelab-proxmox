@@ -1,0 +1,20 @@
+# Mirrors the PROD agent-config.yaml.j2 where it matters for memory: custom provider through
+# the gateway (here: the logging proxy), built-in memory on, approvals fail closed.
+_config_version: 50
+model:
+  default: coder
+  provider: custom
+  base_url: "http://llmproxy:4000/v1"
+  key_env: AUXILIARY_HERMES_API_KEY
+  context_length: 131072
+timezone: "Europe/Oslo"
+approvals:
+  mode: manual
+  cron_mode: deny
+  single_query_mode: deny
+  unattended_mode: deny
+terminal:
+  backend: local
+  env_passthrough: []
+memory:
+  memory_enabled: true

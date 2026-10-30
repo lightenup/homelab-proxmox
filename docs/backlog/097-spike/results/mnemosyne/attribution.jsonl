@@ -1,0 +1,16 @@
+{"probe": "p1", "tools": ["mnemosyne_recall", "mnemosyne_recall_canonical", "mnemosyne_recall", "mnemosyne_recall", "tool_search", "tool_describe", "session_search", "session_search", "session_search", "session_search", "session_search"]}
+{"probe": "p2", "tools": ["mnemosyne_recall", "mnemosyne_recall", "mnemosyne_recall"]}
+{"probe": "p3", "tools": []}
+{"probe": "p4", "tools": ["mnemosyne_recall", "mnemosyne_recall"]}
+{"probe": "p5", "tools": []}
+{"probe": "p6", "tools": ["mnemosyne_recall", "mnemosyne_recall", "mnemosyne_recall", "tool_search", "tool_describe", "session_search", "session_search", "session_search", "session_search", "session_search", "session_search"]}
+{"probe": "p7", "tools": ["mnemosyne_recall", "terminal", "terminal", "tool_search", "tool_describe", "cronjob_manage"]}
+{"probe": "p8", "tools": ["mnemosyne_recall"]}
+{"probe": "p9", "tools": ["mnemosyne_recall", "mnemosyne_recall", "mnemosyne_recall"]}
+{"probe": "p10", "tools": ["mnemosyne_recall", "mnemosyne_recall", "tool_search", "tool_describe", "session_search", "session_search", "session_search", "mnemosyne_recall"]}
+{"probe": "p11", "tools": ["mnemosyne_recall", "mnemosyne_recall", "mnemosyne_shared_recall", "mnemosyne_triple_query", "mnemosyne_triple_query", "tool_call", "tool_describe", "tool_call", "session_search", "session_search", "session_search", "session_search", "mnemosyne_recall", "mnemosyne_recall"]}
+{"probe": "p12", "tools": ["mnemosyne_recall", "mnemosyne_recall"]}
+{"probe": "p13", "tools": ["mnemosyne_recall", "mnemosyne_recall", "mnemosyne_recall_canonical"]}
+{"probe": "p14", "tools": ["mnemosyne_recall"]}
+{"probe": "p15", "tools": ["web_search"]}
+{"probe": "p16", "tools": []}

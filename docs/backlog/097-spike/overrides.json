@@ -1,0 +1,22 @@
+{
+ "_why": "p16 judged by hand: does the answer honour 'ask before suggesting network changes'? Honcho p4: mentions flat white only as past, correct.",
+ "none": {
+  "p16": true
+ },
+ "holographic": {
+  "p16": true
+ },
+ "mnemosyne": {
+  "p16": true
+ },
+ "hindsight": {
+  "p16": false
+ },
+ "hindsight-chunks": {
+  "p16": true
+ },
+ "honcho": {
+  "p4": true,
+  "p16": true
+ }
+}

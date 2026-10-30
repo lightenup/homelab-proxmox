@@ -1,0 +1,35 @@
+# Shared spike topology. Candidates add services via compose.<candidate>.yml.
+# `int` is internal: no route out except through llmproxy, which only speaks to LiteLLM.
+name: memspike
+networks:
+  int:
+    internal: true
+  ext: {}
+volumes:
+  hermes_data: {}
+services:
+  llmproxy:
+    image: python:3.12-slim
+    command: ["python", "-u", "/app/logproxy.py"]
+    environment:
+      LITELLM_SPIKE_KEY: ${LITELLM_SPIKE_KEY:?put the spike key in keys/spike.env}
+    volumes:
+      - ./llmproxy:/app:ro
+      - ./logs:/logs
+      - ./dataset.json:/data/dataset.json:ro
+    networks: [int, ext]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+  hermes:
+    image: nousresearch/hermes-agent:${HERMES_TAG:-v0.21.6}
+    command: ["gateway", "run"]
+    environment:
+      AUXILIARY_HERMES_API_KEY: spike-proxy-injects-the-real-key
+      # As PROD (agent.env.j2): the API server is how Open WebUI reaches the agent.
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_KEY: spike-api-key-not-secret-0001
+    volumes:
+      - hermes_data:/opt/data
+      - ./runs/${CANDIDATE:?}/config.yaml:/opt/data/config.yaml:ro
+    networks: [int]
+    depends_on: [llmproxy]

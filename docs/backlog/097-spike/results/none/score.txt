@@ -1,0 +1,23 @@
+p1  update            PASS  'du bor nå i trondheim, i en leilighet på møllenberg i 3. etasje.'
+p2  fact-no           FAIL  'jeg har ingen opplysninger om en hund i min profil for deg, ola. skriv gjerne til meg navnet og rasen så legge'
+p3  constraint        PASS  'a handful of sunflower seeds and an apple — quick, no nuts, and keeps you going.'
+p4  update-no         FAIL  'det vet jeg ikke — det står ikke i min profil.'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  FAIL  "i don't have a record of any construction project in what you've told me. the closest thing i do know is that "
+p7  decision-no       FAIL  'ingen nattlige backup-jobber er satt opp i hermes akkurat nå — listen er tom.\n\nhar du kanskje en backup som kj'
+p8  negative          PASS  "i don't have any information about a cat in my notes about you, ola. i know about your family (ingrid, sindre,"
+p9  volume-no         PASS  'ingrid bor i tromsø, og hun er marinbiolog.'
+p10 volume-en         PASS  'your mother berit turns 70 on 14 march 2027. the plan is a surprise party at fjellstua.'
+p11 volume-crossref   PASS  'your brother håkon, the electrician in stavanger, is helping with the electrical work in the sauna (badstua) d'
+p12 volume-no         PASS  'vinterdekkene dine er lagret på dekkhotellet i leangen.'
+p13 volume-en         FAIL  "i don't have any information about a band in my notes — no band name or rehearsal schedule is stored.\n\nwant me"
+p14 volume-en         PASS  'your next on-call week starts monday 9 november 2026.'
+p15 volume-constraint FAIL  'lakserullader med rømme og nysskokt asparges — kjappt og uten nøtter.'
+p16 volume-preference PASS  "i won't change anything on your router without walking through it with you first.\n\ni can help with that, but i"
+recall: 10/16
+calls final chat 200 6
+calls probes chat 200 111
+calls probes chat 429 1
+calls probes chat 502 1
+calls sessions chat 200 136
+calls settle chat 200 1

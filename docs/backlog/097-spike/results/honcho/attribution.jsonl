@@ -1,0 +1,16 @@
+{"probe": "p1", "tools": []}
+{"probe": "p2", "tools": []}
+{"probe": "p3", "tools": []}
+{"probe": "p4", "tools": ["honcho_search"]}
+{"probe": "p5", "tools": []}
+{"probe": "p6", "tools": ["honcho_search"]}
+{"probe": "p7", "tools": ["terminal", "terminal"]}
+{"probe": "p8", "tools": ["honcho_search"]}
+{"probe": "p9", "tools": []}
+{"probe": "p10", "tools": []}
+{"probe": "p11", "tools": ["honcho_search", "memory"]}
+{"probe": "p12", "tools": []}
+{"probe": "p13", "tools": ["tool_call", "tool_search", "session_search", "session_search"]}
+{"probe": "p14", "tools": ["honcho_search"]}
+{"probe": "p15", "tools": []}
+{"probe": "p16", "tools": []}

@@ -1,0 +1,23 @@
+p1  update            PASS  'du bor nå i trondheim — du flyttet der hit fra bergen i uka 26. oktober 2026, og jobber på et kraftselskap. le'
+p2  fact-no           FAIL  'jeg har ingen info om hunden din i minnebanka ennå. hva heter hun, og hvilken rase er hun? da husker jeg det t'
+p3  constraint        PASS  'en håndfull mandler med et eple — raskt, mettende og uten å måtte varme noe opp.'
+p4  update-no         FAIL  'jeg har ingen lagret info om hva du drikker om morgenen.\n\nhva er det? (kaffe? te? noe annet?) da kan jeg huske'
+p5  fact-en           PASS  'you use helix.'
+p6  fact-no-asked-en  FAIL  "i don't have any record of a construction project from you — no memory entry, no past session. the only sessio"
+p7  decision-no       FAIL  'jeg fant ingen nattlig backup. her er hva jeg sjekket:\n\n- ingen cron-jobber er satt opp i hermes (listen er to'
+p8  negative          PASS  "i don't have that stored. what's your cat's name?"
+p9  volume-no         PASS  'ingrid bor i tromsø og jobber som havbiolog. hun har to barn, sindre (7) og mia (4).'
+p10 volume-en         PASS  'mamma berit blir 70 år 14. mars 2027. dere planlegger en overraskelsessamling på fjellstua.'
+p11 volume-crossref   FAIL  "i have no record of this — no memory, no past conversation mentions the sauna's electrical work. i can't tell "
+p12 volume-no         FAIL  'jeg har ikke lagret noen info om hvor vinterdekkene dine er. kan du fortelle meg det? da kan jeg huske det til'
+p13 volume-en         FAIL  "i don't have that stored — i have no memory of your band name or rehearsal schedule. what's the band called an"
+p14 volume-en         PASS  "your next on-call week starts monday 9 november 2026 — that's the first week of your every-fourth-week rotatio"
+p15 volume-constraint FAIL  'varm suppe med ristede brødskiver og litt ost — enkel og god på en kald kveld.'
+p16 volume-preference PASS  "i won't make any changes to your router without walking through them with you first — network changes can knoc"
+recall: 8/16
+calls final chat 200 1
+calls final embed 200 1
+calls probes chat 200 101
+calls probes embed 200 60
+calls sessions chat 200 48
+calls sessions embed 200 54

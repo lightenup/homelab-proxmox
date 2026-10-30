@@ -1,0 +1,101 @@
+GET /health - Health check endpoint
+GET /health/live - Liveness probe
+GET /health/ready - Readiness probe
+GET /metrics - Prometheus metrics endpoint
+GET /v1/bank-template-schema - Get bank template JSON Schema
+GET /v1/default/banks - List memory banks
+PUT /v1/default/banks/{bank_id} - Create or update memory bank
+PATCH /v1/default/banks/{bank_id} - Partial update memory bank
+DELETE /v1/default/banks/{bank_id} - Delete memory bank
+GET /v1/default/banks/{bank_id}/aliases - List the bank's aliases
+POST /v1/default/banks/{bank_id}/aliases - Add an alias to the bank
+PATCH /v1/default/banks/{bank_id}/aliases/{alias} - Show this alias in place of the bank id
+DELETE /v1/default/banks/{bank_id}/aliases/{alias} - Remove an alias from the bank
+GET /v1/default/banks/{bank_id}/attachments/{attachment_id} - Fetch an attachment retained inline with a document
+GET /v1/default/banks/{bank_id}/audit-logs - List audit logs
+GET /v1/default/banks/{bank_id}/audit-logs/stats - Audit log statistics
+GET /v1/default/banks/{bank_id}/audit-logs/{log_id} - Get audit log entry
+POST /v1/default/banks/{bank_id}/background - Add/merge memory bank background (removed — use PATCH .../config)
+POST /v1/default/banks/{bank_id}/clone - Clone a bank (async)
+GET /v1/default/banks/{bank_id}/config - Get bank configuration
+PATCH /v1/default/banks/{bank_id}/config - Update bank configuration
+DELETE /v1/default/banks/{bank_id}/config - Reset bank configuration
+POST /v1/default/banks/{bank_id}/consolidate - Trigger consolidation
+POST /v1/default/banks/{bank_id}/consolidation-strategies/preview - Preview consolidation strategies
+POST /v1/default/banks/{bank_id}/consolidation/recover - Recover failed consolidation
+GET /v1/default/banks/{bank_id}/directives - List directives
+POST /v1/default/banks/{bank_id}/directives - Create directive
+GET /v1/default/banks/{bank_id}/directives/{directive_id} - Get directive
+PATCH /v1/default/banks/{bank_id}/directives/{directive_id} - Update directive
+DELETE /v1/default/banks/{bank_id}/directives/{directive_id} - Delete directive
+GET /v1/default/banks/{bank_id}/document-transfer - Export documents (removed — use POST .../document-transfer/export)
+POST /v1/default/banks/{bank_id}/document-transfer - Import documents (async)
+POST /v1/default/banks/{bank_id}/document-transfer/export - Export documents (async)
+GET /v1/default/banks/{bank_id}/documents - List documents
+GET /v1/default/banks/{bank_id}/documents/{document_id} - Get document details
+PATCH /v1/default/banks/{bank_id}/documents/{document_id} - Update document
+DELETE /v1/default/banks/{bank_id}/documents/{document_id} - Delete a document
+GET /v1/default/banks/{bank_id}/documents/{document_id}/chunks - List document chunks
+GET /v1/default/banks/{bank_id}/documents/{document_id}/history - Get document change history
+POST /v1/default/banks/{bank_id}/documents/{document_id}/reprocess - Reprocess document
+GET /v1/default/banks/{bank_id}/entities - List entities
+GET /v1/default/banks/{bank_id}/entities/graph - Get entity co-occurrence graph
+GET /v1/default/banks/{bank_id}/entities/{entity_id} - Get entity details
+POST /v1/default/banks/{bank_id}/entities/{entity_id}/regenerate - Regenerate entity observations (deprecated)
+GET /v1/default/banks/{bank_id}/export - Export bank template
+POST /v1/default/banks/{bank_id}/files/retain - Convert files to memories
+GET /v1/default/banks/{bank_id}/graph - Get memory graph data
+POST /v1/default/banks/{bank_id}/health/llm - Test the bank's LLM connectivity
+POST /v1/default/banks/{bank_id}/import - Import bank template
+GET /v1/default/banks/{bank_id}/knowledge-base/export - Export the knowledge base as a markdown bundle
+POST /v1/default/banks/{bank_id}/knowledge-base/folders - Create a knowledge-base folder
+PATCH /v1/default/banks/{bank_id}/knowledge-base/nodes/{node_id} - Rename/move a knowledge-base node or update a page's options
+DELETE /v1/default/banks/{bank_id}/knowledge-base/nodes/{node_id} - Delete a knowledge-base node
+POST /v1/default/banks/{bank_id}/knowledge-base/pages - Create a knowledge-base page
+GET /v1/default/banks/{bank_id}/knowledge-base/pages/{page_id} - Get a knowledge-base page
+GET /v1/default/banks/{bank_id}/knowledge-base/search - Hybrid search over knowledge pages (BM25 + vector)
+GET /v1/default/banks/{bank_id}/knowledge-base/tree - Get the knowledge-base tree
+GET /v1/default/banks/{bank_id}/llm-requests - List LLM request traces
+GET /v1/default/banks/{bank_id}/llm-requests/stats - LLM request statistics
+POST /v1/default/banks/{bank_id}/memories - Retain memories
+DELETE /v1/default/banks/{bank_id}/memories - Clear memory bank memories
+POST /v1/default/banks/{bank_id}/memories/dry-run-extract - Dry-run fact extraction (preview, no persistence)
+GET /v1/default/banks/{bank_id}/memories/list - List memory units
+POST /v1/default/banks/{bank_id}/memories/recall - Recall memory
+GET /v1/default/banks/{bank_id}/memories/{memory_id} - Get memory unit
+PATCH /v1/default/banks/{bank_id}/memories/{memory_id} - Curate memory unit
+GET /v1/default/banks/{bank_id}/memories/{memory_id}/history - Get observation history
+DELETE /v1/default/banks/{bank_id}/memories/{memory_id}/observations - Clear observations for a memory
+GET /v1/default/banks/{bank_id}/mental-models - List mental models
+POST /v1/default/banks/{bank_id}/mental-models - Create mental model
+GET /v1/default/banks/{bank_id}/mental-models/{mental_model_id} - Get mental model
+PATCH /v1/default/banks/{bank_id}/mental-models/{mental_model_id} - Update mental model
+DELETE /v1/default/banks/{bank_id}/mental-models/{mental_model_id} - Delete mental model
+POST /v1/default/banks/{bank_id}/mental-models/{mental_model_id}/clear - Clear mental model content
+POST /v1/default/banks/{bank_id}/mental-models/{mental_model_id}/dry-run-refresh - Dry-run mental model refresh (preview, no persistence)
+GET /v1/default/banks/{bank_id}/mental-models/{mental_model_id}/history - Get mental model history
+POST /v1/default/banks/{bank_id}/mental-models/{mental_model_id}/refresh - Refresh mental model
+DELETE /v1/default/banks/{bank_id}/observations - Clear all observations
+GET /v1/default/banks/{bank_id}/observations/scopes - List observation scopes
+GET /v1/default/banks/{bank_id}/operations - List async operations
+GET /v1/default/banks/{bank_id}/operations/{operation_id} - Get operation status
+DELETE /v1/default/banks/{bank_id}/operations/{operation_id} - Cancel a pending or in-flight async operation
+DELETE /v1/default/banks/{bank_id}/operations/{operation_id}/delete - Delete a terminal async operation
+POST /v1/default/banks/{bank_id}/operations/{operation_id}/retry - Retry a failed async operation
+GET /v1/default/banks/{bank_id}/profile - Get memory bank profile (removed — use GET .../config)
+PUT /v1/default/banks/{bank_id}/profile - Update memory bank disposition (removed — use PATCH .../config)
+POST /v1/default/banks/{bank_id}/prompts/preview - Preview an operation's prompts (no LLM call)
+POST /v1/default/banks/{bank_id}/reflect - Reflect and generate answer
+GET /v1/default/banks/{bank_id}/stats - Get statistics for memory bank
+GET /v1/default/banks/{bank_id}/stats/memories-timeseries - Memory ingestion time-series
+GET /v1/default/banks/{bank_id}/tags - List tags
+POST /v1/default/banks/{bank_id}/transfer/export - Export a bank (async)
+POST /v1/default/banks/{bank_id}/transfer/import - Import a bank (async)
+POST /v1/default/banks/{bank_id}/webhooks - Register webhook
+GET /v1/default/banks/{bank_id}/webhooks - List webhooks
+DELETE /v1/default/banks/{bank_id}/webhooks/{webhook_id} - Delete webhook
+PATCH /v1/default/banks/{bank_id}/webhooks/{webhook_id} - Update webhook
+GET /v1/default/banks/{bank_id}/webhooks/{webhook_id}/deliveries - List webhook deliveries
+GET /v1/default/chunks/{chunk_id} - Get chunk details
+GET /v1/default/files/download/{key} - Download a stored file (async export archive)
+GET /version - Get API version and feature flags

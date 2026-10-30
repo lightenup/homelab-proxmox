@@ -1,0 +1,63 @@
+# Candidate: Honcho v3.5.0 self-hosted (API + deriver worker) + pgvector Postgres, layered on
+# compose.base.yml. "Sparing" profile in honcho/config.toml: deriver batched, summary and
+# dream OFF, dialectic at the minimal level every 3rd turn (runs/honcho/honcho.json).
+# No Redis (cache off). Everything sits on `int`: LLM and embeddings only via llmproxy.
+volumes:
+  honcho_pg: {}
+x-honcho-common: &honcho-common
+  image: ghcr.io/plastic-labs/honcho:v3.5.0
+  env_file: [./runs/honcho/secret.env]          # AUTH_JWT_SECRET (random per prep)
+  environment:
+    DB_CONNECTION_URI: postgresql+psycopg://honcho:honcho-spike@honcho-db:5432/honcho
+    # tiktoken fetches its BPE files from openaipublic.blob.core.windows.net on first use;
+    # `int` has no egress, so the cache is pre-seeded (honcho/tiktoken, keyed by sha1(url)).
+    # PROD would bake these into a derived image.
+    TIKTOKEN_CACHE_DIR: /app/tiktoken
+  volumes:
+    - ./honcho/config.toml:/app/config.toml:ro
+    - ./honcho/tiktoken:/app/tiktoken:ro
+  networks: [int]
+services:
+  honcho-db:
+    image: pgvector/pgvector:0.8.1-pg17
+    environment:
+      POSTGRES_USER: honcho
+      POSTGRES_PASSWORD: honcho-spike
+      POSTGRES_DB: honcho
+    volumes: [honcho_pg:/var/lib/postgresql/data]
+    networks: [int]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U honcho -d honcho"]
+      interval: 5s
+      retries: 20
+  honcho:
+    <<: *honcho-common
+    # Upstream entrypoint (migrations, then API) plus the one-time ALTER of the vector columns
+    # from the migrations' 1536 to the configured 1024; the startup validator refuses a mismatch.
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        /app/.venv/bin/python scripts/provision_db.py
+        && /app/.venv/bin/python scripts/configure_embeddings.py --yes
+        && exec /app/.venv/bin/fastapi run --host 0.0.0.0 --workers 1 src/main.py
+    depends_on:
+      honcho-db: {condition: service_healthy}
+      llmproxy: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2).read()"]
+      interval: 5s
+      retries: 30
+      start_period: 20s
+  honcho-deriver:
+    <<: *honcho-common
+    entrypoint: ["/app/.venv/bin/python", "-m", "src.deriver"]
+    depends_on:
+      honcho: {condition: service_healthy}
+  hermes:
+    image: memspike-hermes-honcho:v0.21.6-ho1.0.0   # built from honcho/image/Dockerfile
+    volumes:
+      - ./honcho/plugin:/opt/data/plugins/honcho:ro
+      - ./runs/honcho/honcho.json:/opt/data/honcho.json:ro
+    depends_on:
+      honcho: {condition: service_healthy}

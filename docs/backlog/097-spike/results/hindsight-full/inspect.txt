@@ -1,0 +1,35 @@
+== counts
+documents|3
+chunks|6
+memory_units|10
+entities|14
+mental_models|0
+== memory units by type
+experience|1
+observation|2
+world|7
+== memory units (newest first)
+  fact_type  |                                                                     text                                                                     |     document_id
+-------------+----------------------------------------------------------------------------------------------------------------------------------------------+----------------------
+ observation | User is building a sauna (badstue) at their cabin in Hemsedal.                                                                               |
+ observation | User drinks an oat-milk flat white every morning before starting work.                                                                       |
+ experience  | Hermes Agent explained to the User that a Bloom filter is a space-efficient probabilistic data structure using multiple hash functions that  | api-506009d7a5cf07ba
+ world       | User drinks an oat-milk flat white every morning before starting work. | Involving: user                                                     | api-6d892d9612b76279
+ world       | User is building a sauna (badstue) at their cabin in Hemsedal. | When: 2026-10-30 | Involving: user                                          | api-6d892d9612b76279
+ world       | User bor i Bergen. | Involving: user                                                                                                         | api-d10e4b275ded5468
+ world       | User writes most of their code in the Helix editor. | Involving: user                                                                        | api-d10e4b275ded5468
+ world       | User is allergic to nuts and requests no recipes containing nuts be suggested. | Involving: user | Health constraint                         | api-d10e4b275ded5468
+ world       | User's name is Ola. | Involving: user                                                                                                        | api-d10e4b275ded5468
+ world       | User's dog heter Tinde og er en border collie. | Involving: user                                                                             | api-d10e4b275ded5468
+(10 rows)
+
+== documents per session
+api-d10e4b275ded5468|988
+api-6d892d9612b76279|2393
+api-506009d7a5cf07ba|1057
+== async operations
+batch_retain|completed|7
+consolidation|pending|1
+consolidation|processing|1
+graph_maintenance|completed|1
+retain|completed|7

@@ -1,0 +1,1 @@
+STOPPED 17:35: consolidation held one LLM call ~36 min on the serial inference queue; chat calls 429 after 600 s queue wait. Run aborted after s4.
