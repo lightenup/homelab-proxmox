@@ -34,6 +34,9 @@ LAB_TEMPLATE_VMID=${LAB_TEMPLATE_VMID:-9001}
 LAB_TEMPLATE_VMID_TIER2=${LAB_TEMPLATE_VMID_TIER2:-9002}
 LAB_IP="10.99.0.10"
 LAB_GATEWAY="10.99.0.1"
+# Public resolver: the host's own resolver is Tailscale MagicDNS (100.100.100.100), which the
+# isolated vmbr99 cannot reach, so cloud-init's apt-get update would hang without this.
+LAB_NAMESERVER="1.1.1.1"
 LAB_BRIDGE="vmbr99"
 IDENTITY_TAG_KEY="ManagedBy"
 IDENTITY_TAG_VAL="${IDENTITY_TAG_VAL:-homelab-proxmox}"
@@ -791,7 +794,7 @@ cmd_up() {
         log_warn "Provisioning SSH public key missing; falling back to template key"
     fi
 
-    log_cmd_exec pve_exec "$QM_CMD set $vmid --description '$tags' --ipconfig0 ip=$LAB_IP/24,gw=$LAB_GATEWAY --net0 virtio,bridge=$LAB_BRIDGE --ciuser ${PROVISION_SSH_USER} $sshkey_arg $resource_args"
+    log_cmd_exec pve_exec "$QM_CMD set $vmid --description '$tags' --ipconfig0 ip=$LAB_IP/24,gw=$LAB_GATEWAY --nameserver $LAB_NAMESERVER --net0 virtio,bridge=$LAB_BRIDGE --ciuser ${PROVISION_SSH_USER} $sshkey_arg $resource_args"
 
     # 6. Start
     log_info "Starting VM..."

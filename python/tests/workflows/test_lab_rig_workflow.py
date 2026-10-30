@@ -210,3 +210,11 @@ def test_playbook_asserts_lab_rig_and_lab_environment_first():
     assert "lab_inventory" in that
     assert "deploy_environment" in that and "'lab'" in that
     assert "lab-pve-" in that
+
+
+def test_rig_vm_gets_a_public_nameserver():
+    # The host resolver is Tailscale MagicDNS, unreachable from the isolated vmbr99; without an
+    # explicit nameserver the nested VM's cloud-init apt-get update hangs (067 regression).
+    text = Path("scripts/lab/pve-lab").read_text(encoding="utf-8")
+    assert 'LAB_NAMESERVER="1.1.1.1"' in text
+    assert "--nameserver $LAB_NAMESERVER" in text
