@@ -453,6 +453,9 @@ ntfy_metrics_port: 9090
 memory_ip: "192.168.1.223"
 memory_api_port: 8888
 memory_ui_port: 9999
+# The restore drill's throwaway API (playbooks/memory-restore-drill.yml, spec 097 R-014).
+# Published on 127.0.0.1 only and only for the length of a drill.
+memory_restore_test_port: 8889
 
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.

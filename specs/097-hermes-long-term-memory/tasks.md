@@ -137,6 +137,22 @@ builds the memory service, which every story needs.
   preview also showed the UI's views refused (`get_entity_graph` 113 times, `list_mental_models`,
   `list_directives`, `list_entities`, `get_memories_timeseries`, `get_bank_config`): the five
   reads are now allowed for every scope, and reading the bank config for `curator` and up.
+- **US4 restore drill (T056 to T059), 2026-10-31**: code and guard tests only; the drill has not
+  run (T060 waits for the first nightly backup with probes). Deviations and choices:
+  - T057: the drill API publishes on `127.0.0.1:8889` (`memory_restore_test_port`), not on
+    `memory_ip`, so nothing on the LAN reaches a second copy of every memory. `server.env` is the
+    role's template rendered by the drill with the host swapped to `memory_postgres_restore`
+    (`regex_replace`, then an assert that refuses the live host); `db.env` is the role's template
+    unchanged. The drill mounts the live `clients.json`, shim and policy, and reads the admin key
+    from `backup.key`, as the snapshot does.
+  - T058: the drill also requires `drill-probes.json` in the archive, so archives older than
+    this change fail the archive check rather than skip the recall leg silently. An empty list
+    skips the recall check with a note. The import bank's count is compared with `stats.json`'s
+    `total_documents` after polling the import operation to `completed`.
+  - T059: probes are picked before `pg_dump`, so a picked unit is in the dump unless deleted in
+    the seconds between. They come from live `world` units (`list?type=world`; invalidated units
+    live in a separate table and are not listed): a `limit=0` call gives the count, and up to 3
+    random offsets are fetched one unit at a time, so the bank is never listed whole.
 - **Not run locally**: `terraform init/validate`. The local binary is broken, and the provider
   download from a container fails TLS verification behind Zscaler. `terraform fmt -check` passes.
   CI runs `terraform-validate.sh`.
@@ -507,19 +523,19 @@ the portable export (FR-007, FR-018, SC-006).
 
 ### Tests for User Story 4
 
-- [ ] T056 [P] [US4] Extend `python/tests/guardrails/test_service_backup.py` to cover `ansible/playbooks/memory-restore-drill.yml`: extraction happens inside the `block` that owns the `always:` cleanup (the rule at line about 240).
+- [X] T056 [P] [US4] Extend `python/tests/guardrails/test_service_backup.py` to cover `ansible/playbooks/memory-restore-drill.yml`: extraction happens inside the `block` that owns the `always:` cleanup (the rule at line about 240).
 
 ### Implementation for User Story 4
 
-- [ ] T057 [US4] Create `ansible/roles/service_backup/templates/restore/memory-compose.yml.j2`: throwaway `memory_postgres_restore` and `memory_api_restore` on their own network, API on port `8889`, `server.env` re-rendered with the restore database URL and the same `clients.json`.
-- [ ] T058 [US4] Create `ansible/playbooks/memory-restore-drill.yml`, modelled on `ansible/playbooks/restore-drill.yml` (Immich). Run it on `hosts: memory` with `become`, and `vars_files: ../roles/memory/defaults/main.yml`.
+- [X] T057 [US4] Create `ansible/roles/service_backup/templates/restore/memory-compose.yml.j2`: throwaway `memory_postgres_restore` and `memory_api_restore` on their own network, API on port `8889`, `server.env` re-rendered with the restore database URL and the same `clients.json`.
+- [X] T058 [US4] Create `ansible/playbooks/memory-restore-drill.yml`, modelled on `ansible/playbooks/restore-drill.yml` (Immich). Run it on `hosts: memory` with `become`, and `vars_files: ../roles/memory/defaults/main.yml`.
   1. Find the latest `{{ service_backups['memory'].dir }}/memory-backup-*.tar.gz` (overridable with `-e`).
   2. In a `block`: extract, render the restore compose, run `pg_restore` into `memory_postgres_restore`, start `memory_api_restore` and wait for `/health`.
   3. Compare `GET /v1/default/banks/owner/stats` (`total_documents`, `total_nodes`) with `stats.json`.
   4. For each entry in the archive's `drill-probes.json`, recall its `query` on the restored instance (admin key, the gateway's embedder) and assert that its `unit_id` is among the top 3 results.
   5. Import `owner-export.zip` into an empty bank `restore-import` and assert the same document count.
   6. `always:` tears down both containers and the drill directory.
-- [ ] T059 [US4] Extend `ansible/roles/service_backup/templates/snapshot/memory.sh.j2` (from T025) to write `drill-probes.json`. Pick 3 random active units from bank `owner` (`list_memories`, admin key) and store `{unit_id, query}` for each, where `query` is the first 200 characters of the unit's text.
+- [X] T059 [US4] Extend `ansible/roles/service_backup/templates/snapshot/memory.sh.j2` (from T025) to write `drill-probes.json`. Pick 3 random active units from bank `owner` (`list_memories`, admin key) and store `{unit_id, query}` for each, where `query` is the first 200 characters of the unit's text.
   - The probe set is generated from the store at backup time and lives only inside the backup archive on the NAS, so no question about the owner is committed to this public repository (U3).
   - With fewer than 3 units in the bank, write the units that exist. With none, write an empty list, and the drill checks stats only.
 - [ ] T060 [US4] (manual) After one nightly backup, run `ansible-playbook -i ansible/inventories/prod/hosts.yml ansible/playbooks/memory-restore-drill.yml` (quickstart § 9). Record the result in `specs/097-hermes-long-term-memory/quickstart.md`.

@@ -376,6 +376,66 @@ def test_portal_tile_publishes_the_ui_only():
     assert str(services["memory-api"]["user_facing"]).lower() == "false"
 
 
+# --------------------------------------------------------------------------- restore drill (T057)
+
+RESTORE_TEMPLATES = ROOT / "ansible" / "roles" / "service_backup" / "templates" / "restore"
+DRILL = ROOT / "ansible" / "playbooks" / "memory-restore-drill.yml"
+
+
+def _restore_compose() -> dict[str, Any]:
+    ctx = _context()
+    env = Environment(loader=FileSystemLoader(str(RESTORE_TEMPLATES)), undefined=StrictUndefined)
+    return yaml.safe_load(env.get_template("memory-compose.yml.j2").render(**ctx))
+
+
+def test_restore_compose_runs_the_live_images_on_their_own_network():
+    restore = _restore_compose()
+    live = yaml.safe_load(render("docker-compose.yml.j2"))["services"]
+    services = restore["services"]
+    assert set(services) == {"memory_postgres_restore", "memory_api_restore"}
+    for name, svc in services.items():
+        assert svc["container_name"] == name
+        assert str(svc["restart"]).lower() == "no"
+        assert svc["networks"] == ["memory_restore"]
+    assert services["memory_postgres_restore"]["image"] == live["memory_postgres"]["image"]
+    assert services["memory_api_restore"]["image"] == live["memory_api"]["image"]
+    network = restore["networks"]["memory_restore"]
+    assert network["name"] == "memory-restore-drill"
+
+
+def test_restore_compose_publishes_the_api_on_localhost_8889_only():
+    services = _restore_compose()["services"]
+    assert services["memory_api_restore"]["ports"] == ["127.0.0.1:8889:8888"]
+    assert "ports" not in services["memory_postgres_restore"]
+
+
+def test_restore_compose_shares_the_live_mounts_but_not_the_live_data():
+    services = _restore_compose()["services"]
+    live = yaml.safe_load(render("docker-compose.yml.j2"))["services"]
+    api, db = services["memory_api_restore"], services["memory_postgres_restore"]
+    assert api["volumes"] == live["memory_api"]["volumes"]
+    assert api["env_file"] == "server.env" and db["env_file"] == "db.env"
+    assert db["volumes"] == ["memory-postgres-restore:/var/lib/postgresql/data"]
+    assert "memory-postgres-restore" in _restore_compose()["volumes"]
+    rendered = yaml.safe_dump(services)
+    assert _context()["memory_data_dir"] not in rendered
+    for secret in SECRETS.values():
+        assert secret not in rendered
+
+
+def test_drill_server_env_points_at_the_restore_database():
+    """The drill renders the role's server.env and rewrites the database host with the
+    playbook's own regex_replace; the result must name memory_postgres_restore only."""
+    match = re.search(r"regex_replace\('(@memory_postgres:[^']+)', '([^']+)'\)", DRILL.read_text())
+    assert match, "the drill rewrites server.env with regex_replace"
+    env = _env_file(re.sub(match.group(1), match.group(2), render("server.env.j2")))
+    url = env["HINDSIGHT_API_DATABASE_URL"]
+    assert url == f"postgresql://hindsight:{SECRETS['memory_db_password']}@memory_postgres_restore:5432/hindsight"
+    assert {k: v for k, v in env.items() if k != "HINDSIGHT_API_DATABASE_URL"} == {
+        k: v for k, v in _env_file(render("server.env.j2")).items() if k != "HINDSIGHT_API_DATABASE_URL"
+    }
+
+
 def test_preflight_refuses_a_ui_without_its_login_key():
     preflight = (ROLE / "tasks" / "preflight.yml").read_text()
     assert "memory_ui_access_key" in preflight and "serves the UI open" in preflight
