@@ -28,7 +28,7 @@ turn format (contract [turn-format.md](./contracts/turn-format.md)):
 - **Open WebUI**: a filter function, provisioned by the role's existing reconcile pattern. Open
   WebUI's own memories are imported once, then switched off (R-007, R-008).
 - **Claude Code**: `UserPromptSubmit` and `Stop` hooks in the owner's dotfiles. They are enabled
-  per private repository, and only after the accepted risk is confirmed (R-010).
+  only in the owner's private Claude Code installation, for private repositories (R-010).
 
 Hindsight's own web UI runs as a third container in the memory stack (stock
 `hindsight-control-plane` image). It is published at `https://memory.hus-sky.no` with a portal
@@ -111,7 +111,7 @@ No NFS for state (spec FR-007). The NAS share `homelab_memory` holds backups onl
 | Principle | Status | Notes |
 |---|---|---|
 | I. Spec-driven | PASS | `specs/097-hermes-long-term-memory/` (spec, plan, research, data model, contracts, quickstart). Two spec fixes are made in this change: FR-020's `lan` label becomes `internal` (R-011), and a new edge case covers Open WebUI chats with the agent model (R-007). Amendments to `083`, `065` and `002` are tasks (FR-022). |
-| II. Secrets | PASS | Seven new vault entries: `memory_db_password`, `memory_client_hermes_key`, `memory_client_open_webui_key`, `memory_client_control_plane_key`, `memory_ui_access_key`, `memory_admin_key` and `llm_router_client_memory_key`. The UI's API key exists only in the UI container's environment; the browser never holds it. Claude Code's key lives in the vault and the Mac's keychain, never in a repo. The LXC holds only sha256 hashes of client keys (R-001). Placeholders in docs. |
+| II. Secrets | PASS | Seven new vault entries: `memory_db_password`, `memory_client_hermes_key`, `memory_client_open_webui_key`, `memory_client_control_plane_key`, `memory_ui_access_key`, `memory_admin_key` and `llm_router_client_memory_key`. The UI's API key exists only in the UI container's environment; the browser never holds it. Claude Code's key lives in the vault, the Mac's keychain and Bitwarden (Linux), never in a repo. The LXC holds only sha256 hashes of client keys (R-001). Placeholders in docs. |
 | III. Separation | PASS | Terraform: `terraform/services/memory/` (existence and sizing) plus the IP and mountpoint in `prod.tfvars.template`. Ansible: everything inside the LXC, the Hermes, Open WebUI and gateway changes, Caddy, monitoring and the NFS mount. |
 | IV. Code economy | PASS, with six recorded choices | See Complexity Tracking. No new image builds: both images stay stock, and code is mounted read-only. The policy module and shim are about 150 lines. The other three are one optional field each on an existing list (`hermes_mcp_servers` twice, `llm_router_clients` once). No wrapper roles: `memory` follows `ntfy`'s layout. |
 | V. Dual provisioning | PASS | `memory` joins the `lxc-promote-prod.yml` dropdown and `service-scope-allowlist.json` in the same PR. All deploys go through `pve-service-deploy`. The spike harness runs on the dev Mac by design (FR-021); it is a gate, not a provisioning path. The Claude Code hooks are owner-workstation config in dotfiles, outside both paths, as the spec says (FR-019). |

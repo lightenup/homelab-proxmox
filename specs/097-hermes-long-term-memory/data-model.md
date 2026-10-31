@@ -65,7 +65,7 @@ stored there.
 |---|---|---|---|
 | `hermes` | `readwrite` | `memory_client_hermes_key` | Agent plugin config, agent MCP (`AUXILIARY_MCP_MEMORY_API_KEY`) |
 | `open-webui` | `readwrite` | `memory_client_open_webui_key` | Filter valves, Open WebUI MCP connection |
-| `claude-code` | `readwrite`, switchable to `readonly`, or absent (revoked) | `memory_client_claude_code_key` | Vault, Mac keychain |
+| `claude-code` | `readwrite`, switchable to `readonly`, or absent (revoked) | `memory_client_claude_code_key` | Vault, Mac keychain, Bitwarden (Linux laptop) |
 | `control-plane` | `curator` | `memory_client_control_plane_key` | The web UI container's environment only (research R-020) |
 | `backup` | `admin` | `memory_admin_key` | Root-only file on the memory LXC; restore drill; import task |
 
