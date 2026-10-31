@@ -190,13 +190,16 @@ Note: this means you do **not** need to mount the Jellyfin media export on PVE f
 
 ## Terraform state
 
-Terraform state is per-service on PVE:
+Terraform state is per-service and per-environment on PVE (spec 067):
 
-- `/var/lib/homelab-proxmox/state/services/<service>/terraform.tfstate`
+- PROD: `/var/lib/homelab-proxmox/state/prod/<service>/terraform.tfstate`
+- LAB: `/var/lib/homelab-proxmox/state/lab/<service>/terraform.tfstate`, which exists only during a LAB rehearsal
+  and is destroyed with the lab copy.
 
-After a successful apply, the orchestrator backs up that state file to Synology and captures proof in evidence:
-
-- `reports/apply/state-backup.txt`
+After a successful PROD apply, the orchestrator backs up that state file to Synology and captures proof in
+evidence (`reports/apply/state-backup.txt`). A LAB run skips the backup and records why. The nightly
+`proxmox-config-backup` also collects `state/prod/<svc>`. The drift check and how to respond are in
+[state-drift.md](../runbooks/state-drift.md).
 
 ## Evidence Verification
 

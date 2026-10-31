@@ -1,6 +1,6 @@
 # Backlog: one clear Terraform state location per service
 
-**Status**: Folded into [`067`](./067-lab-prod-same-address-space.md) (decision 5, 2026-10-30): a real lab
+**Status**: **DELIVERED 2026-10-31** inside [`specs/067-isolated-lab/`](../../specs/067-isolated-lab/). Folded into [`067`](./067-lab-prod-same-address-space.md) (decision 5, 2026-10-30): a real lab
 needs separate state per environment, so the state layout is done as part of that spec. The backup gap
 below is already fixed (PR #295). Raised 2026-10-28 during the Home Assistant deploy (PR #293).
 **Scope**: every service's Terraform state on `pve` and on the NAS. Related: [`067`](./067-lab-prod-same-address-space.md),

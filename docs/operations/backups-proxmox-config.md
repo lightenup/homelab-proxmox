@@ -530,17 +530,16 @@ task ansible:backup
 - ✅ Ansible role tasks: `ansible/roles/*/tasks/*.yml`
 - ✅ Documentation: `README.md`, `docs/operations/*.md`, `docs/runbooks/*.md`
 
-### User Story 3 - NAS-Backed State (If NAS mounted)
+### User Story 3 - Production Terraform State
 
-Since spec 033, Terraform state lives on the NAS under `infra_state/{lab,prod}/`.
-The nightly backup script (D-012 integration) collects these into the archive:
+Since spec 067, Terraform state is local to `pve` under `/var/lib/homelab-proxmox/state/{prod,lab}/`.
+The nightly backup collects the production state only:
 
-- ✅ Per-service Terraform state: `infra_state/<env>/<service>/terraform.tfstate`
-- ✅ Ansible inventory snapshot: `infra_state/<env>/ansible/hosts.yml`
-- ✅ Archived under `iac-artifacts/nas-state/` inside the backup tarball
+- ✅ Per-service Terraform state: `state/prod/<service>/terraform.tfstate*`
+- ✅ Archived under `iac-artifacts/local-state/<service>/` inside the backup tarball
+- ❌ Lab state (`state/lab`) is temporary, exists only during a LAB rehearsal, and is never backed up.
 
-> **Note**: Symlinks in `terraform/services/<service>/terraform.tfstate` point to
-> the NAS paths. During restore, re-create NAS mounts before running Terraform.
+> **Note**: The NAS `infra_state` tree no longer exists (removed by the 067 migration).
 
 ### What's NOT Backed Up
 

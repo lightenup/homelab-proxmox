@@ -46,8 +46,7 @@ def test_no_nas_state_leftovers():
     offenders = []
     for base in ("scripts", "ansible", ".github"):
         for path in (ROOT / base).rglob("*"):
-            # migrate-state-067 is the one-off that reads the old layout (deleted in T066).
-            if not path.is_file() or path.suffix == ".pyc" or path.name == "migrate-state-067":
+            if not path.is_file() or path.suffix == ".pyc":
                 continue
             try:
                 text = path.read_text()

@@ -106,6 +106,41 @@ change production; the PROD plan that follows is the real change. LAB cannot be 
 there is no standing lab copy. Evidence: `reports/lab/` in the run's evidence pack. Contract:
 [`specs/067-isolated-lab/contracts/pve-service-deploy-lab.md`](specs/067-isolated-lab/contracts/pve-service-deploy-lab.md).
 
+### Lab rehearsal from a laptop
+
+The rehearsal is a script on `pve`, so the laptop runs the same command CI does (constitution V). The pipeline
+passes the vault password and the Terraform token on stdin; do the same, and never put them on the command line.
+
+```bash
+# 1. Put the commit you want to rehearse on pve (CI checks out the SHA; from a laptop sync the tree)
+rsync -az --delete --exclude .git --exclude .venv --exclude mutants ./ ci@pve:homelab-proxmox/
+
+# 2. Run the rehearsal. Two stdin lines: the vault password, then the Terraform API token secret.
+printf '%s\n%s\n' "$ANSIBLE_VAULT_PASSWORD" "$TF_VAR_proxmox_api_token_secret" | ssh ci@pve '
+  set -euo pipefail; umask 077; read -r _vault_pw; read -r _tf_secret
+  pwfile="$(mktemp -t ansible-vault.XXXXXX)"; printf "%s" "$_vault_pw" >"$pwfile"
+  export ANSIBLE_VAULT_PASSWORD_FILE="$pwfile"
+  export TF_VAR_proxmox_api_token_id="terraform@pve!terraform-token" TF_VAR_proxmox_api_token_secret="$_tf_secret" PROXMOX_API_TOKEN_SECRET="$_tf_secret"
+  cd ~/homelab-proxmox/scripts/lab
+  ARTIFACT_ROOT=/var/lib/homelab-proxmox/artifacts ARTIFACT_RUNS_DIR=service-deploy-runs \
+    TFVARS_DIR=/var/lib/homelab-proxmox/tfvars VAULT_ID=lab ./pve-service-deploy apply --environment lab --service <svc>
+  rm -f "$pwfile"'
+
+# 3. Fetch the evidence pack (the run id is printed at the end of step 2)
+ARTIFACT_RUNS_DIR=service-deploy-runs scripts/lab/fetch_evidence_pack.sh --environment lab --run-id <run-id>
+```
+
+The result is the same as CI: `reports/apply/summary.txt` (`status=success`, or `status=failure` with a
+`reason=`), `reports/lab/*.json` and `teardown.json`. A second rehearsal started while one runs exits 1 on the
+lock and leaves the running one alone.
+
+Host-only parts, which no pipeline or rehearsal installs (root Ansible from the laptop, with `-k`):
+
+```bash
+ansible-playbook ansible/playbooks/lab_setup.yml --tags lab-network -k     # vmbr99 and the nftables isolation
+ansible-playbook ansible/playbooks/host_proxmox.yml --tags state-drift -k  # the nightly drift timer
+```
+
 Before the **first** deploy of a service:
 
 - Check `ssh pve sudo pct list` for a container that already has the service's hostname or IP but is

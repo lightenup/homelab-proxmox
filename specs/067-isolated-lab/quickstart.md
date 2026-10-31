@@ -15,6 +15,10 @@ This is a run guide that proves the feature end to end. Contracts:
 
 ## M. One-time state migration (FR-013, supervised; operator present)
 
+> Done on 2026-10-30 (T021). `migrate-state-067` and its test were deleted in T066; recover them from git
+> history (`b7273dc`) if a rerun is ever needed. The dated backup `/home/ci/state-backup-067-20261030` on `pve` is kept
+> for 30 days (until 2026-11-29); remove it by hand after that.
+
 ```bash
 ssh pve
 cd ~/homelab-proxmox/scripts/lab
@@ -27,7 +31,7 @@ Expected: `12/12 No changes`, then `old layout removed`. Check:
 ```bash
 ls /var/lib/homelab-proxmox/state            # prod  lab   (no 'services')
 ls /mnt/nas/homelab_ci/infra_state 2>&1      # No such file or directory
-ls /var/lib/homelab-proxmox/state-backup-067-*/   # 12 dated copies
+ls /home/ci/state-backup-067-*/   # 12 dated copies
 sudo systemctl start proxmox-config-backup.service   # then the manifest lists state/prod/<svc> x12
 ```
 
@@ -149,3 +153,70 @@ with `lab.tfvars` (prod IPs); the duplicate-container guard is what stops it. Do
 
 Hermes' skipped probes are recorded in `reports/lab/skipped-checks.txt`. A second run while the lock was
 held refused with exit 1 and left the other run untouched.
+
+## T059 record (2026-10-30/31, pipeline, `ntfy`)
+
+Promotion 1 of 5 for SC-007. Marker: a rendered YAML comment `# T059 promotion rehearsal` in the ntfy compose
+template.
+
+| Step | Run | Result |
+|---|---|---|
+| Promote `067-t059-ntfy-change`, suite forced on | 41138655454 | LAB rehearsal pass, suite pass, `lab_gate_failed=false`, `sha_all_ok=true` |
+| Production before apply | | marker count 0 |
+| `lxc-apply-prod` | 41174279772 | success; production marker count 1 |
+| Promote `067-t059-ntfy-bad-health` (418 health path) | 41134375265 | LAB `ok=false` (health check failed after 180 s), `lab_gate_failed=true`, copy destroyed, `lab-scratch` empty |
+| `lxc-apply-prod` for that run, no override | 41174541673 | refused at "Enforce override semantics": "LAB deploy and/or confidence suite failed; override not enabled." The sync and apply steps were skipped. |
+
+The Terraform PROD plan shows no change for this promotion, because the marker lives in an Ansible template; the
+change reaches production through the apply's Ansible step.
+
+Defects this exercise found and fixed before it could pass cleanly:
+
+- #308: the confidence-suite rig VM inherited Tailscale MagicDNS, which `vmbr99` cannot reach, so cloud-init
+  hung (600 s) and the suite failed.
+- #309: suite evidence retention globbed `lab-*`, so the isolated-lab runs (`lab-<service>-...`) made it delete
+  the suite's own newest pack and CI found no provenance.
+- #311: a died step (for example the health check) left no `reason=`; the summary now names it.
+- The first test marker was a Jinja comment, which never renders; a rendered comment is required for the
+  before/after check to mean anything.
+
+## T061 record (2026-10-31, laptop path, `ntfy`)
+
+`rsync` of the working tree to `ci@pve`, then `ssh ci@pve './pve-service-deploy apply --environment lab --service ntfy'`
+(run `lab-ntfy-unknown-20261031-060408`, 3 min 4 s), compared with the pipeline's LAB evidence for
+`lxc-promote-prod` run 41138655454.
+
+| Item | Pipeline | Laptop |
+|---|---|---|
+| `reports/apply/summary.txt` | `status=success`, `terraform_plan_exitcode=2` | identical |
+| `reports/lab/*.json` | capacity, copy, fingerprint.before/after, isolation, sweep, teardown, plus `inventory-guard.txt` | the same 8 files |
+| JSON key shapes (capacity, copy, fingerprint, isolation, teardown) | | identical |
+| `teardown.json` | `ok: true`, scratch and lab state removed | identical |
+| fingerprint before/after | only `phase` and `taken_at` differ | same; no `fingerprint.diff.txt` |
+| After the run | 0 lab containers, empty `lab-scratch`, 12 production containers | same |
+
+Two file-set differences are expected, not behavioural: CI strips `*.tfplan` before uploading the artifact, and
+`ansible-galaxy.txt` is written only when the collections are installed (the CI run did; the laptop run found
+them present).
+
+Limits of this check: the laptop run was made from the working tree (the ntfy sources are the same as the
+pipeline's commit; only docs differ). The vault password and token were already on `pve`, so the stdin hand-off
+documented in `AGENTS.md` was not exercised from the laptop.
+
+## T067 record (2026-10-31)
+
+- `pytest python/tests`: 535 passed (the 6 migration tests were deleted with `migrate-state-067`).
+- `scripts/lab/ci-validate-iac.sh`, `scripts/lab/ci-verify.sh <valid fixture>`: pass.
+- `pre-commit run --all-files` (yamllint, ansible-lint, json/yaml checks): pass.
+- `scripts/ci/terraform-validate.sh` on `pve`: exit 0.
+- `task mutmut:gate`: not run; no Python under the mutation scope changed (only tests and docs).
+
+## T021 step 4 record (2026-10-31, backup collects `state/prod`)
+
+The nightly `proxmox-backup.service` run at 2026-10-31 02:03 (journal, read as `ci`): "Collecting local Terraform
+state from: /var/lib/homelab-proxmox/state/prod", IaC artifacts 104K, secret scan clean, "Manifest generated: 28
+files checksummed", "Backup completed successfully", "Decryption successful". `state/prod` holds 12 service
+directories and the collector copies every `terraform.tfstate*` in each. Not directly confirmed: the manifest
+listing itself, which sits inside the age-encrypted archive that only root can open. To see it: as root on `pve`,
+decrypt the newest `/mnt/nas-backup/proxmox-backup-*.tar.zst.age` with `/root/.age/proxmox-backup.key` and list
+`iac-artifacts/local-state/`.
