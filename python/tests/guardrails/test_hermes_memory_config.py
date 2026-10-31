@@ -15,7 +15,9 @@ The per-mode secret freeze for hindsight-config.json is in test_hermes_env_modes
 
 from __future__ import annotations
 
+import ast
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -200,3 +202,135 @@ def test_plugin_config_is_root_owned_and_not_logged():
     assert module["owner"] == "root"
     # str(): other test modules strip YAML's bool resolver at import (see test_hermes_ntfy_config).
     assert str(task["no_log"]).lower() == "true"
+
+
+# --------------------------------------------------------------------------- Open WebUI (US2)
+#
+# Spec 097 T040: the Open WebUI filter, the one-shot import of Open WebUI's memories and the
+# retirement of that feature (research R-007, R-008). The filter's own behaviour and the two
+# container-side scripts are unit-tested in python/tests/open_webui_memory_filter/.
+
+FILTER_FILE = HERMES_ROLE / "files" / "open_webui" / "memory_filter.py"
+FILTER_TASK = "Reconcile the shared memory filter (097 T042, R-007)"
+CONFIG_TASK = "Reconcile the persisted Open WebUI configuration we own"
+TOOL_SERVER_TASK = "Reconcile the persisted MCP tool-server registrations"
+IMPORT_READ_TASK = "Read Open WebUI's own memories for the one-shot import (097 R-008)"
+IMPORT_TASK = "Import Open WebUI's memories into the shared memory (admin key, synchronous)"
+IMPORT_ASSERT_TASK = "Assert every Open WebUI memory is in the shared memory (097 R-008)"
+
+
+def _tasks() -> list[dict]:
+    return yaml.safe_load((HERMES_ROLE / "tasks" / "main.yml").read_text())
+
+
+def _task(name: str) -> dict:
+    return next(t for t in _tasks() if t.get("name") == name)
+
+
+def _index(name: str) -> int:
+    return next(i for i, t in enumerate(_tasks()) if t.get("name") == name)
+
+
+def _filter_constant(name: str):
+    """A module-level literal of the filter, read without importing it (it needs requests)."""
+    for node in ast.parse(FILTER_FILE.read_text()).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == name for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise AssertionError(f"{name} not found in {FILTER_FILE}")
+
+
+def test_open_webui_memories_are_switched_off_in_compose():
+    env = render_compose()["services"]["open-webui"]["environment"]
+    assert str(env["ENABLE_MEMORIES"]).lower() == "false"
+    assert str(env["USER_PERMISSIONS_FEATURES_MEMORIES"]).lower() == "false"
+
+
+def test_managed_config_switches_memories_off():
+    """ENABLE_MEMORIES seeds a fresh database only; the reconcile turns an existing install off
+    (memories.enable is a PersistentConfig in Open WebUI 0.11.3, config.py)."""
+    managed = yaml.safe_load((ROOT / "ansible/group_vars/services/vars.yml").read_text())["hermes_managed_config"]
+    assert str(managed["memories.enable"]).lower() == "false"
+
+
+def test_filter_reconcile_carries_the_open_webui_key_never_the_hermes_key():
+    task = _task(FILTER_TASK)
+    payload = task["vars"]["hermes_memory_filter_payload"]
+    assert payload["valves"]["key"] == "{{ memory_client_open_webui_key }}"
+    assert "memory_client_hermes_key" not in yaml.safe_dump(task)
+    assert task["ansible.builtin.command"]["stdin"] == "{{ hermes_memory_filter_payload | to_json }}"
+    assert str(task["no_log"]).lower() == "true"
+
+
+def test_filter_valve_url_goes_through_caddy_never_the_direct_port():
+    payload = _task(FILTER_TASK)["vars"]["hermes_memory_filter_payload"]
+    vars_yml = yaml.safe_load((ROOT / "ansible/group_vars/services/vars.yml").read_text())
+    env = Environment(undefined=StrictUndefined)
+    ctx = {"caddy_base_domain": vars_yml["caddy_base_domain"]}
+    ctx["hermes_memory_api_url"] = env.from_string(_defaults()["hermes_memory_api_url"]).render(**ctx)
+    url = env.from_string(payload["valves"]["url"]).render(**ctx)
+    assert url.startswith("https://memory-api.")
+    assert ":8888" not in url
+
+
+def test_filter_reconcile_reads_the_agent_models_with_the_agent_key():
+    payload = _task(FILTER_TASK)["vars"]["hermes_memory_filter_payload"]
+    assert payload["id"] == "shared_memory"
+    assert payload["models_url"] == "{{ hermes_agent_api_base_url }}/models"
+    assert payload["models_key"] == "{{ hermes_agent_api_server_key }}"
+    assert payload["content"] == "{{ lookup('ansible.builtin.file', 'open_webui/memory_filter.py') }}"
+    assert payload["valves"]["bank"] == "{{ hermes_memory_bank_id }}"
+
+
+def test_filter_reconcile_runs_after_the_tool_server_reconcile():
+    assert _index(FILTER_TASK) > _index(TOOL_SERVER_TASK)
+
+
+def test_import_runs_before_memories_are_switched_off():
+    """R-008: import while memories.enable is still true; the config reconcile flips it."""
+    for name in (IMPORT_READ_TASK, IMPORT_TASK, IMPORT_ASSERT_TASK):
+        assert _index(name) < _index(CONFIG_TASK), name
+
+
+def test_import_uses_the_admin_key_and_is_prod_only():
+    task = _task(IMPORT_TASK)
+    dumped = yaml.safe_dump(task)
+    assert "memory_admin_key" in dumped
+    assert "memory_client_" not in dumped
+    assert str(task["no_log"]).lower() == "true"
+    assert task["ansible.builtin.uri"]["url"] == (
+        "{{ hermes_memory_api_url }}/v1/default/banks/{{ hermes_memory_bank_id }}/memories")
+    read = _task(IMPORT_READ_TASK)
+    assert str(read["no_log"]).lower() == "true"
+    assert "(deploy_environment | default('prod')) != 'lab'" in yaml.safe_dump(read["when"])
+
+
+def test_every_task_naming_a_memory_key_is_no_log():
+    for task in _tasks():
+        if re.search(r"memory_(admin|client_\w+)_key", yaml.safe_dump(task)):
+            assert str(task.get("no_log")).lower() == "true", task.get("name")
+
+
+def test_lab_records_the_skipped_import():
+    tasks = (HERMES_ROLE / "tasks" / "main.yml").read_text()
+    assert "Open WebUI memories import" in tasks
+    assert tasks.count("{{ evidence_dir }}/reports/lab/skipped-checks.txt") >= 2
+
+
+def test_filter_preamble_is_the_contract_verbatim():
+    contract = (ROOT / "specs/097-hermes-long-term-memory/contracts/turn-format.md").read_text()
+    block = contract.split("```text\n", 1)[1].split("\n\n- <recalled text 1>", 1)[0]
+    assert _filter_constant("PREAMBLE") == block
+
+
+def test_filter_secret_patterns_are_alloy_redaction_patterns():
+    """turn-format.md rule 6: adapters strip what the estate's Alloy redaction would."""
+    alloy = yaml.safe_load((ROOT / "ansible/roles/alloy/defaults/main.yml").read_text())
+    expressions = {
+        re.sub(r"^(\\b)?\((.*)\)$", r"\1\2", rule["expression"])
+        for rules in alloy.values() if isinstance(rules, list)
+        for rule in rules if isinstance(rule, dict) and "expression" in rule
+    }
+    patterns = _filter_constant("SECRETS")
+    assert r"hmem_[A-Za-z0-9_-]{20,}" in patterns
+    for pattern in patterns:
+        assert pattern in expressions, pattern

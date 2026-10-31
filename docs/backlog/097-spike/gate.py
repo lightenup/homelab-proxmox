@@ -2,7 +2,7 @@
 
 Usage: python3 gate.py prod-render   (run.sh calls it after score.py)
 
-Evaluates SC-001 to SC-004 from the run's own evidence and writes results/<cand>/gate.json with
+Evaluates SC-001 to SC-005 from the run's own evidence and writes results/<cand>/gate.json with
 the configuration fingerprint and the images the harness actually ran. Exits non-zero unless
 every criterion passes. python/tests/guardrails/test_memory_harness_gate.py accepts a run only
 if its gate.json says pass and carries the current fingerprint, so a matching fingerprint on a
@@ -13,11 +13,14 @@ failed run is not evidence (PR #318 review).
 - SC-002: every update probe current, the negative probe "don't know".
 - SC-003: the memory server's key made embed and rerank calls only, and at least one.
 - SC-004: no egress attempt beyond the proxy in the compose log.
+- SC-005: llmproxy/portability.py clients (run.sh) passed: 6/6 cross-client recalls across
+  hermes, open-webui and claude-code, the server-stamped client tag, a read-only retain, a
+  webhook and a bank-config change refused (results/<cand>/portability.json; missing fails).
 - Images: every image in runs/<cand>/build/images.env (rendered from the PROD pins) is among
   the images compose ran (results/<cand>/images.txt).
 A keyword miss that nobody judged by hand fails the gate.
 """
-import collections, glob, hashlib, json, re, sys
+import collections, glob, hashlib, json, os, re, sys
 
 from score import score
 
@@ -71,9 +74,13 @@ def verdict(cand):
     ran = sorted({line.strip() for line in open(f"{out}/images.txt") if line.strip()})
     images = {"expected": expected, "ran": ran, "pass": set(expected) <= set(ran)}
 
+    porta = f"{out}/portability.json"
+    sc005 = json.load(open(porta)) if os.path.exists(porta) else {"missing": porta}
+    sc005["pass"] = sc005.get("pass") is True
+
     fingerprint = open(f"runs/{cand}/fingerprint.txt").readline().strip()
     result = {"fingerprint": fingerprint, "images": images,
-              "SC-001": sc001, "SC-002": sc002, "SC-003": sc003, "SC-004": sc004}
+              "SC-001": sc001, "SC-002": sc002, "SC-003": sc003, "SC-004": sc004, "SC-005": sc005}
     result["pass"] = all(v["pass"] for k, v in result.items() if isinstance(v, dict))
     return result
 

@@ -1,0 +1,26 @@
+p1  update            PASS  'you live in trondheim — you moved there from bergen at the end of october 2026, and your apartment is on mølle'
+p2  fact-no           PASS  'hunden heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'en smørbrød med ost og syltetøy er raskt, enkelt og helt uten nøtter.'
+p4  update-no         PASS  'grønn te om morgenen.'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  PASS  'du fortalte meg at du holder på å bygge en badstue på hytta din i hemsedal. (og håkon, elektrikeren i stavange'
+p7  decision-no       PASS  'den nattlige backupen skal kjøre klokka 03:00, ifølge det vi bestemte i dag — flytta fra midnatt til 03:00.\n\nm'
+p8  negative          PASS  "i don't have any information about a cat in my memory — i only know about your dog, tinde, the border collie. "
+p9  volume-no         PASS  'ingrid bor i tromsø og jobber som havbiolog.'
+p10 volume-en         PASS  'berit fyller 70 år 14. mars 2027, og planen er en overraskelsesfest på fjellstua.\n\n(en liten presisering: jeg '
+p11 volume-crossref   PASS  'det er håkon — din bror, som er elektriker i stavanger. han skal hjelpe med det elektriske i badstua på hytta '
+p12 volume-no         PASS  'vinterdekkene er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'your band is called fjordfunk, and you rehearse every wednesday at 19:00 in svartlamon.'
+p14 volume-en         PASS  'your on-call weeks start on thursdays every 4 weeks, counting from 9 november 2026. so the next ones are:\n\n- 9'
+p15 volume-constraint PASS  'reisei med kalkun, egg og springløk — raskt, japansk og uten nøtter.'
+p16 volume-preference FAIL  'jeg kan ikke røre ruteren direkte — den er ikke koblet til fra denne maskinen. men jeg kan gi deg konkrete end'
+recall: 15/16
+calls final chat 200 2
+calls final embed 200 17
+calls final rerank 200 9
+calls probes chat 200 63
+calls probes embed 200 32
+calls probes rerank 200 17
+calls sessions chat 200 46
+calls sessions embed 200 49
+calls sessions rerank 200 17

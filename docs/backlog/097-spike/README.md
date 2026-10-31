@@ -42,7 +42,7 @@ quickstart § 1). It runs the production configuration, not a hand-written one:
 mv results/prod-render "results/$(date +%F)-prod-render"   # keep gate.json and fingerprint.txt
 ```
 
-`run.sh` ends with `gate.py`, which writes `gate.json` (SC-001 to SC-004, the images that ran,
+`run.sh` ends with `gate.py`, which writes `gate.json` (SC-001 to SC-005, the images that ran,
 the fingerprint) and exits non-zero on any fail. A probe that misses its keywords prints a
 `review <id> sha256=<digest>` line; judge it by hand, record
 `{"pass": true|false, "answer_sha256": "<digest>"}` under `prod-render` in `overrides.json`, and
@@ -60,6 +60,18 @@ An override applies to that exact answer only.
 - `runs/prod-render/fingerprint.txt` hashes the pins and files that decide memory behaviour.
   `python/tests/guardrails/test_memory_harness_gate.py` fails until a committed
   `results/*-prod-render/fingerprint.txt` matches the current configuration.
+- SC-005 (spec 097 T045): after scoring, `run.sh` runs `llmproxy/portability.py clients` inside
+  `llmproxy`, which reads the keys from `runs/prod-render/secret.env` (mounted read-only at
+  `/run/harness/secret.env`). Hermes, Open WebUI and Claude Code each write one turn in the
+  `contracts/turn-format.md` shape with their own key, into the bank `porta-clients`, and the
+  other two must recall it (6/6). It also checks that the server stamps each writer's
+  `client:<id>` tag (the Open WebUI leg sends a forged one), that a read-only retain gets 403
+  (`claude-code-ro`, a harness-only readonly client that `render-prod.sh` appends to the rendered
+  `clients.json`), and that a webhook creation (every key) and a bank-config change (every key but
+  admin) get 403. The verdict lands in `results/prod-render/portability.json`; `gate.py` reads it
+  as SC-005, and a missing file fails the gate. To re-run the leg alone against a running stack:
+  `docker compose -f compose.base.yml -f compose.prod-render.yml exec -T llmproxy python -u
+  /app/portability.py clients porta-clients --clients hermes,open-webui,claude-code`.
 - `runs/prod-render/after-up.sh` creates the `owner` and `deploy-probe` banks with the admin key, as
   the memory deploy does (`roles/memory/tasks/bank.yml`); only `admin` may create a bank.
 - `keys/spike.env`: a virtual key minted on the Mac's LiteLLM (`/key/generate` with the master key

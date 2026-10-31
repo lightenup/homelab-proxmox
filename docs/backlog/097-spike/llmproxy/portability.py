@@ -1,7 +1,16 @@
 """Hindsight portability tests, run inside llmproxy (internal network, stdlib only).
 
 usage: portability.py write|mcp|export|import|recall <bank>
+       portability.py clients <bank> --clients hermes,open-webui,claude-code [--secrets PATH]
 Client A = REST, client B = MCP over Streamable HTTP. HSK = Hindsight API key (env).
+
+`clients` is the FR-021 gate's SC-005 leg (spec 097 T045, research R-017): each client writes a
+turn in the contracts/turn-format.md format with its own key from runs/prod-render/secret.env
+(mounted at /run/harness/secret.env by compose.prod-render.yml), and every other client must
+recall it (6/6 for three clients). It also checks the server-stamped client tag (a forged one
+replaced), a read-only retain refused with 403 (the harness-only `claude-code-ro` client that
+render-prod.sh adds), and a webhook creation and a bank-config change refused with 403. Writes
+/logs/porta/clients.json, which run.sh archives and gate.py reads as SC-005.
 """
 import json
 import os
@@ -12,7 +21,7 @@ import urllib.request
 import uuid
 
 BASE = "http://hindsight:8888"
-KEY = os.environ["HSK"]
+KEY = os.environ.get("HSK", "")
 OUT = "/logs/porta"
 os.makedirs(OUT, exist_ok=True)
 
@@ -193,5 +202,112 @@ def recall_all(bank):
     log("units in bank:", len(items), "tags seen:", sorted({t for u in items for t in (u.get("tags") or [])}))
 
 
+# --- clients: SC-005 across the three adapters (spec 097 T045) ---------------------------
+
+# One turn per client, each about its own topic, in the shape that client's adapter stores:
+# the plugin's session document for Hermes, owui-<chat_id> for Open WebUI (the filter),
+# cc-<session_id> for Claude Code (the hook). The Open WebUI leg also sends a forged client tag.
+TURNS = {
+    "hermes": dict(doc="porta-hermes-session", context="conversation between Hermes Agent and the User",
+                   say="My test parrot is called Kvitre-097.", reply="Noted, your test parrot is Kvitre-097.",
+                   ask="What is my test parrot called?", expect="kvitre-097", tags=["client:hermes"]),
+    "open-webui": dict(doc="owui-porta-chat", context="conversation between Open WebUI and the User",
+                       say="My test sister lives in Probe-by.", reply="Got it, your test sister lives in Probe-by.",
+                       ask="Where does my test sister live?", expect="probe-by", tags=["client:hermes"]),
+    "claude-code": dict(doc="cc-porta-session", context="conversation between Claude Code and the User",
+                        say="My test boat is called Probe-båt.", reply="Understood, your test boat is Probe-båt.",
+                        ask="What is my test boat called?", expect="probe-båt", tags=[]),
+}
+READONLY = "claude-code-ro"   # harness-only client with scope readonly (render-prod.sh)
+
+
+def key_var(client):
+    return {"admin": "memory_admin_key", READONLY: "memory_client_claude_code_readonly_key"}.get(
+        client, "memory_client_" + client.replace("-", "_") + "_key")
+
+
+def turn(client, spec):
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    messages = [{"role": "user", "content": f"User: {spec['say']}", "timestamp": now},
+                {"role": "assistant", "content": f"Assistant: {spec['reply']}", "timestamp": now}]
+    return {"items": [{"content": json.dumps(messages, ensure_ascii=False), "document_id": spec["doc"],
+                       "update_mode": "append", "context": spec["context"],
+                       "tags": [f"session:{spec['doc']}"] + spec["tags"],
+                       "metadata": {"retained_at": now, "turn_index": "1", "platform": client}}],
+            "async": True}
+
+
+def recall_texts(bank, query, key):
+    s, b, _ = http("POST", f"/v1/default/banks/{bank}/memories/recall",
+                   {"query": query, "types": ["world"], "budget": "mid", "max_tokens": 2000}, key=key)
+    return s, [(r.get("text") or "") for r in (json.loads(b).get("results", []) if s == 200 else [])]
+
+
+def clients(bank, names, secrets_path, deadline_s=180):
+    keys = dict(line.strip().split("=", 1) for line in open(secrets_path) if "=" in line)
+    key = {c: keys[key_var(c)] for c in [*names, READONLY, "control-plane", "admin"]}
+    s, _, _ = http("PUT", f"/v1/default/banks/{bank}", {"name": bank}, key=key["admin"])
+    log("create bank", bank, "->", s)
+    retained = {}
+    for c in names:
+        retained[c], b, _ = http("POST", f"/v1/default/banks/{bank}/memories", turn(c, TURNS[c]), key=key[c])
+        log(f"retain {c} ->", retained[c], b[:120])
+
+    cross = {f"{w}->{r}": False for w in names for r in names if r != w}
+    end = time.time() + deadline_s
+    while not all(cross.values()) and time.time() < end:
+        for pair in [p for p, ok in cross.items() if not ok]:
+            writer, reader = pair.split("->")
+            _, texts = recall_texts(bank, TURNS[writer]["ask"], key[reader])
+            cross[pair] = any(TURNS[writer]["expect"] in t.casefold() for t in texts)
+        if not all(cross.values()):
+            time.sleep(5)
+    for pair, ok in cross.items():
+        log(f"recall {pair}:", "found" if ok else "MISSING")
+
+    s, b, _ = http("GET", f"/v1/default/banks/{bank}/memories/list?limit=200", key=key["admin"])
+    units = json.loads(b).get("items", []) if s == 200 else []
+    stamped = {c: sorted({t for u in units if u.get("document_id") == TURNS[c]["doc"]
+                          for t in (u.get("tags") or []) if t.startswith("client:")}) for c in names}
+    log("client tags per writer:", stamped)
+    tags_ok = all(stamped[c] == [f"client:{c}"] for c in names)
+
+    readonly_retain, _, _ = http("POST", f"/v1/default/banks/{bank}/memories",
+                                 turn(READONLY, TURNS["claude-code"]), key=key[READONLY])
+    readonly_recall, _ = recall_texts(bank, TURNS["claude-code"]["ask"], key[READONLY])
+    log("read-only retain ->", readonly_retain, "recall ->", readonly_recall)
+    webhook = {c: http("POST", f"/v1/default/banks/{bank}/webhooks", {"url": "https://example.com/hook"},
+                       key=k)[0] for c, k in key.items()}
+    config = {c: http("PATCH", f"/v1/default/banks/{bank}/config",
+                      {"updates": {"retain_extraction_mode": "chunks"}}, key=k)[0]
+              for c, k in key.items() if c != "admin"}   # admin may change bank config
+    log("webhook create ->", webhook)
+    log("bank config change ->", config)
+
+    found = sum(cross.values())
+    result = {
+        "clients": names, "bank": bank, "score": f"{found}/{len(cross)}", "cross_recall": cross,
+        "retain_status": retained, "client_tags": stamped, "forged_tag_replaced": tags_ok,
+        "readonly_retain_status": readonly_retain, "readonly_recall_status": readonly_recall,
+        "webhook_status": webhook, "bank_config_status": config,
+    }
+    result["pass"] = (found == len(cross) and len(names) == 3 and all(v == 200 for v in retained.values())
+                      and tags_ok and readonly_retain == 403 and readonly_recall == 200
+                      and all(v == 403 for v in webhook.values()) and all(v == 403 for v in config.values()))
+    with open(f"{OUT}/clients.json", "w") as f:
+        json.dump(result, f, indent=1, ensure_ascii=False)
+        f.write("\n")
+    log(f"SC-005: {result['score']} cross-client recalls, {'PASS' if result['pass'] else 'FAIL'}")
+    return result
+
+
+def option(name, default):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
+
+
 cmd, bank = sys.argv[1], sys.argv[2]
+if cmd == "clients":
+    outcome = clients(bank, option("--clients", "hermes,open-webui,claude-code").split(","),
+                      option("--secrets", "/run/harness/secret.env"))
+    sys.exit(0 if outcome["pass"] else 1)
 {"write": write, "mcp": mcp, "export": export, "import": import_, "recall": recall_all}[cmd](bank)

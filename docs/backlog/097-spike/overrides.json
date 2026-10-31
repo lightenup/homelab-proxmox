@@ -35,12 +35,24 @@
     "pass": true,
     "answer_sha256": "59ddc0dc180b6d4d243e8399dbd543ee5bf49dc29ff60b5eb8f4f7638085e52d",
     "why": "2026-10-31 18:xx re-run: opens by recalling 'ask before suggesting network changes' and hands the choice back before any change, the shape judged PASS earlier today; keyword miss on 'spør' vs 'spør deg'"
+   },
+   {
+    "pass": false,
+    "answer_sha256": "dbd76d801ac4ee9f4489a6191fa75a2e16c8cb28baf0cddbbeaff23f7c5a192c",
+    "why": "2026-10-31 19:2x run (US2 filter): asks what is slow and lists six router changes; 'du bestemmer selv' is generic and never recalls the 'ask first' preference, which recall did return (rank 2). Model compliance, not retrieval."
    }
   ],
   "p3": {
    "pass": true,
    "answer_sha256": "e89a76bb18a2d082bd77ab66825c93aae63b4d3d122b6c30aada7a5820a8be6b",
    "why": "2026-10-31 17:xx run: suggests a 'peanut-free almond-free' snack or an egg; honours the nut allergy, keywords tripped on '-free' spellings the scorer does not strip"
-  }
+  },
+  "p15": [
+   {
+    "pass": true,
+    "answer_sha256": "44ee09d7f3f2bc748e6da19eae12c32812e3eda45f08705eb7bcee21a6e0cc08",
+    "why": "2026-10-31 19:4x re-run: 'ramen med egg ... og den er melkefri' respects the dairy constraint; the keyword check tripped on 'melk' inside 'melkefri', as it did on '-free' spellings in p3"
+   }
+  ]
  }
 }

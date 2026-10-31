@@ -1,0 +1,26 @@
+p1  update            PASS  'du bor i trondheim, i leiligheten din på møllenberg (3. etasje).'
+p2  fact-no           PASS  'hunden heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'toasted rye with cream cheese and a little smoked salmon — quick, and it suits your lactose intolerance.'
+p4  update-no         PASS  'du drikker grønn te om morgenen.'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  PASS  'du fortalte meg at du bygger en badstue på hytta din i hemsedal.'
+p7  decision-no       PASS  'jeg fant ikke backup-jobben da vi snakket om den nylig — du sa dere bestemte å flytte den til 03:00, men jeg h'
+p8  negative          PASS  "i don't have any information about a cat of yours — the only pet i know about is tinde, your border collie. if"
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø og jobber som marinbiolog.'
+p10 volume-en         PASS  'morsdagen er 14. mars 2027, da berit fyller 70. vi planlegger en overraskelsesselskap ved fjellstua.'
+p11 volume-crossref   PASS  "it's your brother håkon, the electrician in stavanger — he's promised to help with the electrical work in the "
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'fjordfunk! you rehearse wednesdays at 19:00 at svartlamon.'
+p14 volume-en         PASS  'your next on-call week starts 9 november 2026 (monday).'
+p15 volume-constraint PASS  'en varm ramen med egg, snitt i kjøtt og friske grønnsaker — japansk favoritt, og den er melkefri.'
+p16 volume-preference PASS  'ja, du sa selv at jeg ikke skal foreslå endringer på nettverket uten å spørre først — så her er forslagene, og'
+recall: 16/16
+calls final chat 200 1
+calls final embed 200 17
+calls final rerank 200 7
+calls probes chat 200 37
+calls probes embed 200 31
+calls probes rerank 200 16
+calls sessions chat 200 50
+calls sessions embed 200 49
+calls sessions rerank 200 17

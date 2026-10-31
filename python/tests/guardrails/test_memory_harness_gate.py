@@ -16,7 +16,7 @@ the Open WebUI filter (once it exists). Added after the PR #318 review: hashing 
 missed a change to the values it renders.
 
 A matching fingerprint alone is not evidence: the run must also have passed. gate.py writes
-gate.json with the SC-001 to SC-004 verdict and the fingerprint; only a passing gate.json counts.
+gate.json with the SC-001 to SC-005 verdict and the fingerprint; only a passing gate.json counts.
 
 Not fingerprinted: the Claude Code hook. It lives in dotfiles, and the harness replays its turn format without running
 it, so hashing it would force re-runs that test nothing (I2). The turn-format contract and
@@ -76,7 +76,7 @@ def fingerprint_file(root: Path = ROOT) -> str:
     return "\n".join([compute_fingerprint(root), *fingerprint_inputs(root)]) + "\n"
 
 
-GATE_CRITERIA = ("images", "SC-001", "SC-002", "SC-003", "SC-004")
+GATE_CRITERIA = ("images", "SC-001", "SC-002", "SC-003", "SC-004", "SC-005")
 
 
 def _recorded() -> dict[str, str]:

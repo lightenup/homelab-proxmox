@@ -133,6 +133,13 @@ services:
       # --- Scheduled prompts — retired (083 US3, FR-015): the agent's scheduler is the one
       # place jobs run. Persisted as automations.enable, so hermes_managed_config owns it too.
       ENABLE_AUTOMATIONS: "false"
+
+      # --- Memories — retired (097 FR-016, research R-008): the shared memory service is the one
+      # memory, reached through the `shared_memory` filter. Both seed a fresh database only;
+      # memories.enable in hermes_managed_config turns an existing install off, after the deploy
+      # has imported the old memories ("Import Open WebUI's memories into the shared memory").
+      ENABLE_MEMORIES: "false"
+      USER_PERMISSIONS_FEATURES_MEMORIES: "false"
     restart: unless-stopped
     depends_on:
       - searxng

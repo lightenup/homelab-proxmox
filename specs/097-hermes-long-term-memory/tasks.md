@@ -180,6 +180,57 @@ builds the memory service, which every story needs.
   `memory` and `reverse_proxy` deployed with the web UI; the owner's click-through is in
   quickstart § 11. The nightly backup script on the LXC writes `drill-probes.json`; the first run
   is 2026-11-01 05:30 UTC, after which T060 can run.
+- **US2 Open WebUI (T039–T046), 2026-10-31**: the harness gate (T046) passed on the agreed re-run at
+  19:40 after a 19:20 fail on p16 (quickstart § 1); the deploy (T047) has not run. Checked against the Open WebUI `v0.11.3` source (tag
+  `v0.11.3`, commit `2a960a5`, `backend/open_webui/`):
+  - Inlet gets `body`, `__user__`, `__metadata__`, `__model__` and `__chat_id__`
+    (`utils/middleware.py:2517-2527`); the outlet gets the same minus the chat and message ids
+    (`:3974-3981`), so the filter reads `body["chat_id"]`. Task requests carry
+    `metadata["task"]` (`routers/tasks.py:190`).
+  - The outlet runs inline after completion (`outlet_filter_handler`, `:3872`), but its messages
+    come from the stored chat (`:3945-3965`), not from the inlet's modified body. The injected
+    block reaches the outlet only for temporary and API chats, which the filter does not retain.
+  - An exception in a filter is re-raised (`utils/filter.py:205`) and fails the chat
+    (`utils/middleware.py:2644`), so the filter catches everything itself (fail open).
+  - Content and valves are re-read from `webui.db` on every inlet and outlet
+    (`utils/plugin.py:382-403`, `utils/filter.py:24-29`). Differs from R-007's UNVERIFIED
+    restart: none is needed, so T042 does not restart Open WebUI.
+  - Table `function` (`models/functions.py:19-32`); valves are plain JSON unless
+    `ENABLE_VALVE_ENCRYPTION` (default off, `env.py:752`), which the reconcile refuses. A module
+    that fails to load is set inactive (`utils/plugin.py:312`), which the reconcile undoes. Stored
+    content is rewritten when it contains `from utils`, `from main`, `from config` or `from apps`
+    (`utils/plugin.py:187-201`), and a frontmatter `requirements:` line is pip-installed
+    (`:273-275`); a unit test keeps both out of the filter.
+  - `memories.enable` gates the memories API (`routers/memories.py:35-46`) and is a
+    PersistentConfig (`config.py:424`, `:2856`). `USER_PERMISSIONS_FEATURES_MEMORIES` (`:1940`)
+    lives inside the persisted `user.permissions` object, so its env var seeds a fresh database
+    only; the deploy does not rewrite that object. The owner is admin, and admins bypass it.
+  - Table `memory`: `id, user_id, type, path, content, meta, updated_at, created_at`
+    (`models/memories.py:15-28`). The model's memory tool can write rows too
+    (`tools/builtin.py:921`).
+  - Deviations and choices:
+    - T041: the block is merged into an existing leading system message rather than added as a
+      second one (some chat templates refuse a second system message); otherwise inserted first.
+      `<details>` blocks (tool calls, tool results, reasoning) are stripped as Open WebUI does
+      (`utils/middleware.py:3689`). Besides `hmem_`, the filter strips the other token-shaped
+      Alloy patterns (`sk-`, `tk_`, JWT, `tskey-`); a guard test keeps them equal to Alloy's.
+      Temporary and channel chats are not retained (added to turn-format.md rule 5). A
+      workspace model built on the agent (`info.base_model_id`) is skipped like the agent.
+    - T042: the reconcile lives in `files/open_webui/reconcile_filter.py`; `meta` keeps keys the
+      app adds. Valve `url` is `hermes_memory_api_url`, which is
+      `https://memory-api.{{ caddy_base_domain }}`, the plugin's own setting.
+    - T043: `files/open_webui/read_memories.py` builds the items; the import posts them one per
+      call with the admin key. Text is labelled `Open WebUI saved memory:`, not `User:`, because
+      the model may have written it. The item timestamp is the row's `created_at`. The count is
+      `GET .../documents?q=owui-memory-` filtered by id prefix. The import runs before "Reconcile
+      the persisted Open WebUI configuration we own", and is skipped once `memories.enable` is
+      false, so later deploys never call the memory API here.
+    - T045: `portability.py clients` writes into its own bank `porta-clients` (created with the
+      admin key). The read-only check uses a harness-only `claude-code-ro` client that
+      `render-prod.sh` appends to the rendered `clients.json`, so `claude-code` stays readwrite
+      for 6/6. The bank-config refusal is checked for every key except admin, which may change
+      bank config. `run.sh` runs the leg and `gate.py` reads it as SC-005; the gate guard test
+      now requires SC-005. Smoke-tested only against a stub server, not the harness.
 - **Not run locally**: `terraform init/validate`. The local binary is broken, and the provider
   download from a container fails TLS verification behind Zscaler. `terraform fmt -check` passes.
   CI runs `terraform-validate.sh`.
@@ -442,7 +493,7 @@ WebUI's own memories are imported and retired (FR-012, FR-016, FR-019).
 
 ### Tests for User Story 2
 
-- [ ] T039 [P] [US2] Write `python/tests/open_webui_memory_filter/test_filter.py`. Load `ansible/roles/hermes/files/open_webui/memory_filter.py` by path and stub HTTP. Cover:
+- [X] T039 [P] [US2] Write `python/tests/open_webui_memory_filter/test_filter.py`. Load `ansible/roles/hermes/files/open_webui/memory_filter.py` by path and stub HTTP. Cover:
   - **Inlet**:
     - one system message with contracts/turn-format.md § Recall's preamble, verbatim;
     - no block on empty results;
@@ -454,7 +505,7 @@ WebUI's own memories are imported and retired (FR-012, FR-016, FR-019).
     - `document_id = owui-<chat_id>`, `update_mode: append`, tag `session:owui-<chat_id>`, `async: true`;
     - drops tool-call and tool-result messages and any injected memory block;
     - strips strings matching `hmem_[A-Za-z0-9_-]{20,}`.
-- [ ] T040 [P] [US2] Extend `python/tests/guardrails/test_hermes_memory_config.py`:
+- [X] T040 [P] [US2] Extend `python/tests/guardrails/test_hermes_memory_config.py`:
   - the Open WebUI service renders `ENABLE_MEMORIES=false` and `USER_PERMISSIONS_FEATURES_MEMORIES=false`;
   - `hermes_managed_config` contains `memories.enable: false`;
   - the filter-reconcile task's payload carries `memory_client_open_webui_key` and never `memory_client_hermes_key`;
@@ -462,32 +513,32 @@ WebUI's own memories are imported and retired (FR-012, FR-016, FR-019).
 
 ### Implementation for User Story 2
 
-- [ ] T041 [US2] Implement `ansible/roles/hermes/files/open_webui/memory_filter.py` (about 120 lines) until T039 passes. Ship T041 to T046 in one PR: the filter changes the harness fingerprint (T037), so CI stays red until T046 commits the new results folder.
+- [X] T041 [US2] Implement `ansible/roles/hermes/files/open_webui/memory_filter.py` (about 120 lines) until T039 passes. Ship T041 to T046 in one PR: the filter changes the harness fingerprint (T037), so CI stays red until T046 commits the new results folder.
   - **Structure**: `class Filter` with `Valves(url, key, bank="owner", agent_model_ids: list[str] = [], timeout_s=3)`.
   - **inlet**: `inlet(body, __user__, __metadata__)` recalls with types `["world"]` and budget `mid`, caps the block at about 8,000 characters, and inserts the system message.
   - **outlet**: async retain per contracts/turn-format.md.
   - **Dependencies**: standard library plus `requests`, which ships in Open WebUI's environment.
-- [ ] T042 [US2] Add the filter reconcile task to `ansible/roles/hermes/tasks/main.yml`, after the existing tool-server reconcile.
+- [X] T042 [US2] Add the filter reconcile task to `ansible/roles/hermes/tasks/main.yml`, after the existing tool-server reconcile.
   - **Mechanism**: `docker exec -i hermes_open_webui python3 -c ...`, with a JSON payload on stdin (`no_log`).
   - **Upsert**: the `function` row `id=shared_memory`, `type=filter`, `is_active=1`, `is_global=1`, the content of the filter file, and valves `{url: "https://memory-api.{{ caddy_base_domain }}", key: memory_client_open_webui_key, bank: owner, agent_model_ids: <ids>}`.
   - **Agent model ids**: inside the Open WebUI container (it shares the compose network), the same reconcile script calls `GET {{ hermes_agent_api_base_url }}/models` with `Authorization: Bearer {{ hermes_agent_api_server_key }}`, and writes every returned `data[*].id` into `agent_model_ids`. It fails the task if the list is empty, which catches a renamed or missing agent connection.
   - **Restart**: restart `hermes_open_webui` only when the stored content hash changed.
   - Follow the pattern of the tool-server reconcile at `ansible/roles/hermes/tasks/main.yml:636-708`.
-- [ ] T043 [US2] Add the one-shot import task to `ansible/roles/hermes/tasks/main.yml` (research R-008). It runs before memories are switched off, and only while `memories.enable` is still true in `webui.db`.
+- [X] T043 [US2] Add the one-shot import task to `ansible/roles/hermes/tasks/main.yml` (research R-008). It runs before memories are switched off, and only while `memories.enable` is still true in `webui.db`.
   1. Read the `memory` table through `docker exec`.
   2. For each row, retain with the admin key (`memory_admin_key`, `no_log`): `document_id = owui-memory-<id>`, tags `origin:open-webui-memory` and `client:open-webui`, synchronously.
   3. Assert that the count of `owui-memory-*` documents equals the row count.
   - Skip when the counts already match. PROD only: lab has no memory service.
-- [ ] T044 [US2] Switch Open WebUI's memories off.
+- [X] T044 [US2] Switch Open WebUI's memories off.
   - In `ansible/roles/hermes/templates/docker-compose.yml.j2` (open-webui service), set `ENABLE_MEMORIES=false` and `USER_PERMISSIONS_FEATURES_MEMORIES=false`.
   - Add `memories.enable: false` to `hermes_managed_config` in `ansible/group_vars/services/vars.yml`.
   - Order: after T043 in the same deploy.
-- [ ] T045 [US2] Extend `docs/backlog/097-spike/llmproxy/portability.py` with `--clients hermes,open-webui,claude-code`. Each client gets its own key from `runs/prod-render/secret.env` and replays a turn in the contracts/turn-format.md format. Then assert:
+- [X] T045 [US2] Extend `docs/backlog/097-spike/llmproxy/portability.py` with `--clients hermes,open-webui,claude-code`. Each client gets its own key from `runs/prod-render/secret.env` and replays a turn in the contracts/turn-format.md format. Then assert:
   - 6/6 cross-client recalls (SC-005);
   - a `client:<id>` tag stamped per writer, with a forged tag replaced;
   - a read-only `claude-code` retain refused with 403;
   - a webhook creation and a bank-config change refused with 403 for every key.
-- [ ] T046 [US2] (manual) Re-run the harness gate with the filter and portability legs (quickstart § 1), and commit the new results folder and fingerprint.
+- [X] T046 [US2] (manual) Re-run the harness gate with the filter and portability legs (quickstart § 1), and commit the new results folder and fingerprint.
 - [ ] T047 [US2] (manual) Deploy `hermes` (Open WebUI) through `Prod 1` → `Prod 2`.
   - **LAB stage**: the filter loads and fails open.
   - **PROD**: run quickstart § 7. Record the row count before the deploy, and the document count and the missing memory setting after it.

@@ -65,6 +65,15 @@ PASSED: p16 recalls the preference and hands the choice back (judged pass by the
 digest-bound), SC-002 to SC-004 and images pass (`results/2026-10-31-1815-prod-render/`). p16 is
 the one probe that varies run to run; it has passed in 4 of 5 prod-render runs today.
 
+**Runs 2026-10-31 19:20 and 19:40** for US2's Open WebUI filter (fingerprint `85ded065…`, the
+first runs with the SC-005 leg): 19:20 FAILED SC-001 on p16 (six router changes, no mention of the
+"ask first" preference; recall had returned it at rank 2, so model compliance, not retrieval;
+kept on record in `results/2026-10-31-1920-prod-render/`). The agreed single re-run at 19:40
+PASSED: SC-001 16/16 (p16 on its keywords; p15 judged pass, "melkefri" tripping the "melk"
+keyword), SC-002 to SC-004, SC-005 6/6 cross-client recalls with per-client tags, the forged tag
+replaced, the read-only retain refused (403) and webhooks refused for every key
+(`results/2026-10-31-1940-prod-render/`).
+
 SC-005 (cross-client) is US2's harness leg (T045, T046).
 
 Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two
