@@ -1,0 +1,16 @@
+{"probe": "p1", "tools": []}
+{"probe": "p2", "tools": []}
+{"probe": "p3", "tools": []}
+{"probe": "p4", "tools": []}
+{"probe": "p5", "tools": []}
+{"probe": "p6", "tools": ["read_file"]}
+{"probe": "p7", "tools": []}
+{"probe": "p8", "tools": []}
+{"probe": "p9", "tools": []}
+{"probe": "p10", "tools": ["tool_call", "tool_search", "session_search", "session_search", "session_search", "session_search", "session_search", "session_search", "terminal", "terminal", "terminal", "read_file", "terminal", "terminal", "terminal", "terminal", "execute_code", "terminal", "terminal", "terminal", "terminal"]}
+{"probe": "p11", "tools": ["read_file"]}
+{"probe": "p12", "tools": []}
+{"probe": "p13", "tools": []}
+{"probe": "p14", "tools": []}
+{"probe": "p15", "tools": []}
+{"probe": "p16", "tools": ["read_file"]}

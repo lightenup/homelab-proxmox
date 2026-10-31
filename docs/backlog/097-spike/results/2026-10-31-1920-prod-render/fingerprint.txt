@@ -1,0 +1,26 @@
+85ded065bab64cda5a667a1a07a100b33ab97263586f3b622f529ab83ac095d1
+pin hindsight_version=1.1.0
+pin memory_postgres_version=0.8.1-pg17
+pin hermes_hindsight_plugin_version=1.2.3
+pin hermes_agent_version=v0.21.6
+pin hermes_hindsight_plugin_sha256=845eb81934b5cefd0ce0b9170b2173ce144e5724cc736117d9a279e392bc466b
+pin wheel hindsight-client==0.10.3 b4d0d1bbc29dcd4ef25a4a23a08a48046d5337b704bdafabb02d0010d299a068
+pin wheel hindsight-embed==0.10.3 290b81d8363e996f166f533d32c61e734af5d104695a252b0e0f729cf36eccf1
+pin wheel aiohttp-retry==2.9.1 66d2759d1921838256a05a3f80ad7e724936f083e35be5abb5e16eed6be6dc54
+var hermes_agent_site_packages="/opt/hermes/.venv/lib/python3.14/site-packages"
+var hermes_hindsight_plugin_sha256="845eb81934b5cefd0ce0b9170b2173ce144e5724cc736117d9a279e392bc466b"
+var hermes_hindsight_plugin_url="https://github.com/vectorize-io/hindsight/archive/refs/tags/integrations/hermes/v{{ hermes_hindsight_plugin_version }}.tar.gz"
+var hermes_memory_api_url="https://memory-api.{{ caddy_base_domain }}"
+var hermes_memory_bank_id="owner"
+var hermes_memory_deps_dir="{{ hermes_agent_plugins_dir }}/memory-deps"
+var hermes_memory_plugin_cache_dir="/var/cache/hermes-memory-plugin"
+var hermes_memory_plugin_config_path="{{ hermes_install_dir }}/hindsight-config.json"
+var hermes_memory_plugin_dir="{{ hermes_agent_plugins_dir }}/memory/hindsight"
+var hermes_memory_pth_path="{{ hermes_agent_plugins_dir }}/memory/hermes-memory-deps.pth"
+file ansible/roles/memory/templates/server.env.j2 1b58a24aa1a108555c1a6c52e8a5cd0f6e59d6eb6b911a1a0c5f53c3f37c3611
+file ansible/roles/memory/templates/clients.json.j2 7bd8bd2af20f50d03236664d21ed82e7ba22cc53cf8aee8f5123da7cae42fad0
+file ansible/roles/memory/defaults/main.yml 3076e94474897b3450eae875c9c594537e633e79dcbe9ccf57ee11c9c0b4b532
+file ansible/roles/hermes/templates/hindsight-config.json.j2 c00ef708496adffb8a5a29d0b83845c5a9a7d1a4d550af608563fa0b5abc8263
+file python/src/homelab_proxmox_orchestrator/memory_access.py 63e8d57d86a17504ed8eaf226400139603c369d760058f7c4cc3382a32d542d3
+file ansible/roles/memory/files/hindsight_ext/shim.py dc80ef100ff82b597131e4fdc4f5ba2df29257eea471cd276c7cdb169d27426a
+file ansible/roles/hermes/files/open_webui/memory_filter.py 9919d1176ddfd5e1417a4a701f9a7b25fc0a54b2d8ca958bca965fecf3128f70
