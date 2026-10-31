@@ -137,6 +137,9 @@ builds the memory service, which every story needs.
   preview also showed the UI's views refused (`get_entity_graph` 113 times, `list_mental_models`,
   `list_directives`, `list_entities`, `get_memories_timeseries`, `get_bank_config`): the five
   reads are now allowed for every scope, and reading the bank config for `curator` and up.
+  The PROD click-through then hit `get_knowledge_base_tree` and `get_graph_data`, so reads moved
+  from a per-view list to a rule: every bank read is open to every scope except the bank config
+  (`curator` and up) and the bulk `export_knowledge_base` (nobody). Writes stay an allowlist.
 - **US3 monitoring (T052–T054), 2026-10-31**: metric names re-checked against the PROD
   `/metrics` and the `1.1.0-slim` source; they match research R-015.
   - `hindsight_operation_operations_total{operation="retain", source="api", success="true"}` is

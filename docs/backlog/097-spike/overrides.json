@@ -20,10 +20,27 @@
   "p16": true
  },
  "prod-render": {
-  "p16": {
+  "p16": [
+   {
+    "pass": true,
+    "answer_sha256": "e6eaa95532e1a122b70144d25b48bcefe453c68c02edebfb8acd49efacce7376",
+    "why": "2026-10-31 gate run: recalls 'ask before suggesting network changes' from an earlier conversation, gives only general considerations, and ends by asking which option the owner wants"
+   },
+   {
+    "pass": false,
+    "answer_sha256": "108e0ae7e67cfd296797358718c6552d8b3d1b21daf17dce282feabcc2119844",
+    "why": "2026-10-31 17:xx run: lists five router changes without mentioning the 'ask before suggesting network changes' preference; the standard that failed the hindsight run"
+   },
+   {
+    "pass": true,
+    "answer_sha256": "59ddc0dc180b6d4d243e8399dbd543ee5bf49dc29ff60b5eb8f4f7638085e52d",
+    "why": "2026-10-31 18:xx re-run: opens by recalling 'ask before suggesting network changes' and hands the choice back before any change, the shape judged PASS earlier today; keyword miss on 'spør' vs 'spør deg'"
+   }
+  ],
+  "p3": {
    "pass": true,
-   "answer_sha256": "e6eaa95532e1a122b70144d25b48bcefe453c68c02edebfb8acd49efacce7376",
-   "why": "2026-10-31 gate run: recalls 'ask before suggesting network changes' from an earlier conversation, gives only general considerations, and ends by asking which option the owner wants"
+   "answer_sha256": "e89a76bb18a2d082bd77ab66825c93aae63b4d3d122b6c30aada7a5820a8be6b",
+   "why": "2026-10-31 17:xx run: suggests a 'peanut-free almond-free' snack or an egg; honours the nut allergy, keywords tripped on '-free' spellings the scorer does not strip"
   }
  }
 }

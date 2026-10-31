@@ -196,6 +196,12 @@ READ = [
     "list_entities",
     "list_mental_models",
     "list_directives",
+    "get_graph_data",
+    "get_knowledge_base_tree",
+    "get_knowledge_page",
+    "search_knowledge_base",
+    "get_document_history",
+    "mental_model_get",
 ]
 RETAIN = ["retain"]
 CURATE = [

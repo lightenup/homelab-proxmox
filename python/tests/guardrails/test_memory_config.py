@@ -439,3 +439,15 @@ def test_drill_server_env_points_at_the_restore_database():
 def test_preflight_refuses_a_ui_without_its_login_key():
     preflight = (ROLE / "tasks" / "preflight.yml").read_text()
     assert "memory_ui_access_key" in preflight and "serves the UI open" in preflight
+
+
+def test_every_bank_read_but_two_is_open_to_every_scope():
+    """R-020: reads are open (every key can already recall the whole bank); writes stay an
+    allowlist. Only the bank config (curator and up) and the bulk export (nobody) are held back."""
+    # In guardrails/, not memory_access/: it reads the role's snapshot file, which the mutation
+    # gate does not copy into its mutants/ tree.
+    names = _snapshot()
+    reads = {n for n in names if n.startswith(("get_", "list_", "search_"))}
+    assert reads - memory_access.SCOPE_ALLOWLISTS["readonly"] == {"get_bank_config"}
+    assert "export_knowledge_base" in memory_access.REFUSED_FOR_ALL
+    assert "get_bank_config" in memory_access.SCOPE_ALLOWLISTS["curator"]
