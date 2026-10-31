@@ -509,7 +509,11 @@ that verifies it.
   Hindsight, plugin or agent pin, the server env, the plugin config, the policy module, the shim
   or the Open WebUI filter.
 - **Enforcement**: a guard test (`test_memory_harness_gate.py`) computes a fingerprint over those
-  pins and files, and fails unless a committed `results/*-prod-render/fingerprint.txt` matches.
+  pins and files and the values they render from (memory role defaults, hermes memory settings).
+  It fails unless a committed `results/*-prod-render/gate.json` both passed SC-001 to SC-004 and
+  carries the current fingerprint. `gate.py` writes that verdict at the end of `run.sh` and
+  checks that compose ran the images rendered from the PROD pins. Hand judgements are bound to
+  the reviewed answer's digest (PR #318 review).
   The Claude Code hook is not fingerprinted: it lives in dotfiles, and the harness replays its
   turn format without running the script.
 

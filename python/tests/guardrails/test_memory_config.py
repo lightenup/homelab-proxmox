@@ -313,3 +313,21 @@ def test_every_shim_hook_name_exists_in_the_pinned_hindsight():
     names = _shim_operation_names()
     assert "recall" in names and "import" in names
     assert names - _snapshot() == set()
+
+
+# --------------------------------------------------------------------------- deploy probe (R-019)
+
+
+def test_deploy_probe_token_is_drawn_once():
+    """A lookup re-evaluates at every reference: built in one templating pass, the probe's
+    document id, text and token each got a different random value, and the recall check
+    failed on every deploy (PR #318 review). The token must be stored by a set_fact of its own
+    and only referenced afterwards."""
+    tasks = yaml.safe_load((ROLE / "tasks" / "bank.yml").read_text())
+    probe = next(t for t in tasks if t.get("name") == "Run the deploy probe")
+    assert "vars" not in probe, "no lookup in block vars: it would be re-evaluated per reference"
+    draw, build = probe["block"][0], probe["block"][1]
+    assert list(draw["ansible.builtin.set_fact"]) == ["memory_probe_token"]
+    assert "lookup(" in draw["ansible.builtin.set_fact"]["memory_probe_token"]
+    fields = build["ansible.builtin.set_fact"]["memory_probe"]
+    assert all("{{ memory_probe_token }}" in v and "lookup(" not in v for v in fields.values())

@@ -98,6 +98,19 @@ builds the memory service, which every story needs.
   `keys/spike.env`.
 - **T037**: `test_harness_gate_ran_against_this_configuration` passes against
   `results/2026-10-31-prod-render/fingerprint.txt`.
+- **PR #318 review (2026-10-31), all 8 Copilot findings fixed**:
+  - T017: the deploy probe drew a new random token at every reference, so recall never matched
+    and every PROD memory deploy would have failed. The token is now set once (guard test).
+  - T031: the plugin is re-extracted when the installed manifest differs from the pin, and the
+    packages are rebuilt when `.pins` (name, version, sha256 per wheel) differs. A rollback to
+    cached files no longer leaves the newer copy in place (guard tests).
+  - T027 and T038: `reverse_proxy` is deployed after `memory`, and an authenticated HTTPS request
+    through Caddy must pass before `hermes` (plan step 6, quickstart § 3).
+  - T035 and T037: the harness runs the images rendered from the PROD pins (`images.env`,
+    checked against what compose ran); the fingerprint also covers the memory role defaults,
+    the client template and the hermes memory settings; `gate.py` writes `gate.json` with the
+    SC-001 to SC-004 verdict, and only a passing `gate.json` with the current fingerprint counts.
+    Hand judgements in `overrides.json` are bound to the reviewed answer's sha256.
 - **Not run locally**: `terraform init/validate`. The local binary is broken, and the provider
   download from a container fails TLS verification behind Zscaler. `terraform fmt -check` passes.
   CI runs `terraform-validate.sh`.
@@ -278,6 +291,7 @@ builds the memory service, which every story needs.
   2. Run `lxc-lifecycle.yml` with `action=add`, `environment=prod`, `service=memory`, `confirm_apply_prod=deploy-prod`.
   3. Deploy `llm-router` through `Prod 1 - LXC Promote` → `Prod 2 - LXC Apply`.
   4. Deploy `memory` the same way. The LAB stage must pass quickstart § 2 "memory": liveness without embeddings, deploy probe listed as skipped.
+  4a. Deploy `reverse_proxy` the same way, for the `memory-api` route (PR #318 review: no other deploy applies it). DNS is a wildcard to `.211`, so the route is all that is missing.
   5. Run `curl -s http://10.99.0.223:8888/metrics | grep -E '^hindsight_' | cut -d'{' -f1 | sort -u` from `pve` during the rehearsal, and paste the metric names into research R-015.
   6. In PROD, quickstart § 3 steps 1–5 must pass.
   7. Check that `/health` and `/metrics` answer without a key. If not, make the shim admit exactly those two paths (contracts/memory-access.md UNVERIFIED note) and redeploy.
@@ -342,6 +356,7 @@ turn of a new one, across Norwegian and English, and an unknown topic gets "don'
   - **Assertion**: some `docs/backlog/097-spike/results/*-prod-render/fingerprint.txt` equals the computed value (FR-021).
   - **Helper**: `render-prod.sh` writes `fingerprint.txt` using the same function, importable from the test module.
 - [ ] T038 [US1] (manual) Deploy `hermes` through `Prod 1` → `Prod 2`.
+  - **Before**: quickstart § 3 step 3 passes through Caddy (`https://memory-api.hus-sky.no`, Hermes key, 200). If the route is missing, Hermes runs every turn without memory.
   - **LAB stage**: the agent's `/health` stays healthy with memory unreachable, and one API-server turn returns the gateway's 429 without a crash (quickstart § 2 "hermes", research R-016).
   - **PROD**: run quickstart § 4 steps 1–5. Record the results in `specs/097-hermes-long-term-memory/quickstart.md`.
 

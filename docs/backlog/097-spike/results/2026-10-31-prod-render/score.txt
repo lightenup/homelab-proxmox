@@ -1,25 +1,25 @@
-p1  update            PASS  'trondheim, norway.'
+p1  update            PASS  'trondheim — du flyttet dit fra bergen i slutten av oktober 2026.'
 p2  fact-no           PASS  'hunden heter tinde, og hun er en border collie.'
-p3  constraint        PASS  'a slice of wholegrain bread with cream cheese and a thin layer of smoked salmon, or a boiled egg with a pinch '
-p4  update-no         PASS  'du drikker grønn te om morgenen — du har sluttet med kaffe.'
+p3  constraint        PASS  'a slice of rye bread with smoked salmon and a little green tea on the side.'
+p4  update-no         PASS  'grønn te.'
 p5  fact-en           PASS  'helix.'
-p6  fact-no-asked-en  PASS  "you're building a sauna (badstue) at your cabin in hemsedal."
-p7  decision-no       PASS  "the backup job was never actually set up — i couldn't find an existing one when you asked earlier. so right no"
-p8  negative          PASS  "i don't have any record of a cat — what i know is that you have a border collie named tinde. if you've gotten "
-p9  volume-no         PASS  'søsteren din, ingrid, bor i tromsø og jobber som marinbiolog.'
-p10 volume-en         PASS  'mors fødselsdag er 14. mars 2027, da fyller berit 70. vi planlegger en overraskelsesselskap ved fjellstua.'
-p11 volume-crossref   PASS  'your brother håkon (the electrician in stavanger) is helping with the sauna electrical work in hemsedal over e'
-p12 volume-no         PASS  'vinterdekkene er lagret hos dekkhotellet i leangen.'
-p13 volume-en         PASS  'your band is called fjordfunk, and you rehearse every wednesday at 19:00 at svartlamon.'
-p14 volume-en         PASS  'du er på vakt hver 4. uke fra og med 9. november, så neste vaktuke starter mandag 9. november.'
-p15 volume-constraint PASS  'ramen med syltet ingefær og mykt stekt egg.'
-p16 volume-preference PASS  'ok, først en ting: jeg kan ikke komme meg inn på ruteren fra her, så alt blir forslag du gjør selv i unifi-kon'
+p6  fact-no-asked-en  PASS  'du bygger en badstue på hytta i hemsedal.'
+p7  decision-no       PASS  'det finnes ingen nattlig backup-jobb som kjører i hermes akkurat nå — jeg sjekket listen over cron-jobber, og '
+p8  negative          PASS  "i don't have any record of a cat — my notes only mention tinde, your border collie. do you have a cat too? if "
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø og jobber som havbiolog.'
+p10 volume-en         PASS  'moren berit fyller 70. 14. mars 2027, og dere planlegger en overraskelsesselskap på fjellstua.'
+p11 volume-crossref   PASS  "your brother håkon, who's an electrician in stavanger, is helping with the electrical work in the sauna at the"
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'your band is fjordfunk, and you rehearse every wednesday at 19:00 at svartlamon.'
+p14 volume-en         PASS  'your next on-call week starts monday, 9 november 2026.'
+p15 volume-constraint PASS  'laks med poteter og grønnsaker til kvelds.'
+p16 volume-preference PASS  'jeg kan ikke greie å plogge direkte inn i ruteren min fra her — jeg har ikke ip-adresse eller tilgang til unif'
 recall: 16/16
 calls final chat 200 1
 calls final embed 200 1
-calls probes chat 200 33
+calls probes chat 200 37
 calls probes embed 200 31
 calls probes rerank 200 16
-calls sessions chat 200 50
-calls sessions embed 200 49
+calls sessions chat 200 41
+calls sessions embed 200 47
 calls sessions rerank 200 17

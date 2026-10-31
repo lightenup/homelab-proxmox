@@ -2,14 +2,14 @@
 # The production configuration, rendered by ./render-prod.sh from the Ansible templates:
 # pinned stock images, the shim and policy module mounted read-only as on the memory LXC, and
 # the stock agent with the pinned plugin, packages and plugin config mounted read-only as in
-# roles/hermes/templates/docker-compose.yml.j2. Images and pins must match
-# roles/memory/defaults/main.yml and group_vars/services/vars.yml (render-prod.sh fingerprints
-# the pins; keep the image tags here in step with them).
+# roles/hermes/templates/docker-compose.yml.j2. The images come from runs/prod-render/build/
+# images.env, which render-prod.sh renders from the role defaults and the PROD pins; run.sh
+# loads it, and gate.py checks that compose ran exactly those images.
 volumes:
   memory_pg: {}
 services:
   memory_postgres:
-    image: pgvector/pgvector:0.8.1-pg17
+    image: ${MEMORY_POSTGRES_IMAGE:?run render-prod.sh first}
     env_file: ./runs/prod-render/build/db.env
     volumes: [memory_pg:/var/lib/postgresql/data]
     networks: [int]
@@ -18,7 +18,7 @@ services:
       interval: 5s
       retries: 20
   hindsight:
-    image: ghcr.io/vectorize-io/hindsight:1.1.0-slim
+    image: ${MEMORY_API_IMAGE:?run render-prod.sh first}
     env_file: ./runs/prod-render/build/server.env
     volumes:
       - ../../../python/src/homelab_proxmox_orchestrator/memory_access.py:/opt/memory-ext/memory_access.py:ro
@@ -39,6 +39,7 @@ services:
       # rendered model names reach the Mac's LiteLLM unchanged in the config.
       MODEL_MAP: "hermes-embed=embed,hermes-rerank=rerank"
   hermes:
+    image: ${HERMES_AGENT_IMAGE:?run render-prod.sh first}
     volumes:
       - ./runs/prod-render/build/plugin:/opt/data/plugins/hindsight:ro
       - ./runs/prod-render/build/memory-deps:/opt/hermes-memory-deps:ro

@@ -40,21 +40,24 @@ Expected:
 
 Record the results under `results/<YYYY-MM-DD>-prod-render/` and link them in the PR.
 
-**Run 2026-10-31** (T036, fingerprint `391a9406…`,
-[`results/2026-10-31-prod-render/`](../../docs/backlog/097-spike/results/2026-10-31-prod-render/)):
+**Run 2026-10-31** (T036, re-run after the PR #318 review fixes; fingerprint `5aef232f…`,
+[`results/2026-10-31-prod-render/`](../../docs/backlog/097-spike/results/2026-10-31-prod-render/),
+verdict in `gate.json`):
 
 | Criterion | Result |
 |---|---|
-| SC-001 | PASS: 16/16, all 8 volume probes; baselines `none` 10/16 and `none-run1` 11/16. p16 judged by hand (`overrides.json`, same standard as `hindsight-chunks`) |
+| Images | PASS: compose ran `hindsight:1.1.0-slim`, `pgvector:0.8.1-pg17`, `hermes-agent:v0.21.6`, as rendered from the PROD pins |
+| SC-001 | PASS: 16/16, all 8 volume probes; best baseline 11/16. p16 judged by hand, bound to the answer's sha256 (`overrides.json`): it recalls "ask before suggesting network changes" and ends by asking which option the owner wants |
 | SC-002 | PASS: both update probes current (p1, p4); the negative probe answers "no record of a cat" (p8) |
-| SC-003 | PASS: the memory key made 81 embed and 33 rerank calls and 0 chat calls; the 80 chat calls are the agent's own |
-| SC-004 | PASS: no egress attempt in the compose log (internal network, proxy only) |
-| Store | 36 documents, 36 units, every unit tagged `client:hermes`, 0 failed operations |
-| Memory | agent 324 MiB, Hindsight 350 MiB, Postgres 76 MiB at the end of the run |
+| SC-003 | PASS: the memory key made 79 embed and 33 rerank calls and 0 chat calls |
+| SC-004 | PASS: no egress attempt in the compose log |
+| Store | 34 documents, 34 units, every unit tagged `client:hermes`, 0 failed operations |
+| Memory | agent 330 MiB, Hindsight 333 MiB, Postgres 92 MiB at the end of the run |
 
 SC-005 (cross-client) is US2's harness leg (T045, T046).
 
-Two runs before this one were stopped and discarded: the first had no valid LiteLLM key and
+Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two
+stopped and discarded runs: the first had no valid LiteLLM key and
 showed that `PYTHONPATH` does not reach the gateway (fixed with a `.pth` file, research R-003);
 the second showed the harness skipped the bank creation the memory deploy performs, so every
 client retain was refused `scope readwrite may not create_bank` (fixed with
@@ -81,6 +84,9 @@ Runs inside `Prod 1 - LXC Promote` for `memory`, then for `hermes`.
 
 ## 3. memory in PROD: deploy probe and auth (FR-010, FR-011, R-019)
 
+Needs the `reverse_proxy` deploy after `memory` (plan step 6): `$MEM` goes through Caddy. Step 3
+is the precondition for the `hermes` deploy.
+
 1. The deploy log shows the `deploy-probe` retain, recall and delete passing.
 2. Unauthenticated and wrong-key requests both return 401:
 
@@ -89,7 +95,8 @@ Runs inside `Prod 1 - LXC Promote` for `memory`, then for `hermes`.
    curl -s -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer hmem_wrong' "$MEM/owner/stats"
    ```
 
-3. `GET $MEM/owner/stats` with the Hermes key returns 200.
+3. `GET $MEM/owner/stats` with the Hermes key returns 200 over HTTPS through Caddy. Do not deploy
+   `hermes` until this passes.
 4. A `DELETE $MEM/owner/memories` (clear bank) with the Hermes key returns 403.
 5. Creating a webhook (`POST $MEM/owner/webhooks`) and changing the bank config
    (`PATCH $MEM/owner/config`) both return 403 with the Hermes key, and also with the admin key

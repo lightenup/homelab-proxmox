@@ -28,13 +28,25 @@
     mode: '0644'
   register: hermes_memory_plugin_tarball
 
+# The cached tarball can be older than what is installed (a rollback to a version fetched
+# before), so the installed manifest decides, not the download.
 - name: Check for an unpacked plugin
   ansible.builtin.stat:
     path: "{{ hermes_memory_plugin_dir }}/plugin.yaml"
   register: hermes_memory_plugin_unpacked
 
+- name: Read the installed plugin manifest
+  ansible.builtin.slurp:
+    src: "{{ hermes_memory_plugin_dir }}/plugin.yaml"
+  register: hermes_memory_plugin_installed
+  when: hermes_memory_plugin_unpacked.stat.exists
+
 - name: Unpack the plugin into a clean directory
-  when: hermes_memory_plugin_tarball.changed or not hermes_memory_plugin_unpacked.stat.exists
+  when: >-
+    hermes_memory_plugin_tarball.changed
+    or not hermes_memory_plugin_unpacked.stat.exists
+    or ((hermes_memory_plugin_installed.content | b64decode | from_yaml).version | string)
+       != hermes_hindsight_plugin_version
   block:
     - name: Remove the previous plugin version
       ansible.builtin.file:
@@ -100,15 +112,31 @@
     label: "{{ item.name }}{{ item.version }}"
   register: hermes_memory_wheels
 
+# .pins records exactly what was unpacked (name, version, sha256 per wheel). Any difference from
+# the declared list, a rollback to cached wheels or a removed wheel included, rebuilds the dir.
+- name: Define the expected package marker
+  ansible.builtin.set_fact:
+    hermes_memory_deps_pins: >-
+      {%- for w in hermes_hindsight_plugin_wheels -%}
+      {{ w.name }}{{ w.version }} {{ w.sha256 }}
+      {% endfor -%}
+
 - name: Check for unpacked packages
   ansible.builtin.stat:
     path: "{{ hermes_memory_deps_dir }}/.pins"
   register: hermes_memory_deps_marker
 
+- name: Read the installed package marker
+  ansible.builtin.slurp:
+    src: "{{ hermes_memory_deps_dir }}/.pins"
+  register: hermes_memory_deps_installed
+  when: hermes_memory_deps_marker.stat.exists
+
 - name: Unpack the packages into a clean directory
   when: >-
     hermes_memory_wheels.changed
     or not hermes_memory_deps_marker.stat.exists
+    or (hermes_memory_deps_installed.content | b64decode) != hermes_memory_deps_pins
   block:
     - name: Remove the previous packages
       ansible.builtin.file:
@@ -137,7 +165,7 @@
 
     - name: Record the unpacked pins
       ansible.builtin.copy:
-        content: "{{ hermes_hindsight_plugin_wheels | map(attribute='name') | zip(hermes_hindsight_plugin_wheels | map(attribute='version')) | map('join') | join('\n') }}\n"
+        content: "{{ hermes_memory_deps_pins }}"
         dest: "{{ hermes_memory_deps_dir }}/.pins"
         owner: root
         mode: '0644'

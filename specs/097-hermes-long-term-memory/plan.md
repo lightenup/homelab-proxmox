@@ -212,15 +212,19 @@ LAB rehearsal.
 5. **memory**: deploy, with the web UI. LAB proves liveness without embeddings and that the UI
    serves its login page (SC-008). PROD runs the deploy probe (R-019), adds the backup timer and
    the portal tile; check quickstart § 11.
-6. **hermes**: plugin, config and MCP entry. LAB proves the agent stays healthy with memory
+6. **reverse_proxy**: the `memory-api` route (and the `memory` portal tile once the UI ships).
+   DNS is a wildcard to `.211`, so the route is all that is missing. Before step 7, an
+   authenticated `GET https://memory-api.hus-sky.no/v1/default/banks/owner/stats` with the
+   Hermes key returns 200 (quickstart § 3). Without it, Hermes runs every turn without memory.
+7. **hermes**: plugin, config and MCP entry. LAB proves the agent stays healthy with memory
    unreachable. In PROD, a fresh conversation shows recall (quickstart § 4).
-7. **monitoring**: scrape, probe and rules (log rules start disabled, awaiting a 7-day baseline).
-8. **Open WebUI** (part of the `hermes` deploy, separate PR): filter, memories import, memories
+8. **monitoring**: scrape, probe and rules (log rules start disabled, awaiting a 7-day baseline).
+9. **Open WebUI** (part of the `hermes` deploy, separate PR): filter, memories import, memories
    off.
-9. **Claude Code**: only after the accepted risk is confirmed against the Claude Enterprise
+10. **Claude Code**: only after the accepted risk is confirmed against the Claude Enterprise
    Guidance & Guidelines. Mint the key, then enable the hooks in one private repo.
-10. **US-4 and US-5**: restore drill, the forget/correct check and the revocation drill.
-11. **Docs**: amend `083`, `065` and `002`, and update the architecture table (FR-022).
+11. **US-4 and US-5**: restore drill, the forget/correct check and the revocation drill.
+12. **Docs**: amend `083`, `065` and `002`, and update the architecture table (FR-022).
 
 ## Complexity Tracking
 

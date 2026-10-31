@@ -19,15 +19,20 @@
 
 - name: Run the deploy probe
   when: (deploy_environment | default('prod')) != 'lab'
-  vars:
-    memory_probe_token: "{{ lookup('ansible.builtin.password', '/dev/null length=20 chars=ascii_lowercase') }}"
-    memory_probe_doc: "deploy-probe-{{ memory_probe_token }}"
-    memory_probe_text: "The deploy probe for memory recorded the marker {{ memory_probe_token }}."
   block:
-    # The token is set once: a lookup in vars is re-evaluated at every use.
-    - name: Fix the probe sentence
+    # Two steps on purpose: a lookup is re-evaluated at every reference, so building the three
+    # fields from it in one go gives each a different token and the recall check always fails.
+    # set_fact stores the token once; the fields are built from the stored value.
+    - name: Draw the probe token once
       ansible.builtin.set_fact:
-        memory_probe: {doc: "{{ memory_probe_doc }}", text: "{{ memory_probe_text }}", token: "{{ memory_probe_token }}"}
+        memory_probe_token: "{{ lookup('ansible.builtin.password', '/dev/null length=20 chars=ascii_lowercase') }}"
+
+    - name: Build the probe sentence from the token
+      ansible.builtin.set_fact:
+        memory_probe:
+          doc: "deploy-probe-{{ memory_probe_token }}"
+          text: "The deploy probe for memory recorded the marker {{ memory_probe_token }}."
+          token: "{{ memory_probe_token }}"
 
     - name: Read probe bank stats before the probe
       ansible.builtin.uri:

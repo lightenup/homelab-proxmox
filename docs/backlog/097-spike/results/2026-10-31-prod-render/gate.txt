@@ -1,0 +1,6 @@
+gate images: PASS
+gate SC-001: PASS
+gate SC-002: PASS
+gate SC-003: PASS
+gate SC-004: PASS
+gate: PASS (5aef232f9c1f)

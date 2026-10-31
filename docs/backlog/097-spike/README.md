@@ -39,8 +39,15 @@ quickstart § 1). It runs the production configuration, not a hand-written one:
 ```sh
 ./render-prod.sh                  # renders the Ansible templates, fetches the pinned plugin
 ./run.sh prod-render              # pinned stock images, shim and policy mounted read-only
-mv results/prod-render "results/$(date +%F)-prod-render"   # keep fingerprint.txt with it
+mv results/prod-render "results/$(date +%F)-prod-render"   # keep gate.json and fingerprint.txt
 ```
+
+`run.sh` ends with `gate.py`, which writes `gate.json` (SC-001 to SC-004, the images that ran,
+the fingerprint) and exits non-zero on any fail. A probe that misses its keywords prints a
+`review <id> sha256=<digest>` line; judge it by hand, record
+`{"pass": true|false, "answer_sha256": "<digest>"}` under `prod-render` in `overrides.json`, and
+re-run `python3 score.py prod-render > results/prod-render/score.txt && python3 gate.py prod-render`.
+An override applies to that exact answer only.
 
 - `render-prod.sh` renders `roles/memory/templates/{server.env,db.env,clients.json}.j2` and
   `roles/hermes/templates/hindsight-config.json.j2` with `ansible localhost -m template`, the PROD

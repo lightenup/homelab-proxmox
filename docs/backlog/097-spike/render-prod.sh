@@ -58,6 +58,16 @@ render memory/templates/server.env.j2 server.env
 render memory/templates/db.env.j2 db.env
 render memory/templates/clients.json.j2 clients.json
 render hermes/templates/hindsight-config.json.j2 hindsight-config.json
+# The images, from the same role defaults the deploy uses (PR #318 review: the harness must
+# run the pinned images, not literal tags). compose.prod-render.yml reads these; gate.py checks
+# that compose ran them.
+cat > "$BUILD/images.env.j2" <<'IMAGES'
+MEMORY_API_IMAGE={{ memory_api_image }}
+MEMORY_POSTGRES_IMAGE={{ memory_postgres_image }}
+HERMES_AGENT_IMAGE={{ hermes_agent_image }}
+IMAGES
+ansible "${ANSIBLE_ARGS[@]}" -m ansible.builtin.template \
+    -a "src=$PWD/$BUILD/images.env.j2 dest=$PWD/$BUILD/images.env mode=0644" >/dev/null
 # The API container runs as uid 1000 and reads clients.json; on the dev Mac the bind mount maps
 # the owner, so 0644 inside the 0700 build dir is enough.
 chmod 644 "$BUILD/clients.json" "$BUILD/hindsight-config.json"
