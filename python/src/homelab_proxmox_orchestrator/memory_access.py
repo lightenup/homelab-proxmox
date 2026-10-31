@@ -44,13 +44,33 @@ _READ = frozenset(
         "get_bank_profile",
         "get_operation_status",
         "list_operations",
+        # The web UI's views (R-020; refused in the first preview, 2026-10-31): the memory
+        # timeline and the entity graph, empty in chunks mode, and the lists of features kept
+        # off. Reads of what every key can already recall; no LLM, no egress, no change.
+        "get_memories_timeseries",
+        "get_entity_graph",
+        "list_entities",
+        "list_mental_models",
+        "list_directives",
     }
 )
 # Retain, plus curation of one unit (edit, invalidate, revert). Hindsight fires the bank write
-# update_memory_unit before the memory_update hook, so both are needed.
-_WRITE = frozenset({"retain", "memory_update", "update_memory_unit"})
-# Hard delete of a conversation and retry of a failed operation (owner choice 2026-10-31).
-_CURATE = frozenset({"delete_document", "retry_operation"})
+# update_memory_unit before the memory_update hook, so both are needed. An edit or a delete then
+# submits graph and vector-index maintenance in the caller's own context (relink, prune orphaned
+# entities, index upkeep; no LLM, no egress). Refusing those left stale links after every delete
+# (first PROD deletes, 2026-10-31; research R-019).
+_WRITE = frozenset(
+    {
+        "retain",
+        "memory_update",
+        "update_memory_unit",
+        "submit_async_graph_maintenance",
+        "submit_async_vector_index_maintenance",
+    }
+)
+# Hard delete of a conversation and retry of a failed operation (owner choice 2026-10-31), and
+# reading the bank's settings for the web UI's settings page. Changing them stays admin-only.
+_CURATE = frozenset({"delete_document", "retry_operation", "get_bank_config"})
 # Whole-bank operations for the backup, restore drill, deploy probe and import task only.
 # Creating a bank through PUT also fires update_bank.
 _WHOLE_BANK = frozenset(
@@ -59,7 +79,6 @@ _WHOLE_BANK = frozenset(
         "import_documents",
         "create_bank",
         "update_bank",
-        "get_bank_config",
         "update_bank_config",
         "delete_bank",
     }
@@ -100,19 +119,14 @@ REFUSED_FOR_ALL = frozenset(
         "get_directive",
         "get_document_history",
         "get_entity",
-        "get_entity_graph",
         "get_entity_state",
         "get_graph_data",
         "get_knowledge_base_tree",
         "get_knowledge_page",
-        "get_memories_timeseries",
         "get_mental_model_history",
         "get_observation_history",
         "list_bank_aliases",
-        "list_directives",
-        "list_entities",
         "list_mental_model_tags",
-        "list_mental_models",
         "list_observation_scopes",
         "list_webhook_deliveries",
         "list_webhooks",
@@ -129,8 +143,6 @@ REFUSED_FOR_ALL = frozenset(
         "search_knowledge_base",
         "set_bank_mission",
         "submit_async_consolidation",
-        "submit_async_graph_maintenance",
-        "submit_async_vector_index_maintenance",
         "update_bank_disposition",
         "update_directive",
         "update_document",

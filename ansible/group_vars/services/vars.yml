@@ -606,6 +606,16 @@ caddy_services:
     # probe (R-007). web-root must stay at the upstream default "/" so the front-page
     # probe of https://ntfy.hus-sky.no/ gets a 200 (contracts/server-config.md).
     user_facing: true
+  # Spec 097 (FR-023, R-020): the memory web UI: browse, correct, hide and delete memories,
+  # behind its own login key. user_facing: true creates the route, the portal tile and the
+  # blackbox HTTPS probe, which follows the redirect to /login (200).
+  - host: memory
+    ip: "{{ memory_ip }}"
+    port: "{{ memory_ui_port }}"
+    title: "Memory"
+    desc: "Shared AI memory: browse and edit"
+    enabled: true
+    user_facing: true
   # Spec 097: the memory API (REST and MCP). A route without a portal tile; every request
   # still needs a client key (contracts/memory-access.md).
   - host: memory-api

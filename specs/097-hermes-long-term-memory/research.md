@@ -569,11 +569,12 @@ that verifies it.
   and delete all worked. Bank stats are served from a 60-second cache
   (`HINDSIGHT_API_BANK_STATS_CACHE_TTL_SECONDS`), so before and after read the same value. The
   probe and the backup's `stats.json` now ask for `?refresh=true`.
-- **Open (for US5)**: a document delete submits `submit_async_graph_maintenance`, which the policy
-  refuses for every scope, so deletes leave stale links and orphaned entities. The job relinks
-  and prunes without an LLM. Allow it (and `submit_async_vector_index_maintenance`) for the
-  scopes that may delete before the web UI ships deletes to `owner`; it changes the policy
-  module, so the harness gate re-runs.
+- **Resolved with the web UI (2026-10-31)**: a document delete, and a memory edit, submit
+  `submit_async_graph_maintenance` (and deletes `submit_async_vector_index_maintenance`) in the
+  caller's own context; retains submit them from the worker (`internal`), which was always
+  accepted. The policy refused them for every scope, so deletes left stale links and orphaned
+  entities (6 refusals logged in PROD by the first deletes). Both jobs relink, prune and index
+  without an LLM or egress, so `readwrite` and up now allow them. The harness gate re-ran.
 
 ## R-020: Memory web UI (FR-023, SC-011)
 
