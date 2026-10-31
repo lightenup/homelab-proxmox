@@ -227,7 +227,7 @@ tasks:
     summary: |
       Deploy/update NAS NFS mount configuration via IaC.
       Target: PROD (192.168.1.112)
-      Manages: All 6 NAS mounts in /mnt/nas/*
+      Manages: every NAS mount in /mnt/nas/* (roles/proxmox_mounts)
       Example: task ansible:mounts
       Check mode: task ansible:mounts -- --check
     dir: ansible
