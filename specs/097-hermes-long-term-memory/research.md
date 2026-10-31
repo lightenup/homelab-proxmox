@@ -131,8 +131,9 @@ that verifies it.
     - unpacks the plugin to `{{ hermes_agent_plugins_dir }}/memory/hindsight` and the wheels to
       `{{ hermes_agent_plugins_dir }}/memory-deps`, both root-owned.
   - **Mounts**: both directories are mounted `:ro` at `/opt/data/plugins/hindsight` and
-    `/opt/hermes-memory-deps`, and compose sets `PYTHONPATH=/opt/hermes-memory-deps`. The existing
-    `:ro` mount assertion covers both.
+    `/opt/hermes-memory-deps`, plus a `.pth` file in the venv's site-packages that adds the
+    second to `sys.path` (see the correction below; `PYTHONPATH` does not reach the gateway).
+    The `:ro` mount assertion covers all three.
   - **Plugin config** `hindsight-config.json` (root, 0644, mounted `:ro` at
     `/opt/data/hindsight/config.json`):
 
@@ -158,13 +159,20 @@ that verifies it.
     be revoked alone.
   - **Config protection** (FR-008): `memory.provider: hindsight` sits in the read-only
     `agent-config.yaml`.
-- **Verified locally 2026-10-31** (stock `hermes-agent:v0.21.6`, real entrypoint, the
-  `render-prod.sh` output mounted read-only, `PYTHONPATH=/opt/hermes-memory-deps`):
+- **Verified locally 2026-10-31** (stock `hermes-agent:v0.21.6`, the `render-prod.sh` output
+  mounted read-only):
   - `1.2.3`'s `plugin.yaml` declares no `requires_hermes`, so nothing excludes `v0.21.6`. The
     deploy task still asserts the version and any future range.
-  - The three packages import from the read-only directory, and `hermes memory status` reports
-    `Provider: hindsight`, `Plugin: installed`, `Status: available`. The s6 privilege drop keeps
-    `PYTHONPATH`.
+  - `hermes memory status` reports `Provider: hindsight`, `Plugin: installed`,
+    `Status: available`. It does not import the client, so it does not prove the packages load.
+  - **Correction (first harness run, 2026-10-31)**: a `PYTHONPATH` set in compose does not reach
+    the gateway. The image's launcher replaces it with
+    `/opt/hermes/.:/opt/hermes/.venv/lib/python3.14/site-packages`, and every recall failed with
+    `ModuleNotFoundError: hindsight_client`. Decision: a one-line `hermes-memory-deps.pth`
+    (`/opt/hermes-memory-deps`), mounted `:ro` into the venv's site-packages. Python reads it at
+    startup whatever `PYTHONPATH` holds; checked as root and as `hermes` with the launcher's
+    value. The deploy asserts the import after the agent is healthy, and the confinement check
+    requires every mount under `/opt/hermes/` to be `:ro`.
   - Recall injection and retain against a live server are proven by the harness gate (T036).
 - **Alternatives rejected**:
   - A derived image: it breaks `083` R-002, and the repo has no image pipeline.

@@ -87,6 +87,12 @@ hermes_hindsight_plugin_wheels:
 hermes_memory_plugin_dir: "{{ hermes_agent_plugins_dir }}/memory/hindsight"
 hermes_memory_deps_dir: "{{ hermes_agent_plugins_dir }}/memory-deps"
 hermes_memory_plugin_config_path: "{{ hermes_install_dir }}/hindsight-config.json"
+# The agent's launcher rewrites PYTHONPATH before it starts the gateway, so the packages are put
+# on sys.path with a one-line .pth file mounted read-only into the venv's site-packages
+# (found in the harness gate, 2026-10-31). The venv path is the pinned image's
+# (hermes-agent v0.21.6, Python 3.14); re-check it on a hermes_agent_version bump.
+hermes_agent_site_packages: "/opt/hermes/.venv/lib/python3.14/site-packages"
+hermes_memory_pth_path: "{{ hermes_agent_plugins_dir }}/memory/hermes-memory-deps.pth"
 # Downloads, kept so an unchanged pin is not fetched again. Outside the mounted directories.
 hermes_memory_plugin_cache_dir: "/var/cache/hermes-memory-plugin"
 # The memory service's API through Caddy (FR-010: never the direct port) and its one bank,

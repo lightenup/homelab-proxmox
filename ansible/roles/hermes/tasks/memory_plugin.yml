@@ -141,3 +141,12 @@
         dest: "{{ hermes_memory_deps_dir }}/.pins"
         owner: root
         mode: '0644'
+
+- name: Put the packages on the agent's sys.path
+  ansible.builtin.copy:
+    content: "/opt/hermes-memory-deps\n"
+    dest: "{{ hermes_memory_pth_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart hermes

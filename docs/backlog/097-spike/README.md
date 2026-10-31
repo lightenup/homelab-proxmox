@@ -53,7 +53,11 @@ mv results/prod-render "results/$(date +%F)-prod-render"   # keep fingerprint.tx
 - `runs/prod-render/fingerprint.txt` hashes the pins and files that decide memory behaviour.
   `python/tests/guardrails/test_memory_harness_gate.py` fails until a committed
   `results/*-prod-render/fingerprint.txt` matches the current configuration.
-- Generated files (`runs/prod-render/build/`, `secret.env`) are git-ignored.
+- `runs/prod-render/after-up.sh` creates the `owner` and `deploy-probe` banks with the admin key, as
+  the memory deploy does (`roles/memory/tasks/bank.yml`); only `admin` may create a bank.
+- `keys/spike.env`: a virtual key minted on the Mac's LiteLLM (`/key/generate` with the master key
+  from `~/Development/private/local-llm/proxy/.env`), limited to `coder`, `embed` and `rerank`.
+- Generated files (`runs/prod-render/build/`, `secret.env`, `fingerprint.txt`) are git-ignored.
 
 ## Not in the repo
 

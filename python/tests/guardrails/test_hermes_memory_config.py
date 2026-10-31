@@ -96,7 +96,8 @@ def render_compose() -> dict:
         "hermes_agent_plugins_dir": defaults["hermes_agent_plugins_dir"],
         "hermes_agent_tool_servers": [],
     }
-    for name in ("hermes_memory_plugin_dir", "hermes_memory_deps_dir", "hermes_memory_plugin_config_path"):
+    ctx["hermes_agent_site_packages"] = defaults["hermes_agent_site_packages"]
+    for name in ("hermes_memory_plugin_dir", "hermes_memory_deps_dir", "hermes_memory_plugin_config_path", "hermes_memory_pth_path"):
         ctx[name] = env.from_string(defaults[name]).render(**ctx)
     return yaml.safe_load(env.get_template("docker-compose.yml.j2").render(**ctx))
 
@@ -147,23 +148,39 @@ def test_plugin_deps_and_config_are_mounted_read_only():
         "/opt/hermes-agent-plugins/memory/hindsight:/opt/data/plugins/hindsight:ro",
         "/opt/hermes-agent-plugins/memory-deps:/opt/hermes-memory-deps:ro",
         "/opt/hermes/hindsight-config.json:/opt/data/hindsight/config.json:ro",
+        "/opt/hermes-agent-plugins/memory/hermes-memory-deps.pth:"
+        "/opt/hermes/.venv/lib/python3.14/site-packages/hermes-memory-deps.pth:ro",
     ]
     for mount in expected:
         assert mount in volumes, mount
     for mount in volumes:
-        if ":/opt/data/plugins" in mount or ":/opt/data/hindsight" in mount or "memory-deps" in mount:
+        if any(t in mount for t in (":/opt/data/plugins", ":/opt/data/hindsight", "memory-deps", ":/opt/hermes/")):
             assert mount.endswith(":ro"), mount
 
 
-def test_agent_imports_the_plugin_packages_from_the_read_only_dir():
-    env = render_compose()["services"]["hermes-agent"]["environment"]
-    assert env == {"PYTHONPATH": "/opt/hermes-memory-deps"}
+def test_packages_reach_sys_path_through_a_pth_file_not_pythonpath():
+    """The image's launcher rewrites PYTHONPATH before it starts the gateway (harness gate,
+    2026-10-31), so a PYTHONPATH in compose never reaches the plugin's import."""
+    service = render_compose()["services"]["hermes-agent"]
+    assert "PYTHONPATH" not in str(service.get("environment", {}))
+    tasks = (HERMES_ROLE / "tasks" / "memory_plugin.yml").read_text()
+    assert 'content: "/opt/hermes-memory-deps\\n"' in tasks
+    assert "dest: \"{{ hermes_memory_pth_path }}\"" in tasks
+
+
+def test_deploy_asserts_the_gateway_can_import_the_client():
+    tasks = yaml.safe_load((HERMES_ROLE / "tasks" / "main.yml").read_text())
+    task = next(t for t in tasks if t.get("name") == "Assert the agent can import the memory provider's packages")
+    argv = task["ansible.builtin.command"]["argv"]
+    assert argv[-1] == "import hindsight_client, hindsight_embed, aiohttp_retry"
+    assert "PYTHONPATH=/opt/hermes/.:{{ hermes_agent_site_packages }}" in argv
 
 
 def test_compose_confinement_assert_covers_the_new_mounts():
     tasks = (HERMES_ROLE / "tasks" / "main.yml").read_text()
     assert "select('search', ':/opt/data/hindsight') | reject('search', ':ro$')" in tasks
     assert "select('search', ':/opt/hermes-memory-deps') | reject('search', ':ro$')" in tasks
+    assert "select('search', ':/opt/hermes/') | reject('search', ':ro$')" in tasks
 
 
 # --------------------------------------------------------------------------- key placement

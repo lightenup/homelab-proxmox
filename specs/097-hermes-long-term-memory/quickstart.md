@@ -40,6 +40,26 @@ Expected:
 
 Record the results under `results/<YYYY-MM-DD>-prod-render/` and link them in the PR.
 
+**Run 2026-10-31** (T036, fingerprint `391a9406…`,
+[`results/2026-10-31-prod-render/`](../../docs/backlog/097-spike/results/2026-10-31-prod-render/)):
+
+| Criterion | Result |
+|---|---|
+| SC-001 | PASS: 16/16, all 8 volume probes; baselines `none` 10/16 and `none-run1` 11/16. p16 judged by hand (`overrides.json`, same standard as `hindsight-chunks`) |
+| SC-002 | PASS: both update probes current (p1, p4); the negative probe answers "no record of a cat" (p8) |
+| SC-003 | PASS: the memory key made 81 embed and 33 rerank calls and 0 chat calls; the 80 chat calls are the agent's own |
+| SC-004 | PASS: no egress attempt in the compose log (internal network, proxy only) |
+| Store | 36 documents, 36 units, every unit tagged `client:hermes`, 0 failed operations |
+| Memory | agent 324 MiB, Hindsight 350 MiB, Postgres 76 MiB at the end of the run |
+
+SC-005 (cross-client) is US2's harness leg (T045, T046).
+
+Two runs before this one were stopped and discarded: the first had no valid LiteLLM key and
+showed that `PYTHONPATH` does not reach the gateway (fixed with a `.pth` file, research R-003);
+the second showed the harness skipped the bank creation the memory deploy performs, so every
+client retain was refused `scope readwrite may not create_bank` (fixed with
+`runs/prod-render/after-up.sh`).
+
 ## 2. LAB rehearsal (SC-008)
 
 Runs inside `Prod 1 - LXC Promote` for `memory`, then for `hermes`.

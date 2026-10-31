@@ -39,11 +39,11 @@ services:
       # rendered model names reach the Mac's LiteLLM unchanged in the config.
       MODEL_MAP: "hermes-embed=embed,hermes-rerank=rerank"
   hermes:
-    environment:
-      PYTHONPATH: /opt/hermes-memory-deps
     volumes:
       - ./runs/prod-render/build/plugin:/opt/data/plugins/hindsight:ro
       - ./runs/prod-render/build/memory-deps:/opt/hermes-memory-deps:ro
+      # As in PROD: the launcher rewrites PYTHONPATH, so a .pth file puts the packages on sys.path.
+      - ./runs/prod-render/build/hermes-memory-deps.pth:/opt/hermes/.venv/lib/python3.14/site-packages/hermes-memory-deps.pth:ro
       - ./runs/prod-render/build/hindsight-config.json:/opt/data/hindsight/config.json:ro
     depends_on:
       hindsight: {condition: service_healthy}

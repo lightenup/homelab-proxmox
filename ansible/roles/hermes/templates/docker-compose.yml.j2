@@ -177,9 +177,6 @@ services:
     command: gateway run
     env_file:
       - "{{ hermes_agent_env_path }}"
-    # The memory plugin's packages (097 R-003). Not a secret, so here rather than in agent.env.
-    environment:
-      PYTHONPATH: /opt/hermes-memory-deps
     volumes:
       # Data (jobs, scripts, memory, scout state), owned by the agent's UID.
       - "{{ hermes_agent_data_dir }}:/opt/data"
@@ -194,10 +191,12 @@ services:
       # the bundled ntfy adapter by directory name; enabled by plugins.enabled in config.yaml.
       - "{{ hermes_agent_plugins_dir }}/platforms/ntfy:/opt/data/plugins/platforms/ntfy:ro"
       # Hindsight memory provider (097 R-003), READ-ONLY for the same reason: the pinned plugin,
-      # its three pinned packages (found through PYTHONPATH below) and its config, which holds
-      # the memory key.
+      # its three pinned packages, the .pth file that puts them on sys.path (the launcher
+      # rewrites PYTHONPATH, so an environment variable does not reach the gateway) and its
+      # config, which holds the memory key.
       - "{{ hermes_memory_plugin_dir }}:/opt/data/plugins/hindsight:ro"
       - "{{ hermes_memory_deps_dir }}:/opt/hermes-memory-deps:ro"
+      - "{{ hermes_memory_pth_path }}:{{ hermes_agent_site_packages }}/hermes-memory-deps.pth:ro"
       - "{{ hermes_memory_plugin_config_path }}:/opt/data/hindsight/config.json:ro"
       # Gap-notice gateway hook (095 FR-006, R-007), READ-ONLY for the same reason: it is Python
       # the gateway executes on every start.

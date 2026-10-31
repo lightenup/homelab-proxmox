@@ -97,6 +97,7 @@ if str(manifest["version"]) != version:
     sys.exit(f"plugin manifest is {manifest['version']}, pin is {version}")
 for wheel in defaults["hermes_hindsight_plugin_wheels"]:
     zipfile.ZipFile(io.BytesIO(fetch(wheel["url"], wheel["sha256"]))).extractall(deps)
+(build / "hermes-memory-deps.pth").write_text("/opt/hermes-memory-deps\n")  # as memory_plugin.yml
 print(f"plugin {version} and {len(defaults['hermes_hindsight_plugin_wheels'])} packages unpacked")
 EOF
 

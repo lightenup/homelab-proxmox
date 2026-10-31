@@ -83,14 +83,21 @@ builds the memory service, which every story needs.
   `unzip` is installed for the wheels. Downloads are cached in `/var/cache/hermes-memory-plugin`.
 - **T032**: the hermes preflight asserts `memory_client_hermes_key` is set and well formed.
   `hermes_memory_api_url` is also classified `internal`.
+- **T034 (corrected after the first harness run)**: no `PYTHONPATH` in compose; the image's
+  launcher overwrites it. A read-only `hermes-memory-deps.pth` in the venv's site-packages puts
+  the packages on `sys.path` (research R-003), and the deploy asserts the import.
 - **T035**: `render-prod.sh` fetches with `curl` (Python's TLS fails behind the dev Mac's
   interception) and verifies checksums in Python. `llmproxy` gains `MODEL_MAP` (the gateway's
   alias mapping for `hermes-embed` and `hermes-rerank`) and logs a short hash of each caller's
   key for SC-003. A `.gitignore` now keeps `keys/`, `logs/`, `runs/*/secret.env` and the
   prod-render build out of the repo; none of them was ignored before.
-- **T037**: `test_harness_gate_ran_against_this_configuration` fails until T036 commits a
-  matching `results/*-prod-render/fingerprint.txt`. This is the FR-021 gate, so CI's Python
-  tests stay red on this branch until then.
+- **T036**: passed 2026-10-31 (quickstart § 1). The harness gained `runs/prod-render/after-up.sh`,
+  which creates the banks with the admin key as `bank.yml` does; `run.sh` runs it after start-up
+  and creates `logs/`. The gate's LiteLLM key is a virtual key on the Mac's LiteLLM
+  (`memspike-097-gate`, models `coder`, `embed`, `rerank`, 30 days), kept in the git-ignored
+  `keys/spike.env`.
+- **T037**: `test_harness_gate_ran_against_this_configuration` passes against
+  `results/2026-10-31-prod-render/fingerprint.txt`.
 - **Not run locally**: `terraform init/validate`. The local binary is broken, and the provider
   download from a container fails TLS verification behind Zscaler. `terraform fmt -check` passes.
   CI runs `terraform-validate.sh`.
@@ -323,7 +330,7 @@ turn of a new one, across Norwegian and English, and an unknown topic gets "don'
   - **`render-prod.sh`**: renders `ansible/roles/memory/templates/{server.env.j2,clients.json.j2}` and `ansible/roles/hermes/templates/hindsight-config.json.j2` with `ansible localhost -m template`, using PROD vars and harness-local keys (generated into `runs/prod-render/secret.env`, gitignored). It rewrites only the gateway URL to `http://llmproxy:4000` and `api_url` to `http://hindsight:8888`.
   - **`compose.prod-render.yml`**: uses `memory_api_image`, `memory_postgres_image`, and the shim and `memory_access.py` mounted read-only. Hermes uses the stock image plus the plugin and wheel dirs that `memory_plugin.yml` produces, unpacked locally by `render-prod.sh` from the same pins.
   - **README**: add `prod-render` to `docs/backlog/097-spike/README.md`.
-- [ ] T036 [US1] (manual) Run the harness gate (quickstart § 1): `./render-prod.sh && ./run.sh prod-render`. SC-001, SC-002, SC-003 and SC-004 must pass. Commit the results to `docs/backlog/097-spike/results/<YYYY-MM-DD>-prod-render/`, including `fingerprint.txt` (T037). If it fails, stop: FR-021 forbids the PROD promotion.
+- [X] T036 [US1] (manual) Run the harness gate (quickstart § 1): `./render-prod.sh && ./run.sh prod-render`. SC-001, SC-002, SC-003 and SC-004 must pass. Commit the results to `docs/backlog/097-spike/results/<YYYY-MM-DD>-prod-render/`, including `fingerprint.txt` (T037). If it fails, stop: FR-021 forbids the PROD promotion.
 - [X] T037 [US1] Write `python/tests/guardrails/test_memory_harness_gate.py`.
   - **Fingerprint**: sha256 over the pins `hindsight_version`, `memory_postgres_version`, `hermes_hindsight_plugin_version` and `hermes_agent_version` (G2: the plugin's behaviour depends on the agent, so an agent bump re-runs the gate), the wheel pins, and the contents of:
     - `ansible/roles/memory/templates/server.env.j2`;
