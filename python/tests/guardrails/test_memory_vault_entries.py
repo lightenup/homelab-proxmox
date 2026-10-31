@@ -1,4 +1,7 @@
-"""Tests for scripts/memory/generate-vault-entries.py (spec 097, task T002).
+"""Guard tests for scripts/memory/generate-vault-entries.py (spec 097, task T002).
+
+In guardrails/, not memory_access/: they read ansible/roles/memory, which the mutation gate does
+not copy into its mutants/ tree, and the script is not mutated source.
 
 The pure functions run everywhere. The end-to-end test uses a real ansible-vault on a throwaway
 vault with its own password file, and is skipped where ansible-vault is not installed (CI).
