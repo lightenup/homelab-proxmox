@@ -28,7 +28,8 @@ docker exec -i memory_postgres pg_restore --list < "$WORK_DIR/db.dump" > /dev/nu
 echo "Database dump verified (pg_restore --list)."
 
 echo "Recording bank stats..."
-api "$API/v1/default/banks/$BANK/stats" > "$WORK_DIR/stats.json"
+# refresh=true: the endpoint serves a 60 s cache otherwise; the restore drill compares these.
+api "$API/v1/default/banks/$BANK/stats?refresh=true" > "$WORK_DIR/stats.json"
 
 # The export is asynchronous in Hindsight 1.1.0: submit, poll the operation, then download
 # the archive from the result's download_url.

@@ -331,3 +331,11 @@ def test_deploy_probe_token_is_drawn_once():
     assert "lookup(" in draw["ansible.builtin.set_fact"]["memory_probe_token"]
     fields = build["ansible.builtin.set_fact"]["memory_probe"]
     assert all("{{ memory_probe_token }}" in v and "lookup(" not in v for v in fields.values())
+
+
+def test_probe_and_backup_read_fresh_stats():
+    """Bank stats are cached for 60 s; a before/after comparison must bypass the cache."""
+    bank = (ROLE / "tasks" / "bank.yml").read_text()
+    assert bank.count("/stats?refresh=true") == 2 and "/stats\"" not in bank
+    snapshot = (ROOT / "ansible/roles/service_backup/templates/snapshot/memory.sh.j2").read_text()
+    assert "/stats?refresh=true" in snapshot
