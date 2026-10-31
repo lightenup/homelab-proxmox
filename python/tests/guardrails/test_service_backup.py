@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 from pathlib import Path
 
 import yaml
+from jinja2 import Environment, StrictUndefined
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -243,7 +246,8 @@ def test_restore_drills_extract_inside_their_cleanup_block() -> None:
     in /tmp (review on #298). Every drill with a block must unarchive inside it, guard the
     Compose teardown on the rendered file, and remove its directory in always:."""
     for rel in ("ansible/playbooks/homeassistant-restore-drill.yml",
-                "ansible/playbooks/hermes-restore-drill.yml"):
+                "ansible/playbooks/hermes-restore-drill.yml",
+                "ansible/playbooks/memory-restore-drill.yml"):
         tasks = yaml.safe_load(_read(rel))[0]["tasks"]
         blocks = [t for t in tasks if "block" in t]
         assert len(blocks) == 1, rel
@@ -261,3 +265,177 @@ def test_mount_parent_is_traversable_for_node_exporter() -> None:
     tasks = yaml.safe_load(_read("ansible/roles/service_backup/tasks/main.yml"))
     task = next(t for t in tasks if "dirname" in yaml.safe_dump(t) and "ansible.builtin.file" in t)
     assert task["ansible.builtin.file"]["mode"] == "0755"
+
+
+# --------------------------------------------------------------------------- memory drill (097 US4)
+
+MEMORY_DRILL = "ansible/playbooks/memory-restore-drill.yml"
+MEMORY_SNAPSHOT = "ansible/roles/service_backup/templates/snapshot/memory.sh.j2"
+
+
+def _memory_drill() -> tuple[dict, list[dict], list[dict]]:
+    play = yaml.safe_load(_read(MEMORY_DRILL))[0]
+    block = next(t for t in play["tasks"] if "block" in t)
+    return play, block["block"], block["always"]
+
+
+def _named(tasks: list[dict], fragment: str) -> dict:
+    return next(t for t in tasks if fragment in t.get("name", ""))
+
+
+def test_memory_drill_runs_on_memory_with_the_role_defaults() -> None:
+    """T058: the drill renders the role's own env templates and images, so it loads the role
+    defaults instead of copying them."""
+    play, _, _ = _memory_drill()
+    assert play["hosts"] == "memory"
+    # str(): other test modules strip YAML's bool resolver at import.
+    assert str(play["become"]).lower() == "true"
+    assert "../roles/memory/defaults/main.yml" in play["vars_files"]
+    find = _named(play["tasks"], "latest backup")
+    assert "service_backups['memory'].dir" in yaml.safe_dump(find)
+    assert "memory-backup-*.tar.gz" in yaml.safe_dump(find)
+    assert "memory_restore_archive is not defined" in str(find.get("when", ""))
+
+
+def test_memory_drill_proves_both_restore_legs() -> None:
+    """T058, research R-014: pg_restore, then stats and probes; then the export ZIP into an empty
+    bank with the same document count. The order matters: the API starts on a restored database."""
+    _, block, _ = _memory_drill()
+    dumped = [yaml.safe_dump(t) for t in block]
+
+    def at(needle: str) -> int:
+        return next(i for i, d in enumerate(dumped) if needle in d)
+
+    steps = [
+        at("ansible.builtin.unarchive"),
+        at("memory-compose.yml.j2"),
+        at("pg_restore"),
+        at("/health"),
+        at("/stats?refresh=true"),
+        at("/memories/recall"),
+        at("/document-transfer"),
+    ]
+    assert steps == sorted(steps), "drill steps are out of order"
+    text = "\n".join(dumped)
+    for needle in ("db.dump", "stats.json", "drill-probes.json", "{{ memory_bank_id }}-export.zip",
+                   "total_documents", "total_nodes", "[:3]", "memory_restore_import_bank",
+                   "/operations/"):
+        assert needle in text, needle
+    assert yaml.safe_load(_read(MEMORY_DRILL))[0]["vars"]["memory_restore_import_bank"] == "restore-import"
+
+
+def test_memory_drill_starts_postgres_alone_before_pg_restore() -> None:
+    """The API must not start on an empty database: postgres first, restore, then the rest."""
+    _, block, _ = _memory_drill()
+    starts = [t for t in block if "community.docker.docker_compose_v2" in t]
+    assert starts[0]["community.docker.docker_compose_v2"]["services"] == ["memory_postgres_restore"]
+    restore = next(i for i, t in enumerate(block) if "pg_restore" in yaml.safe_dump(t))
+    assert block.index(starts[0]) < restore < block.index(starts[1])
+    assert "services" not in starts[1]["community.docker.docker_compose_v2"]
+
+
+def test_memory_drill_keeps_keys_and_owner_text_out_of_the_log() -> None:
+    """Every task that carries the admin key, the env files or a probe query is no_log; the
+    asserts that report results see unit ids and counts only."""
+    play, block, always = _memory_drill()
+    for task in play["tasks"] + block + always:
+        if "block" in task:
+            continue
+        dumped = yaml.safe_dump(task)
+        if any(n in dumped for n in ("Authorization", "backup.key", "server.env.j2", "db.env.j2",
+                                     "memory_restore_server_env", "item.query",
+                                     "memory_restore_recall.results")):
+            assert str(task.get("no_log")).lower() == "true", task.get("name")
+
+
+def test_memory_drill_rewrites_the_database_url_to_the_restore_host() -> None:
+    """T057: server.env is the role's template re-rendered, pointed at memory_postgres_restore.
+    The drill refuses to start an API whose URL still names the live database host."""
+    _, block, _ = _memory_drill()
+    dumped = "\n".join(yaml.safe_dump(t) for t in block)
+    assert "../roles/memory/templates/server.env.j2" in dumped
+    assert "../roles/memory/templates/db.env.j2" in dumped
+    assert "@memory_postgres_restore:5432/" in dumped
+    guard = _named(block, "Assert the restore server.env")
+    assert "ansible.builtin.assert" in guard
+    assert block.index(guard) < next(
+        i for i, t in enumerate(block) if "community.docker.docker_compose_v2" in t)
+
+
+def test_memory_drill_tears_everything_down() -> None:
+    """T058 step 6: both containers, the network and volume (compose down), and the directory."""
+    _, _, always = _memory_drill()
+    teardown = next(t for t in always if "community.docker.docker_compose_v2" in t)
+    args = teardown["community.docker.docker_compose_v2"]
+    assert args["state"] == "absent"
+    assert str(args["remove_volumes"]).lower() == "true"
+    assert args["files"] == ["docker-compose.restore.yml"]
+    removal = next(t for t in always if t.get("ansible.builtin.file", {}).get("state") == "absent")
+    assert removal["ansible.builtin.file"]["path"] == "{{ memory_restore_dir }}"
+
+
+def _render_snapshot(tmp_path: Path) -> Path:
+    text = Environment(undefined=StrictUndefined).from_string(_read(MEMORY_SNAPSHOT)).render(
+        memory_install_dir="/opt/memory", memory_api_url="http://192.0.2.1:8888", memory_bank_id="owner"
+    )
+    path = tmp_path / "memory.sh"
+    path.write_text(text)
+    return path
+
+
+def _drill_probes(tmp_path: Path, total: int) -> list[dict]:
+    """Run write_drill_probes from the rendered snapshot against a stub `api` serving a bank of
+    `total` live units, unit i at offset i."""
+    script = _render_snapshot(tmp_path)
+    work = tmp_path / "work"
+    work.mkdir()
+    harness = f"""
+set -euo pipefail
+source "{script}"
+WORK_DIR="{work}"
+api() {{
+    case "$1" in
+        *"limit=0"*) printf '{{"items": [], "total": {total}}}\\n' ;;
+        *"offset="*) o="${{1##*offset=}}"
+                     printf '{{"items": [{{"id": "u%s", "text": "unit %s %0300d"}}], "total": {total}}}\\n' "$o" "$o" 0 ;;
+        *) echo "unexpected call $1" >&2; exit 1 ;;
+    esac
+}}
+write_drill_probes
+cat "$WORK_DIR/drill-probes.json"
+test ! -e "$WORK_DIR/.probes"
+"""
+    result = subprocess.run(["bash", "-c", harness], capture_output=True, text=True, check=True)
+    return json.loads(result.stdout)
+
+
+def test_snapshot_writes_up_to_three_random_probes(tmp_path: Path) -> None:
+    """T059: up to 3 distinct live units, each {unit_id, query}, query = first 200 characters."""
+    probes = _drill_probes(tmp_path, 50)
+    assert len(probes) == 3
+    assert len({p["unit_id"] for p in probes}) == 3
+    for probe in probes:
+        assert set(probe) == {"unit_id", "query"}
+        assert len(probe["query"]) == 200
+        assert probe["query"].startswith(f"unit {probe['unit_id'][1:]} ")
+
+
+def test_snapshot_probes_a_small_bank_whole(tmp_path: Path) -> None:
+    """T059: fewer than 3 units gives the units that exist."""
+    assert sorted(p["unit_id"] for p in _drill_probes(tmp_path, 2)) == ["u0", "u1"]
+
+
+def test_snapshot_probes_an_empty_bank_as_an_empty_list(tmp_path: Path) -> None:
+    """T059: an empty bank gives [], and the drill checks stats only."""
+    assert _drill_probes(tmp_path, 0) == []
+
+
+def test_snapshot_picks_probes_with_the_admin_key_before_dropping_it() -> None:
+    """T059: the probes come from bank owner's live world units through api() (header file, so
+    the key stays out of argv), and are written while the key file still exists."""
+    text = _read(MEMORY_SNAPSHOT)
+    body = text[text.index("snapshot() {"):]
+    assert body.index("write_drill_probes") < body.index('rm -f "$WORK_DIR/.auth"')
+    probes = text[text.index("write_drill_probes() {"):text.index("snapshot() {")]
+    assert "/memories/list?type=world" in probes and "api " in probes
+    assert "curl" not in probes and "backup.key" not in probes

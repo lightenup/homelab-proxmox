@@ -1,7 +1,9 @@
 # Memory snapshot (spec 097, research R-013). Sourced into backup.sh.j2; defines snapshot().
 # Two copies of the store: a pg_dump (fast, exact, embeddings included) and Hindsight's
 # portable document export (re-embedded on import, FR-018). The archive also carries the
-# compose file and clients.json (hashes only). Never server.env, db.env, ui.env or backup.key.
+# compose file and clients.json (hashes only), and stats.json and drill-probes.json for the
+# restore drill (playbooks/memory-restore-drill.yml). Never server.env, db.env, ui.env or
+# backup.key.
 INSTALL_DIR="{{ memory_install_dir }}"
 API="{{ memory_api_url }}"
 BANK="{{ memory_bank_id }}"
@@ -18,9 +20,40 @@ for k in sys.argv[1].split("."): d=d.get(k) if isinstance(d, dict) else None
 print("" if d is None else d)' "$1"
 }
 
+# The restore drill's recall probes (spec 097 T059, research R-014): up to 3 live units of the
+# bank, picked at random, each {unit_id, query} with the first 200 characters of the unit's
+# text as the query. The set exists only inside this archive on the NAS, so no question about
+# the owner is committed to the public repository. An empty bank gives [], and the drill then
+# checks stats only. The list endpoint returns live units only (invalidated ones sit in an
+# archive table) and counts them in `total`; limit=0 returns the count alone.
+write_drill_probes() {
+    local list="$API/v1/default/banks/$BANK/memories/list?type=world"
+    local total offset
+    total=$(api "$list&limit=0" | json_field total)
+    : > "$WORK_DIR/.probes"
+    for offset in $(python3 -c 'import random,sys; n=int(sys.argv[1] or 0)
+print(*random.sample(range(n), min(3, n)))' "$total"); do
+        api "$list&limit=1&offset=$offset" >> "$WORK_DIR/.probes"
+        echo >> "$WORK_DIR/.probes"
+    done
+    python3 -c 'import json,sys
+probes = []
+for line in sys.stdin:
+    for unit in (json.loads(line).get("items") or []) if line.strip() else []:
+        if unit.get("id") and (unit.get("text") or "").strip():
+            probes.append({"unit_id": unit["id"], "query": unit["text"][:200]})
+json.dump(probes, sys.stdout, indent=2)' < "$WORK_DIR/.probes" > "$WORK_DIR/drill-probes.json"
+    rm -f "$WORK_DIR/.probes"
+}
+
 snapshot() {
 umask 077
 printf 'Authorization: Bearer %s\n' "$(cat "$INSTALL_DIR/backup.key")" > "$WORK_DIR/.auth"
+
+# Before the dump: a unit picked now is in the dump unless deleted in the seconds between,
+# whereas a unit picked after the dump could be a retain the dump missed.
+echo "Picking restore-drill probes..."
+write_drill_probes
 
 echo "Starting database dump..."
 docker exec memory_postgres pg_dump -Fc -U hindsight hindsight > "$WORK_DIR/db.dump"

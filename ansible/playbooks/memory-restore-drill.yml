@@ -1,0 +1,375 @@
+---
+# Memory restore drill (spec 097 US4, research R-014): proves the latest nightly backup brings
+# the store back by both paths, without touching the live stack. Follows the hermes and
+# Immich drills (playbooks/hermes-restore-drill.yml, playbooks/restore-drill.yml).
+#
+#   ansible-playbook -i inventories/prod/hosts.yml playbooks/memory-restore-drill.yml
+#   ... -e memory_restore_archive=/mnt/memory/backups/memory-backup-YYYYMMDD-HHMMSS.tar.gz
+#
+# 1. Dump leg: pg_restore db.dump into a throwaway pgvector, start a throwaway Hindsight on
+#    127.0.0.1:{{ memory_restore_test_port }}, compare bank stats with the archive's stats.json
+#    and recall each probe in drill-probes.json; its unit must be in the top 3.
+# 2. Export leg (FR-018): import the export ZIP into an empty bank on the same instance and
+#    compare its document count with stats.json.
+#
+# Everything from extraction on sits in one block, so `always:` removes both containers, their
+# network and volume, and the extracted copy (every memory, in two forms) whether the drill
+# passes or fails at any step, a bad archive included.
+#
+# The throwaway API embeds through the gateway with the memory key (server.env): recall embeds
+# each probe query, and the import re-embeds every document. It reads the live clients.json, so
+# the admin key in backup.key works on it. Needs the vault, as a memory deploy does.
+#
+# Run it after a nightly backup that includes drill-probes.json (T059); older archives fail the
+# archive check.
+- name: Memory Restore Drill
+  hosts: memory
+  become: true
+  # The restore compose and env files render the role's images, paths and templates; loaded
+  # rather than copied, so the drill proves the deployed release reads the archive.
+  vars_files:
+    - ../roles/memory/defaults/main.yml
+  vars:
+    memory_restore_dir: "/tmp/memory-restore-drill"
+    memory_restore_api_url: "http://127.0.0.1:{{ memory_restore_test_port }}"
+    memory_restore_import_bank: "restore-import"
+
+  tasks:
+    - name: Assert the secrets the restore env files need are loaded
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.vars', item, default='') | length > 0
+        fail_msg: >-
+          {{ item }} is undefined or empty. It comes from the vault
+          (group_vars/services/vault.yml); run the drill with the vault password, as for a
+          memory deploy.
+      loop:
+        - memory_db_password
+        - llm_router_client_memory_key
+
+    - name: Find the latest backup
+      ansible.builtin.shell: "ls -t {{ service_backups['memory'].dir }}/memory-backup-*.tar.gz | head -n 1"
+      register: memory_restore_latest_cmd
+      changed_when: false
+      failed_when: memory_restore_latest_cmd.stdout == ""
+      when: memory_restore_archive is not defined
+
+    - name: Record the archive under test
+      ansible.builtin.set_fact:
+        memory_restore_latest: "{{ memory_restore_archive | default(memory_restore_latest_cmd.stdout) }}"
+
+    - name: Record the archive's top-level directory name
+      ansible.builtin.set_fact:
+        memory_restore_basename: "{{ memory_restore_latest | basename | regex_replace('\\.tar\\.gz$', '') }}"
+
+    - name: Show which archive is being drilled
+      ansible.builtin.debug:
+        msg: "Drilling {{ memory_restore_latest }}"
+
+    - name: Restore drill
+      block:
+        - name: Clean any previous drill directory
+          ansible.builtin.file:
+            path: "{{ memory_restore_dir }}"
+            state: absent
+
+        # 0700: the extracted dump and export hold every memory; the env files hold secrets.
+        - name: Create the drill directory
+          ansible.builtin.file:
+            path: "{{ memory_restore_dir }}"
+            state: directory
+            mode: '0700'
+
+        - name: Extract the archive
+          ansible.builtin.unarchive:
+            src: "{{ memory_restore_latest }}"
+            dest: "{{ memory_restore_dir }}"
+            remote_src: true
+
+        - name: Record the extracted folder
+          ansible.builtin.set_fact:
+            memory_restore_extracted: "{{ memory_restore_dir }}/{{ memory_restore_basename }}"
+
+        - name: Assert the archive holds the dump, the export, the stats and the probes
+          ansible.builtin.stat:
+            path: "{{ memory_restore_extracted }}/{{ item }}"
+          register: memory_restore_files
+          failed_when: not memory_restore_files.stat.exists
+          loop:
+            - db.dump
+            - "{{ memory_bank_id }}-export.zip"
+            - stats.json
+            - drill-probes.json
+
+        - name: Read the stats recorded at backup time
+          ansible.builtin.slurp:
+            src: "{{ memory_restore_extracted }}/stats.json"
+          register: memory_restore_stats_file
+
+        - name: Record the expected counts
+          ansible.builtin.set_fact:
+            memory_restore_expected:
+              total_documents: "{{ (memory_restore_stats_file.content | b64decode | from_json).total_documents | int }}"
+              total_nodes: "{{ (memory_restore_stats_file.content | b64decode | from_json).total_nodes | int }}"
+
+        # The probe queries are the owner's own text: never in the log.
+        - name: Read the probe set picked at backup time
+          ansible.builtin.slurp:
+            src: "{{ memory_restore_extracted }}/drill-probes.json"
+          register: memory_restore_probes_file
+          no_log: true
+
+        - name: Record the probes
+          ansible.builtin.set_fact:
+            memory_restore_probes: "{{ memory_restore_probes_file.content | b64decode | from_json }}"
+          no_log: true
+
+        # The key the nightly backup uses; it matches the live clients.json the drill mounts.
+        - name: Read the admin key
+          ansible.builtin.slurp:
+            src: "{{ memory_install_dir }}/backup.key"
+          register: memory_restore_key_file
+          no_log: true
+
+        - name: Record the admin key
+          ansible.builtin.set_fact:
+            memory_restore_admin_key: "{{ memory_restore_key_file.content | b64decode | trim }}"
+          no_log: true
+
+        # The role's own server.env, with the database host swapped for the throwaway one.
+        - name: Render server.env with the restore database URL
+          ansible.builtin.set_fact:
+            memory_restore_server_env: >-
+              {{ lookup('ansible.builtin.template', '../roles/memory/templates/server.env.j2')
+                 | regex_replace('@memory_postgres:5432/', '@memory_postgres_restore:5432/') }}
+          no_log: true
+
+        - name: Assert the restore server.env names the restore database URL only
+          ansible.builtin.assert:
+            that:
+              - "'@memory_postgres_restore:5432/' in memory_restore_server_env"
+              - "'@memory_postgres:5432/' not in memory_restore_server_env"
+            fail_msg: >-
+              The drill's server.env still names the live database host. The role's
+              HINDSIGHT_API_DATABASE_URL changed shape; update the regex_replace above.
+          no_log: true
+
+        - name: Write the restore server.env
+          ansible.builtin.copy:
+            content: "{{ memory_restore_server_env }}\n"
+            dest: "{{ memory_restore_dir }}/server.env"
+            mode: '0600'
+          no_log: true
+
+        - name: Write the restore db.env
+          ansible.builtin.template:
+            src: ../roles/memory/templates/db.env.j2
+            dest: "{{ memory_restore_dir }}/db.env"
+            mode: '0600'
+          no_log: true
+
+        - name: Deploy the restore-drill compose file
+          ansible.builtin.template:
+            src: ../roles/service_backup/templates/restore/memory-compose.yml.j2
+            dest: "{{ memory_restore_dir }}/docker-compose.restore.yml"
+            mode: '0644'
+
+        # Postgres alone first: the API must not start, and migrate, an empty database.
+        - name: Start the throwaway database
+          community.docker.docker_compose_v2:
+            project_src: "{{ memory_restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            services:
+              - memory_postgres_restore
+            state: present
+            wait: true
+            wait_timeout: 120
+
+        - name: Restore db.dump into the throwaway database
+          ansible.builtin.shell: >-
+            docker exec -i memory_postgres_restore
+            pg_restore -U hindsight -d hindsight --no-owner --exit-on-error
+            < "{{ memory_restore_extracted }}/db.dump"
+          changed_when: true
+
+        - name: Start the throwaway API
+          community.docker.docker_compose_v2:
+            project_src: "{{ memory_restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            state: present
+
+        - name: Wait for the throwaway API to answer
+          ansible.builtin.uri:
+            url: "{{ memory_restore_api_url }}/health"
+            status_code: 200
+          register: memory_restore_health
+          until: memory_restore_health.status == 200
+          retries: 36
+          delay: 5
+
+        # --- Dump leg ---
+        # refresh=true: stats are cached for 60 s otherwise.
+        - name: Read the restored bank's stats
+          ansible.builtin.uri:
+            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_bank_id }}/stats?refresh=true"
+            headers:
+              Authorization: "Bearer {{ memory_restore_admin_key }}"
+            return_content: true
+          register: memory_restore_stats
+          no_log: true
+
+        - name: Assert the restored counts match the backup
+          ansible.builtin.assert:
+            that:
+              - memory_restore_stats.json.total_documents | int == memory_restore_expected.total_documents | int
+              - memory_restore_stats.json.total_nodes | int == memory_restore_expected.total_nodes | int
+            fail_msg: >-
+              The restored bank has {{ memory_restore_stats.json.total_documents }} documents and
+              {{ memory_restore_stats.json.total_nodes }} nodes; the backup recorded
+              {{ memory_restore_expected.total_documents }} and
+              {{ memory_restore_expected.total_nodes }}. A retain between the dump and the stats
+              call can explain a difference of one; anything else is a bad dump.
+            success_msg: >-
+              The dump restored {{ memory_restore_expected.total_documents }} documents and
+              {{ memory_restore_expected.total_nodes }} nodes, as recorded.
+
+        - name: Note an empty probe set
+          ansible.builtin.debug:
+            msg: >-
+              drill-probes.json is empty: the bank had no units at backup time. Recall check
+              skipped; the stats check stands alone.
+          when: memory_restore_probes | length == 0
+
+        - name: Recall each probe on the restored store
+          ansible.builtin.uri:
+            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_bank_id }}/memories/recall"
+            method: POST
+            headers:
+              Authorization: "Bearer {{ memory_restore_admin_key }}"
+            body_format: json
+            body:
+              query: "{{ item.query }}"
+              types: ["world"]
+            return_content: true
+            timeout: 60
+          loop: "{{ memory_restore_probes }}"
+          loop_control:
+            label: "{{ item.unit_id }}"
+          register: memory_restore_recall
+          no_log: true
+
+        - name: Collect the probes whose unit is not in the top 3
+          ansible.builtin.set_fact:
+            memory_restore_misses: "{{ memory_restore_misses | default([]) + [item.item.unit_id] }}"
+          loop: "{{ memory_restore_recall.results }}"
+          loop_control:
+            label: "{{ item.item.unit_id }}"
+          when: >-
+            item.item.unit_id not in
+            ((item.json.results | default([]))[:3] | map(attribute='id') | list)
+          no_log: true
+
+        - name: Assert every probe found its unit in the top 3
+          ansible.builtin.assert:
+            that:
+              - memory_restore_misses | default([]) | length == 0
+            fail_msg: >-
+              Not in the top 3 recall results on the restored store:
+              {{ memory_restore_misses | default([]) | join(', ') }}. The dump restored but does not
+              recall; check the gateway's embedder, then the restored embeddings.
+            success_msg: "{{ memory_restore_probes | length }} probe(s) found their unit in the top 3."
+          when: memory_restore_probes | length > 0
+
+        # --- Export leg (FR-018) ---
+        - name: Create the empty import bank
+          ansible.builtin.uri:
+            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_restore_import_bank }}"
+            method: PUT
+            headers:
+              Authorization: "Bearer {{ memory_restore_admin_key }}"
+            body_format: json
+            body:
+              name: "{{ memory_restore_import_bank }}"
+            status_code: 200
+          no_log: true
+
+        # Asynchronous in Hindsight 1.1.0: returns an operation id to poll.
+        - name: Import the export ZIP into the empty bank
+          ansible.builtin.uri:
+            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_restore_import_bank }}/document-transfer"
+            method: POST
+            headers:
+              Authorization: "Bearer {{ memory_restore_admin_key }}"
+            body_format: form-multipart
+            body:
+              file:
+                filename: "{{ memory_restore_extracted }}/{{ memory_bank_id }}-export.zip"
+                mime_type: application/zip
+            status_code: [200, 201, 202]
+            return_content: true
+            timeout: 120
+          register: memory_restore_import
+          no_log: true
+
+        - name: Wait for the import to finish
+          ansible.builtin.uri:
+            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_restore_import_bank }}/operations/{{ memory_restore_import.json.operation_id }}"
+            headers:
+              Authorization: "Bearer {{ memory_restore_admin_key }}"
+            return_content: true
+          register: memory_restore_import_op
+          until: memory_restore_import_op.json.status | default('') in ['completed', 'failed', 'cancelled', 'not_found']
+          retries: 90
+          delay: 10
+          no_log: true
+
+        - name: Assert the import completed
+          ansible.builtin.assert:
+            that:
+              - memory_restore_import_op.json.status == 'completed'
+            fail_msg: "The export ZIP import ended {{ memory_restore_import_op.json.status | default('unknown') }}."
+
+        - name: Read the import bank's stats
+          ansible.builtin.uri:
+            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_restore_import_bank }}/stats?refresh=true"
+            headers:
+              Authorization: "Bearer {{ memory_restore_admin_key }}"
+            return_content: true
+          register: memory_restore_import_stats
+          no_log: true
+
+        - name: Assert the import holds every document
+          ansible.builtin.assert:
+            that:
+              - memory_restore_import_stats.json.total_documents | int == memory_restore_expected.total_documents | int
+            fail_msg: >-
+              The export ZIP imported {{ memory_restore_import_stats.json.total_documents }}
+              documents; the backup recorded {{ memory_restore_expected.total_documents }}.
+            success_msg: >-
+              The export ZIP imported {{ memory_restore_expected.total_documents }} documents into
+              an empty bank, as recorded. Both restore paths work.
+
+      always:
+        # A failure before the compose file was rendered (bad archive) leaves nothing to tear
+        # down, and docker_compose_v2 would fail on the missing file.
+        - name: Check whether a drill stack was set up
+          ansible.builtin.stat:
+            path: "{{ memory_restore_dir }}/docker-compose.restore.yml"
+          register: memory_restore_compose
+
+        # Removes both containers, the memory-restore-drill network and the database volume.
+        - name: Tear down the throwaway stack
+          community.docker.docker_compose_v2:
+            project_src: "{{ memory_restore_dir }}"
+            files:
+              - docker-compose.restore.yml
+            state: absent
+            remove_volumes: true
+          when: memory_restore_compose.stat.exists
+
+        - name: Remove the drill directory
+          ansible.builtin.file:
+            path: "{{ memory_restore_dir }}"
+            state: absent
