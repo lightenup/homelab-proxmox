@@ -228,3 +228,18 @@ directories and the collector copies every `terraform.tfstate*` in each. Not dir
 listing itself, which sits inside the age-encrypted archive that only root can open. To see it: as root on `pve`,
 decrypt the newest `/mnt/nas-backup/proxmox-backup-*.tar.zst.age` with `/root/.age/proxmox-backup.key` and list
 `iac-artifacts/local-state/`.
+
+## T068 record: promotion 2 of 5 (2026-10-31, `monitoring`, runner-heartbeat alert rules)
+
+Real change: the `CiRunnerHeartbeatStale` and `CiRunnerHeartbeatAbsent` rules (PR #314) reaching Prometheus.
+
+| Step | Run | Result |
+|---|---|---|
+| Promote `main` (`1c18cb6`), suite forced on | 41178629827 | LAB rehearsal pass (`ok=138 failed=0`), suite 27/28 pass, `lab_gate_failed=false`, `sha_all_ok=true`, Plan (PROD) pass |
+| After the run | | 0 lab containers, empty `lab-scratch`, 12 production containers, no `state/lab` content |
+| `lxc-apply-prod` (dispatched by the operator) | 41180066498 | success, Ansible `ok=140 changed=2 failed=0` |
+| Prometheus (CT 103) | | both rules loaded; `time() - homelab_ci_runner_last_heartbeat_timestamp_seconds` = 259 s, so neither alert is pending |
+
+The PROD plan carries no Terraform change for this promotion (the rules are an Ansible template); the real
+change is visible in the apply's `changed=2` and in the loaded rules. The LAB run had no fingerprint diff
+(the `ok` gate requires `status=success`, and the evidence check requires a clean teardown and fingerprint).
