@@ -102,6 +102,18 @@ is the precondition for the `hermes` deploy.
    (`PATCH $MEM/owner/config`) both return 403 with the Hermes key, and also with the admin key
    for the webhook (research R-001: refused for every scope).
 
+**Run 2026-10-31** (PROD):
+- Step 1: the `memory` apply (run 41205103733) passed the deploy probe: retain, recall, count and
+  delete.
+- Steps 2–5 through `https://memory-api.hus-sky.no`: no key 401, wrong key 401, Hermes stats 200,
+  Hermes clear bank 403 (`scope readwrite may not delete_bank`), Hermes and admin webhook 403
+  (`create_webhook is disabled`), Hermes bank config 403 (`scope readwrite may not
+  update_bank_config`).
+- Gateway scope (SC-003, § 5 step 2 in advance): the memory key gets 200 on `hermes-embed` and 401
+  on `hermes-fast` ("This key can only access models=['hermes-embed', 'hermes-rerank']").
+- Caddy's first certificate attempt failed (TXT record not yet published); the retry succeeded
+  after about 3 minutes, as for earlier vhosts.
+
 ## 4. Hermes remembers (US-1, FR-005)
 
 1. Tell Hermes (Open WebUI with the agent model, or ntfy) "my test parrot is called Probe-097".
@@ -114,6 +126,12 @@ is the precondition for the `hermes` deploy.
    ```sh
    curl -s -H "Authorization: Bearer $HERMES_KEY" "$MEM/owner/tags"
    ```
+
+**Run 2026-10-31** (PROD, owner): steps 1–4 as expected: Probe-097 recalled on the first turn of
+a new conversation, in English and Norwegian, and the unknown cat answered as unknown. The
+`owner` bank then held 2 documents (one per test conversation), both units tagged
+`client:hermes`, 0 failed operations. `hermes memory status`: provider `hindsight`, available; 0
+memory errors in the agent log.
 
 ## 5. Cost and locality (US-3, SC-003, SC-004)
 
