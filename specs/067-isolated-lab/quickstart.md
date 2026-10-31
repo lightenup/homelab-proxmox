@@ -89,6 +89,14 @@ chain **twice** (PR A loaded the file with `nft -f`, which appends). Fixed in PR
 starts with `table …` / `delete table …` so a load replaces the table. Re-run the same command
 once after PR B merges and check each rule appears once.
 
+**Re-check (2026-10-31, `nft list table inet lab_isolation` on `pve`)**: each chain and rule now appears
+once. `forward`: established/related accepted; `vmbr99` to `10.99.0.0/24` accepted; the two rig VMs
+(10.99.0.10/.11) may reach only `192.168.1.211:443` and `192.168.1.220:4000`; everything else from `vmbr99` to
+`lan_private` (`10.0.0.0/8`, `100.64.0.0/10`, `172.16.0.0/12`, `192.168.0.0/16`) is dropped. `input`:
+established/related accepted, every other packet from `vmbr99` to the host is dropped. Internet traffic is not
+in `lan_private`, so it stays open. Because `100.64.0.0/10` (the tailnet) is dropped, a guest cannot use the
+host's Tailscale resolver `100.100.100.100`, which is why guests need an explicit public nameserver (#308).
+
 ## 4. Laptop parity (US4, SC-008)
 
 From the laptop, run the same `pve-service-deploy apply --environment lab --service ntfy` over SSH
