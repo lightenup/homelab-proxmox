@@ -111,6 +111,10 @@ builds the memory service, which every story needs.
     the client template and the hermes memory settings; `gate.py` writes `gate.json` with the
     SC-001 to SC-004 verdict, and only a passing `gate.json` with the current fingerprint counts.
     Hand judgements in `overrides.json` are bound to the reviewed answer's sha256.
+- **T002** (2026-10-31): `scripts/memory/generate-vault-entries.py --keychain` added the 8 entries
+  (earlier vault content byte-identical, every value in the preflight format) and stored the
+  Claude Code key in the keychain (`homelab-memory`/`claude-code`). Still the owner's: copy the
+  web UI login key into the password manager with `--copy-ui-key`.
 - **Not run locally**: `terraform init/validate`. The local binary is broken, and the provider
   download from a container fails TLS verification behind Zscaler. `terraform fmt -check` passes.
   CI runs `terraform-validate.sh`.
@@ -122,7 +126,7 @@ builds the memory service, which every story needs.
 **Purpose**: Secrets, storage, pins and addresses that every later task reads.
 
 - [X] T001 (manual) Create the Synology share `homelab_memory`, exported over NFS to `pve` like `homelab_hermes`. Run `ssh pve sudo pct list` and confirm that no container uses `192.168.1.223`. Record both under a new `## 0. Preconditions` heading at the top of `specs/097-hermes-long-term-memory/quickstart.md`.
-- [ ] T002 (manual) Add vault entries with `ansible-vault edit ansible/group_vars/services/vault.yml`:
+- [X] T002 (manual) Add vault entries. `scripts/memory/generate-vault-entries.py` does it: `--check` lists present and missing names, a plain run adds only the missing entries in the formats below (never changes an existing one, never prints a value), `--keychain` stores the Claude Code key in the keychain, `--copy-ui-key` puts the web UI key on the clipboard for the password manager. Commit the vault through a PR. By hand, with `ansible-vault edit ansible/group_vars/services/vault.yml`:
   - `memory_db_password`: random, no prefix.
   - `memory_client_hermes_key`, `memory_client_open_webui_key`, `memory_client_claude_code_key`, `memory_client_control_plane_key`, `memory_ui_access_key`, `memory_admin_key`: each `hmem_` followed by at least 32 random bytes, URL-safe base64 (data-model.md: "Every key starts with `hmem_`… Keys are at least 32 random bytes").
   - `llm_router_client_memory_key`: in the existing `sk-` format of the other gateway keys.
