@@ -517,6 +517,15 @@ that verifies it.
   The Claude Code hook is not fingerprinted: it lives in dotfiles, and the harness replays its
   turn format without running the script.
 
+- **Gap found in the first PROD deploy (2026-10-31)**: the harness sends embeddings straight to
+  the Mac's LiteLLM, not through the homelab gateway, so it could not see that the gateway's
+  LiteLLM (`v1.83.3-stable`) refuses the `dimensions` parameter Hindsight sends (400
+  UnsupportedParamsError, whatever `drop_params` says). The PROD deploy probe caught it, as
+  R-019 intends. Fix: `allowed_openai_params: [dimensions]` on the `hermes-embed` deployment,
+  reproduced and verified against the pinned image with a stub backend, and guarded by
+  `test_llm_router_embed_params.py`. Open: run the harness through a gateway-shaped proxy, so a
+  gateway incompatibility shows before PROD.
+
 ## R-018: Pins, version currency and guard updates
 
 - **Decision**:
