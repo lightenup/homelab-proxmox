@@ -192,6 +192,12 @@ llm_router_aliases:
         context_window: 8192
         timeout: 300
         health_checked: false
+        # Spec 097: the memory server sends `dimensions: 1024` with every embedding request (a
+        # known dimension spares it a start-up probe, so it starts with the gateway down).
+        # v1.83.3 refuses `dimensions` for an openai/ model with 400 UnsupportedParamsError,
+        # and drop_params, global or per deployment, does not help (reproduced 2026-10-31).
+        # Passing it through works; the Mac's LiteLLM accepts it (the 097 harness gate).
+        allowed_openai_params: [dimensions]
   - name: hermes-rerank
     fallback_to: null
     context_window_fallback_to: null

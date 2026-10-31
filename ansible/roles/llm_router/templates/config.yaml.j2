@@ -17,6 +17,11 @@ model_list:
 {% if d.api_key_env is defined and d.api_key_env %}
       api_key: os.environ/{{ d.api_key_env }}
 {% endif %}
+{% if d.allowed_openai_params is defined and d.allowed_openai_params %}
+      # Request parameters passed through to this deployment even though LiteLLM would refuse
+      # them for the provider (see the deployment's entry in llm_router_aliases for why).
+      allowed_openai_params: {{ d.allowed_openai_params | to_json }}
+{% endif %}
       # Without this, a dead backend HANGS the caller instead of erroring. Measured
       # 2026-09-19 with the Mac's LiteLLM stopped: every alias hung past 300s and returned
       # nothing — no status, no error. The cause is the Mac's MDM-enforced stealth mode,
