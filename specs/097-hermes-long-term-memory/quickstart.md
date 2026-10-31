@@ -58,6 +58,13 @@ verdict in `gate.json`):
 `df080631…`, `results/2026-10-31-1545-prod-render/`): images, SC-001 (16/16, all 8 volume probes,
 no hand judgement), SC-002, SC-003 (81 embed, 33 rerank, 0 chat) and SC-004 PASS.
 
+**Runs 2026-10-31 17:30 and 18:15** for the read-view rule (fingerprint `833fa285…`): 17:30 FAILED
+SC-001 (15/16): p16 listed router changes without mentioning the "ask first" preference (judged
+fail, `results/2026-10-31-1730-prod-render/`, kept on record). The agreed single re-run at 18:15
+PASSED: p16 recalls the preference and hands the choice back (judged pass by the same standard,
+digest-bound), SC-002 to SC-004 and images pass (`results/2026-10-31-1815-prod-render/`). p16 is
+the one probe that varies run to run; it has passed in 4 of 5 prod-render runs today.
+
 SC-005 (cross-client) is US2's harness leg (T045, T046).
 
 Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two

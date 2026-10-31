@@ -1,0 +1,25 @@
+p1  update            PASS  'trondheim, norway — you moved there from bergen in october 2026.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'a banana with a spoonful of peanut-free almond-free alternative — or just a boiled egg with a slice of wholegr'
+p4  update-no         PASS  'grønn te. du sluttet med kaffe i oktober 2026 og drikker nå grønn te om morgenen.'
+p5  fact-en           PASS  'you use the helix editor for most of your code.'
+p6  fact-no-asked-en  PASS  'du fortalte meg at du bygger en badstue på hytta i hemsedal.'
+p7  decision-no       PASS  'klokka 03:00 — det var vi enige om i dag, flyttet fra midnatt.'
+p8  negative          PASS  "i don't have any record of a cat — your memory only mentions tinde, your border collie. do you have a cat too?"
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø og jobber som havbiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march 2027, and you're planning a surprise party for her at fjellstua."
+p11 volume-crossref   PASS  'your brother håkon, the electrician in stavanger, is helping with the electrical work in the sauna at your cab'
+p12 volume-no         PASS  'de er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'your band is fjordfunk, and you rehearse every wednesday at 19:00 at svartlamon in trondheim.'
+p14 volume-en         PASS  "your first on-call week started 9 november 2026 — that's the one coming up (about a week from now)."
+p15 volume-constraint PASS  'prøv en enkel japansk inspirert bulgur- eller quinoabowl med stekt tofu, stekegrønnsaker og soya-gyrosas — ras'
+p16 volume-preference FAIL  "i can't reach your router from here — it's on your local network, not something i can access remotely.\n\nbut i "
+recall: 15/16
+calls final chat 200 1
+calls final embed 200 1
+calls probes chat 200 33
+calls probes embed 200 31
+calls probes rerank 200 16
+calls sessions chat 200 47
+calls sessions embed 200 49
+calls sessions rerank 200 17

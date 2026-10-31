@@ -28,30 +28,47 @@ CLIENT_TAG_PREFIX = "client:"
 CLIENT_ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
-# Browse: recall and the bank reads behind it. get_bank_profile is read on most bank routes
-# (export included); list_operations backs "operation status" in the web UI.
+# Browse: recall and every bank read except the two below (R-001, R-020). Every key can already
+# read the whole bank through recall, and none of these reads runs an LLM, writes or sends
+# anything out; the web UI needs most of them (refused one view at a time in the first PROD
+# click-through, 2026-10-31). Kept back: get_bank_config (curator and up, the UI's settings
+# page) and export_knowledge_base (a bulk export, refused for every scope). Writes stay a strict
+# allowlist, and an operation a Hindsight bump adds is refused until someone classifies it.
 _READ = frozenset(
     {
         "recall",
-        "list_memory_units",
-        "get_memory_unit",
-        "list_documents",
-        "get_document",
-        "list_document_chunks",
-        "get_chunk",
-        "list_tags",
-        "get_bank_stats",
+        "mental_model_get",
         "get_bank_profile",
-        "get_operation_status",
-        "list_operations",
-        # The web UI's views (R-020; refused in the first preview, 2026-10-31): the memory
-        # timeline and the entity graph, empty in chunks mode, and the lists of features kept
-        # off. Reads of what every key can already recall; no LLM, no egress, no change.
-        "get_memories_timeseries",
+        "get_bank_stats",
+        "get_chunk",
+        "get_directive",
+        "get_document",
+        "get_document_history",
+        "get_entity",
         "get_entity_graph",
-        "list_entities",
-        "list_mental_models",
+        "get_entity_state",
+        "get_graph_data",
+        "get_knowledge_base_tree",
+        "get_knowledge_page",
+        "get_memories_timeseries",
+        "get_memory_unit",
+        "get_mental_model_history",
+        "get_observation_history",
+        "get_operation_status",
+        "list_bank_aliases",
         "list_directives",
+        "list_document_chunks",
+        "list_documents",
+        "list_entities",
+        "list_memory_units",
+        "list_mental_model_tags",
+        "list_mental_models",
+        "list_observation_scopes",
+        "list_operations",
+        "list_tags",
+        "list_webhook_deliveries",
+        "list_webhooks",
+        "search_knowledge_base",
     }
 )
 # Retain, plus curation of one unit (edit, invalidate, revert). Hindsight fires the bank write
@@ -116,21 +133,6 @@ REFUSED_FOR_ALL = frozenset(
         "delete_operation",
         "delete_webhook",
         "export_knowledge_base",
-        "get_directive",
-        "get_document_history",
-        "get_entity",
-        "get_entity_state",
-        "get_graph_data",
-        "get_knowledge_base_tree",
-        "get_knowledge_page",
-        "get_mental_model_history",
-        "get_observation_history",
-        "list_bank_aliases",
-        "list_mental_model_tags",
-        "list_observation_scopes",
-        "list_webhook_deliveries",
-        "list_webhooks",
-        "mental_model_get",
         "mental_model_refresh",
         "merge_bank_mission",
         "move_knowledge_node",
@@ -140,7 +142,6 @@ REFUSED_FOR_ALL = frozenset(
         "reset_bank_config",
         "retry_failed_consolidation",
         "run_consolidation",
-        "search_knowledge_base",
         "set_bank_mission",
         "submit_async_consolidation",
         "update_bank_disposition",
