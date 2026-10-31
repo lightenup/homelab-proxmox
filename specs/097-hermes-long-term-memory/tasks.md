@@ -175,6 +175,11 @@ builds the memory service, which every story needs.
     the seconds between. They come from live `world` units (`list?type=world`; invalidated units
     live in a separate table and are not listed): a `limit=0` call gives the count, and up to 3
     random offsets are fetched one unit at a time, so the bank is never listed whole.
+- **T055 and T068, 2026-10-31**: `monitoring` deployed (scrape and `memory-health` probe up; the
+  fresh-scrape false positive of `MemoryWritesStalled` fixed by #330's 12-hour data guard).
+  `memory` and `reverse_proxy` deployed with the web UI; the owner's click-through is in
+  quickstart § 11. The nightly backup script on the LXC writes `drill-probes.json`; the first run
+  is 2026-11-01 05:30 UTC, after which T060 can run.
 - **Not run locally**: `terraform init/validate`. The local binary is broken, and the provider
   download from a container fails TLS verification behind Zscaler. `terraform fmt -check` passes.
   CI runs `terraform-validate.sh`.
@@ -530,7 +535,7 @@ log line within 5 minutes (SC-010).
     - `MemoryWritesStalled`: retain operations at 0 over 12h while `sum(increase(litellm_deployment_success_responses_total[12h]))` exceeds 20.
   - **Log rule**: the memory container's `ERROR` lines, with `enabled: false` and `disabled_reason: "awaiting 7-day baseline (097)"`.
   - In `ansible/host_vars/hermes.yml`, add a log rule for agent lines matching `Hindsight (retain|recall) failed`, with the same disabled reason.
-- [ ] T055 [US3] (manual) Deploy `monitoring` through `Prod 1` → `Prod 2`. Run quickstart § 5 steps 1–4: gateway model scope, chat refused with the memory key, `ss -tnp` on the memory LXC, memory stopped while chat works and a log line in Loki within 5 minutes. Record the results in `specs/097-hermes-long-term-memory/quickstart.md`.
+- [X] T055 [US3] (manual) Deploy `monitoring` through `Prod 1` → `Prod 2`. Run quickstart § 5 steps 1–4: gateway model scope, chat refused with the memory key, `ss -tnp` on the memory LXC, memory stopped while chat works and a log line in Loki within 5 minutes. Record the results in `specs/097-hermes-long-term-memory/quickstart.md`.
 
 **Checkpoint**: US3 delivered. Cost and failure behaviour are proven and monitored.
 
@@ -606,7 +611,7 @@ FR-023, SC-011).
   - **Preflight**: `ansible/roles/memory/tasks/preflight.yml` already asserts `memory_ui_access_key`. Add a message: "upstream serves the UI open without it".
   - **Health**: extend the health wait in `ansible/roles/memory/tasks/main.yml` and `scripts/healthcheck/memory.sh` to `GET http://{{ memory_ip }}:{{ memory_ui_port }}/api/health`.
 - [X] T067 [P] [US5] Add the portal entry `{host: memory, ip: "{{ memory_ip }}", port: "{{ memory_ui_port }}", title: "Memory", desc: "Shared AI memory: browse and edit", enabled: true, user_facing: true}` to `caddy_services` in `ansible/group_vars/services/vars.yml`.
-- [ ] T068 [US5] (manual) Deploy `memory`, then `hermes`, then `reverse_proxy` through `Prod 1` → `Prod 2`.
+- [X] T068 [US5] (manual) Deploy `memory`, then `hermes`, then `reverse_proxy` through `Prod 1` → `Prod 2`.
   - **LAB stage**: the UI's lab copy answers `/api/health` and serves `/login` without data. Record its resident memory (quickstart § 2 "memory web UI").
   - **PROD**: run quickstart § 11 steps 1–5.
 - [ ] T069 [US5] (manual) Add the MCP server in Claude Code's user scope: `claude mcp add --scope user --transport http memory https://memory-api.hus-sky.no/mcp/ --header "Authorization: Bearer <key from keychain>"`. Do this only if T048 confirmed the risk. Document it in the dotfiles README without the key.
