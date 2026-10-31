@@ -10,10 +10,13 @@ import collections, hashlib, json, re, sys
 
 
 def _override(o, raw):
+    """A bare bool, one digest-bound judgement, or a list of them (one per reviewed answer)."""
     if isinstance(o, bool):
         return o
-    if isinstance(o, dict) and o.get("answer_sha256") == hashlib.sha256(raw.encode()).hexdigest():
-        return bool(o["pass"])
+    digest = hashlib.sha256(raw.encode()).hexdigest()
+    for j in o if isinstance(o, list) else [o]:
+        if isinstance(j, dict) and j.get("answer_sha256") == digest:
+            return bool(j["pass"])
     return None
 
 

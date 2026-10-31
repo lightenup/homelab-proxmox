@@ -196,6 +196,12 @@ READ = [
     "list_entities",
     "list_mental_models",
     "list_directives",
+    "get_graph_data",
+    "get_knowledge_base_tree",
+    "get_knowledge_page",
+    "search_knowledge_base",
+    "get_document_history",
+    "mental_model_get",
 ]
 RETAIN = ["retain"]
 CURATE = [
@@ -369,3 +375,16 @@ def test_authorize_applies_the_scope(clients):
     assert authorize(clients, api_key_id="hermes", internal=False, operation="recall").allowed
     assert not authorize(clients, api_key_id="hermes", internal=False, operation="delete_bank").allowed
     assert authorize(clients, api_key_id="backup", internal=False, operation="delete_bank").allowed
+
+
+def test_every_bank_read_but_two_is_open_to_every_scope():
+    """R-020: reads are open (every key can already recall the whole bank); writes stay an
+    allowlist. Only the bank config (curator and up) and the bulk export (nobody) are held back."""
+    from pathlib import Path
+
+    snapshot = Path(__file__).resolve().parents[3] / "ansible/roles/memory/files/hindsight_ext/operations-1.1.0.txt"
+    names = {line.strip() for line in snapshot.read_text().splitlines() if line.strip() and not line.startswith("#")}
+    reads = {n for n in names if n.startswith(("get_", "list_", "search_"))}
+    assert reads - SCOPE_ALLOWLISTS["readonly"] == {"get_bank_config"}
+    assert "export_knowledge_base" in REFUSED_FOR_ALL
+    assert "get_bank_config" in SCOPE_ALLOWLISTS["curator"]

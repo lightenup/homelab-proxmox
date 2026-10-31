@@ -1,0 +1,47 @@
+{
+ "fingerprint": "833fa285ce5c3d42dbca9ae973477cf8dd3aa0f4bfc6a95e69625d8846e2ae33",
+ "images": {
+  "expected": [
+   "ghcr.io/vectorize-io/hindsight:1.1.0-slim",
+   "nousresearch/hermes-agent:v0.21.6",
+   "pgvector/pgvector:0.8.1-pg17"
+  ],
+  "ran": [
+   "ghcr.io/vectorize-io/hindsight:1.1.0-slim",
+   "nousresearch/hermes-agent:v0.21.6",
+   "pgvector/pgvector:0.8.1-pg17",
+   "python:3.12-slim"
+  ],
+  "pass": true
+ },
+ "SC-001": {
+  "score": "16/16",
+  "volume": "8/8",
+  "baseline_max": 11,
+  "unjudged": [],
+  "pass": true
+ },
+ "SC-002": {
+  "update": {
+   "p1": true,
+   "p4": true
+  },
+  "negative": {
+   "p8": true
+  },
+  "pass": true
+ },
+ "SC-003": {
+  "memory_key_calls": {
+   "embed": 80,
+   "rerank": 33
+  },
+  "pass": true
+ },
+ "SC-004": {
+  "egress_lines": 0,
+  "examples": [],
+  "pass": true
+ },
+ "pass": true
+}
