@@ -21,6 +21,17 @@
   loop: "{{ (memory_clients | map(attribute='vault_var') | list) + ['memory_db_password', 'llm_router_client_memory_key', 'memory_ui_access_key'] }}"
   no_log: true
 
+- name: Assert the web UI has its login key
+  # R-020: with HINDSIGHT_CP_ACCESS_KEY unset, upstream serves the UI open, so no deploy without it.
+  ansible.builtin.assert:
+    that:
+      - memory_ui_access_key is defined
+      - memory_ui_access_key | length > 0
+    fail_msg: >-
+      memory_ui_access_key is missing: upstream serves the UI open without it, which would expose
+      every memory to the LAN. Add it with scripts/memory/generate-vault-entries.py.
+  no_log: true
+
 - name: Assert every memory key carries the hmem_ prefix and at least 32 random bytes
   # data-model.md § Client: the prefix is what log redaction matches (research R-015).
   # 32 bytes as URL-safe base64 is 43 characters.

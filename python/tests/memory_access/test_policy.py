@@ -191,11 +191,21 @@ READ = [
     "get_bank_profile",
     "get_operation_status",
     "list_operations",
+    "get_memories_timeseries",
+    "get_entity_graph",
+    "list_entities",
+    "list_mental_models",
+    "list_directives",
 ]
 RETAIN = ["retain"]
-CURATE = ["memory_update", "update_memory_unit"]
-DELETE_RETRY = ["delete_document", "retry_operation"]
-WHOLE_BANK = ["import", "import_documents", "create_bank", "get_bank_config", "update_bank_config", "delete_bank"]
+CURATE = [
+    "memory_update",
+    "update_memory_unit",
+    "submit_async_graph_maintenance",
+    "submit_async_vector_index_maintenance",
+]
+DELETE_RETRY = ["delete_document", "retry_operation", "get_bank_config"]
+WHOLE_BANK = ["import", "import_documents", "create_bank", "update_bank_config", "delete_bank"]
 NEVER = [
     "create_webhook",
     "update_webhook",

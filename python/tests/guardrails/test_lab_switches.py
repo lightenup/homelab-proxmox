@@ -46,6 +46,8 @@ CLASSIFICATION = {
     "memory_api_image": "internal", "memory_api_port": "internal", "memory_api_url": "internal",
     # 097 R-003: the agent's memory key (readwrite, no whole-bank operation) and the API URL.
     "memory_client_hermes_key": "internal", "hermes_memory_api_url": "internal",
+    # 097 R-020: the web UI's login key and its curator API key (memory stack only).
+    "memory_ui_access_key": "internal", "memory_client_control_plane_key": "internal",
 }
 
 # internet key -> {template (relative to ansible/roles): why a lab copy never renders it}

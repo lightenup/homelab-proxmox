@@ -339,3 +339,43 @@ def test_probe_and_backup_read_fresh_stats():
     assert bank.count("/stats?refresh=true") == 2 and "/stats\"" not in bank
     snapshot = (ROOT / "ansible/roles/service_backup/templates/snapshot/memory.sh.j2").read_text()
     assert "/stats?refresh=true" in snapshot
+
+
+# --------------------------------------------------------------------------- web UI (T063, R-020)
+
+
+def test_ui_env_holds_exactly_the_login_key_and_the_curator_key():
+    env = _env_file(render("ui.env.j2"))
+    assert env == {
+        "HINDSIGHT_CP_ACCESS_KEY": SECRETS["memory_ui_access_key"],
+        "HINDSIGHT_CP_DATAPLANE_API_KEY": SECRETS["memory_client_control_plane_key"],
+    }
+
+
+def test_ui_service_is_bounded_and_bound_to_memory_ip():
+    ui = yaml.safe_load(render("docker-compose.yml.j2"))["services"]["memory_ui"]
+    assert ui["image"] == f"ghcr.io/vectorize-io/hindsight-control-plane:{_context()['hindsight_version']}"
+    assert ui["env_file"] == "ui.env"
+    assert ui["environment"] == {"HINDSIGHT_CP_DATAPLANE_API_URL": "http://memory_api:8888"}
+    assert ui["ports"] == ["192.168.1.223:9999:9999"]
+    assert ui["mem_limit"] == "384m"
+    assert ui["depends_on"] == {"memory_api": {"condition": "service_healthy"}}
+
+
+def test_ui_never_holds_the_admin_gateway_or_database_secrets():
+    rendered = render("ui.env.j2") + yaml.safe_dump(yaml.safe_load(render("docker-compose.yml.j2"))["services"]["memory_ui"])
+    for name in ("memory_admin_key", "llm_router_client_memory_key", "memory_db_password"):
+        assert SECRETS[name] not in rendered, name
+
+
+def test_portal_tile_publishes_the_ui_only():
+    services = {s["host"]: s for s in _context()["caddy_services"]}
+    ui = services["memory"]
+    # str(): other test modules strip YAML's bool resolver at import (see test_hermes_ntfy_config).
+    assert str(ui["user_facing"]).lower() == "true" and ui["port"] == "9999" and ui["ip"] == "192.168.1.223"
+    assert str(services["memory-api"]["user_facing"]).lower() == "false"
+
+
+def test_preflight_refuses_a_ui_without_its_login_key():
+    preflight = (ROLE / "tasks" / "preflight.yml").read_text()
+    assert "memory_ui_access_key" in preflight and "serves the UI open" in preflight
