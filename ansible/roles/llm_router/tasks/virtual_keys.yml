@@ -133,6 +133,9 @@
 # The enforcement is LiteLLM's own key scope, which is the same mechanism the Mac uses on
 # the key it mints for this gateway. Scoped to the alias names, so adding an alias widens
 # the scope automatically and no list is maintained twice.
+#
+# A client may narrow this with its own `models` list (spec 097 R-011: the memory key may reach
+# the embed and rerank aliases only, so the gateway refuses any chat call made with it).
 - name: Define the model scope every client key is limited to
   ansible.builtin.set_fact:
     llm_router_client_allowed_models: "{{ llm_router_aliases | map(attribute='name') | list }}"
@@ -168,7 +171,7 @@
       key: "{{ lookup('vars', item.key_env | lower) }}"
       key_alias: "{{ item.alias }}"
       team_id: "{{ llm_router_gateway_team_id }}"
-      models: "{{ llm_router_client_allowed_models }}"
+      models: "{{ item.models | default(llm_router_client_allowed_models) }}"
       max_budget: "{{ item.max_budget }}"
       budget_duration: "{{ item.budget_duration }}"
       rpm_limit: "{{ item.rpm_limit | default(omit) }}"
@@ -193,7 +196,7 @@
     body_format: json
     body:
       key: "{{ lookup('vars', item.key_env | lower) }}"
-      models: "{{ llm_router_client_allowed_models }}"
+      models: "{{ item.models | default(llm_router_client_allowed_models) }}"
     status_code: 200
   loop: "{{ llm_router_clients }}"
   loop_control:

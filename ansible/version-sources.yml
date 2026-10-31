@@ -102,3 +102,17 @@ pins:
     file: ansible/group_vars/services/vars.yml
     policy: latest
     github: home-assistant/core
+  - variable: hindsight_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: vectorize-io/hindsight
+  # The tag's numeric core is pgvector's (0.8.1), not Postgres's, so support-only would match
+  # no postgresql cycle. Postgres 17 is in support until 2029-11 (097 R-018).
+  - variable: memory_postgres_version
+    file: ansible/group_vars/services/vars.yml
+    policy: latest
+    github: pgvector/pgvector
+  - variable: hermes_hindsight_plugin_version
+    file: ansible/group_vars/services/vars.yml
+    policy: unchecked
+    reason: "tags carry the integrations/hermes/ prefix; re-checked with hindsight_version (097 R-018)"

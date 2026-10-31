@@ -1,0 +1,111 @@
+---
+# Research R-019: prove that a write lands before any client relies on the store. The probe
+# needs embeddings, so it runs in PROD only; the lab copy records it as skipped.
+- name: Ensure the memory banks exist
+  ansible.builtin.uri:
+    url: "{{ memory_api_url }}/v1/default/banks/{{ item }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ memory_admin_key }}"
+    body_format: json
+    body:
+      name: "{{ item }}"
+    status_code: 200
+  loop:
+    - "{{ memory_bank_id }}"
+    - "{{ memory_probe_bank_id }}"
+  changed_when: false
+  no_log: true
+
+- name: Run the deploy probe
+  when: (deploy_environment | default('prod')) != 'lab'
+  vars:
+    memory_probe_token: "{{ lookup('ansible.builtin.password', '/dev/null length=20 chars=ascii_lowercase') }}"
+    memory_probe_doc: "deploy-probe-{{ memory_probe_token }}"
+    memory_probe_text: "The deploy probe for memory recorded the marker {{ memory_probe_token }}."
+  block:
+    # The token is set once: a lookup in vars is re-evaluated at every use.
+    - name: Fix the probe sentence
+      ansible.builtin.set_fact:
+        memory_probe: {doc: "{{ memory_probe_doc }}", text: "{{ memory_probe_text }}", token: "{{ memory_probe_token }}"}
+
+    - name: Read probe bank stats before the probe
+      ansible.builtin.uri:
+        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/stats"
+        headers:
+          Authorization: "Bearer {{ memory_admin_key }}"
+        return_content: true
+      register: memory_probe_before
+      no_log: true
+
+    - name: Retain the probe sentence synchronously
+      ansible.builtin.uri:
+        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/memories"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ memory_admin_key }}"
+        body_format: json
+        body:
+          async: false
+          items:
+            - content: "{{ memory_probe.text }}"
+              document_id: "{{ memory_probe.doc }}"
+        timeout: 60
+      changed_when: false
+      no_log: true
+
+    - name: Recall the probe sentence
+      ansible.builtin.uri:
+        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/memories/recall"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ memory_admin_key }}"
+        body_format: json
+        body:
+          query: "{{ memory_probe.text }}"
+          types: ["world"]
+        return_content: true
+        timeout: 30
+      register: memory_probe_recall
+      no_log: true
+
+    - name: Read probe bank stats after the probe
+      ansible.builtin.uri:
+        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/stats"
+        headers:
+          Authorization: "Bearer {{ memory_admin_key }}"
+        return_content: true
+      register: memory_probe_after
+      no_log: true
+
+    - name: Assert the probe was stored and recalled
+      ansible.builtin.assert:
+        that:
+          - memory_probe_recall.json.results | map(attribute='text') | select('search', memory_probe.token) | list | length > 0
+          - memory_probe_after.json.total_documents == memory_probe_before.json.total_documents + 1
+        fail_msg: >-
+          The deploy probe did not round-trip: a retain was lost or not recallable
+          (research R-019, edge case "silent write loss"). Check the gateway's embedder.
+  always:
+    - name: Delete the probe document
+      ansible.builtin.uri:
+        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/documents/{{ memory_probe.doc }}"
+        method: DELETE
+        headers:
+          Authorization: "Bearer {{ memory_admin_key }}"
+        status_code: [200, 404]
+      changed_when: false
+      no_log: true
+      when: memory_probe is defined
+
+- name: Record the skipped lab check
+  ansible.builtin.lineinfile:
+    path: "{{ evidence_dir }}/reports/lab/skipped-checks.txt"
+    create: true
+    mode: "0644"
+    line: "memory: deploy probe (needs embeddings)"
+  delegate_to: localhost
+  become: false
+  when:
+    - (deploy_environment | default('prod')) == 'lab'
+    - evidence_dir is defined

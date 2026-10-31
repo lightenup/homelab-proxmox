@@ -55,6 +55,44 @@ hermes_agent_hooks_dir: "/opt/hermes-agent-hooks"
 # Host directory for agent plugin overrides (095 R-018: the ntfy chunking shim). Root-owned,
 # outside the agent's data dir, bind-mounted read-only.
 hermes_agent_plugins_dir: "/opt/hermes-agent-plugins"
+
+# Spec 097 (FR-001, FR-002, R-003): the Hindsight memory provider, fetched at deploy time from
+# pinned, hashed sources and mounted read-only into the stock agent image. No runtime install:
+# the agent never runs pip. hermes_hindsight_plugin_version lives in the versions block of
+# group_vars/services/vars.yml; re-check these pins together with it and hermes_agent_version.
+# The tarball is GitHub's archive of the plugin tag; the plugin is under
+# hindsight-integrations/hermes/ inside it.
+hermes_hindsight_plugin_url: "https://github.com/vectorize-io/hindsight/archive/refs/tags/integrations/hermes/v{{ hermes_hindsight_plugin_version }}.tar.gz"
+hermes_hindsight_plugin_sha256: "845eb81934b5cefd0ce0b9170b2173ce144e5724cc736117d9a279e392bc466b"
+# The three packages the stock image lacks (spike Dockerfile, 2026-10-30): pure-Python wheels
+# inside plugin 1.2.3's hindsight-client/hindsight-embed >=0.10.1,<1 constraint. Their own
+# dependencies (aiohttp, pydantic, rich, ...) ship in the image. URLs and hashes from
+# https://pypi.org/pypi/<name>/<version>/json.
+hermes_hindsight_plugin_wheels:
+  - name: hindsight-client
+    version: "==0.10.3"
+    url: "https://files.pythonhosted.org/packages/54/31/5157bd9f73dca7ef2516470ff85818e03d6167f031cfcc96ff1c263ebc12/hindsight_client-0.10.3-py3-none-any.whl"
+    sha256: "b4d0d1bbc29dcd4ef25a4a23a08a48046d5337b704bdafabb02d0010d299a068"
+  - name: hindsight-embed
+    version: "==0.10.3"
+    url: "https://files.pythonhosted.org/packages/f3/c4/4854a2e245937026dcdf3291506dc51b16dc9dcb9e673c8f6c4668d76632/hindsight_embed-0.10.3-py3-none-any.whl"
+    sha256: "290b81d8363e996f166f533d32c61e734af5d104695a252b0e0f729cf36eccf1"
+  - name: aiohttp-retry
+    version: "==2.9.1"
+    url: "https://files.pythonhosted.org/packages/1a/99/84ba7273339d0f3dfa57901b846489d2e5c2cd731470167757f1935fffbd/aiohttp_retry-2.9.1-py3-none-any.whl"
+    sha256: "66d2759d1921838256a05a3f80ad7e724936f083e35be5abb5e16eed6be6dc54"
+# Root-owned host directories, mounted :ro (the agent can write /opt/data, so code it runs must
+# not live there writable). The plugin config holds the memory key, so it is rendered to the
+# install dir, not into the agent's data dir.
+hermes_memory_plugin_dir: "{{ hermes_agent_plugins_dir }}/memory/hindsight"
+hermes_memory_deps_dir: "{{ hermes_agent_plugins_dir }}/memory-deps"
+hermes_memory_plugin_config_path: "{{ hermes_install_dir }}/hindsight-config.json"
+# Downloads, kept so an unchanged pin is not fetched again. Outside the mounted directories.
+hermes_memory_plugin_cache_dir: "/var/cache/hermes-memory-plugin"
+# The memory service's API through Caddy (FR-010: never the direct port) and its one bank,
+# the same as memory_bank_id in roles/memory/defaults/main.yml (guard test).
+hermes_memory_api_url: "https://memory-api.{{ caddy_base_domain }}"
+hermes_memory_bank_id: "owner"
 # Host directory for the agent's /etc/profile.d drop-in (puts /opt/hermes/bin back on the
 # terminal tool's login-shell PATH). Root-owned, outside the agent's data dir, mounted read-only.
 hermes_agent_profile_dir: "/opt/hermes-agent-profile.d"

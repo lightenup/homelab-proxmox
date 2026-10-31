@@ -1,0 +1,7 @@
+{#- Spec 097 data-model.md § Client. Only sha256 hashes of the keys, never a key (R-001).
+    claude-code is left out when revoked (SC-009). memory_access.load_clients validates it. -#}
+{%- set entries = [] -%}
+{%- for client in memory_clients if not (client.id == 'claude-code' and memory_claude_code_scope == 'revoked') -%}
+{%-   set _ = entries.append({'id': client.id, 'sha256': lookup('ansible.builtin.vars', client.vault_var) | hash('sha256'), 'scope': client.scope}) -%}
+{%- endfor -%}
+{{ entries | to_nice_json }}

@@ -13,6 +13,7 @@ tailscale-key|drill-5 tailscale up --authkey=tskey-auth-abc123XYZ|tskey-auth-abc
 query-credential|drill-6 GET /alerts?auth=qc-secret-777&x=1 200|qc-secret-777
 url-password|drill-7 DATABASE_URL=postgresql://litellm:S3cr3tPassw0rd@llm_router_postgres:5432/litellm|S3cr3tPassw0rd
 env-assignment|drill-8 DOMENESHOP_TOKEN=dmn-tok-123456|dmn-tok-123456
+memory-key|drill-12 hindsight retain failed for key hmem_drill_AbCdEfGhIjKlMnOp-1234 in plugin|hmem_drill_AbCdEfGhIjKlMnOp-1234
 jwt|drill-11 hass token eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJkcmlsbCJ9.c2lnbmF0dXJlLXZhbHVl used|eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJkcmlsbCJ9.c2lnbmF0dXJlLXZhbHVl
 control|drill-9 plain line with no secret, user=andreas path=/var/lib/x|
 control|Accepted publickey for root from 192.168.1.112 port 1 ssh2: ED25519 SHA256:NH5zp/61GeEPB81f+jkiTmMfTHaWrn4s4JU5MIQUwT4|

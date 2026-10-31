@@ -1,0 +1,9 @@
+# Spec 097: shared long-term memory. The health check probes the API directly rather than
+# through Caddy, because a single-copy lab has no reverse proxy (research R-016). /health
+# needs no key and checks only the database.
+healthcheck_url:
+  scheme: http
+  port: 8888  # memory_api_port; literal because ansible-inventory --list does not render Jinja
+  path: /health
+healthcheck_profile: lan
+healthcheck_expect_status: 200

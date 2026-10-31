@@ -75,8 +75,14 @@ cron:
 
 # Persistent memory (FR-018): bounded curated memory injected into the system prompt.
 # Upstream default is enabled; stated explicitly so a version bump cannot silently drop it.
+# Spec 097 FR-001: Hindsight is the external provider beside it, the store shared with Open
+# WebUI and Claude Code. Its settings are in hindsight-config.json (read-only mount), and the
+# plugin is the pinned, read-only copy from tasks/memory_plugin.yml. This file is read-only, so
+# the agent cannot switch providers (FR-008). On a hermes_agent_version bump, re-check
+# _config_version and the plugin pin together (097 R-018) and re-run the harness gate (FR-021).
 memory:
   memory_enabled: true
+  provider: hindsight
 
 # Skill curator (keys verified at v0.21.6, hermes_cli/config_defaults.py "curator"). Upstream
 # already runs it every 7 days after 2 h idle, prune-only; no cron job is needed for it. This

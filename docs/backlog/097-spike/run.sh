@@ -24,3 +24,6 @@ sleep 30   # let async writes/consolidation land
   && "${DC[@]}" exec -T hermes python3 /tmp/attribution.py /tmp/dataset.json > "$OUT/attribution.jsonl" 2>&1 || true
 "${DC[@]}" logs --no-color > "$OUT/compose.log" 2>&1
 python3 score.py "$1" | tee "$OUT/score.txt"
+# FR-021 (spec 097): the gate's fingerprint travels with the results. Archive as
+# results/<YYYY-MM-DD>-prod-render/ (README) so test_memory_harness_gate.py finds it.
+if [ "$1" = prod-render ]; then cp runs/prod-render/fingerprint.txt "$OUT/fingerprint.txt"; fi

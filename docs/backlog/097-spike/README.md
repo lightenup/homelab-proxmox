@@ -31,6 +31,30 @@ Candidates with their own services layer `compose.<candidate>.yml` over `compose
 `hindsight-chunks` and `hindsight-full` are symlinks to `compose.hindsight.yml`; the variant is in
 `runs/<variant>/server.env`.
 
+## The FR-021 gate: `prod-render`
+
+The quality gate before a PROD promotion that changes memory (spec 097 FR-021, research R-017,
+quickstart § 1). It runs the production configuration, not a hand-written one:
+
+```sh
+./render-prod.sh                  # renders the Ansible templates, fetches the pinned plugin
+./run.sh prod-render              # pinned stock images, shim and policy mounted read-only
+mv results/prod-render "results/$(date +%F)-prod-render"   # keep fingerprint.txt with it
+```
+
+- `render-prod.sh` renders `roles/memory/templates/{server.env,db.env,clients.json}.j2` and
+  `roles/hermes/templates/hindsight-config.json.j2` with `ansible localhost -m template`, the PROD
+  group vars and role defaults, and harness-local keys in `runs/prod-render/secret.env`. Two values
+  differ from PROD: the gateway (`llmproxy:4000`) and the plugin's `api_url`
+  (`http://hindsight:8888`, no Caddy here). The plugin and its three packages come from the same
+  pins and checksums as `roles/hermes/tasks/memory_plugin.yml`.
+- `llmproxy` maps the gateway aliases `hermes-embed` and `hermes-rerank` to the Mac's `embed` and
+  `rerank` (`MODEL_MAP`), as the gateway does, and logs a short hash of each caller's key.
+- `runs/prod-render/fingerprint.txt` hashes the pins and files that decide memory behaviour.
+  `python/tests/guardrails/test_memory_harness_gate.py` fails until a committed
+  `results/*-prod-render/fingerprint.txt` matches the current configuration.
+- Generated files (`runs/prod-render/build/`, `secret.env`) are git-ignored.
+
 ## Not in the repo
 
 Generate or fetch locally before a run:

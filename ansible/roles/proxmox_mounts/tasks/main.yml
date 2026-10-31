@@ -37,6 +37,10 @@
         src: 192.168.1.109:/volume1/homelab_hermes
         opts: rw,nofail
         purpose: "Hermes workspace backups (spec 065)"
+      - path: /mnt/nas/homelab_memory
+        src: 192.168.1.109:/volume1/homelab_memory
+        opts: rw,nofail
+        purpose: "Shared AI memory backups (spec 097)"
       - path: /mnt/nas/homelab_jellyfin
         src: 192.168.1.109:/volume1/homelab_jellyfin
         opts: rw,nofail

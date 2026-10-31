@@ -1,0 +1,55 @@
+---
+# Shared long-term memory (spec 097). Hindsight server, its web UI and pgvector Postgres in
+# Docker. Versions come from group_vars/services/vars.yml (hindsight_version,
+# memory_postgres_version); both images are stock (research R-001, R-020).
+memory_install_dir: "/opt/memory"
+memory_data_dir: "/opt/memory-data"
+# The policy module and the shim, mounted read-only into the API container (R-001).
+memory_ext_dir: "/opt/memory-ext"
+
+memory_api_image: "ghcr.io/vectorize-io/hindsight:{{ hindsight_version }}-slim"
+memory_postgres_image: "pgvector/pgvector:{{ memory_postgres_version }}"
+memory_ui_image: "ghcr.io/vectorize-io/hindsight-control-plane:{{ hindsight_version }}"
+
+# The `hindsight` user inside the API image (first useradd in python:3.11-slim, uid 1000). It
+# must read clients.json, so the file is owned by this uid at 0400 rather than by root.
+memory_container_uid: 1000
+
+# One bank holds every memory; the probe bank holds one synthetic sentence per deploy, deleted
+# at once (data-model.md § Bank, research R-019).
+memory_bank_id: "owner"
+memory_probe_bank_id: "deploy-probe"
+
+# FR-009: the six MCP tools any model sees, out of 39 (contracts/memory-access.md § MCP).
+memory_mcp_enabled_tools:
+  - recall
+  - retain
+  - list_memories
+  - update_memory
+  - invalidate_memory
+  - list_tags
+
+# Claude Code's access (SC-009): readwrite, readonly, or revoked (left out of clients.json).
+# A change takes effect at the next memory deploy.
+memory_claude_code_scope: "readwrite"
+
+# data-model.md § Client. Only sha256 hashes of these keys reach the LXC (clients.json.j2).
+memory_clients:
+  - id: hermes
+    vault_var: memory_client_hermes_key
+    scope: readwrite
+  - id: open-webui
+    vault_var: memory_client_open_webui_key
+    scope: readwrite
+  - id: claude-code
+    vault_var: memory_client_claude_code_key
+    scope: "{{ memory_claude_code_scope }}"
+  - id: control-plane
+    vault_var: memory_client_control_plane_key
+    scope: curator
+  - id: backup
+    vault_var: memory_admin_key
+    scope: admin
+
+# The direct API address, used from the LXC itself by the deploy probe and the backup.
+memory_api_url: "http://{{ memory_ip }}:{{ memory_api_port }}"

@@ -1,0 +1,6 @@
+# Spec 097 harness: generated keys and builds never reach the repo (README "Not in the repo").
+keys/
+logs/
+runs/*/secret.env
+runs/prod-render/build/
+runs/prod-render/fingerprint.txt

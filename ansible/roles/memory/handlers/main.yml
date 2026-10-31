@@ -1,0 +1,5 @@
+---
+- name: Restart memory
+  community.docker.docker_compose_v2:
+    project_src: "{{ memory_install_dir }}"
+    state: restarted

@@ -207,6 +207,16 @@
       value.
   no_log: true
 
+- name: Assert the agent's memory key is defined (spec 097 R-003)
+  ansible.builtin.assert:
+    that:
+      - memory_client_hermes_key is defined
+      - memory_client_hermes_key is match('^hmem_[A-Za-z0-9_-]{43,}$')
+    fail_msg: >-
+      memory_client_hermes_key is missing or not hmem_ plus 32 random bytes (URL-safe base64).
+      Add it with 'ansible-vault edit group_vars/services/vault.yml' (097 T002).
+  no_log: true
+
 - name: Assert every enabled MCP server URL parses to host and port
   ansible.builtin.assert:
     that:

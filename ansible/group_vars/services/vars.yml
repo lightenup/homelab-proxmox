@@ -41,6 +41,12 @@ hermes_searxng_version: "2026.9.19-c0014f015"
 hermes_agent_version: "v0.21.6"
 ntfy_version: "v2.28.0"
 homeassistant_version: "2026.10.4"
+# Shared AI memory (spec 097). The Hindsight server and its web UI share one version; the
+# shim's HINDSIGHT_VERIFIED_VERSION must match it (guard test, research R-001). The Hermes
+# plugin is re-checked with hindsight_version and hermes_agent_version (R-018).
+hindsight_version: "1.1.0"
+memory_postgres_version: "0.8.1-pg17"
+hermes_hindsight_plugin_version: "1.2.3"
 
 # Euro-Office Configuration
 eurooffice_ip: "192.168.1.219"
@@ -232,6 +238,15 @@ llm_router_clients:
     max_budget: 1.00
     budget_duration: "30d"
     rpm_limit: 2
+  # Spec 097 (FR-004, R-011): the memory server's embedding and rerank traffic. `models`
+  # narrows the key to those two aliases, so the gateway itself refuses a chat-model call made
+  # with it. 30 rpm covers recall and retain bursts from three clients.
+  - alias: memory
+    key_env: LLM_ROUTER_CLIENT_MEMORY_KEY
+    max_budget: 1.00
+    budget_duration: "30d"
+    rpm_limit: 30
+    models: [hermes-embed, hermes-rerank]
 
 # Gateway-wide backstop (FR-010, SC-012). Two caps with OPPOSITE sizing rules — see below.
 llm_router_gateway_budget:
@@ -250,7 +265,7 @@ llm_router_gateway_budget:
   # inside this band, which the preflight asserts:
   #
   #     max(client rpm_limit)  <=  gateway rpm_limit  <  sum(client rpm_limit)
-  #            60              <=          65         <         92
+  #            60              <=          65         <        122
   #
   # Lower bound: at least the largest single client, so one compliant client is never
   # refused by the GATEWAY cap — its own limit should always bind first, otherwise the
@@ -258,8 +273,8 @@ llm_router_gateway_budget:
   #
   # Upper bound: strictly below the sum, so clients COMBINING can trip it. That is the
   # scenario this exists for: `hermes` (60), `canary` (10), `hermes_agent` (20, spec 083)
-  # and `scout_probe` (2, backlog 088) are each well-behaved and together are 92
-  # requests/minute of real inference against a single Mac.
+  # `scout_probe` (2, backlog 088) and `memory` (30, spec 097: embed and rerank only) are
+  # each well-behaved and together are 122 requests/minute against a single Mac.
   #
   # 65 rather than 60 deliberately: at exactly 60, a fully-loaded `hermes` would consume
   # the entire gateway allowance and starve the synthetic canary (FR-018), blinding the
@@ -425,6 +440,14 @@ ntfy_ip: "192.168.1.222"
 ntfy_port: 80
 ntfy_metrics_port: 9090
 
+# Memory Configuration (spec 097) — shared long-term memory for Hermes, Open WebUI and
+# Claude Code. REST and MCP on the API port, the Hindsight web UI on the UI port; both are
+# published only through Caddy (memory-api / memory). The direct port serves the reverse
+# proxy, Prometheus and the health check (FR-010).
+memory_ip: "192.168.1.223"
+memory_api_port: 8888
+memory_ui_port: 9999
+
 # Financial Scenario Configuration
 # Only the GUI port is published; the GUI nginx proxies /api, /docs and /mcp.
 financial_scenario_ip: "192.168.1.217"
@@ -577,6 +600,15 @@ caddy_services:
     # probe (R-007). web-root must stay at the upstream default "/" so the front-page
     # probe of https://ntfy.hus-sky.no/ gets a 200 (contracts/server-config.md).
     user_facing: true
+  # Spec 097: the memory API (REST and MCP). A route without a portal tile; every request
+  # still needs a client key (contracts/memory-access.md).
+  - host: memory-api
+    ip: "{{ memory_ip }}"
+    port: "{{ memory_api_port }}"
+    title: "Memory API"
+    desc: "Shared AI memory API"
+    enabled: true
+    user_facing: false
   - host: ha
     ip: "{{ homeassistant_ip }}"
     port: "{{ homeassistant_port }}"

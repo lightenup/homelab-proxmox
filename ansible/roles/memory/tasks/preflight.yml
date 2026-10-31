@@ -1,0 +1,66 @@
+---
+- name: Assert image versions are pinned
+  ansible.builtin.assert:
+    that:
+      - item is defined
+      - item | length > 0
+      - item != "latest"
+    fail_msg: >-
+      hindsight_version and memory_postgres_version must be pinned tags, not empty or "latest".
+  loop:
+    - "{{ hindsight_version }}"
+    - "{{ memory_postgres_version }}"
+
+- name: Assert the memory vault secrets are defined and non-empty
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.vars', item, default='') | length > 0
+    fail_msg: >-
+      A memory secret is missing or empty ({{ item }}).
+      Run 'ansible-vault edit group_vars/services/vault.yml' and add it (097 T002).
+  loop: "{{ (memory_clients | map(attribute='vault_var') | list) + ['memory_db_password', 'llm_router_client_memory_key', 'memory_ui_access_key'] }}"
+  no_log: true
+
+- name: Assert every memory key carries the hmem_ prefix and at least 32 random bytes
+  # data-model.md § Client: the prefix is what log redaction matches (research R-015).
+  # 32 bytes as URL-safe base64 is 43 characters.
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.vars', item) is match('^hmem_[A-Za-z0-9_-]{43,}$')
+    fail_msg: >-
+      {{ item }} must be hmem_ followed by at least 32 random bytes, URL-safe base64.
+      Generate with: python3 -c "import secrets; print('hmem_' + secrets.token_urlsafe(32))"
+  loop: "{{ (memory_clients | map(attribute='vault_var') | list) + ['memory_ui_access_key'] }}"
+  no_log: true
+
+- name: Assert the database password is URL-safe
+  # It is interpolated into HINDSIGHT_API_DATABASE_URL unescaped.
+  ansible.builtin.assert:
+    that:
+      - memory_db_password is match('^[A-Za-z0-9_-]{24,}$')
+    fail_msg: >-
+      memory_db_password must be at least 24 characters of [A-Za-z0-9_-] (it is placed in a
+      database URL). Generate with: python3 -c "import secrets; print(secrets.token_urlsafe(24))"
+  no_log: true
+
+- name: Assert exactly one client has the admin scope
+  ansible.builtin.assert:
+    that:
+      - memory_clients | selectattr('scope', 'equalto', 'admin') | list | length == 1
+    fail_msg: "Exactly one memory client may have scope admin (data-model.md § Client)."
+
+- name: Assert Claude Code's scope is a known value
+  ansible.builtin.assert:
+    that:
+      - memory_claude_code_scope in ['readwrite', 'readonly', 'revoked']
+    fail_msg: >-
+      memory_claude_code_scope is '{{ memory_claude_code_scope }}'; it must be readwrite,
+      readonly or revoked (SC-009).
+
+- name: Check Docker daemon is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+  check_mode: true
+  register: docker_status
+  failed_when: docker_status.failed

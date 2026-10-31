@@ -1,0 +1,62 @@
+# Memory snapshot (spec 097, research R-013). Sourced into backup.sh.j2; defines snapshot().
+# Two copies of the store: a pg_dump (fast, exact, embeddings included) and Hindsight's
+# portable document export (re-embedded on import, FR-018). The archive also carries the
+# compose file and clients.json (hashes only). Never server.env, db.env, ui.env or backup.key.
+INSTALL_DIR="{{ memory_install_dir }}"
+API="{{ memory_api_url }}"
+BANK="{{ memory_bank_id }}"
+
+# Admin-key request against the API on memory_ip (it is not bound to 127.0.0.1). The key goes
+# through a header file so it never appears in the process list.
+api() {
+    curl -fsS --max-time 60 -H @"$WORK_DIR/.auth" "$@"
+}
+
+json_field() {
+    python3 -c 'import json,sys; d=json.load(sys.stdin)
+for k in sys.argv[1].split("."): d=d.get(k) if isinstance(d, dict) else None
+print("" if d is None else d)' "$1"
+}
+
+snapshot() {
+umask 077
+printf 'Authorization: Bearer %s\n' "$(cat "$INSTALL_DIR/backup.key")" > "$WORK_DIR/.auth"
+
+echo "Starting database dump..."
+docker exec memory_postgres pg_dump -Fc -U hindsight hindsight > "$WORK_DIR/db.dump"
+docker exec -i memory_postgres pg_restore --list < "$WORK_DIR/db.dump" > /dev/null
+echo "Database dump verified (pg_restore --list)."
+
+echo "Recording bank stats..."
+api "$API/v1/default/banks/$BANK/stats" > "$WORK_DIR/stats.json"
+
+# The export is asynchronous in Hindsight 1.1.0: submit, poll the operation, then download
+# the archive from the result's download_url.
+echo "Exporting bank $BANK..."
+op_id=$(api -X POST "$API/v1/default/banks/$BANK/document-transfer/export" | json_field operation_id)
+[ -n "$op_id" ] || { echo "Error: export returned no operation_id" >&2; exit 1; }
+status=""
+for _ in $(seq 1 60); do
+    api "$API/v1/default/banks/$BANK/operations/$op_id" > "$WORK_DIR/.op.json"
+    status=$(json_field status < "$WORK_DIR/.op.json")
+    case "$status" in
+        completed) break ;;
+        failed|cancelled|not_found)
+            echo "Error: export operation $op_id ended $status" >&2; exit 1 ;;
+    esac
+    sleep 5
+done
+[ "$status" = completed ] || { echo "Error: export operation $op_id still $status after 5 minutes" >&2; exit 1; }
+url=$(json_field result_metadata.download_url < "$WORK_DIR/.op.json")
+case "$url" in
+    /*) api "$API$url" -o "$WORK_DIR/$BANK-export.zip" ;;
+    *) echo "Error: unexpected download_url '$url'" >&2; exit 1 ;;
+esac
+python3 -c 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert "manifest.json" in z.namelist(), "no manifest.json"' \
+    "$WORK_DIR/$BANK-export.zip"
+echo "Export verified (manifest.json present)."
+rm -f "$WORK_DIR/.auth" "$WORK_DIR/.op.json"
+
+echo "Backing up configuration..."
+cp "$INSTALL_DIR/docker-compose.yml" "$INSTALL_DIR/clients.json" "$WORK_DIR/"
+}
