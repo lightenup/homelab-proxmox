@@ -2,9 +2,10 @@
 
 **Feature Branch**: `097-hermes-long-term-memory`
 **Created**: 2026-10-30
-**Status**: Draft, **ready for `/speckit-specify`** (2026-10-30). Bake-off and portability test done. Bake-off done
+**Status**: Draft, **ready for `/speckit-specify`** (2026-10-30). Bake-off and portability test done
 2026-10-30 (see [Spike results](#spike-results-2026-10-30)); provider, placement and Open WebUI
-migration decided. Amends [`083`](./083-hermes-agent-runtime.md) (FR-018: built-in memory only) and
+migration decided. The isolated lab of [`067`](../../specs/067-isolated-lab/spec.md) folded in
+2026-10-31 (FR-020, FR-021, verification venues). Amends [`083`](./083-hermes-agent-runtime.md) (FR-018: built-in memory only) and
 [`065`](./065-hermes-service.md) (Open WebUI's own memories retired).
 **Input**: Give the Hermes Agent a long-term memory that remembers facts about the owner beyond the
 built-in `USER.md`/`MEMORY.md` budget, and share that memory with Open WebUI and Claude Code, so
@@ -50,6 +51,7 @@ need to run, and whether other clients can reach them.
 | Open WebUI's own memories | **Imported once, then turned off** (2026-10-30) | One memory for every client. Amends `065`. |
 | Per-client credentials | **A small custom Hindsight extension in this repo** (2026-10-30): tenant extension with one key per client, plus an operation validator that enforces the `client:<id>` tag and a read-only scope | Upstream has one shared key (portability test). Lets Claude Code be revoked or made read-only alone. Rejected: Caddy per-client bearers (no read-only on MCP, tags stay self-declared); one shared key (revoking one client rotates all). Cost: code re-checked on every Hindsight bump. |
 | Claude Code hooks | **Private repositories only** (2026-10-30), as project settings, never global | EY work never reads from or writes to the private store; keeps the accepted risk small. |
+| Verification venues | **Split** (2026-10-31): the spike harness on the Mac gates the PROD promotion for quality (SC-001 to SC-005); the LAB rehearsal proves deploy, health and isolation (SC-008); the real LXC after PROD proves restore and size (SC-006, SC-007) | Since `067` a lab copy cannot reach the production gateway, and only one lab copy runs at a time, so Hermes and the memory service never meet in lab. Rejected: a throwaway bank on PROD (the synthetic persona would also land in Hermes's built-in memory and session history); lab exceptions in `067` (reopens a closed spec, weakens its "no exceptions" isolation). |
 
 ### Accepted risk: memory reaches Anthropic through Claude Code
 
@@ -126,6 +128,11 @@ from all three clients.
   `$HERMES_HOME/mnemosyne/config.yaml`; Hindsight's plugin key sits in a file the agent can read.
 - **Hermes upgrade disables the provider** (Mnemosyne #1169; v0.22 "updates disable a plugin that
   no longer fits").
+- **Memory service unreachable**: an outage, a restart, or every LAB run of Hermes (its lab copy
+  resolves the memory address to a lab address where nothing runs). Chat MUST carry on with
+  built-in memory only and log the failure; the turn is not blocked.
+- **Lab copy without embeddings**: the memory service's lab copy cannot reach the gateway
+  (`067` FR-007), so it must start and pass its liveness check without embedding anything.
 - **Lazy installs**: catalog plugins install dependencies at runtime unless
   `security.allow_lazy_installs: false`, which the egress allowlist would break in any case.
 
@@ -196,6 +203,17 @@ from all three clients.
   (inlet recall, outlet retain) for Open WebUI, and prompt-submit and stop hooks for Claude Code.
   Each adapter is small, versioned in this repo (or the owner's dotfiles for Claude Code) and
   replaceable on its own. MCP tools are not the recall path.
+- **FR-020**: The memory service MUST fit the isolated lab of `067`. It is created with the
+  lifecycle workflow (target `prod`) and deployed only through the promotion workflow. It gets a
+  production address and its mirrored lab address in `inventories/lab/lab-overrides.yml` (proposed
+  `192.168.1.223` and `10.99.0.223`). Its `service_backup` invocation carries the
+  `deploy_environment` gate (no backup timer in lab). Its gateway client key is a `lan` credential
+  in the lab-switch classification, so it needs no lab switch. Its LAB check is liveness only and
+  needs no embeddings. Hermes's LAB rehearsal passes with the memory service unreachable.
+- **FR-021**: Before the first PROD promotion that turns memory on, and before any later change to
+  the provider, its version, its mode or an adapter, the spike harness (`097-spike/`) MUST run on
+  the dev Mac against the exact pinned images and the production-rendered memory configuration, and
+  meet SC-001 to SC-005. Its results are recorded with the change.
 
 ### Key Entities
 
@@ -209,8 +227,9 @@ from all three clients.
 
 ## Success Criteria *(mandatory)*
 
-Measured with the spike harness's dataset (synthetic, mixed NO/EN, 9 conversations, 16 probes),
-re-run on the LAB rig with the chosen provider.
+SC-001 to SC-005 are measured with the spike harness's dataset (synthetic, mixed NO/EN,
+9 conversations, 16 probes) on the dev Mac before the PROD promotion (FR-021). SC-006 and SC-007
+are measured on the production LXC after it. SC-008 is the LAB rehearsal.
 
 - **SC-001**: Recall ≥ 14 of 16 probes, including all "volume" probes beyond the built-in budget,
   and strictly better than the built-in-only baseline.
@@ -222,6 +241,9 @@ re-run on the LAB rig with the chosen provider.
 - **SC-006**: The restore drill brings back the memory store; the probe set scores the same after.
 - **SC-007**: The memory LXC's peak memory within its limit with 30 % headroom (spike: about
   0.4 GB for server and Postgres on a small bank; re-measured after the Open WebUI import).
+- **SC-008**: The LAB rehearsals of the memory service and of Hermes pass, with the production
+  fingerprint unchanged (`067` FR-021) and no backup timer, scrape target or probe created for the
+  lab copy.
 
 ## Spike results (2026-10-30)
 
@@ -323,6 +345,8 @@ REST and MCP access independent of Hermes, thin adapter.
   1024 dims, multilingual) is the embedding model for all clients.
 - `hermes_agent_version` may be bumped (v0.22.x moved memory providers into the plugin catalog) as a
   separate change if the chosen provider needs it.
+- `192.168.1.223` is free (assumed; services use `.211` to `.222`, lab copies `10.99.0.200` to
+  `.254`).
 - Claude Code reaches the endpoint over the LAN (the corporate proxy blocks the tailnet on the Mac,
   `local-llm` `HOMELAB-LAN-EXPOSURE.md`).
 
@@ -339,7 +363,8 @@ REST and MCP access independent of Hermes, thin adapter.
 - [`064`](./064-llm-router.md): `hermes-embed`, `hermes-rerank`, client keys and rate limits.
 - [`065`](./065-hermes-service.md): Open WebUI and its MCP connections (`hermes_mcp_servers`).
 - [`092`](./092-log-aggregation.md): log-based alerts for memory errors.
-- [`067`](./067-lab-prod-same-address-space.md): a real lab for the gate; until then the LAB rig.
+- [`067`](../../specs/067-isolated-lab/spec.md): the isolated lab, delivered 2026-10-31. Constrains
+  the LAB rehearsal (FR-020) and moves quality checks to the harness (FR-021).
 
 ## Open Questions
 
@@ -353,3 +378,6 @@ REST and MCP access independent of Hermes, thin adapter.
 6. ~~**Per-client credentials (FR-011, FR-012)**~~ **Resolved** 2026-10-30: custom tenant extension
    plus operation validator.
 7. ~~**Claude Code adapter scope**~~ **Resolved** 2026-10-30: private repositories only.
+8. **Start without embeddings (FR-020)**: does Hindsight 1.1.0 start and answer liveness when the
+   embedding endpoint is unreachable, and does the Hermes plugin fail open when the server is
+   down? Not tested in the spike, which always had the gateway. The plan verifies both.
