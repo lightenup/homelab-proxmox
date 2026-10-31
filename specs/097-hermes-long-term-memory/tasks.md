@@ -137,6 +137,25 @@ builds the memory service, which every story needs.
   preview also showed the UI's views refused (`get_entity_graph` 113 times, `list_mental_models`,
   `list_directives`, `list_entities`, `get_memories_timeseries`, `get_bank_config`): the five
   reads are now allowed for every scope, and reading the bank config for `curator` and up.
+- **US3 monitoring (T052–T054), 2026-10-31**: metric names re-checked against the PROD
+  `/metrics` and the `1.1.0-slim` source; they match research R-015.
+  - `hindsight_operation_operations_total{operation="retain", source="api", success="true"}` is
+    live on PROD.
+  - `hindsight_async_operations` has no series on PROD. This is expected: the gauge exports only
+    pending, processing and failed rows (`GROUP BY` in `metrics.py`), and PROD had none.
+  - Async retain types in 1.1.0 are `retain`, `batch_retain` and `file_convert_retain`, so
+    `MemoryRetainFailures` matches `operation_type=~".*retain"`.
+  - `MemoryWritesStalled` counts gateway traffic without the `canary`,
+    `litellm-internal-health-check`, `scout_probe` and `memory` aliases. Otherwise health
+    checks and memory's own embed calls keep the gateway side above 20.
+  - An absent retain counter counts as zero (`or on() vector(0)`).
+  - The plugin's failure lines (`Hindsight retain failed` and `Hindsight recall failed`, plugin
+    1.2.3) are logged at WARNING. They reach `hermes_agent` stdout, so the Hermes rule reads the
+    container stream.
+  - Deviation: `test_log_rules_declarations` now requires exactly one `*ErrorLogs` rule per
+    service, not exactly one non-event rule. The new `HermesMemoryPluginFailures` is thresholded
+    and baselined like an error-rate rule (T075), not a single-line event rule.
+  - Promtool and lokitool both accept the new rules.
 - **US4 restore drill (T056 to T059), 2026-10-31**: code and guard tests only; the drill has not
   run (T060 waits for the first nightly backup with probes). Deviations and choices:
   - T057: the drill API publishes on `127.0.0.1:8889` (`memory_restore_test_port`), not on
@@ -492,15 +511,15 @@ log line within 5 minutes (SC-010).
 
 ### Tests for User Story 3
 
-- [ ] T052 [P] [US3] Extend `python/tests/guardrails/test_log_pipeline.py`. Add `memory` to `EXPECTED_LOG_RULE_SERVICES` (line about 300) and assert the shape of the new log rules in `ansible/host_vars/memory.yml` and `ansible/host_vars/hermes.yml` (T054).
-- [ ] T053 [P] [US3] Write `python/tests/guardrails/test_memory_monitoring.py`. Assert that `ansible/host_vars/memory.yml` `monitoring_contract` declares:
+- [X] T052 [P] [US3] Extend `python/tests/guardrails/test_log_pipeline.py`. Add `memory` to `EXPECTED_LOG_RULE_SERVICES` (line about 300) and assert the shape of the new log rules in `ansible/host_vars/memory.yml` and `ansible/host_vars/hermes.yml` (T054).
+- [X] T053 [P] [US3] Write `python/tests/guardrails/test_memory_monitoring.py`. Assert that `ansible/host_vars/memory.yml` `monitoring_contract` declares:
   - the scrape target `{{ memory_ip }}:{{ memory_api_port }}/metrics`;
   - the liveness target `https://memory-api.{{ caddy_base_domain }}/health` with `http_2xx`;
   - the alerts `MemoryDown` (for 5m, critical), `MemoryRetainFailures` (for 30m) and `MemoryWritesStalled`.
 
 ### Implementation for User Story 3
 
-- [ ] T054 [US3] Complete `ansible/host_vars/memory.yml` `monitoring_contract` (research R-015).
+- [X] T054 [US3] Complete `ansible/host_vars/memory.yml` `monitoring_contract` (research R-015).
   - **Scrape and liveness**: as asserted in T053.
   - **Alerts**: use the metric names recorded in T027.
     - `MemoryDown`: `probe_success{job="memory-health"} == 0` for 5m.

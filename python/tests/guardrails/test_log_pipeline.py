@@ -297,7 +297,7 @@ def test_collector_production_only() -> None:
 # ---------------------------------------------------------------------------
 
 
-EXPECTED_LOG_RULE_SERVICES = {"llm-router", "hermes", "nextcloud", "immich", "ntfy"}
+EXPECTED_LOG_RULE_SERVICES = {"llm-router", "hermes", "nextcloud", "immich", "ntfy", "memory"}
 REQUIRED_SEVERITIES = {"critical", "warning", "info"}
 
 
@@ -331,8 +331,60 @@ def test_log_rules_declarations() -> None:
         assert service in found_services, f"{service}: missing log_alert_rules"
         path = ANSIBLE / "host_vars" / f"{service}.yml"
         data = _safe_load(path.read_text())
-        rules = [r for r in data["monitoring_contract"]["log_alert_rules"] if r.get("kind") != "event"]
+        # The generic error-rate rule is the one named `<Service>ErrorLogs`. A service may add
+        # narrower thresholded rules beside it (097: Hermes's memory plugin failures).
+        rules = [
+            r
+            for r in data["monitoring_contract"]["log_alert_rules"]
+            if r.get("kind") != "event" and r["alert"].endswith("ErrorLogs")
+        ]
         assert len(rules) == 1, f"{service}: expected exactly one error-rate log_alert_rules entry"
+
+
+# ---------------------------------------------------------------------------
+# 6b. Spec 097 log rules (T052, T054, research R-015)
+# ---------------------------------------------------------------------------
+
+
+MEMORY_DISABLED_REASON = "awaiting 7-day baseline (097)"
+
+
+def _log_rule(service: str, name: str) -> dict:
+    data = _safe_load(_read(f"ansible/host_vars/{service}.yml"))
+    matches = [r for r in data["monitoring_contract"]["log_alert_rules"] if r["alert"] == name]
+    assert len(matches) == 1, f"{service}: expected exactly one {name}"
+    return matches[0]
+
+
+def test_memory_error_log_rule() -> None:
+    rule = _log_rule("memory", "MemoryErrorLogs")
+    assert str(rule["enabled"]).lower() == "false"
+    assert rule["disabled_reason"] == MEMORY_DISABLED_REASON
+    assert rule.get("kind") is None, "an error-rate rule, thresholded from its baseline (T075)"
+    assert rule["for"] == "0m"
+    assert rule["severity"] == "warning"
+    expr = rule["expr"]
+    assert '{env="prod", host="memory", container="memory_api"}' in expr
+    # Hindsight's text log format is `%(asctime)s - %(levelname)s - %(name)s - %(message)s`.
+    assert " - (ERROR|CRITICAL) - " in expr
+    assert "[15m]" in expr
+    assert re.search(r"\)\s*>\s*\d+\s*$", expr.strip())
+    assert '{host="memory", container="memory_api"}' in rule["summary"]
+
+
+def test_hermes_memory_plugin_log_rule() -> None:
+    rule = _log_rule("hermes", "HermesMemoryPluginFailures")
+    assert str(rule["enabled"]).lower() == "false"
+    assert rule["disabled_reason"] == MEMORY_DISABLED_REASON
+    assert rule.get("kind") is None, "thresholded from its baseline (T075), not a single-line event"
+    assert rule["severity"] == "warning"
+    expr = rule["expr"]
+    # The plugin logs `Hindsight retain failed: ...` / `Hindsight recall failed: ...` at
+    # WARNING, which reaches the agent container's stdout (plugin 1.2.3, __init__.py).
+    assert '{env="prod", host="hermes", container="hermes_agent"}' in expr
+    assert '|~ "Hindsight (retain|recall) failed"' in expr
+    assert "[15m]" in expr
+    assert '{host="hermes", container="hermes_agent"}' in rule["summary"]
 
 
 # ---------------------------------------------------------------------------
