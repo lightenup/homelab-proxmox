@@ -34,9 +34,12 @@
           text: "The deploy probe for memory recorded the marker {{ memory_probe_token }}."
           token: "{{ memory_probe_token }}"
 
+    # refresh=true: bank stats are cached for 60 s (HINDSIGHT_API_BANK_STATS_CACHE_TTL_SECONDS), so a
+    # before/after pair seconds apart read the same cached count and the probe always failed
+    # (first PROD deploy, 2026-10-31).
     - name: Read probe bank stats before the probe
       ansible.builtin.uri:
-        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/stats"
+        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/stats?refresh=true"
         headers:
           Authorization: "Bearer {{ memory_admin_key }}"
         return_content: true
@@ -76,7 +79,7 @@
 
     - name: Read probe bank stats after the probe
       ansible.builtin.uri:
-        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/stats"
+        url: "{{ memory_api_url }}/v1/default/banks/{{ memory_probe_bank_id }}/stats?refresh=true"
         headers:
           Authorization: "Bearer {{ memory_admin_key }}"
         return_content: true

@@ -565,6 +565,16 @@ that verifies it.
     the deploy.
   - In lab it is skipped and listed, because there are no embeddings.
 
+- **First PROD deploy (2026-10-31)**: the probe failed its count check although retain, recall
+  and delete all worked. Bank stats are served from a 60-second cache
+  (`HINDSIGHT_API_BANK_STATS_CACHE_TTL_SECONDS`), so before and after read the same value. The
+  probe and the backup's `stats.json` now ask for `?refresh=true`.
+- **Open (for US5)**: a document delete submits `submit_async_graph_maintenance`, which the policy
+  refuses for every scope, so deletes leave stale links and orphaned entities. The job relinks
+  and prunes without an LLM. Allow it (and `submit_async_vector_index_maintenance`) for the
+  scopes that may delete before the web UI ships deletes to `owner`; it changes the policy
+  module, so the harness gate re-runs.
+
 ## R-020: Memory web UI (FR-023, SC-011)
 
 - **Finding** (Hindsight `v1.1.0`, `hindsight-control-plane/`, `docker/standalone/`):
