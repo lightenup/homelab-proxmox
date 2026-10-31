@@ -179,6 +179,20 @@
   loop_control:
     label: "{{ item.alias }}"
 
+# Spec 097 R-011: a client's own `models` list narrows its key. A name that is not an alias
+# would leave the key scoped to nothing the client needs, and fail only at first use.
+- name: Assert every client's model scope names declared aliases only
+  ansible.builtin.assert:
+    that:
+      - item.models | length > 0
+      - item.models | difference(llm_router_aliases | map(attribute='name') | list) | length == 0
+    fail_msg: >-
+      Client '{{ item.alias }}' declares models {{ item.models }}, which must be a non-empty
+      subset of the llm_router_aliases names.
+  loop: "{{ llm_router_clients | selectattr('models', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.alias }}"
+
 - name: Assert the gateway-wide cap exceeds the sum of per-client budgets with headroom
   ansible.builtin.assert:
     that:

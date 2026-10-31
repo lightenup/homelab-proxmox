@@ -56,6 +56,11 @@ service_backups:
     mount: /mnt/homeassistant/backups
     dir: /mnt/homeassistant/backups
     schedule: "*-*-* 05:15:00"
+  memory:
+    host: memory
+    mount: /mnt/memory/backups
+    dir: /mnt/memory/backups
+    schedule: "*-*-* 05:30:00"
 
 # Tailscale Configuration
 tailscale_tailnet_name: "-" # Use "-" to automatically detect tailnet from API key

@@ -1,0 +1,16 @@
+---
+- name: Configure base for memory
+  hosts: memory
+  become: true
+  roles:
+    - lxc_base
+
+- name: Configure memory
+  hosts: memory
+  become: true
+  roles:
+    - geerlingguy.docker
+    - memory
+    - role: service_backup
+      service_backup_name: memory
+      when: (deploy_environment | default('prod')) != 'lab'

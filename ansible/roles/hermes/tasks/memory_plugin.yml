@@ -1,0 +1,180 @@
+---
+# Spec 097 (FR-002, research R-003): the Hindsight memory provider for the agent, fetched from
+# pinned, hashed sources at deploy time and mounted read-only. The stock image is unchanged and
+# the agent never installs anything. A changed pin re-extracts into a clean directory, so no
+# file from an older version survives.
+- name: Ensure the memory plugin directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - "{{ hermes_agent_plugins_dir }}/memory"
+    - "{{ hermes_memory_plugin_cache_dir }}"
+
+- name: Ensure unzip is installed (the wheels are zip archives)
+  ansible.builtin.apt:
+    name: unzip
+    state: present
+
+- name: Fetch the Hindsight plugin tarball
+  ansible.builtin.get_url:
+    url: "{{ hermes_hindsight_plugin_url }}"
+    dest: "{{ hermes_memory_plugin_cache_dir }}/hindsight-hermes-v{{ hermes_hindsight_plugin_version }}.tar.gz"
+    checksum: "sha256:{{ hermes_hindsight_plugin_sha256 }}"
+    owner: root
+    mode: '0644'
+  register: hermes_memory_plugin_tarball
+
+# The cached tarball can be older than what is installed (a rollback to a version fetched
+# before), so the installed manifest decides, not the download.
+- name: Check for an unpacked plugin
+  ansible.builtin.stat:
+    path: "{{ hermes_memory_plugin_dir }}/plugin.yaml"
+  register: hermes_memory_plugin_unpacked
+
+- name: Read the installed plugin manifest
+  ansible.builtin.slurp:
+    src: "{{ hermes_memory_plugin_dir }}/plugin.yaml"
+  register: hermes_memory_plugin_installed
+  when: hermes_memory_plugin_unpacked.stat.exists
+
+- name: Unpack the plugin into a clean directory
+  when: >-
+    hermes_memory_plugin_tarball.changed
+    or not hermes_memory_plugin_unpacked.stat.exists
+    or ((hermes_memory_plugin_installed.content | b64decode | from_yaml).version | string)
+       != hermes_hindsight_plugin_version
+  block:
+    - name: Remove the previous plugin version
+      ansible.builtin.file:
+        path: "{{ hermes_memory_plugin_dir }}"
+        state: absent
+
+    - name: Create the plugin directory
+      ansible.builtin.file:
+        path: "{{ hermes_memory_plugin_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    # The archive holds the whole monorepo at the tag; only hindsight-integrations/hermes/ is
+    # the plugin. --strip-components=3 drops "<archive root>/hindsight-integrations/hermes/".
+    - name: Unpack only hindsight-integrations/hermes
+      ansible.builtin.unarchive:
+        src: "{{ hermes_memory_plugin_tarball.dest }}"
+        dest: "{{ hermes_memory_plugin_dir }}"
+        remote_src: true
+        owner: root
+        group: root
+        extra_opts:
+          - "--wildcards"
+          - "*/hindsight-integrations/hermes/*"
+          - "--strip-components=3"
+      notify: Restart hermes
+
+- name: Read the plugin manifest
+  ansible.builtin.slurp:
+    src: "{{ hermes_memory_plugin_dir }}/plugin.yaml"
+  register: hermes_memory_plugin_manifest_raw
+
+# research R-003: if a pinned plugin declares a Hermes range that excludes the pinned agent,
+# stop here (the fallback is the previous plugin release, re-run through the harness gate).
+- name: Assert the plugin is the pinned version and admits the pinned agent
+  ansible.builtin.assert:
+    that:
+      - manifest.name == 'hindsight'
+      - manifest.version | string == hermes_hindsight_plugin_version
+      - manifest.requires_hermes is not defined
+        or (manifest.requires_hermes is match('^>=\s*[0-9.]+$')
+            and (hermes_agent_version | regex_replace('^v', ''))
+                is version(manifest.requires_hermes | regex_replace('^>=\s*', ''), '>='))
+    fail_msg: >-
+      Plugin manifest {{ manifest.name | default('?') }} {{ manifest.version | default('?') }}
+      (requires_hermes {{ manifest.requires_hermes | default('none') }}) does not match the pin
+      hermes_hindsight_plugin_version={{ hermes_hindsight_plugin_version }} or does not admit
+      hermes_agent_version={{ hermes_agent_version }} (097 R-003).
+  vars:
+    manifest: "{{ hermes_memory_plugin_manifest_raw.content | b64decode | from_yaml }}"
+
+- name: Fetch the plugin's packages
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ hermes_memory_plugin_cache_dir }}/{{ item.url | basename }}"
+    checksum: "sha256:{{ item.sha256 }}"
+    owner: root
+    mode: '0644'
+  loop: "{{ hermes_hindsight_plugin_wheels }}"
+  loop_control:
+    label: "{{ item.name }}{{ item.version }}"
+  register: hermes_memory_wheels
+
+# .pins records exactly what was unpacked (name, version, sha256 per wheel). Any difference from
+# the declared list, a rollback to cached wheels or a removed wheel included, rebuilds the dir.
+- name: Define the expected package marker
+  ansible.builtin.set_fact:
+    hermes_memory_deps_pins: >-
+      {%- for w in hermes_hindsight_plugin_wheels -%}
+      {{ w.name }}{{ w.version }} {{ w.sha256 }}
+      {% endfor -%}
+
+- name: Check for unpacked packages
+  ansible.builtin.stat:
+    path: "{{ hermes_memory_deps_dir }}/.pins"
+  register: hermes_memory_deps_marker
+
+- name: Read the installed package marker
+  ansible.builtin.slurp:
+    src: "{{ hermes_memory_deps_dir }}/.pins"
+  register: hermes_memory_deps_installed
+  when: hermes_memory_deps_marker.stat.exists
+
+- name: Unpack the packages into a clean directory
+  when: >-
+    hermes_memory_wheels.changed
+    or not hermes_memory_deps_marker.stat.exists
+    or (hermes_memory_deps_installed.content | b64decode) != hermes_memory_deps_pins
+  block:
+    - name: Remove the previous packages
+      ansible.builtin.file:
+        path: "{{ hermes_memory_deps_dir }}"
+        state: absent
+
+    - name: Create the packages directory
+      ansible.builtin.file:
+        path: "{{ hermes_memory_deps_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Unpack each wheel (a wheel is a zip of site-packages content)
+      ansible.builtin.unarchive:
+        src: "{{ item.dest }}"
+        dest: "{{ hermes_memory_deps_dir }}"
+        remote_src: true
+        owner: root
+        group: root
+      loop: "{{ hermes_memory_wheels.results }}"
+      loop_control:
+        label: "{{ item.dest | basename }}"
+      notify: Restart hermes
+
+    - name: Record the unpacked pins
+      ansible.builtin.copy:
+        content: "{{ hermes_memory_deps_pins }}"
+        dest: "{{ hermes_memory_deps_dir }}/.pins"
+        owner: root
+        mode: '0644'
+
+- name: Put the packages on the agent's sys.path
+  ansible.builtin.copy:
+    content: "/opt/hermes-memory-deps\n"
+    dest: "{{ hermes_memory_pth_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart hermes

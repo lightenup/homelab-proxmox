@@ -5,6 +5,7 @@ request to /logs/calls.jsonl: run tag, path, model, input size, status, latency.
 Prompt and response bodies are not logged. Anything that is not the LLM (HF downloads,
 OpenRouter, telemetry) cannot leave: the network is internal and this is the only bridge.
 """
+import hashlib
 import json
 import os
 import time
@@ -15,6 +16,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 UPSTREAM = os.environ.get("UPSTREAM", "http://host.docker.internal:4000")
 KEY = os.environ["LITELLM_SPIKE_KEY"]
 LOG = "/logs/calls.jsonl"
+# Optional gateway alias mapping, "alias=upstream,..." (prod-render, spec 097): the rendered
+# production config names the gateway's aliases, the Mac's LiteLLM knows the targets.
+MODEL_MAP = dict(p.split("=", 1) for p in os.environ.get("MODEL_MAP", "").split(",") if "=" in p)
 
 
 def _read(name):
@@ -38,9 +42,17 @@ class Handler(BaseHTTPRequestHandler):
         model = None
         if body:
             try:
-                model = json.loads(body).get("model")
+                payload = json.loads(body)
+                model = payload.get("model")
+                if model in MODEL_MAP:
+                    payload["model"] = MODEL_MAP[model]
+                    body = json.dumps(payload).encode()
             except (ValueError, AttributeError):
                 pass
+        # Which client key called (SC-003: embed and rerank only, under the memory key): a
+        # short hash, never the key itself.
+        auth = self.headers.get("Authorization") or ""
+        caller = hashlib.sha256(auth.removeprefix("Bearer ").encode()).hexdigest()[:8] if auth else None
         headers = {k: v for k, v in self.headers.items()
                    if k.lower() not in ("host", "authorization", "content-length", "connection")}
         # Every client uses the one spike key, whatever it was configured with.
@@ -56,7 +68,7 @@ class Handler(BaseHTTPRequestHandler):
             status, data, rheaders = 502, str(e).encode(), {}
         with open(LOG, "a") as f:
             f.write(json.dumps({"ts": start, "run": run_tag(), "method": self.command, "path": self.path,
-                                "model": model, "in_bytes": len(body or b""), "status": status,
+                                "model": model, "caller": caller, "in_bytes": len(body or b""), "status": status,
                                 "secs": round(time.time() - start, 2)}) + "\n")
         self.send_response(status)
         ctype = rheaders.get("Content-Type", "application/json") if rheaders else "text/plain"

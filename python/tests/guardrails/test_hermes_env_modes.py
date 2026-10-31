@@ -400,3 +400,37 @@ def test_allow_all_guard_runs_on_every_deploy_including_prod() -> None:
     )
     for expr in task["ansible.builtin.assert"]["that"]:
         assert jenv.compile_expression(expr)(env_lines=env_lines) is True, expr
+
+
+# --- hindsight-config.json.j2: the memory plugin's secrets per mode (097 T028, G3) ---
+#
+# The plugin config carries one secret, the hermes memory key (097 R-003), and renders the same
+# in every mode. The LAB rig and the pipeline LAB stage therefore hold it too: they cannot reach
+# memory-api (the lab nftables rule and the agent's egress chain reject it, 097 R-016), and the
+# key's readwrite scope has no whole-bank operation. Recorded as a credential-policy decision
+# per 095 R-016; changing a set below is that decision again.
+HINDSIGHT_CONFIG_SECRETS = {"memory_client_hermes_key"}
+
+
+def _render_plugin_config(hermes_agent_operational: bool, lab_inventory: bool) -> str:
+    env = Environment(
+        loader=FileSystemLoader(str(HERMES_ROLE / "templates")),
+        undefined=StrictUndefined,
+    )
+    ctx = {
+        "hermes_agent_operational": hermes_agent_operational,
+        "lab_inventory": lab_inventory,
+        "hermes_memory_api_url": "https://memory-api.example.invalid",
+        "hermes_memory_bank_id": "owner",
+        "memory_client_hermes_key": _stub("memory_client_hermes_key"),
+    }
+    for name in SECRET_VAR_NAMES:
+        ctx[name] = _stub(name)
+    return env.get_template("hindsight-config.json.j2").render(**ctx)
+
+
+def test_plugin_config_secret_freeze_in_every_mode() -> None:
+    names = SECRET_VAR_NAMES + ["memory_client_hermes_key"]
+    for operational, lab in ((True, False), (False, True), (False, False)):
+        rendered = _render_plugin_config(operational, lab)
+        assert {n for n in names if _stub(n) in rendered} == HINDSIGHT_CONFIG_SECRETS, (operational, lab)

@@ -1,0 +1,23 @@
+{#- Spec 097 research R-003: the agent's Hindsight memory provider. Mounted read-only at
+    /opt/data/hindsight/config.json. Holds the hermes memory key, which therefore never becomes
+    an environment variable of the agent's children. Recall is injected before every turn,
+    including the first (recall_sync); no memory tools are registered (memory_mode: context),
+    the agent browses and edits through the memory MCP server instead (R-009). -#}
+{
+  "mode": "local_external",
+  "api_url": {{ hermes_memory_api_url | tojson }},
+  "api_key": {{ memory_client_hermes_key | tojson }},
+  "bank_id": {{ hermes_memory_bank_id | tojson }},
+  "memory_mode": "context",
+  "auto_recall": true,
+  "auto_retain": true,
+  "recall_sync": true,
+  "recall_types": ["world"],
+  "recall_budget": "mid",
+  "retain_every_n_turns": 1,
+  "retain_async": true,
+  "retain_tags": ["client:hermes"],
+  "retain_user_prefix": "User",
+  "retain_assistant_prefix": "Assistant",
+  "timeout": 10
+}

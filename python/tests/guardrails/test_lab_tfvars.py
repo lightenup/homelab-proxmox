@@ -43,7 +43,7 @@ def test_network_and_prefix(derived):
 def test_every_service_ip_mirrors_into_the_lab_range(derived):
     block = re.search(r"service_ips\s*=\s*\{(.*?)\n\}", derived, re.S).group(1)
     ips = re.findall(r'"(\d+\.\d+\.\d+\.\d+)/24"', block)
-    assert len(ips) == 12
+    assert len(ips) == 13
     for ip in ips:
         assert ip.startswith("10.99.0."), ip
         assert 200 <= int(ip.rsplit(".", 1)[1]) <= 254
@@ -54,7 +54,7 @@ def test_every_service_ip_mirrors_into_the_lab_range(derived):
 def test_every_mount_volume_is_scratch_and_readonly_is_kept(derived):
     mounts = re.search(r"service_mountpoints\s*=\s*\{(.*?)\n\}\n", derived, re.S).group(1)
     volumes = re.findall(r'volume\s*=\s*"([^"]+)"', mounts)
-    assert len(volumes) == 8
+    assert len(volumes) == 9
     assert all(v.startswith(SCRATCH + "/") for v in volumes), volumes
     assert "/mnt/nas" not in mounts
     assert mounts.count("readonly = true") == 2

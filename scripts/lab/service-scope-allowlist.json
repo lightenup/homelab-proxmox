@@ -23,6 +23,9 @@
   "market-model": [
     "module.market_model_lxc"
   ],
+  "memory": [
+    "module.memory_lxc"
+  ],
   "monitoring": [
     "module.monitoring_lxc"
   ],

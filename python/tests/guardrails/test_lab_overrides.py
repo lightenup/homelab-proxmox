@@ -41,7 +41,7 @@ def test_lab_inventory_lists_all_services_at_lab_addresses():
     lab = yaml.safe_load(LAB_HOSTS.read_text())
     prod = yaml.safe_load(PROD_HOSTS.read_text())["all"]["children"]["services"]["hosts"]
     services = lab["all"]["children"]["services"]["hosts"]
-    assert set(services) == set(prod) and len(services) == 12
+    assert set(services) == set(prod) and len(services) == 13
     for name, host in services.items():
         last = prod[name]["ansible_host"].rsplit(".", 1)[1]
         assert host["ansible_host"] == f"10.99.0.{last}", name

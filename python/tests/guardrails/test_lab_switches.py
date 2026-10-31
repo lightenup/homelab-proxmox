@@ -39,6 +39,13 @@ CLASSIFICATION = {
     "grafana_admin_password": "internal", "jellyfin_api_key": "internal", "bearer_token": "internal",
     "proxmox_backup_age_public_key": "internal", "financial_scenario_api_image": "internal",
     "market_model_api_port": "internal",
+    # 097 R-011: the memory store's database and its gateway key (embed and rerank only).
+    # memory_admin_key and memory_client_open_webui_key are used only in tasks and through
+    # lookup('vars', ...), never literally in a template, so they are not classified here.
+    "memory_db_password": "internal", "llm_router_client_memory_key": "internal",
+    "memory_api_image": "internal", "memory_api_port": "internal", "memory_api_url": "internal",
+    # 097 R-003: the agent's memory key (readwrite, no whole-bank operation) and the API URL.
+    "memory_client_hermes_key": "internal", "hermes_memory_api_url": "internal",
 }
 
 # internet key -> {template (relative to ansible/roles): why a lab copy never renders it}

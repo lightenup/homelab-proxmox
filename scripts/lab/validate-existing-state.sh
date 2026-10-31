@@ -8,7 +8,7 @@ set -euo pipefail
 STATE_ROOT="${STATE_ROOT:-/var/lib/homelab-proxmox/state}/prod"
 SERVICES=(
   "ntfy" "market-model" "financial-scenario" "eurooffice" "llm-router" "jellyfin"
-  "homeassistant" "nextcloud" "immich" "hermes" "monitoring" "reverse_proxy"
+  "homeassistant" "nextcloud" "immich" "hermes" "monitoring" "reverse_proxy" "memory"
 )
 
 echo "======================================"

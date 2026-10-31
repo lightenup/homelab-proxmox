@@ -1,0 +1,50 @@
+# Candidate: prod-render (spec 097 FR-021, research R-017), layered on compose.base.yml.
+# The production configuration, rendered by ./render-prod.sh from the Ansible templates:
+# pinned stock images, the shim and policy module mounted read-only as on the memory LXC, and
+# the stock agent with the pinned plugin, packages and plugin config mounted read-only as in
+# roles/hermes/templates/docker-compose.yml.j2. The images come from runs/prod-render/build/
+# images.env, which render-prod.sh renders from the role defaults and the PROD pins; run.sh
+# loads it, and gate.py checks that compose ran exactly those images.
+volumes:
+  memory_pg: {}
+services:
+  memory_postgres:
+    image: ${MEMORY_POSTGRES_IMAGE:?run render-prod.sh first}
+    env_file: ./runs/prod-render/build/db.env
+    volumes: [memory_pg:/var/lib/postgresql/data]
+    networks: [int]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hindsight -d hindsight"]
+      interval: 5s
+      retries: 20
+  hindsight:
+    image: ${MEMORY_API_IMAGE:?run render-prod.sh first}
+    env_file: ./runs/prod-render/build/server.env
+    volumes:
+      - ../../../python/src/homelab_proxmox_orchestrator/memory_access.py:/opt/memory-ext/memory_access.py:ro
+      - ../../../ansible/roles/memory/files/hindsight_ext/shim.py:/opt/memory-ext/shim.py:ro
+      - ./runs/prod-render/build/clients.json:/run/memory/clients.json:ro
+    networks: [int]
+    depends_on:
+      memory_postgres: {condition: service_healthy}
+      llmproxy: {condition: service_started}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8888/health',timeout=3)\""]
+      interval: 10s
+      retries: 30
+      start_period: 30s
+  llmproxy:
+    environment:
+      # The gateway's alias mapping for the two memory aliases (llm_router_aliases), so the
+      # rendered model names reach the Mac's LiteLLM unchanged in the config.
+      MODEL_MAP: "hermes-embed=embed,hermes-rerank=rerank"
+  hermes:
+    image: ${HERMES_AGENT_IMAGE:?run render-prod.sh first}
+    volumes:
+      - ./runs/prod-render/build/plugin:/opt/data/plugins/hindsight:ro
+      - ./runs/prod-render/build/memory-deps:/opt/hermes-memory-deps:ro
+      # As in PROD: the launcher rewrites PYTHONPATH, so a .pth file puts the packages on sys.path.
+      - ./runs/prod-render/build/hermes-memory-deps.pth:/opt/hermes/.venv/lib/python3.14/site-packages/hermes-memory-deps.pth:ro
+      - ./runs/prod-render/build/hindsight-config.json:/opt/data/hindsight/config.json:ro
+    depends_on:
+      hindsight: {condition: service_healthy}

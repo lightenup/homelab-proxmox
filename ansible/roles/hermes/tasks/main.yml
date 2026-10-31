@@ -132,6 +132,20 @@
     directory_mode: '0755'
   notify: Restart hermes
 
+# Spec 097 (FR-001, R-003): the Hindsight memory provider and its packages, then its config.
+- name: Install the memory provider plugin (read-only mount source)
+  ansible.builtin.include_tasks: memory_plugin.yml
+
+- name: Deploy the memory plugin configuration (read-only mount source)
+  ansible.builtin.template:
+    src: hindsight-config.json.j2
+    dest: "{{ hermes_memory_plugin_config_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  no_log: true
+  notify: Restart hermes
+
 - name: Deploy the agent environment (vault-rendered secrets)
   ansible.builtin.template:
     src: agent.env.j2
@@ -305,12 +319,16 @@
       - (hermes_compose | from_yaml).services['hermes-agent'].networks | list | sort == ['agent']
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/plugins') | reject('search', ':ro$') | list | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/hooks') | reject('search', ':ro$') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/hindsight') | reject('search', ':ro$') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/hermes-memory-deps') | reject('search', ':ro$') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/hermes/') | reject('search', ':ro$') | list | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/etc/') | reject('search', ':ro$') | list | length == 0
     fail_msg: >-
       The rendered hermes-agent service is not confined: it must have no published ports,
       no privileged mode, no cap_add, no Docker socket mount, and sit only on the `agent`
-      network (spec 083 FR-004/FR-007/FR-008), and every /opt/data/plugins, /opt/data/hooks
-      and /etc mount must be :ro (095 R-018, R-007). Fix docker-compose.yml.j2 before deploying.
+      network (spec 083 FR-004/FR-007/FR-008), and every /opt/data/plugins, /opt/data/hooks,
+      /opt/data/hindsight, /opt/hermes-memory-deps, /opt/hermes and /etc mount must be :ro (095 R-018, R-007,
+      097 R-003). Fix docker-compose.yml.j2 before deploying.
   vars:
     hermes_compose: "{{ hermes_compose_rendered.content | b64decode }}"
 
@@ -401,6 +419,24 @@
   until: hermes_agent_health.stdout == 'healthy'
   retries: 30
   delay: 10
+  changed_when: false
+
+# 097 R-003: `hermes memory status` reports the provider available without importing its
+# client, so a missing package only shows as a failed recall on every turn. Import it the way
+# the gateway does: the image's venv, with the launcher's PYTHONPATH.
+- name: Assert the agent can import the memory provider's packages
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -u
+      - hermes
+      - -e
+      - PYTHONPATH=/opt/hermes/.:{{ hermes_agent_site_packages }}
+      - hermes_agent
+      - /opt/hermes/.venv/bin/python
+      - -c
+      - import hindsight_client, hindsight_embed, aiohttp_retry
   changed_when: false
 
 - name: Build the egress probe destination list

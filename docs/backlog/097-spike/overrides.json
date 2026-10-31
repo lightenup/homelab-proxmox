@@ -1,5 +1,5 @@
 {
- "_why": "p16 judged by hand: does the answer honour 'ask before suggesting network changes'? Honcho p4: mentions flat white only as past, correct.",
+ "_why": "p16 judged by hand: does the answer honour 'ask before suggesting network changes'? Honcho p4: mentions flat white only as past, correct. prod-render: overrides are bound to the reviewed answer ({\"pass\": bool, \"answer_sha256\": ...}, score.py), never to the candidate, so every gate run is judged on its own answers (PR #318 review).",
  "none": {
   "p16": true
  },
@@ -18,5 +18,12 @@
  "honcho": {
   "p4": true,
   "p16": true
+ },
+ "prod-render": {
+  "p16": {
+   "pass": true,
+   "answer_sha256": "e6eaa95532e1a122b70144d25b48bcefe453c68c02edebfb8acd49efacce7376",
+   "why": "2026-10-31 gate run: recalls 'ask before suggesting network changes' from an earlier conversation, gives only general considerations, and ends by asking which option the owner wants"
+  }
  }
 }
