@@ -4,8 +4,9 @@
 **Created**: 2026-10-31
 **Status**: Draft, **ready for `/speckit-specify`** (2026-10-31). Placement, coupling and code
 location decided 2026-10-31; the two blocking questions — ingest host and memory write — resolved
-the same day (see [Decisions recorded](#decisions-recorded-2026-10-31)). Three non-blocking
-questions carry into the spec as recorded assumptions. **Hard prerequisite not yet met**: the
+the same day (see [Decisions recorded](#decisions-recorded-2026-10-31)). Cadence and Claude Code
+read scope also resolved 2026-10-31; two non-blocking questions (application repository name,
+quarterly pass placement) carry into the spec as recorded assumptions. **Hard prerequisite not yet met**: the
 application repository has not shipped its first GHCR image, as `market-model` had to before
 [`048`](./048-market-model-deploy.md) could proceed. Depends on
 [`083`](./083-hermes-agent-runtime.md) (cron, ntfy, egress),
@@ -100,9 +101,13 @@ store itself is LAN-only and single-user, but `097` FR-012 records that Claude C
 Anthropic's models under an EY enterprise seat, so anything it recalls is sent there as prompt
 content. Holdings, position sizes and threat flags are therefore in scope of that existing accepted
 risk, not exempt from it. Bounded by the same controls `097` already specifies: Claude Code's own
-revocable, optionally read-only credential, and hooks enabled only in private repositories. If that
-is not wanted for portfolio content specifically, the lever is a tag-scoped read restriction on the
-Claude Code key rather than a change here.
+revocable, optionally read-only credential, and hooks enabled only in private repositories.
+
+**Decided 2026-10-31**: portfolio memories carry no extra restriction — they are ordinary memories
+and the existing `097` FR-012 bound is accepted as written. A tag-scoped read restriction on the
+Claude Code key was considered and rejected: it would require the `097` operation validator to
+filter reads by tag, which that spec does not currently provide, for a store that is LAN-only and
+single-user. The lever remains available if the risk assessment changes.
 
 ## Proposed architecture
 
@@ -358,6 +363,9 @@ underperformance.
   lab copy.
 - **SC-009**: The cost governor refuses 100 % of proposals below the minimum viable size across the
   test set, and every refusal names the number that caused it.
+- **SC-010**: After 30 days of operation, a cadence review reports runs executed, runs that produced
+  an action, gateway spend on the portfolio client key, and wall-clock time per run. The review
+  either confirms daily or proposes a cadence change with those numbers behind it (Open Question 3).
 
 ## Assumptions
 
@@ -406,12 +414,17 @@ underperformance.
 2. ~~**Does the brief enter Hermes's long-term memory (`097`)?**~~ **Resolved** 2026-10-31: yes,
    LAN-only and single-user. Scoped by FR-021 (validated fields only, own credential, own tag) and
    bounded by the `097` FR-012 Claude Code risk recorded in Accepted risks.
-3. **Is daily the right cadence?** The cost floor means actions are annual and threat changes are
-   announcement-driven. A daily run may be an expensive way to produce "nothing to do" 250 times a
-   year; an announcement-triggered run plus a weekly summary may serve better. Resolve with measured
-   run cost after the first month.
-4. **What is the application repository called, and does it carry its own constitution?**
-   `market-model` and PFS both do.
+3. ~~**Is daily the right cadence?**~~ **Resolved** 2026-10-31: daily, then measured. The cost floor
+   means actions are annual and threat changes are announcement-driven, so a daily run may prove an
+   expensive way to say "nothing to do" 250 times a year. Decision: ship daily (it matches the model
+   scout precedent and needs no trigger mechanism `hermes cron` lacks), measure run cost and
+   inference spend over the first month, and revisit against an announcement-triggered run plus a
+   weekly summary. The measurement is a deliverable, not an intention — see SC-010.
+4. **What is the application repository called?** Shape resolved 2026-10-31: a **new repository with
+   its own constitution and spec-kit project**, publishing a pinned GHCR image, as `market-model`
+   and PFS do. Rejected: folding it into `market-model`, which would blur that service's deliberate
+   stateless-regenerable-cache design. Name still open; `portfolio-agent` is the working name used
+   throughout this item and in the image reference.
 5. **Does the quarterly universe pass fit the same job, or is it a second cron line?** Its runtime
    and inference cost are an order of magnitude larger than the daily pass.
 
@@ -420,7 +433,7 @@ underperformance.
 ## Notes for `/speckit-specify`
 
 This item is written at backlog depth, not spec depth. The two blocking questions are resolved, so
-it is ready to run. Questions 3 to 5 carry into the spec as recorded assumptions and are revisited
+it is ready to run. Questions 4 and 5 carry into the spec as recorded assumptions and are revisited
 after first measurement, as `097` did with its provider choice.
 
 Two sequencing constraints the spec must respect, both of the kind `048` handled with a hard
