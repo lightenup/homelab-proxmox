@@ -115,6 +115,18 @@ builds the memory service, which every story needs.
   (earlier vault content byte-identical, every value in the preflight format) and stored the
   Claude Code key in the keychain (`homelab-memory`/`claude-code`). Still the owner's: copy the
   web UI login key into the password manager with `--copy-ui-key`.
+- **T027 and T038, PROD rollout (2026-10-31)**: order as run: NFS mount on `pve`, lifecycle
+  `add` (LXC 104), `llm-router`, `memory`, `reverse_proxy`, quickstart § 3 through Caddy, `hermes`.
+  The lifecycle `add` runs the whole memory playbook, so `llm-router` must come first (the probe
+  needs the gateway key). Three defects found by the rollout and fixed before PROD went green:
+  - #321: the `llm-router` LAB stage could never resolve the Mac's mDNS name and stopped before key
+    provisioning; the assertion is now PROD-only.
+  - #323: the gateway's LiteLLM refused Hindsight's `dimensions` parameter (400); the `hermes-embed`
+    deployment now sets `allowed_openai_params: [dimensions]`.
+  - #324: the deploy probe read a 60 s stats cache; it now reads `?refresh=true`.
+  - Also found: the NAS share needed the same NFS rule as `homelab_hermes` (owner fixed it in DSM);
+    `task ansible:mounts` applied nothing (#320); the lifecycle verification step's
+    `terraform output` fails on every run (existing, not fixed).
 - **US5 web UI (T063, T066, T067), 2026-10-31**: built before the MCP half of US5, at the owner's
   request, after a local preview of the stock UI against PROD. Deviation from T066:
   `scripts/healthcheck/memory.sh` still checks the API only, because `healthcheck.py` takes one
@@ -300,7 +312,7 @@ builds the memory service, which every story needs.
     - copies `docker-compose.yml` and `clients.json`, never `server.env`, `db.env`, `ui.env` or `backup.key`.
   - `python/tests/guardrails/test_service_backup.py` must pass.
 - [X] T026 [P] Add a redaction pattern `memory-key` matching `hmem_[A-Za-z0-9_-]{20,}` to `ansible/roles/alloy/defaults/main.yml`, next to `ntfy-token`.
-- [ ] T027 (manual) Deploy the foundation. Record the outcomes in `specs/097-hermes-long-term-memory/quickstart.md` under § 2 and § 3.
+- [X] T027 (manual) Deploy the foundation. Record the outcomes in `specs/097-hermes-long-term-memory/quickstart.md` under § 2 and § 3.
   1. Run `bash scripts/ci/python-tests.sh` and `pre-commit run --all-files`; both must be green.
   2. Run `lxc-lifecycle.yml` with `action=add`, `environment=prod`, `service=memory`, `confirm_apply_prod=deploy-prod`.
   3. Deploy `llm-router` through `Prod 1 - LXC Promote` → `Prod 2 - LXC Apply`.
@@ -369,7 +381,7 @@ turn of a new one, across Norwegian and English, and an unknown topic gets "don'
   - **Not fingerprinted**: the Claude Code hook. It lives in dotfiles, and the harness replays its turn format without running the script, so hashing it would force re-runs that test nothing (I2). It is covered by the contract and quickstart § 6.
   - **Assertion**: some `docs/backlog/097-spike/results/*-prod-render/fingerprint.txt` equals the computed value (FR-021).
   - **Helper**: `render-prod.sh` writes `fingerprint.txt` using the same function, importable from the test module.
-- [ ] T038 [US1] (manual) Deploy `hermes` through `Prod 1` → `Prod 2`.
+- [X] T038 [US1] (manual) Deploy `hermes` through `Prod 1` → `Prod 2`.
   - **Before**: quickstart § 3 step 3 passes through Caddy (`https://memory-api.hus-sky.no`, Hermes key, 200). If the route is missing, Hermes runs every turn without memory.
   - **LAB stage**: the agent's `/health` stays healthy with memory unreachable, and one API-server turn returns the gateway's 429 without a crash (quickstart § 2 "hermes", research R-016).
   - **PROD**: run quickstart § 4 steps 1–5. Record the results in `specs/097-hermes-long-term-memory/quickstart.md`.
