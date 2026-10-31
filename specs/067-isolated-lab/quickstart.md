@@ -229,6 +229,11 @@ listing itself, which sits inside the age-encrypted archive that only root can o
 decrypt the newest `/mnt/nas-backup/proxmox-backup-*.tar.zst.age` with `/root/.age/proxmox-backup.key` and list
 `iac-artifacts/local-state/`.
 
+**Confirmed (2026-10-31, as root on `pve`)**: decrypting `/mnt/nas-backup/proxmox-backup-20261031-020350.tar.zst.age`
+and listing it showed exactly 12 `iac-artifacts/local-state/<service>/terraform.tfstate` entries: eurooffice,
+financial-scenario, hermes, homeassistant, immich, jellyfin, llm-router, market-model, monitoring, nextcloud, ntfy
+and reverse_proxy. T021 step 4 is met.
+
 ## T068 record: promotion 2 of 5 (2026-10-31, `monitoring`, runner-heartbeat alert rules)
 
 Real change: the `CiRunnerHeartbeatStale` and `CiRunnerHeartbeatAbsent` rules (PR #314) reaching Prometheus.

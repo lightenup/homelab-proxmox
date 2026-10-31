@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-30
 
-**Status**: Draft
+**Status**: Closed 2026-10-31 (PRs #302-#316). SC-007: promotions 1 and 2 recorded and clean (quickstart §5); later promotions are appended there as they happen.
 
 **Input**: User description: "docs/backlog/067-lab-prod-same-address-space.md". The owner decisions
 in its section *Decisions for the spec (2026-10-30)* are binding. Backlog `096` (one state location
