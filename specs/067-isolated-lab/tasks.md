@@ -268,7 +268,7 @@ workflows are gone; lifecycle `lab` is the rehearsal.
 - [X] T065 Mark backlog `docs/backlog/067-lab-prod-same-address-space.md` and `096-terraform-state-layout.md` as done in `docs/backlog/backlog.md`, with links to this spec.
 - [X] T066 Delete `scripts/lab/migrate-state-067`, `python/tests/guardrails/test_migrate_state_067.py` and `specs/067-isolated-lab/refs-to-remove.txt` (one-off, R-012). Keep the dated `state-backup-067-*` on `pve` for 30 days, then remove them by hand (noted in the runbook).
 - [X] T067 Run the full guardrail suite (`pytest python/tests/guardrails`), `task` lint, `terraform validate` for all 12 roots and `terraform/`, and `task mutmut:gate` if Python under the mutation scope changed. Fix any failure.
-- [ ] T068 Track SC-007 over the next four promotions (2–5): each PROD plan shows the real change and each LAB run has no fingerprint diff. Note them in `specs/067-isolated-lab/quickstart.md` §5.
+- [~] T068 Track SC-007 over the next four promotions (2–5): each PROD plan shows the real change and each LAB run has no fingerprint diff. Note them in `specs/067-isolated-lab/quickstart.md` §5. **CLOSED 2026-10-31 with the spec**: promotions 1 and 2 are recorded in quickstart §5 and were clean; the remaining three are observed as they happen and appended to quickstart §5, with no task left open.
 
 ---
 
