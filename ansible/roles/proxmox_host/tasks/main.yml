@@ -1,7 +1,13 @@
 ---
+# `apply` passes the tags to the role's tasks. Tags on include_role alone mark only the include,
+# so `--tags mounts` (task ansible:mounts) ran nothing inside the role (found 2026-10-31, 097).
 - name: Configure NAS NFS mounts
   ansible.builtin.include_role:
     name: proxmox_mounts
+    apply:
+      tags:
+        - mounts
+        - nfs
   tags:
     - mounts
     - nfs
