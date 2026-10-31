@@ -180,8 +180,9 @@ builds the memory service, which every story needs.
   `memory` and `reverse_proxy` deployed with the web UI; the owner's click-through is in
   quickstart § 11. The nightly backup script on the LXC writes `drill-probes.json`; the first run
   is 2026-11-01 05:30 UTC, after which T060 can run.
-- **US2 Open WebUI (T039–T046), 2026-10-31**: the harness gate (T046) passed on the agreed re-run at
-  19:40 after a 19:20 fail on p16 (quickstart § 1); the deploy (T047) has not run. Checked against the Open WebUI `v0.11.3` source (tag
+- **US2 Open WebUI (T039–T047), 2026-10-31**: the harness gate (T046) passed on the agreed re-run at
+  19:40 after a 19:20 fail on p16 (quickstart § 1); `hermes` deployed to PROD the same evening
+  (T047), with the 7 Open WebUI memories imported and memories switched off (quickstart § 7). Checked against the Open WebUI `v0.11.3` source (tag
   `v0.11.3`, commit `2a960a5`, `backend/open_webui/`):
   - Inlet gets `body`, `__user__`, `__metadata__`, `__model__` and `__chat_id__`
     (`utils/middleware.py:2517-2527`); the outlet gets the same minus the chat and message ids
@@ -539,7 +540,7 @@ WebUI's own memories are imported and retired (FR-012, FR-016, FR-019).
   - a read-only `claude-code` retain refused with 403;
   - a webhook creation and a bank-config change refused with 403 for every key.
 - [X] T046 [US2] (manual) Re-run the harness gate with the filter and portability legs (quickstart § 1), and commit the new results folder and fingerprint.
-- [ ] T047 [US2] (manual) Deploy `hermes` (Open WebUI) through `Prod 1` → `Prod 2`.
+- [X] T047 [US2] (manual) Deploy `hermes` (Open WebUI) through `Prod 1` → `Prod 2`.
   - **LAB stage**: the filter loads and fails open.
   - **PROD**: run quickstart § 7. Record the row count before the deploy, and the document count and the missing memory setting after it.
 - [ ] T048 [US2] (manual) Confirm the accepted risk "memory reaches Anthropic through Claude Code" against the Claude Enterprise Guidance & Guidelines. Record the outcome and date in the Assumptions of `specs/097-hermes-long-term-memory/spec.md`. If it is not confirmed, stop US2's Claude Code tasks (T049 to T051) and set `memory_claude_code_scope: revoked` in `ansible/roles/memory/defaults/main.yml`.

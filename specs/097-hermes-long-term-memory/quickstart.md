@@ -189,6 +189,15 @@ Guidelines, and the hooks are enabled in one private repository only (R-010).
 3. The Personalisation › Memory setting is gone (memories off), and a fact from the imported set
    is answered in a new chat through the filter.
 
+**Run 2026-10-31** (PROD, `hermes` deploy of `190ea7a`): the `memory` table held 7 non-empty rows
+and `memories.enable` was `true` before the deploy. The LAB rehearsal skipped all five import
+tasks and installed the filter. In PROD the deploy imported 7 memories ("Imported 7 Open WebUI
+memories."); the `owner` bank then held 7 `owui-memory-*` documents, all tagged
+`origin:open-webui-memory` and `client:open-webui`. `memories.enable` is `false`, the `memory`
+table still holds its 7 rows, and the `shared_memory` filter is active and global ("Loaded module:
+function_shared_memory", no errors). Step 3: the owner asked about a saved memory in a new chat
+and got it back.
+
 ## 8. Correct and forget (US-5, R-012)
 
 1. Ask "what do you remember about my test parrot?". The listing shows the Probe-097 unit.
