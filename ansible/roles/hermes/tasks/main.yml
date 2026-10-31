@@ -592,6 +592,116 @@
     fail_msg: A heartbeat job exists on the LAB rig; remove it with `hermes cron remove`.
   when: lab_inventory | default(false) | bool
 
+# --- Open WebUI memories: import once, then retire (097 FR-016, research R-008) ---
+#
+# Open WebUI's own `memory` table is retained once into the shared memory with the admin key
+# (document_id owui-memory-<id>, so a re-run replaces and never duplicates; tags
+# origin:open-webui-memory and client:open-webui, which the admin key may keep). It runs before
+# "Reconcile the persisted Open WebUI configuration we own", which switches memories.enable off
+# (hermes_managed_config), and only while that switch is still on: once retired, later deploys
+# never call the memory API here. The import is skipped when the store already holds as many
+# owui-memory-* documents as there are memories, and the counts must match afterwards, or the
+# deploy stops with the switch still on. The table itself is left in place (R-008).
+# PROD only: the lab copy has no memory service.
+- name: Read Open WebUI's own memories for the one-shot import (097 R-008)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - hermes_open_webui
+      - python3
+      - "-c"
+      - "{{ lookup('ansible.builtin.file', 'open_webui/read_memories.py') }}"
+  register: hermes_owui_memories
+  changed_when: false
+  when: (deploy_environment | default('prod')) != 'lab'
+  # The owner's memories: personal, kept out of CI logs.
+  no_log: true
+
+- name: Decide whether Open WebUI's memories still need importing
+  ansible.builtin.set_fact:
+    hermes_owui_memory_items: "{{ hermes_owui_memories_read.memories }}"
+    hermes_owui_memory_import_open: "{{ hermes_owui_memories_read.enabled is not false and hermes_owui_memories_read.memories | length > 0 }}"
+  vars:
+    hermes_owui_memories_read: "{{ hermes_owui_memories.stdout | from_json }}"
+  when: (deploy_environment | default('prod')) != 'lab'
+  no_log: true
+
+- name: Count the Open WebUI memories already in the shared memory
+  ansible.builtin.uri:
+    url: "{{ hermes_memory_api_url }}/v1/default/banks/{{ hermes_memory_bank_id }}/documents?q=owui-memory-&limit=1000"
+    headers:
+      Authorization: "Bearer {{ memory_admin_key }}"
+    return_content: true
+  register: hermes_owui_memory_stored
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - hermes_owui_memory_import_open | bool
+  no_log: true
+
+- name: Import Open WebUI's memories into the shared memory (admin key, synchronous)
+  ansible.builtin.uri:
+    url: "{{ hermes_memory_api_url }}/v1/default/banks/{{ hermes_memory_bank_id }}/memories"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ memory_admin_key }}"
+    body_format: json
+    body: "{{ {'items': [item], 'async': false} }}"
+    timeout: 300
+  # default([]): Ansible templates the loop before `when`, and the lab copy never reads the list.
+  loop: "{{ hermes_owui_memory_items | default([]) }}"
+  loop_control:
+    label: "{{ item.document_id }}"
+  vars:
+    hermes_owui_memory_stored_count: >-
+      {{ hermes_owui_memory_stored.json['items'] | map(attribute='id') | select('match', 'owui-memory-') | list | length }}
+  changed_when: true
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - hermes_owui_memory_import_open | bool
+    - hermes_owui_memory_stored_count | int != hermes_owui_memory_items | length
+  no_log: true
+
+- name: Count the Open WebUI memories in the shared memory after the import
+  ansible.builtin.uri:
+    url: "{{ hermes_memory_api_url }}/v1/default/banks/{{ hermes_memory_bank_id }}/documents?q=owui-memory-&limit=1000"
+    headers:
+      Authorization: "Bearer {{ memory_admin_key }}"
+    return_content: true
+  register: hermes_owui_memory_stored_after
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - hermes_owui_memory_import_open | bool
+  no_log: true
+
+- name: Assert every Open WebUI memory is in the shared memory (097 R-008)
+  ansible.builtin.assert:
+    that:
+      - hermes_owui_memory_stored_count | int == hermes_owui_memory_items | length
+    fail_msg: >-
+      The shared memory holds {{ hermes_owui_memory_stored_count }} owui-memory-* documents, but
+      Open WebUI has {{ hermes_owui_memory_items | length }} memories. Open WebUI's memories stay
+      on until the import is complete; fix the import and deploy again (097 R-008).
+    success_msg: "Imported {{ hermes_owui_memory_items | length }} Open WebUI memories."
+  vars:
+    hermes_owui_memory_stored_count: >-
+      {{ hermes_owui_memory_stored_after.json['items'] | map(attribute='id') | select('match', 'owui-memory-') | list | length }}
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - hermes_owui_memory_import_open | bool
+
+- name: Record the skipped Open WebUI memories import (lab)
+  ansible.builtin.lineinfile:
+    path: "{{ evidence_dir }}/reports/lab/skipped-checks.txt"
+    create: true
+    mode: "0644"
+    line: "hermes: Open WebUI memories import (097 R-008): the memory service is not part of the lab copy"
+  delegate_to: localhost
+  become: false
+  when:
+    - (deploy_environment | default('prod')) == 'lab'
+    - evidence_dir is defined
+
 # TOOL_SERVER_CONNECTIONS is a PersistentConfig: seed_defaults() inserts a key "only if the
 # key is absent" — "Existing DB values take precedence over defaults." So the env var seeds
 # the FIRST boot and is inert forever after, which would make every later edit to
@@ -741,4 +851,41 @@
   notify: Restart hermes
   # stdin carries the token for any auth: bearer entry, and Ansible echoes module args on
   # failure at higher verbosity. Debuggability is traded for not leaking it into CI logs.
+  no_log: true
+
+# The shared-memory filter (097 FR-019, research R-007): Open WebUI keeps functions only in the
+# `function` table of webui.db, so the deploy upserts the row `shared_memory` (a global, active
+# filter) with the content of files/open_webui/memory_filter.py and its valves. The script reads
+# the agent's model ids from inside the container (it shares the compose network) and fails if
+# there are none, because the filter must skip the agent's chats: the agent's plugin stores those.
+#
+# No restart: Open WebUI 0.11.3 re-reads a filter's content and valves from the database on every
+# request (utils/plugin.py get_function_module_from_cache, utils/filter.py FilterContext), so a
+# changed row is live at the next chat. The payload, with the memory key and the agent key, goes
+# in on stdin, never argv. In the lab copy the memory API is unreachable and the filter fails open.
+- name: Reconcile the shared memory filter (097 T042, R-007)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "-i"
+      - hermes_open_webui
+      - python3
+      - "-c"
+      - "{{ lookup('ansible.builtin.file', 'open_webui/reconcile_filter.py') }}"
+    stdin: "{{ hermes_memory_filter_payload | to_json }}"
+  vars:
+    hermes_memory_filter_payload:
+      id: shared_memory
+      name: Shared memory
+      description: "Recall from and retain to the shared memory (spec 097). Managed by Ansible."
+      content: "{{ lookup('ansible.builtin.file', 'open_webui/memory_filter.py') }}"
+      valves:
+        url: "{{ hermes_memory_api_url }}"
+        key: "{{ memory_client_open_webui_key }}"
+        bank: "{{ hermes_memory_bank_id }}"
+      models_url: "{{ hermes_agent_api_base_url }}/models"
+      models_key: "{{ hermes_agent_api_server_key }}"
+  register: hermes_memory_filter_reconcile
+  changed_when: hermes_memory_filter_reconcile.stdout is match('^CHANGED')
   no_log: true

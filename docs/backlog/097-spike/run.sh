@@ -34,5 +34,11 @@ python3 score.py "$1" | tee "$OUT/score.txt"
 # The verdict (gate.py) is what test_memory_harness_gate.py accepts; it exits non-zero on a fail.
 if [ "$1" = prod-render ]; then
     cp runs/prod-render/fingerprint.txt "$OUT/fingerprint.txt"
+    # SC-005 (097 T045): each client's turn format with its own key, read back by the other two,
+    # in a bank of its own so the dataset's facts do not crowd the recall. gate.py reads the JSON.
+    rm -f logs/porta/clients.json
+    "${DC[@]}" exec -T llmproxy python -u /app/portability.py clients porta-clients \
+        --clients hermes,open-webui,claude-code | tee "$OUT/portability.txt" || true
+    cp logs/porta/clients.json "$OUT/portability.json" 2>/dev/null || true
     python3 gate.py "$1" | tee "$OUT/gate.txt"
 fi

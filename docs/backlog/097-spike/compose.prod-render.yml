@@ -38,6 +38,10 @@ services:
       # The gateway's alias mapping for the two memory aliases (llm_router_aliases), so the
       # rendered model names reach the Mac's LiteLLM unchanged in the config.
       MODEL_MAP: "hermes-embed=embed,hermes-rerank=rerank"
+    volumes:
+      # The harness-local client keys, for the SC-005 leg (llmproxy/portability.py clients),
+      # which run.sh runs here because only this container reaches hindsight and the outside.
+      - ./runs/prod-render/secret.env:/run/harness/secret.env:ro
   hermes:
     image: ${HERMES_AGENT_IMAGE:?run render-prod.sh first}
     volumes:

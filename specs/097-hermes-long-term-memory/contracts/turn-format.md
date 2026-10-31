@@ -37,6 +37,7 @@ Rules:
    - interrupted turns;
    - Open WebUI task requests (title, tag and follow-up generation);
    - Open WebUI chats with the agent model, because the agent's plugin retains those;
+   - Open WebUI temporary and channel chats, which Open WebUI itself does not keep;
    - Claude Code sessions outside private repositories, where the hook is not installed.
 6. **Secrets**: the Hermes agent redacts secrets before `sync_turn`. The other two adapters
    strip strings matching the estate's Alloy redaction patterns before sending. This is best

@@ -25,18 +25,25 @@ BUILD=$OUT/build
 mkdir -p "$BUILD"
 chmod 700 "$OUT" "$BUILD"
 
-# 1. Harness-local keys, generated once. Never real vault values.
-if [ ! -f "$OUT/secret.env" ]; then
-    (umask 077; python3 - > "$OUT/secret.env" <<'EOF'
-import secrets
-for name in ("memory_client_hermes_key", "memory_client_open_webui_key", "memory_client_claude_code_key",
-             "memory_client_control_plane_key", "memory_admin_key", "memory_ui_access_key"):
-    print(f"{name}=hmem_{secrets.token_urlsafe(32)}")
-print(f"memory_db_password={secrets.token_urlsafe(24)}")
-print(f"llm_router_client_memory_key=sk-harness-{secrets.token_urlsafe(16)}")
+# 1. Harness-local keys, generated once; a name added later is appended, existing values are
+# kept. Never real vault values. memory_client_claude_code_readonly_key is harness-only: the
+# SC-005 leg's read-only client (step 2b).
+(umask 077; touch "$OUT/secret.env"; python3 - "$OUT/secret.env" <<'EOF'
+import secrets, sys
+path = sys.argv[1]
+have = {line.split("=", 1)[0] for line in open(path) if "=" in line}
+want = {name: f"hmem_{secrets.token_urlsafe(32)}" for name in (
+    "memory_client_hermes_key", "memory_client_open_webui_key", "memory_client_claude_code_key",
+    "memory_client_control_plane_key", "memory_admin_key", "memory_ui_access_key",
+    "memory_client_claude_code_readonly_key")}
+want["memory_db_password"] = secrets.token_urlsafe(24)
+want["llm_router_client_memory_key"] = f"sk-harness-{secrets.token_urlsafe(16)}"
+with open(path, "a") as f:
+    for name, value in want.items():
+        if name not in have:
+            f.write(f"{name}={value}\n")
 EOF
-    )
-fi
+)
 (umask 077; python3 -c 'import json,sys; print(json.dumps(dict(l.strip().split("=",1) for l in open(sys.argv[1]) if "=" in l)))' \
     "$OUT/secret.env" > "$BUILD/secrets.json")
 
@@ -58,6 +65,18 @@ render memory/templates/server.env.j2 server.env
 render memory/templates/db.env.j2 db.env
 render memory/templates/clients.json.j2 clients.json
 render hermes/templates/hindsight-config.json.j2 hindsight-config.json
+# 2b. One harness-only client on top of the rendered list: `claude-code-ro`, scope readonly, so
+# the SC-005 leg can check a read-only retain is refused (what PROD renders for claude-code with
+# memory_claude_code_scope: readonly) while claude-code itself stays readwrite for the 6/6 recall.
+python3 - "$BUILD/clients.json" "$OUT/secret.env" <<'EOF'
+import hashlib, json, sys
+clients_path, secrets_path = sys.argv[1], sys.argv[2]
+keys = dict(line.strip().split("=", 1) for line in open(secrets_path) if "=" in line)
+clients = json.load(open(clients_path))
+digest = hashlib.sha256(keys["memory_client_claude_code_readonly_key"].encode()).hexdigest()
+clients.append({"id": "claude-code-ro", "sha256": digest, "scope": "readonly"})
+json.dump(clients, open(clients_path, "w"), indent=4)
+EOF
 # The images, from the same role defaults the deploy uses (PR #318 review: the harness must
 # run the pinned images, not literal tags). compose.prod-render.yml reads these; gate.py checks
 # that compose ran them.

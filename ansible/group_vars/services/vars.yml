@@ -382,6 +382,10 @@ hermes_managed_config:
   # Automations retired (083 US3): one scheduler, the agent's. The deploy refuses to switch
   # this off while automations still exist ("Assert no Open WebUI automations remain").
   automations.enable: false
+  # Memories retired (097 FR-016, R-008): the shared memory service replaces them. The deploy
+  # imports the old memories first, while this is still true ("Import Open WebUI's memories
+  # into the shared memory" runs before this reconcile).
+  memories.enable: false
 
 # Title generation stays ON: pointing TASK_MODEL_EXTERNAL at the cheapest alias already
 # bounds its cost (R-004); disabling it as well would drop a real feature to solve a problem
