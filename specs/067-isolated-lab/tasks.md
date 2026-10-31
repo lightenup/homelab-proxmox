@@ -96,7 +96,7 @@ manifest lists 12 prod states. A deliberately untracked CT appears in `latest.js
 
   T013 passes.
 - [X] T020 [US2] Remove the 10 `module "*_lxc"` blocks (and their now-unused variables or outputs) from `terraform/main.tf` and the related files in `terraform/`. (Dropped the `--remove-combined-root-modules` state-rm step: T001 found no combined-root state, so there is nothing to remove.) `terraform validate` in `terraform/`.
-- [ ] T021 [US2] **Supervised migration session (operator present; pause promotions and confirm no mutation job holds the runner)**:
+- [X] T021 [US2] **Supervised migration session (operator present; pause promotions and confirm no mutation job holds the runner)**:
   1. Merge the US2 PR. The pipeline must not run until step 4.
   2. Have the operator run `ansible-playbook playbooks/setup-state-dirs.yml` and `playbooks/backup_proxmox.yml` (root).
   3. On `pve` as `ci`, run `./migrate-state-067 --dry-run`, then `./migrate-state-067`, then `--remove-old-layout`, then `--remove-combined-root-modules`.
