@@ -166,16 +166,17 @@ memory errors in the agent log.
 
 ## 6. Shared memory and Claude Code scopes (US-2, SC-005, SC-009)
 
-Precondition: the accepted risk is confirmed against the Claude Enterprise Guidance &
-Guidelines, and the hooks are enabled in one private repository only (R-010).
+Precondition: the hooks are enabled in the private Claude Code installation only (`claude-private`
+on the Mac, R-010).
 
-1. In Open WebUI (plain model, not the agent), say "my test sister lives in Probe-by". In Claude
-   Code in the private repository, ask "where does my test sister live?". The answer is Probe-by.
+1. In Open WebUI (plain model, not the agent), say "my test sister lives in Probe-by". In
+   `claude-private` in a repository under `~/Development/private`, ask "where does my test sister live?". The answer is Probe-by.
 2. Tell Claude Code "my test boat is called Probe-båt". Ask Hermes over ntfy and get it back.
 3. `list_tags` (MCP from any client) shows `client:open-webui` and `client:claude-code` on those
    units.
-4. Open Claude Code in a work repository. Neither hook runs (no settings entry), and the store
-   shows no new `cc-` document.
+4. Open the EY Claude Code (`claude`) in a repository under `~/Development/private`, and
+   `claude-private` in a directory outside it. Neither sends anything (no settings entry in the
+   first, the path guard in the second), and the store shows no new `cc-` document.
 5. Set `claude-code` to `readonly` and deploy `memory`. A Claude Code retain is refused (403 in
    the hook log), recall still works, and Hermes and Open WebUI are unaffected.
 6. Remove `claude-code` and deploy. Claude Code gets 401, the others are unaffected. Restore the

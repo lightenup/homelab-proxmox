@@ -542,7 +542,8 @@ WebUI's own memories are imported and retired (FR-012, FR-016, FR-019).
 - [ ] T047 [US2] (manual) Deploy `hermes` (Open WebUI) through `Prod 1` → `Prod 2`.
   - **LAB stage**: the filter loads and fails open.
   - **PROD**: run quickstart § 7. Record the row count before the deploy, and the document count and the missing memory setting after it.
-- [ ] T048 [US2] (manual) Confirm the accepted risk "memory reaches Anthropic through Claude Code" against the Claude Enterprise Guidance & Guidelines. Record the outcome and date in the Assumptions of `specs/097-hermes-long-term-memory/spec.md`. If it is not confirmed, stop US2's Claude Code tasks (T049 to T051) and set `memory_claude_code_scope: revoked` in `ansible/roles/memory/defaults/main.yml`.
+- [X] T048 [US2] (manual) Confirm the accepted risk "memory reaches Anthropic through Claude Code" against the Claude Enterprise Guidance & Guidelines. Record the outcome and date in the Assumptions of `specs/097-hermes-long-term-memory/spec.md`. If it is not confirmed, stop US2's Claude Code tasks (T049 to T051) and set `memory_claude_code_scope: revoked` in `ansible/roles/memory/defaults/main.yml`.
+  - **Outcome 2026-10-31**: resolved by account, not by the guidance: the owner uses only a private Claude Code installation on a personal account (Mac: `claude-private` with its own config directory; Linux laptop), never the EY seat. Recorded in the spec Assumptions; FR-012, research R-010, T049, T050 and T069 amended to match.
 - [ ] T049 [US2] In the owner's dotfiles repo (`~/Development/private/dotfiles`), add the executable `claude-memory-hook` (Bash, `curl` and `jq` only), with two modes (research R-010):
   - **`recall`**:
     - Reads the hook JSON from stdin and recalls with `prompt` as the query (`--max-time 3`).
@@ -551,8 +552,9 @@ WebUI's own memories are imported and retired (FR-012, FR-016, FR-019).
   - **`retain`**:
     - Pairs the last user prompt from `transcript_path` with `last_assistant_message`.
     - Strips `hmem_…` strings and retains with `document_id = cc-<session_id>`, `update_mode: append`, `async: true`.
-  - **Key**: from `security find-generic-password -s homelab-memory -a claude-code -w`. **URL**: `https://memory-api.hus-sky.no`.
-- [ ] T050 [US2] (manual) Enable the hooks in exactly one private repository. Add `UserPromptSubmit` → `claude-memory-hook recall` (timeout 5) and `Stop` → `claude-memory-hook retain` (`async: true`) to that repo's `.claude/settings.local.json`. Never use committed project settings or `~/.claude/settings.json`. Document the snippet in the dotfiles README.
+  - **Key**: on macOS from `security find-generic-password -s homelab-memory -a claude-code -w`; on Linux from `rbw get homelab-memory/claude-code`, only when `rbw unlocked`. **URL**: `https://memory-api.hus-sky.no`.
+  - **Guard** (R-010): exit 0 silently unless `HOMELAB_MEMORY_CLIENT=claude-code` and `CLAUDE_PROJECT_DIR` is under `~/Development/private`.
+- [ ] T050 [US2] (manual) Enable the hooks in the private Claude Code installation only (R-010): `~/.claude-private/settings.json` on the Mac (`claude-private` alias, `CLAUDE_CONFIG_DIR=~/.claude-private`) and `~/.claude/settings.json` on the Linux laptop. Add `env.HOMELAB_MEMORY_CLIENT=claude-code`, `UserPromptSubmit` → `claude-memory-hook recall` (timeout 5) and `Stop` → `claude-memory-hook retain` (`async: true`). Never in repository settings or the EY installation's `~/.claude`. Document the snippet in the dotfiles README.
 - [ ] T051 [US2] (manual) Run quickstart § 6 steps 1–4 (cross-client recall, tags, no hook in a work repository). Record the results in `specs/097-hermes-long-term-memory/quickstart.md`.
 
 **Checkpoint**: US2 delivered. All three clients share one memory.
@@ -665,7 +667,7 @@ FR-023, SC-011).
 - [X] T068 [US5] (manual) Deploy `memory`, then `hermes`, then `reverse_proxy` through `Prod 1` → `Prod 2`.
   - **LAB stage**: the UI's lab copy answers `/api/health` and serves `/login` without data. Record its resident memory (quickstart § 2 "memory web UI").
   - **PROD**: run quickstart § 11 steps 1–5.
-- [ ] T069 [US5] (manual) Add the MCP server in Claude Code's user scope: `claude mcp add --scope user --transport http memory https://memory-api.hus-sky.no/mcp/ --header "Authorization: Bearer <key from keychain>"`. Do this only if T048 confirmed the risk. Document it in the dotfiles README without the key.
+- [ ] T069 [US5] (manual) Add the MCP server to the private Claude Code installation only, in local scope for each repository under `~/Development/private` (owner choice 2026-10-31, T048): `claude-private mcp add --scope local --transport http memory https://memory-api.hus-sky.no/mcp/ --header "Authorization: Bearer <key>"`, run in each repository. Never in the EY installation. Document it in the dotfiles README without the key.
 - [ ] T070 [US5] (manual) Run quickstart § 8, including step 4, the resurrection check. If an edited or invalidated fact comes back after appending to the same session, carry out T071. Otherwise mark T071 "not needed" with the date.
 - [ ] T071 [US5] (conditional on T070) Switch every adapter to one document per turn (research R-012): `document_id = <session>-<turn_index>` in `ansible/roles/hermes/files/open_webui/memory_filter.py` and the dotfiles `claude-memory-hook`, and the plugin's `bank_id_template`/`document_id` setting in `ansible/roles/hermes/templates/hindsight-config.json.j2` if the plugin offers one; otherwise record that limit in research R-012. Then update contracts/turn-format.md and re-run the harness gate (T046).
 - [ ] T072 [US5] (manual) Run quickstart § 6 steps 5–6 (SC-009): set `memory_claude_code_scope: readonly`, deploy `memory`, check; set it to `revoked`, deploy, check; restore `readwrite`. Record the results.

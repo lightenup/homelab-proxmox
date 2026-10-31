@@ -357,12 +357,19 @@ that verifies it.
       format.
     - `retain`: async. Pairs the last prompt (from the transcript) with `last_assistant_message`,
       `document_id = cc-<session_id>`, append.
-  - **Key**: read from the macOS keychain (`security find-generic-password -s homelab-memory`).
-  - **Where enabled**: `.claude/settings.local.json` per private repository only (never
-    committed, never in `~/.claude/settings.json`). This repository is public, so committed
-    project settings would hand the hook to every clone.
-  - **Gate**: enabling it is gated on confirming the accepted risk against the Claude Enterprise
-    Guidance & Guidelines (spec Dependencies).
+  - **Key**: on macOS from the keychain (`security find-generic-password -s homelab-memory -a
+    claude-code -w`), on Linux from Bitwarden through `rbw` (item `homelab-memory/claude-code`).
+    A locked or missing source means no memory for that turn, never a prompt.
+  - **Where enabled** (amended 2026-10-31, T048): in the user settings of the owner's private
+    Claude Code installation only: `~/.claude-private/settings.json` on the Mac (launched as
+    `claude-private`, `CLAUDE_CONFIG_DIR=~/.claude-private`) and `~/.claude/settings.json` on the
+    Linux laptop. Repository settings are rejected: `.claude/settings.local.json` applies to
+    whichever account opens the repository, including the EY seat on the same Mac.
+  - **Guard**: the hook does nothing unless `HOMELAB_MEMORY_CLIENT=claude-code` is set (only the
+    private installation's settings `env` sets it) and `CLAUDE_PROJECT_DIR` is under
+    `~/Development/private`. A hook entry copied into the EY setup by mistake therefore sends
+    nothing.
+  - **Gate**: resolved 2026-10-31 by using the private account (spec Assumptions).
 - **Revocation and read-only**: change the `claude-code` scope in `clients.json` (vault-backed
   list) and deploy `memory`. Hermes and Open WebUI keys are untouched (SC-009).
 - **Reachability**: the Mac reaches `memory-api.hus-sky.no` → `192.168.1.211` over the LAN (the

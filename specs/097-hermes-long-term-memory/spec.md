@@ -240,8 +240,9 @@ portal page.
   Hindsight version and re-checked on every bump. Credentials live in the vault.
 - **FR-012**: Claude Code's credential MUST be revocable alone and reducible to read-only (stores
   and edits refused) without touching Hermes or Open WebUI. Claude Code's adapter MUST be enabled
-  only in the project settings of the owner's private repositories, never globally, so work sessions
-  neither read nor write the store.
+  only in the owner's private Claude Code installation (personal account, never the EY enterprise
+  seat) and only for the owner's private repositories, so work sessions neither read nor write the
+  store.
 - **FR-013**: The owner MUST be able to list, correct and delete memories from any client (US-5).
 - **FR-014**: Memory derived from untrusted content (web pages, tool output) MUST be distinguishable
   from what the owner said, or not stored at all. Adapters MUST store full turns, the owner's
@@ -344,10 +345,12 @@ in the bake-off was 1 to 2 probes.
   R-003). A bump to v0.22.x is a separate change.
 - Claude Code reaches the memory endpoint over the LAN, because the corporate proxy blocks the
   tailnet on the Mac.
-- Accepted risk: Claude Code runs on Anthropic's models under an EY enterprise seat, so anything it
-  recalls is sent to Anthropic as prompt content, and anything it stores can carry work context into
-  the private store. The owner accepts this for read-write sharing, bounded by FR-012. It is to be
-  confirmed against the Claude Enterprise Guidance & Guidelines before implementation.
+- Claude Code runs on Anthropic's models, so anything it recalls is sent to Anthropic as prompt
+  content. Resolved 2026-10-31 (T048): the owner uses only a private Claude Code installation on a
+  personal account for this, on the Mac (its own config directory) and on the Linux laptop. The EY
+  enterprise seat never holds the hooks, the MCP server or the key, so the Claude Enterprise Guidance
+  & Guidelines check no longer applies and no work context reaches the store. Read-write sharing,
+  bounded by FR-012.
 - A forgotten memory remains in older backups until the estate's backup retention ages them out
   (up to about 6 months for monthly copies). Forgetting applies to the live store only.
 - The address `192.168.1.223` (lab `10.99.0.223`) is free; to be confirmed in the plan.
@@ -372,5 +375,4 @@ in the bake-off was 1 to 2 probes.
 - `092` log aggregation: log-based alerts for memory errors.
 - `067` isolated lab: constrains the LAB rehearsal (FR-020) and moves quality checks to the
   harness (FR-021).
-- Confirmation of the accepted Claude Code risk against the Claude Enterprise Guidance &
-  Guidelines, before implementation.
+- A private Claude Code installation on a personal account (resolved 2026-10-31, see Assumptions).
