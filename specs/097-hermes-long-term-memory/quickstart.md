@@ -234,6 +234,18 @@ After the Open WebUI import and a week of use, peak memory use on the LXC
 6. An empty login key is caught before deploy, by the role's preflight and by
    `test_memory_config.py`. No PROD test is needed: the guard test runs in CI.
 
+**Run 2026-10-31** (PROD, owner, web UI at `https://memory.hus-sky.no`, portal tile "Memory"):
+- Login with `memory_ui_access_key` works; `/` redirects to `/login` without a session.
+- After the read-view rule (#331), the home, profile, graph, timeline, documents and background
+  operations views load without refusals. The first click-throughs showed the refused reads that
+  led to #327's view list and then #331's read rule.
+- The store showed live Hermes use: 4 memories, 2 documents, 15 links; 13 background operations,
+  all completed, including a graph-maintenance job after a retain (refused before #327).
+- The Consolidation card shows "pending 4, last: never" permanently: consolidation is off by design
+  (FR-004), so units are never consolidated. Cosmetic.
+- Resource use: `memory_ui` 52 MiB of its 384 MiB limit; the LXC 525 of 2048 MB with all three
+  containers (SC-007 headroom well above 30 %).
+
 ## Runbook: failed retains (`MemoryRetainFailures`)
 
 1. Open the web UI's operations page (or `GET $MEM/owner/operations?status=failed` with the

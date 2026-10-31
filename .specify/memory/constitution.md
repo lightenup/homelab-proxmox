@@ -44,6 +44,29 @@ Every provisioning and deployment operation MUST be executable through **both** 
 - Avoid scattering IP strings across files: define them centrally (variables/locals) and pass into modules.
 - Target network is eventually segmented (Management, Services, LAN, IoT, VPN egress).
 
+### Inference
+
+Every service that needs a language model addresses a **gateway intent alias**, never a model.
+This generalises the load-bearing design choice of [`064`](../../docs/backlog/064-llm-router.md)
+from one service's requirement into an estate rule, because each new service otherwise re-derives
+it or quietly does not.
+
+- A service MUST call the gateway's OpenAI-compatible endpoint using an alias that names an
+  **intent** (`hermes-fast`, `hermes-balanced`, `hermes-embed`, `hermes-rerank`). A provider model
+  ID, a model name or a direct backend address in a service's configuration is a defect.
+- If no existing alias fits a service's need, the answer is **a new alias in the gateway**, declared
+  in `group_vars` as data, not a direct model reference in the service. The alias is created in the
+  same change that introduces the need for it.
+- The alias→deployment mapping stays declarative data (`064` FR-003). Changing the model behind an
+  alias is a `group_vars` edit and a deploy, and no client changes.
+- Each service gets **its own gateway client key** with its own rate limit and budget, so its usage
+  is counted and capped separately from chat (`064`'s sizing rule `max(client) ≤ gateway <
+  sum(clients)` is re-checked whenever a client is added).
+
+The point is substitutability: hardware changes, models are superseded, and a model that fits in
+memory today will not be the right one in a year. A service that names a model has to be edited and
+redeployed when that happens; a service that names an intent does not.
+
 ### Access Control
 - Terraform must inject SSH public keys into LXCs (`ssh_public_keys`) so Ansible can connect without passwords.
 - Ansible initially uses `root` for bootstrapping (homelab tradeoff).
@@ -174,4 +197,4 @@ iterations) to converge on quality before declaring a feature complete.
 ## Governance
 This constitution supersedes all other practices. Amendments require documentation and approval. All PRs and reviews must verify compliance with these principles.
 
-**Version**: 1.5.0 | **Ratified**: 2026-02-22 | **Last Amended**: 2026-10-30
+**Version**: 1.6.0 | **Ratified**: 2026-02-22 | **Last Amended**: 2026-10-31
