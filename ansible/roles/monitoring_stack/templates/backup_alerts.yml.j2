@@ -89,9 +89,11 @@ groups:
           summary: "The CI runner has not run a job in 2 hours"
           description: >-
             The scheduled `Runner heartbeat` workflow has not completed for 2 hours, longer than any
-            job may run. The pi-ci runner is probably wedged: GitHub can still show it as online while
-            jobs sit queued. On pi-ci: `sudo ./svc.sh status` in the actions-runner directory, then
-            `sudo ./svc.sh stop && sudo ./svc.sh start`. See docs/operations/proxmox-ci.md.
+            single job may run. The pi-ci runner is probably wedged: GitHub can still show it as online
+            while jobs sit queued. The heartbeat queues behind other jobs, so first check that the
+            runner is not simply busy: `gh run list --status in_progress` and `--status queued`. Restart
+            only if nothing is running. On pi-ci: `sudo ./svc.sh status` in the actions-runner directory,
+            then `sudo ./svc.sh stop && sudo ./svc.sh start`. See docs/operations/proxmox-ci.md.
       - alert: CiRunnerHeartbeatAbsent
         expr: absent(homelab_ci_runner_last_heartbeat_timestamp_seconds)
         for: 3h

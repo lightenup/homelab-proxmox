@@ -89,6 +89,12 @@ runs on the runner every 10 minutes and stamps `homelab_ci_runner_last_heartbeat
 older than 2 hours. That is longer than any job may run, because the heartbeat queues behind running jobs on the
 single runner; every self-hosted job therefore has a `timeout-minutes` (a guardrail test enforces both).
 
-When it fires, on `pi-ci`: `cd ~/actions-runner && sudo ./svc.sh status`, then `sudo ./svc.sh stop && sudo ./svc.sh start`.
+When it fires, first check the runner is not simply busy with a backlog (`gh run list --status in_progress` and
+`--status queued`); a restart interrupts a running job, so restart only if nothing is running. Then, on `pi-ci`:
+`cd ~/actions-runner && sudo ./svc.sh status`, then `sudo ./svc.sh stop && sudo ./svc.sh start`.
+Known limits: the heartbeat can queue behind several jobs, so a backlog over 2 hours could alert on a healthy
+runner; stamping the metric from a runner job-started hook (`ACTIONS_RUNNER_HOOK_JOB_STARTED` on `pi-ci`) would
+remove that. The metric file is written with `sudo tee` (not an atomic rename, which `ci` cannot do); an
+interrupted write is caught by `CiRunnerHeartbeatAbsent` after 3 hours.
 `CiRunnerHeartbeatAbsent` means the file was never written: run the workflow once with `workflow_dispatch`.
 The alert rules reach Prometheus with the next monitoring deploy.

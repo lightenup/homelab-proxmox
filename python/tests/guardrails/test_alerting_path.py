@@ -341,7 +341,10 @@ def test_runner_heartbeat_alerts_exist_and_page_like_the_backup_alert():
     assert absent["expr"].strip() == f"absent({RUNNER_METRIC})"
     for name in ("CiRunnerHeartbeatStale", "CiRunnerHeartbeatAbsent"):
         assert rules[name]["labels"] == rules["BackupStale"]["labels"]
-    assert "svc.sh" in stale["annotations"]["description"]
+    description = stale["annotations"]["description"]
+    assert "svc.sh" in description
+    # A restart interrupts a running job, so the alert must say to check for a busy runner first.
+    assert "--status in_progress" in description and "Restart only if nothing is running" in " ".join(description.split())
 
 
 def test_runner_heartbeat_alerts_are_absent_in_lab():
