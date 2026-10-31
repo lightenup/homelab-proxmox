@@ -71,7 +71,12 @@
   failed_when: false
   loop: "{{ llm_router_local_backend_hostnames }}"
 
+# 067: the isolated lab has no route to the LAN, so the Mac's mDNS name never resolves there and
+# the lab copy runs without a local tier (its first chat call fails, as for every peer the lab
+# does not copy). Asserting it in lab stopped the role before key provisioning, so the LAB stage
+# never rehearsed the key changes (found 2026-10-31, 097). PROD still asserts.
 - name: Assert every local-tier backend hostname resolved
+  when: (deploy_environment | default('prod')) != 'lab'
   ansible.builtin.assert:
     that:
       - item.rc == 0
@@ -92,10 +97,27 @@
 - name: Build the container host mappings for the local tier
   ansible.builtin.set_fact:
     llm_router_extra_hosts: >-
-      {{ llm_router_backend_resolution.results | map(attribute='item')
-         | zip(llm_router_backend_resolution.results | map(attribute='stdout')
-               | map('split') | map('first'))
+      {{ resolved | map(attribute='item')
+         | zip(resolved | map(attribute='stdout') | map('split') | map('first'))
          | map('join', ':') | list }}
+  vars:
+    # Only names that resolved (all of them in PROD, asserted above; none in lab).
+    resolved: "{{ llm_router_backend_resolution.results | selectattr('rc', 'equalto', 0) | list }}"
+
+- name: Record the skipped lab check
+  ansible.builtin.lineinfile:
+    path: "{{ evidence_dir }}/reports/lab/skipped-checks.txt"
+    create: true
+    mode: "0644"
+    line: "llm-router: local-tier backend {{ item.item }} does not resolve in the lab (no LAN)"
+  loop: "{{ llm_router_backend_resolution.results | rejectattr('rc', 'equalto', 0) | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  delegate_to: localhost
+  become: false
+  when:
+    - (deploy_environment | default('prod')) == 'lab'
+    - evidence_dir is defined
 
 - name: Deploy docker-compose.yml
   ansible.builtin.template:
