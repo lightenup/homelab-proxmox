@@ -311,3 +311,56 @@ def test_state_drift_timer_runs_on_pve_daily_after_the_backups():
     drift = [t for t in tasks if "state-drift" in (t.get("tags") or [])]
     assert len(drift) == 3
     assert "0775" in (ANSIBLE / "host_vars/proxmox.yml").read_text()
+
+
+# ---------------------------------------------------------------------------
+# 6. CI runner dead-man's switch: a wedged runner that GitHub still shows online
+# ---------------------------------------------------------------------------
+
+HEARTBEAT_WORKFLOW = ROOT / ".github/workflows/runner-heartbeat.yml"
+RUNNER_METRIC = "homelab_ci_runner_last_heartbeat_timestamp_seconds"
+
+
+def _longest_self_hosted_timeout_minutes() -> int:
+    longest = 0
+    for path in (ROOT / ".github/workflows").glob("*.yml"):
+        if path == HEARTBEAT_WORKFLOW:
+            continue
+        for job in (_yaml(path).get("jobs") or {}).values():
+            if "self-hosted" in str(job.get("runs-on")):
+                longest = max(longest, int(job.get("timeout-minutes", 360)))
+    return longest
+
+
+def test_runner_heartbeat_alerts_exist_and_page_like_the_backup_alert():
+    rules = _backup_alert_rules("prod")
+    stale = rules["CiRunnerHeartbeatStale"]
+    assert stale["expr"].strip() == f"time() - {RUNNER_METRIC} > 7200"
+    assert stale["for"] == "5m"
+    absent = rules["CiRunnerHeartbeatAbsent"]
+    assert absent["expr"].strip() == f"absent({RUNNER_METRIC})"
+    for name in ("CiRunnerHeartbeatStale", "CiRunnerHeartbeatAbsent"):
+        assert rules[name]["labels"] == rules["BackupStale"]["labels"]
+    assert "svc.sh" in stale["annotations"]["description"]
+
+
+def test_runner_heartbeat_alerts_are_absent_in_lab():
+    assert not [n for n in _backup_alert_rules("lab") if n.startswith("CiRunner")]
+
+
+def test_runner_heartbeat_threshold_outlasts_the_longest_job():
+    # The heartbeat queues behind running jobs on the single runner, so a threshold at or below the
+    # longest job timeout would fire during a legitimate long run.
+    assert _longest_self_hosted_timeout_minutes() * 60 < 7200
+
+
+def test_runner_heartbeat_workflow_runs_on_the_runner_and_writes_the_alerted_metric():
+    wf = _yaml(HEARTBEAT_WORKFLOW)
+    triggers = wf.get("on") or wf.get(True)
+    assert triggers["schedule"] == [{"cron": "*/10 * * * *"}]
+    assert wf["concurrency"] == {"group": "runner-heartbeat", "cancel-in-progress": False}
+    job = wf["jobs"]["heartbeat"]
+    assert job["runs-on"] == ["self-hosted"]
+    run = job["steps"][0]["run"]
+    assert RUNNER_METRIC in run
+    assert "sudo -n tee /var/lib/node_exporter/textfile_collector/ci_runner.prom" in run

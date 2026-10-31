@@ -12,6 +12,7 @@ concurrency:
 jobs:
     apply:
         runs-on: [self-hosted]
+        timeout-minutes: 90
         steps:
             - uses: actions/checkout@v4
 

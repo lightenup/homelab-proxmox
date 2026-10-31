@@ -73,4 +73,33 @@ groups:
           description: >-
             No state_drift.prom was ever collected from pve. Apply
             `host_proxmox.yml --tags state-drift` and check the timer and the textfile directory.
+
+  # Dead-man's switch for the single self-hosted runner (pi-ci): .github/workflows/runner-heartbeat.yml
+  # stamps this metric on pve every 10 minutes while the runner works. 7200 s is longer than the longest
+  # job timeout (90 min) because the heartbeat queues behind running jobs.
+  - name: ci_runner_alerts
+    interval: 30s
+    rules:
+      - alert: CiRunnerHeartbeatStale
+        expr: time() - homelab_ci_runner_last_heartbeat_timestamp_seconds > 7200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "The CI runner has not run a job in 2 hours"
+          description: >-
+            The scheduled `Runner heartbeat` workflow has not completed for 2 hours, longer than any
+            job may run. The pi-ci runner is probably wedged: GitHub can still show it as online while
+            jobs sit queued. On pi-ci: `sudo ./svc.sh status` in the actions-runner directory, then
+            `sudo ./svc.sh stop && sudo ./svc.sh start`. See docs/operations/proxmox-ci.md.
+      - alert: CiRunnerHeartbeatAbsent
+        expr: absent(homelab_ci_runner_last_heartbeat_timestamp_seconds)
+        for: 3h
+        labels:
+          severity: warning
+        annotations:
+          summary: "The CI runner heartbeat has never reported"
+          description: >-
+            No ci_runner.prom was ever collected from pve. Run the `Runner heartbeat` workflow once
+            (workflow_dispatch) and check that the node_exporter textfile directory is writable by ci.
 {% endif %}

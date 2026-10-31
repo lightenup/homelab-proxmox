@@ -79,3 +79,16 @@ act workflow_dispatch -W .github/workflows/proxmox-apply.yml -j apply \
 - **Artifacts permission issues:** Re-run `guardrails.sh ensure-artifacts` or `sudo chown -R ci:ci /var/lib/homelab-proxmox/artifacts`.
 - **Sudo smoke failure:** Re-apply sudoers with `pve-lab --apply-sudoers` and verify `visudo -c` output.
 - **Provisioning timeout:** Inspect evidence pack (qm status/config, cloud-init, network probe logs) under the captured `RUN_ID`.
+
+## Runner health alert (dead-man's switch)
+
+GitHub keeps showing `pi-ci` as online when its listener is wedged, and queued jobs then wait with no alert
+(2026-10-30: CI sat queued 9+ minutes on an "online", idle runner). `.github/workflows/runner-heartbeat.yml`
+runs on the runner every 10 minutes and stamps `homelab_ci_runner_last_heartbeat_timestamp_seconds` on `pve`
+(`ci_runner.prom`, node_exporter textfile collector). Prometheus fires `CiRunnerHeartbeatStale` when the stamp is
+older than 2 hours. That is longer than any job may run, because the heartbeat queues behind running jobs on the
+single runner; every self-hosted job therefore has a `timeout-minutes` (a guardrail test enforces both).
+
+When it fires, on `pi-ci`: `cd ~/actions-runner && sudo ./svc.sh status`, then `sudo ./svc.sh stop && sudo ./svc.sh start`.
+`CiRunnerHeartbeatAbsent` means the file was never written: run the workflow once with `workflow_dispatch`.
+The alert rules reach Prometheus with the next monitoring deploy.

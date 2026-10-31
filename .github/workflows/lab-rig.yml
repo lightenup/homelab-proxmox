@@ -37,6 +37,7 @@ permissions:
 jobs:
   rig:
     runs-on: [self-hosted]
+    timeout-minutes: 90
     env:
       ACTION: ${{ inputs.action }}
       CONFIRM: ${{ inputs.confirm }}

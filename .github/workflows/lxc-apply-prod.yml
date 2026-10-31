@@ -25,6 +25,7 @@ jobs:
   apply_prod:
     name: Apply (PROD)
     runs-on: [self-hosted]
+    timeout-minutes: 60
     steps:
       - name: Fetch promotion metadata artifact
         id: fetch_meta
