@@ -1,7 +1,8 @@
 # 097 memory bake-off harness (2026-10-30)
 
 Reusable harness behind the spike results in [`../097-hermes-long-term-memory.md`](../097-hermes-long-term-memory.md).
-SC-001 asks for the same dataset to be re-run on the LAB rig with the chosen provider; this is it.
+FR-021 makes it the quality gate before a PROD promotion that changes memory (SC-001 to SC-005).
+It runs on the dev Mac: since `067` the LAB rehearsal cannot reach the gateway.
 
 ## What it does
 
