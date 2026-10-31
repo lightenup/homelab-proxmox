@@ -270,142 +270,40 @@ mount | grep nfs
 
 ### Step 7: Restore IaC State Files
 
-**⚠️ IMPORTANT**: As of spec 033-idempotent-rebuild, Terraform state and Ansible inventory are stored on NAS (`/mnt/nas/homelab_ci/infra_state/`) instead of the PVE filesystem.
-
-#### Prerequisites
-
-- NAS mounted on restored PVE host: `/mnt/nas/homelab_ci`
-- Backup archive extracted: `/root/restore-YYYYMMDD/`
-- Verify state directories exist: `ls /mnt/nas/homelab_ci/infra_state/{lab,static}/`
+As of spec 067, production Terraform state is local to `pve` at
+`/var/lib/homelab-proxmox/state/prod/<service>/terraform.tfstate`, and the backup holds it under
+`iac-artifacts/local-state/<service>/`. Lab state is temporary and is not backed up, so there is nothing to
+restore for it.
 
 #### Restore Terraform State
 
-**Lab Environment**:
 ```bash
 # Verify source data in backup
-ls /root/restore-*/iac-artifacts/nas-state/lab/*/terraform.tfstate
+ls /root/restore-*/iac-artifacts/local-state/*/terraform.tfstate
 
-# Sync all lab service state files
+# Restore every service (run as root on the restored PVE host, then fix ownership for ci)
+install -d -o ci -g ci /var/lib/homelab-proxmox/state/prod
 rsync -av --checksum \
-  /root/restore-*/iac-artifacts/nas-state/lab/ \
-  /mnt/nas/homelab_ci/infra_state/lab/
-
-# Verify restoration
-ls -lh /mnt/nas/homelab_ci/infra_state/lab/*/terraform.tfstate
-```
-
-**Production Environment**:
-```bash
-# Verify source data in backup
-ls /root/restore-*/iac-artifacts/nas-state/static/*/terraform.tfstate
-
-# Sync static state separately
-rsync -av --checksum \
-  /root/restore-*/iac-artifacts/nas-state/static/ \
-  /mnt/nas/homelab_ci/infra_state/prod/
-
-# Verify restoration
-ls -lh /mnt/nas/homelab_ci/infra_state/prod/*/terraform.tfstate
-```
-
-#### Restore Ansible Inventory
-
-```bash
-# Lab inventory
-mkdir -p /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated
-cp -v /root/restore-*/iac-artifacts/nas-state/lab/ansible/inventories/generated/hosts.yml \
-  /mnt/nas/homelab_ci/infra_state/lab/ansible/inventories/generated/hosts.yml
-
-# Static inventory
-mkdir -p /mnt/nas/homelab_ci/infra_state/prod/ansible/inventories/generated
-cp -v /root/restore-*/iac-artifacts/nas-state/static/ansible/inventories/generated/hosts.yml \
-  /mnt/nas/homelab_ci/infra_state/prod/ansible/inventories/generated/hosts.yml
+  /root/restore-*/iac-artifacts/local-state/ \
+  /var/lib/homelab-proxmox/state/prod/
+chown -R ci:ci /var/lib/homelab-proxmox/state/prod
 ```
 
 #### Validation
 
-Verify state files are accessible and valid:
 ```bash
-# Check file ownership and permissions
-find /mnt/nas/homelab_ci/infra_state/ -type f -ls
-
-# Validate Terraform state format (example for immich)
-for env in lab static; do
-  for service_dir in /mnt/nas/homelab_ci/infra_state/$env/*/; do
-    [[ -f "${service_dir}terraform.tfstate" ]] || continue
-    service=$(basename "$service_dir")
-    if terraform show -json "${service_dir}terraform.tfstate" > /dev/null 2>&1; then
-      echo "✓ $env/$service: OK"
-    else
-      echo "✗ $env/$service: INVALID STATE"
-    fi
-  done
+for state in /var/lib/homelab-proxmox/state/prod/*/terraform.tfstate; do
+  service=$(basename "$(dirname "$state")")
+  if terraform show -json "$state" > /dev/null 2>&1; then
+    echo "✓ $service: OK"
+  else
+    echo "✗ $service: INVALID STATE"
+  fi
 done
 ```
 
-**Expected Output**:
-```
-✓ lab/immich: OK
-✓ lab/monitoring: OK
-✓ lab/jellyfin: OK
-✓ static/immich: OK
-```
-
-#### Legacy State (Deprecated Path)
-
-If your backup includes legacy state at `iac-artifacts/legacy/terraform/terraform.tfstate`:
-
-```bash
-# This is the old location - should be migrated to NAS paths above
-# Only restore legacy state if NAS state is unavailable
-
-# Restore to old location (deprecated)
-mkdir -p /var/lib/homelab-proxmox/terraform
-cp /root/restore-*/iac-artifacts/legacy/terraform/terraform.tfstate \
-  /var/lib/homelab-proxmox/terraform/
-
-# Then migrate to NAS:
-# DRY_RUN=false ENVIRONMENT=lab bash scripts/lab/migrate-state-to-nas.sh
-```
-
-```bash
-# Navigate to inventory directory
-cd /root/homelab-proxmox/ansible/inventories/generated
-
-# Backup current inventory
-cp hosts.yml hosts.yml.bak 2>/dev/null || true
-
-# Restore inventory
-cp /root/restore-*/iac/ansible/inventories/generated/hosts.yml .
-
-# Verify syntax
-ansible-inventory -i hosts.yml --list > /dev/null
-
-# Validate against reality
-ansible -i hosts.yml all -m ping
-
-# Expected: All hosts respond (or fail with known reason)
-```
-
-**Validation: Zero Drift Check**
-
-```bash
-# Terraform validation
-cd /root/homelab-proxmox/terraform
-terraform plan -detailed-exitcode
-
-# Exit code 0 = no changes (✓ success)
-# Exit code 2 = drift detected (review changes)
-
-# Ansible validation
-cd /root/homelab-proxmox/ansible
-ansible-playbook -i inventories/generated/hosts.yml playbooks/site.yml --check --diff
-
-# Expected: "changed=0" across all plays
-# Any changes indicate drift from backup state
-```
-
----
+Then run the drift check (see [state-drift.md](../runbooks/state-drift.md)) to confirm state matches the
+containers.
 
 ## Verification
 

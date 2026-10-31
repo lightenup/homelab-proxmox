@@ -1,6 +1,6 @@
 # Backlog: the gated pipeline's "LAB" stage deploys to the production address space
 
-**Status**: Ready for spec — found during the `064-llm-router` deploy, 2026-09-19. Direction 2
+**Status**: **DELIVERED 2026-10-31** as [`specs/067-isolated-lab/`](../../specs/067-isolated-lab/) (PRs #302–#311). Original status: found during the `064-llm-router` deploy, 2026-09-19. Direction 2
 (honest labels) partly done 2026-10-28; direction 1 (a real isolated lab) decided 2026-10-30, see
 [Decisions for the spec](#decisions-for-the-spec-2026-10-30). Absorbs [`096`](./096-terraform-state-layout.md).
 **Scope**: every service, not just `064`.

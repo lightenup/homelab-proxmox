@@ -13,7 +13,7 @@ This runbook guides you through **restoring** your homelab infrastructure using 
 
 **What This Does**:
 - ✅ Restores LXC containers from backup archives
-- ✅ Rebuilds infrastructure using NAS-backed Terraform state
+- ✅ Rebuilds infrastructure using the Terraform state on `pve` (`state/prod`; `state/lab` is temporary)
 - ✅ Configures services with environment isolation (lab/prod)
 - ✅ Validates and remediates mount configurations
 - ✅ Executes from laptop (no SSH required after prerequisites)
@@ -41,24 +41,19 @@ Before starting restoration, verify these requirements:
 - [ ] **SSH access to PVE**: `ssh pve` works without password
 - [ ] **Network connectivity**: Laptop on same network as PVE (192.168.1.0/24)
 
-### 2. NAS Infrastructure
+### 2. Terraform state on pve
 
-Verify NAS is accessible and contains state from previous deployment:
+Terraform state is local to `pve` (spec 067), not on the NAS. Verify it exists on the host you are restoring:
 
 ```bash
-# Check NAS directories exist
-ssh pve "ls -ld /mnt/nas/homelab_ci/infra_state/{lab,prod}/"
+ssh pve "ls -d /var/lib/homelab-proxmox/state/prod/*/ | wc -l"   # expect 12 on a healthy host
 
-# Expected output (if restoring existing system):
-# drwxr-xr-x 9 1024 users 4096 /mnt/nas/homelab_ci/infra_state/lab/
-# drwxr-xr-x 6 1024 users 4096 /mnt/nas/homelab_ci/infra_state/prod/
-
-# If directories don't exist, orchestrator will create them during first run
+# Expected: the production services, each with a terraform.tfstate
+# `state/lab` is absent unless a LAB rehearsal is running. That is normal.
 ```
 
-- [ ] **NAS accessible from PVE**: `/mnt/nas/homelab_ci/` mounted
-- [ ] **State directories exist** (or can be created): `lab/` and `prod/`
-- [ ] **Previous state available** (if restoring existing environment)
+- [ ] **State restored on PVE** (from the backup, see [backups-proxmox-config-restore.md](../operations/backups-proxmox-config-restore.md) Step 7)
+- [ ] **NAS mounts** present on PVE for the service data (`/mnt/nas/...`), because bind mounts need them
 
 ### 3. Credentials Required
 
@@ -84,70 +79,17 @@ ssh pve "ls -ld /mnt/nas/homelab_ci/infra_state/{lab,prod}/"
 
 ## Part 1: Laptop Setup (One-Time)
 
-### Step 1.1: Configure NFS Mount
+### Step 1.1: No laptop NFS mount needed
 
-**Reference**: [laptop-nfs-setup.md](./laptop-nfs-setup.md)
-
-> **Important**: macOS autofs uses a **direct map** (`/-`) approach.
-> See [laptop-nfs-setup.md](./laptop-nfs-setup.md) for full details.
-
-**Create autofs direct map** (`/etc/auto_nfs`):
-```bash
-sudo tee /etc/auto_nfs <<'EOF'
-/Volumes/nas/homelab_ci  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_ci
-/Volumes/nas/homelab_dr_test  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_dr_test
-/Volumes/nas/homelab_backups  -fstype=nfs,rw,nfsvers=3,resvport  192.168.1.109:/volume1/homelab_backups
-EOF
-```
-
-> **Warning**: No blank lines in `/etc/auto_nfs` — macOS stops parsing at the first blank line.
-
-**Register direct map in auto_master**:
-```bash
-# Add this line to /etc/auto_master:
-/-    auto_nfs
-```
-
-**Reload automount**:
-```bash
-sudo automount -vc
-```
-
-**Expected output**:
-```
-automount: /net updated
-automount: /home updated
-automount: /Volumes/nas/homelab_ci updated
-automount: /Volumes/nas/homelab_dr_test updated
-automount: /Volumes/nas/homelab_backups updated
-automount: no unmounts
-```
-
-### Step 1.2: Validate NFS Access
+Earlier versions of this runbook mounted `homelab_ci/infra_state` on the laptop. That is gone: state is local to
+`pve`, and state-touching steps run on `pve` as `ci` over SSH. Confirm access instead:
 
 ```bash
-# Test 1: Mount triggers on access
-ls /Volumes/nas/homelab_ci/infra_state/
-
-# Expected: lab/ prod/
+ssh pve 'id && ls /var/lib/homelab-proxmox/state/'
+# Expected: uid=...(ci) and the directory `prod` (plus `lab` only during a LAB run)
 ```
 
-```bash
-# Test 2: Lab state accessible
-ls /Volumes/nas/homelab_ci/infra_state/lab/
-
-# Expected: 6+ directories (homeassistant, immich, jellyfin, monitoring, reverse_proxy, ansible)
-```
-
-```bash
-# Test 3: Write access works
-touch /Volumes/nas/homelab_ci/infra_state/lab/.test-$(date +%s) && \
-  rm /Volumes/nas/homelab_ci/infra_state/lab/.test-*
-
-# Expected: No error
-```
-
-**✅ Checkpoint**: NFS mount configured and working
+**✅ Checkpoint**: SSH access to `pve` as `ci` works
 
 ### Step 1.3: Configure Proxmox API Credentials
 
@@ -180,19 +122,13 @@ curl -k -H "Authorization: PVEAPIToken=$PROXMOX_API_TOKEN_ID=$PROXMOX_API_TOKEN_
 
 **✅ Checkpoint**: API credentials configured and validated
 
-### Step 1.4: Enable NAS State Mode
+### Step 1.4: Select the environment
 
 ```bash
-export USE_NAS_STATE=true
-export ENVIRONMENT=lab
-
-# Verify state library works
-bash -c 'source scripts/lab/lib/state.sh && resolve_state_root'
-
-# Expected: /Volumes/nas/homelab_ci/infra_state/lab
+export ENVIRONMENT=prod   # or lab (only meaningful while a LAB rehearsal runs)
 ```
 
-**✅ Checkpoint**: State library configured
+**✅ Checkpoint**: environment selected
 
 ---
 
@@ -231,29 +167,26 @@ Phase: mounts - Status: completed
 
 ### Step 2.2: Phase 2 - State Library Resolution
 
-**Purpose**: Verify state path resolution works from laptop
+**Purpose**: Verify state path resolution
 
 ```bash
-# Test state paths manually
-USE_NAS_STATE=true ENVIRONMENT=lab bash -c '
+# Run on pve, where the state lives
+ssh pve 'cd ~/homelab-proxmox && ENVIRONMENT=prod bash -c "
   source scripts/lab/lib/state.sh
-  echo "State root: $(resolve_state_root)"
-  echo "Monitoring state: $(get_service_state_path monitoring)"
-  echo "Inventory path: $(get_inventory_path)"
-'
+  echo State root: \$(resolve_state_root prod)
+  echo Monitoring state: \$(get_service_state_path prod monitoring)
+"'
 ```
 
 **Expected Output**:
 ```
-State root: /Volumes/nas/homelab_ci/infra_state/lab
-Monitoring state: /Volumes/nas/homelab_ci/infra_state/lab/monitoring/terraform.tfstate
-Inventory path: /Volumes/nas/homelab_ci/infra_state/lab/ansible/inventories/generated/hosts.yml
+State root: /var/lib/homelab-proxmox/state/prod
+Monitoring state: /var/lib/homelab-proxmox/state/prod/monitoring/terraform.tfstate
 ```
 
 **✅ Validation**:
-- [ ] Paths use `/Volumes/nas/` (macOS detection working)
-- [ ] Environment is `lab`
-- [ ] All functions return expected paths
+- [ ] Paths are under `/var/lib/homelab-proxmox/state/`
+- [ ] The environment segment matches the one you selected
 
 ### Step 2.3: Phase 3 - Restore Phase (LXC Containers)
 
@@ -306,7 +239,7 @@ task rebuild:apply -- --phase services --environment lab
 ```
 [INFO] Phase: services
 [INFO] Processing service: immich (mode: apply)
-[INFO] State path: /Volumes/nas/homelab_ci/infra_state/lab/immich/terraform.tfstate
+[INFO] State path: /var/lib/homelab-proxmox/state/prod/immich/terraform.tfstate
 Terraform initialized
 Terraform apply output...
 Apply complete! Resources: 2 added, 1 changed, 0 destroyed.
@@ -329,18 +262,11 @@ Phase: services - Status: completed
 
 **Common Issues**:
 
-**Issue**: `ERROR: NAS mount not found`
-```bash
-# Fix: Verify NFS mount
-ls /Volumes/nas/homelab_ci/
-sudo automount -vc
-```
-
 **Issue**: `ERROR: Cannot write to state root`
 ```bash
-# Fix: Check NAS permissions
-ls -la /Volumes/nas/homelab_ci/infra_state/lab/
-# Verify write access with test file
+# Fix: state is local to pve; check the directory and its owner
+ssh pve 'ls -ld /var/lib/homelab-proxmox/state /var/lib/homelab-proxmox/state/*'
+# Setup: ansible/playbooks/setup-state-dirs.yml
 ```
 
 **Issue**: `Terraform authentication failed`
@@ -488,7 +414,7 @@ cat reports/services/monitoring.log | tail -50
 
 - [ ] Lab restoration tested successfully first
 - [ ] Prod backup extracted and ready (if doing full restore)
-- [ ] Prod state exists on NAS: `/mnt/nas/homelab_ci/infra_state/prod/`
+- [ ] Prod state exists on PVE: `/var/lib/homelab-proxmox/state/prod/`
 - [ ] Downtime window scheduled (if applicable)
 - [ ] Rollback plan ready
 - [ ] Confirmation you understand prod will be affected
@@ -496,23 +422,12 @@ cat reports/services/monitoring.log | tail -50
 ### Step 3.1: Prod State Path Validation
 
 ```bash
-# Verify prod paths resolve correctly
-USE_NAS_STATE=true ENVIRONMENT=prod bash -c '
-  source scripts/lab/lib/state.sh
-  echo "Prod state root: $(resolve_state_root)"
-  echo "Monitoring state: $(get_service_state_path monitoring)"
-'
-```
-
-**Expected Output**:
-```
-Prod state root: /Volumes/nas/homelab_ci/infra_state/prod
-Monitoring state: /Volumes/nas/homelab_ci/infra_state/prod/monitoring/terraform.tfstate
+ssh pve 'ls /var/lib/homelab-proxmox/state/prod/ | wc -l'
+# Expected: 12
 ```
 
 **✅ Validation**:
-- [ ] Paths use `prod` (not `lab` or `static`)
-- [ ] Environment isolation working
+- [ ] Each service has `state/prod/<service>/terraform.tfstate`
 
 ### Step 3.2: Prod Mounts Validation
 
@@ -545,7 +460,7 @@ task rebuild:plan -- --environment prod --backup-dir /root/restore-YYYYMMDD
 
 **✅ Validation**:
 - [ ] Terraform plans against prod infrastructure
-- [ ] State read from `/Volumes/nas/.../prod/` paths
+- [ ] State read from `/var/lib/homelab-proxmox/state/prod/` paths
 - [ ] Plan shows expected state (no surprises)
 - [ ] No changes applied (plan mode only)
 
@@ -584,7 +499,7 @@ Production Status: OPERATIONAL ✓
 **✅ Validation**:
 - [ ] All phases successful
 - [ ] Production services accessible
-- [ ] State on NAS at `/mnt/nas/homelab_ci/infra_state/prod/`
+- [ ] State on PVE at `/var/lib/homelab-proxmox/state/prod/`
 - [ ] No cross-environment contamination
 
 **Idempotency Test**: Run again:
@@ -601,78 +516,31 @@ Expected: "No changes needed" for all phases.
 
 ### Validation 4.1: Environment Isolation
 
-**Verify lab and prod state completely separate**:
+Lab and prod are separate directories. Lab exists only during a LAB rehearsal, so on a quiet host:
 
 ```bash
-# Check lab state
-ssh pve "ls /mnt/nas/homelab_ci/infra_state/lab/ | wc -l"
-
-# Check prod state
-ssh pve "ls /mnt/nas/homelab_ci/infra_state/prod/ | wc -l"
-
-# Ensure different contents
-ssh pve "diff -r /mnt/nas/homelab_ci/infra_state/lab/ /mnt/nas/homelab_ci/infra_state/prod/ || echo 'Isolated (expected)'"
+ssh pve 'ls /var/lib/homelab-proxmox/state/'      # expect: prod  (lab only while a rehearsal runs)
+ssh pve 'ls /var/lib/homelab-proxmox/lab-scratch/'  # expect: empty
+ssh pve 'sudo pct list | grep -c " lab-"'          # expect: 0
 ```
 
 **✅ Validation**:
-- [ ] Lab and prod directories separate
-- [ ] No accidental cross-environment writes
-- [ ] State files independent
-
-### Validation 4.2: Backward Compatibility (Symlinks)
-
-**Verify GH Actions can still use legacy paths**:
-
-```bash
-# Check symlinks still intact
-ssh pve "ls -la /var/lib/homelab-proxmox/state/services/ | grep '^l' | wc -l"
-
-# Expected: 6 (all services symlinked)
-```
-
-```bash
-# Verify symlink targets correct
-ssh pve "readlink /var/lib/homelab-proxmox/state/services/monitoring"
-
-# Expected: /mnt/nas/homelab_ci/infra_state/lab/monitoring
-```
-
-**Test legacy path access**:
-```bash
-# State accessible through symlink
-ssh pve "cat /var/lib/homelab-proxmox/state/services/monitoring/terraform.tfstate | jq -r .version"
-
-# Expected: State version number (e.g., "4")
-```
-
-**✅ Validation**:
-- [ ] All symlinks present
-- [ ] Symlinks point to lab environment (GH Actions default)
-- [ ] Legacy path access works
-- [ ] GH Actions workflows unaffected
+- [ ] `state/lab` absent, `lab-scratch` empty, no `lab-` containers
+- [ ] The drift check is clean (see [state-drift.md](./state-drift.md))
 
 ### Validation 4.3: State Integrity
 
-**Verify no state corruption**:
+**Verify no state corruption** (terraform runs on `pve`):
 
 ```bash
-# Validate all state files
-for env in lab prod; do
-  for statefile in /Volumes/nas/homelab_ci/infra_state/$env/*/terraform.tfstate; do
-    [[ -f "$statefile" ]] || continue
-    service=$(basename $(dirname "$statefile"))
-    if terraform show -json "$statefile" > /dev/null 2>&1; then
-      echo "✓ $env/$service: Valid"
-    else
-      echo "✗ $env/$service: CORRUPTED"
-    fi
-  done
-done
+ssh pve 'for statefile in /var/lib/homelab-proxmox/state/prod/*/terraform.tfstate; do
+  service=$(basename "$(dirname "$statefile")")
+  if terraform show -json "$statefile" > /dev/null 2>&1; then echo "✓ prod/$service: Valid"; else echo "✗ prod/$service: CORRUPTED"; fi
+done'
 ```
 
 **✅ Validation**:
-- [ ] All state files valid JSON
-- [ ] Terraform can parse all states
+- [ ] All state files parse
 - [ ] No corruption detected
 
 ---
@@ -767,27 +635,16 @@ Your system is now fully operational. The orchestrator can be run again at any t
 
 ## Troubleshooting
 
-### Issue: NFS mount not accessible
+### Issue: Service data mount not accessible
 
 **Symptoms**:
-- `ERROR: NAS mount not found at /Volumes/nas/homelab_ci`
-- State library fails with missing directory error
+- `ERROR: NAS mount not found` on `pve`
 
 **Solutions**:
 ```bash
-# 1. Check mount status
-ls /Volumes/nas/
-
-# 2. Force remount
-sudo automount -uc
-sudo automount -vc
-
-# 3. Test NFS connectivity
+ssh pve 'mount | grep /mnt/nas'
+ssh pve 'sudo systemctl daemon-reload && sudo mount -a'
 showmount -e 192.168.1.109
-
-# 4. Manual mount (temporary)
-sudo mkdir -p /Volumes/nas/homelab_ci
-sudo mount -t nfs -o nfsvers=3,resvport 192.168.1.109:/volume1/homelab_ci /Volumes/nas/homelab_ci
 ```
 
 ### Issue: Terraform authentication failed
@@ -818,41 +675,27 @@ export PROXMOX_API_TOKEN_SECRET='<from Bitwarden>'
 
 **Symptoms**:
 - `ERROR: Cannot write to state root`
-- Permission denied when accessing NAS
 
 **Solutions**:
 ```bash
-# 1. Check NAS permissions
-ls -la /Volumes/nas/homelab_ci/infra_state/
+# 1. Run state-touching steps on pve as ci
+ssh pve 'id; ls -ld /var/lib/homelab-proxmox/state /var/lib/homelab-proxmox/state/*'
 
-# 2. Verify NFS export settings
-# Login to Synology DSM → Control Panel → Shared Folder → homelab_ci → NFS Permissions
-# Ensure your laptop IP has Read/Write access
-
-# 3. Test write access
-touch /Volumes/nas/homelab_ci/infra_state/lab/.test
-rm /Volumes/nas/homelab_ci/infra_state/lab/.test
+# 2. Recreate the directories if they are missing (root Ansible, from the laptop)
+ansible-playbook ansible/playbooks/setup-state-dirs.yml -k
 ```
 
 ### Issue: Wrong environment (lab state accessed in prod mode)
 
 **Symptoms**:
-- Prod rebuild accessing lab services
-- Environment variable mismatch
+- Prod rebuild reading `state/lab`, or the reverse
 
 **Solutions**:
 ```bash
-# 1. Verify environment variable
-echo $ENVIRONMENT
-
-# 2. Explicitly set environment
-export ENVIRONMENT=prod  # or lab
-
-# 3. Check state path resolution
-USE_NAS_STATE=true bash -c 'source scripts/lab/lib/state.sh && resolve_state_root'
-
-# Expected for prod: /Volumes/nas/homelab_ci/infra_state/prod
-# Expected for lab: /Volumes/nas/homelab_ci/infra_state/lab
+echo $ENVIRONMENT                      # must be prod or lab
+export ENVIRONMENT=prod                # explicitly set it
+ssh pve 'cd ~/homelab-proxmox && bash -c "source scripts/lab/lib/state.sh && resolve_state_root prod"'
+# Expected: /var/lib/homelab-proxmox/state/prod
 ```
 
 ### Issue: Evidence artifacts not created
@@ -887,16 +730,14 @@ task rebuild:plan -- --environment lab --backup-dir /root/test --verbose
 
 **Immediate actions**:
 
-1. **Disable NAS state mode**:
+1. **Check state is intact**:
    ```bash
-   unset USE_NAS_STATE
-   # Falls back to legacy paths automatically
+   ssh pve "ls /var/lib/homelab-proxmox/state/prod/"
    ```
 
-2. **Verify symlinks still work**:
+2. **Run the drift check** to see what differs from the containers:
    ```bash
-   ssh pve "ls -la /var/lib/homelab-proxmox/state/services/"
-   # Symlinks preserve backward compatibility
+   ssh pve "sudo systemctl start state-drift-check.service && cat /var/lib/homelab-proxmox/artifacts/state-drift/latest.json"
    ```
 
 3. **Restore from backup** (if state corrupted):

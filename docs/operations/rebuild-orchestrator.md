@@ -65,44 +65,28 @@ Apply (requires confirmation string):
 
 ## State Architecture
 
-### Storage Locations
+Terraform state is **local to the PVE host** (spec 067). It is no longer on the NAS and there is no
+`USE_NAS_STATE` switch.
 
-**NAS-Backed State** (current):
-- Path: `/mnt/nas/homelab_ci/infra_state/<environment>/<service>/terraform.tfstate`
-- Environments: `lab`, `prod` (production)
-- Access:
-  - **PVE**: via `/mnt/nas/homelab_ci` NFS mount
-  - **Laptop**: via `/Volumes/nas/homelab_ci` autofs (see [docs/runbooks/laptop-nfs-setup.md](../../docs/runbooks/laptop-nfs-setup.md))
-  - **GH Actions**: via symlinks at `/var/lib/homelab-proxmox/state/services/<service>/` (transitional)
+- **Production**: `/var/lib/homelab-proxmox/state/prod/<service>/terraform.tfstate`. Real, long-lived. Backed up
+  by `proxmox-config-backup` (the manifest lists `state/prod/<svc>`), and checked for drift by the drift timer
+  (see [docs/runbooks/state-drift.md](../runbooks/state-drift.md)).
+- **Lab**: `/var/lib/homelab-proxmox/state/lab/<service>/terraform.tfstate`. Exists only while a LAB rehearsal
+  runs, under the lock `state/lab/.lock`, and is removed at teardown. It is never backed up.
 
-**Legacy State** (deprecated, backward compatibility only):
-- Path: `/var/lib/homelab-proxmox/state/services/<service>/terraform.tfstate`
-- Used by: GH Actions workflows (via symlinks during transition)
-- Status: Symlinks point to NAS-backed state
-- Removal: After all workflows migrated to USE_NAS_STATE mode
+`ENVIRONMENT` (`lab` or `prod`) selects the directory through `resolve_state_root`. From a laptop, run
+state-touching steps on `pve` as `ci` over SSH; the rebuild orchestrator's `SRV-003` check verifies that the
+local state root is writable. Setup: `ansible/playbooks/setup-state-dirs.yml`.
 
-### Environment Separation
-
-State files are isolated per environment to prevent cross-environment pollution:
-- **Lab**: `infra_state/lab/<service>/` - Testing and development
-- **Production**: `infra_state/prod/<service>/` - Production services
-
-The `ENVIRONMENT` variable must be set correctly to access the appropriate state.
-
-### Enabling NAS State
-
-For services phase execution from laptop:
+Rebuild from a laptop that needs token credentials:
 ```bash
-export USE_NAS_STATE=true
-export ENVIRONMENT=lab  # or static
+export ENVIRONMENT=prod  # or lab
 # Use single quotes to avoid zsh history expansion (!)
 export PROXMOX_API_TOKEN_ID='root@pam!rebuild'
 export PROXMOX_API_TOKEN_SECRET='<secret>'
 
 task rebuild:plan -- --phase services
 ```
-
-Without `USE_NAS_STATE=true`, scripts use legacy paths (backward compatible).
 
 ## Evidence Outputs
 

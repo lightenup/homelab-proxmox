@@ -1,8 +1,10 @@
 # Laptop NFS Mount Setup for Rebuild Orchestrator
 
-**Purpose**: Configure macOS for NFS access to NAS-backed infrastructure state
+**Purpose**: Configure macOS for NFS access to NAS shares (backups, DR tests)
 
-**When Needed**: Before running services phase (D-009) from laptop
+**When Needed**: Only to browse those shares from the laptop. **Not needed for Terraform state.** Since spec
+067, Terraform state is local to `pve` (`/var/lib/homelab-proxmox/state/{prod,lab}`), and state-touching steps
+run on `pve` as `ci` over SSH. There is no `infra_state` share to mount and no `USE_NAS_STATE` switch.
 
 **Related**: [Proxmox API Token Setup](./proxmox-api-token-setup.md)
 
@@ -71,15 +73,7 @@ automount: no unmounts
 ls -la /Volumes/nas/homelab_ci
 ```
 
-Expected: Directory listing showing NAS contents (infra_state/, mutmut-cache/, etc.)
-
-### 5. Test state directory access
-
-```bash
-ls -la /Volumes/nas/homelab_ci/infra_state/lab/
-```
-
-Expected: Service directories (immich, monitoring, reverse_proxy, etc.)
+Expected: Directory listing showing NAS contents (mutmut-cache/, etc.)
 
 ## Troubleshooting
 
@@ -146,43 +140,26 @@ showmount -e 192.168.1.109
 
 ## Validation Tests
 
-Run these tests to confirm setup is working:
-
 ```bash
 # Test 1: Mount auto-triggers on access
-ls /Volumes/nas/homelab_ci/infra_state/lab/ | wc -l
-# Expected: 7 (6 services + ansible directory)
+ls /Volumes/nas/homelab_backups/ | head
+# Expected: the backup directories
 
-# Test 2: Read access works
-cat /Volumes/nas/homelab_ci/infra_state/lab/immich/.gitkeep 2>/dev/null || echo "No .gitkeep yet (OK)"
-# Expected: Either file contents or "No .gitkeep yet"
-
-# Test 3: Write access works (create test file)
-touch /Volumes/nas/homelab_ci/infra_state/lab/.laptop-test-$(date +%s)
+# Test 2: Write access works (create and remove a test file)
+touch /Volumes/nas/homelab_dr_test/.laptop-test-$(date +%s) && rm /Volumes/nas/homelab_dr_test/.laptop-test-*
 # Expected: No error
-
-# Test 4: Cleanup test file
-rm /Volumes/nas/homelab_ci/infra_state/lab/.laptop-test-*
-# Expected: No error
-
-# Test 5: Path matches expected pattern
-echo "Lab state root: /Volumes/nas/homelab_ci/infra_state/lab"
-# Expected: This is the path lib/state.sh will use in macOS mode
 ```
 
-## Usage in Rebuild
+## Terraform state is not on the NAS
 
-After setup, the rebuild orchestrator will automatically use this path:
+State is read and written on `pve`, not through this mount:
 
 ```bash
-# Enable NAS state mode
-export USE_NAS_STATE=true
-
-# Run rebuild (state will be accessed via /Volumes/nas/homelab_ci)
-task rebuild:plan -- --backup-dir /path/to/backup
+ssh pve 'ls /var/lib/homelab-proxmox/state/prod/'
 ```
 
-The state library (`scripts/lab/lib/state.sh`) detects macOS and uses `/Volumes/nas/` instead of `/mnt/nas/`.
+See [docs/operations/rebuild-orchestrator.md](../operations/rebuild-orchestrator.md) (State Architecture) and
+[state-drift.md](./state-drift.md).
 
 ## Removal
 
@@ -205,11 +182,10 @@ sudo automount -vc
 - NFS traffic is unencrypted - only use on trusted networks
 - Consider restricting NAS export to specific laptop MAC address
 - Mount is read/write - be careful with accidental deletions
-- State files may contain infrastructure metadata (not secrets)
 - Ensure laptop firewall allows NFS client traffic
 
 ## References
 
 - macOS autofs: `man auto_master`, `man automount`
 - Synology NFS setup: Control Panel → File Services → NFS
-- Used by: specs/033-idempotent-rebuild (D-002, D-009)
+- Originally added by specs/033-idempotent-rebuild; state moved off the NAS in spec 067
