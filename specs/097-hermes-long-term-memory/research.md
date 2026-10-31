@@ -366,7 +366,7 @@ that verifies it.
     Linux laptop. Repository settings are rejected: `.claude/settings.local.json` applies to
     whichever account opens the repository, including the EY seat on the same Mac.
   - **Guard**: the hook does nothing unless `HOMELAB_MEMORY_CLIENT=claude-code` is set (only the
-    private installation's settings `env` sets it) and `CLAUDE_PROJECT_DIR` is under
+    private installation's hook commands set it) and `CLAUDE_PROJECT_DIR` is under
     `~/Development/private`. A hook entry copied into the EY setup by mistake therefore sends
     nothing.
   - **Gate**: resolved 2026-10-31 by using the private account (spec Assumptions).
