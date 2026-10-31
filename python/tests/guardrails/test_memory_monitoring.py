@@ -139,6 +139,10 @@ def test_memory_writes_stalled() -> None:
     assert 'hindsight_operation_operations_total{job="memory", operation="retain", success="true"}[12h]' in expr
     # An absent counter (no retain since a restart) must count as zero, or the rule never fires.
     assert "or on() vector(0)) == 0" in expr
+    # increase() reads 0 until Prometheus holds a sample from before the window, so on a fresh
+    # scrape (first deploy, a new Prometheus, a renamed job) the rule fired at once although
+    # retains were happening (2026-10-31, T055). It only judges with ~11 of 12 hours of data.
+    assert 'and on() count_over_time(up{job="memory"}[12h]) > 1300' in expr
     assert "and on()" in expr
     assert re.search(r"litellm_deployment_success_responses_total\{[^}]*\}\[12h\]\)\) > 20$", expr)
     # Chats only: the canary, health checks, scout probes and memory's own embed/rerank calls

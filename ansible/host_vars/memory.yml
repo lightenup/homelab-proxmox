@@ -66,8 +66,12 @@ monitoring_contract:
     - alert: MemoryWritesStalled
       expr: |
         (sum(increase(hindsight_operation_operations_total{job="memory", operation="retain", success="true"}[12h])) or on() vector(0)) == 0
+        and on() count_over_time(up{job="memory"}[12h]) > 1300
         and on()
         sum(increase(litellm_deployment_success_responses_total{api_key_alias!~"canary|litellm-internal-health-check|scout_probe|memory"}[12h])) > 20
+      # The count_over_time guard: increase() reads 0 until Prometheus holds a sample from
+      # before the window, so a fresh scrape fired this at once (first deploy, 2026-10-31).
+      # 1300 samples at the 30 s interval is about 10.8 of the 12 hours.
       for: "15m"
       severity: warning
       summary: "Memory: no retains in 12 hours while chats continue"
