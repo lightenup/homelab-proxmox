@@ -43,6 +43,7 @@ jobs:
   setup:
     name: Setup (ref + validations)
     runs-on: [self-hosted]
+    timeout-minutes: 10
     outputs:
       checked_sha: ${{ steps.capture_sha.outputs.checked_sha }}
     steps:
@@ -374,6 +375,7 @@ jobs:
   confidence_suite:
     name: Confidence suite (best-effort)
     runs-on: [self-hosted]
+    timeout-minutes: 60
     needs: [setup, apply_lab, confidence_gate]
     if: ${{ needs.confidence_gate.outputs.run == 'true' }}
     outputs:
@@ -538,6 +540,7 @@ jobs:
   plan_prod:
     name: Plan (PROD)
     runs-on: [self-hosted]
+    timeout-minutes: 30
     needs: [setup]
     if: always()
     outputs:
@@ -721,6 +724,7 @@ jobs:
   summarize_before_approval:
     name: Summary (before approval)
     runs-on: [self-hosted]
+    timeout-minutes: 10
     needs: [setup, apply_lab, confidence_suite, plan_prod]
     if: always()
     outputs:

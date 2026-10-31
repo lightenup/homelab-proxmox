@@ -26,6 +26,7 @@ jobs:
     lab:
         name: Lab Integration (Rebuild-Critical)
         runs-on: [self-hosted]
+        timeout-minutes: 90
         steps:
             - uses: actions/checkout@v4
 

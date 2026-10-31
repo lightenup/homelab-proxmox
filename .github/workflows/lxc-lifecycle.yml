@@ -42,6 +42,7 @@ jobs:
   plan:
     name: Plan (Lifecycle)
     runs-on: [self-hosted]
+    timeout-minutes: 30
     outputs:
       run_id: ${{ steps.capture_run_id.outputs.run_id }}
       destructive: ${{ steps.detect_destructive.outputs.destructive }}
@@ -182,6 +183,7 @@ jobs:
   apply:
     name: Apply (Lifecycle)
     runs-on: [self-hosted]
+    timeout-minutes: 90
     needs: [plan]
     if: needs.plan.result == 'success'
     env:

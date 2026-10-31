@@ -1,0 +1,43 @@
+name: Runner heartbeat
+
+# Dead-man's switch for the single self-hosted runner (pi-ci). GitHub reports the runner "online"
+# even when its listener is wedged, and queued jobs then wait with no alert (2026-10-30: CI sat
+# queued 9+ minutes on an idle, "online" runner). A job that only runs while the runner works
+# stamps a metric on pve; Prometheus alerts when the stamp goes stale (CiRunnerHeartbeatStale in
+# ansible/roles/monitoring_stack/templates/backup_alerts.yml.j2).
+#
+# Runs queue behind other jobs on the single runner, so the alert threshold is longer than the
+# longest job timeout (pinned by python/tests/guardrails/test_alerting_path.py).
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# At most one running and one waiting: a long job on the runner must not build up a backlog.
+concurrency:
+  group: runner-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    name: Stamp heartbeat on pve
+    runs-on: [self-hosted]
+    timeout-minutes: 5
+    steps:
+      - name: Write the heartbeat metric
+        run: |
+          set -euo pipefail
+          ssh_target="ci@${PROXMOX_HOST:-pve}"
+          ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o CheckHostIP=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null"
+          # ci cannot write the textfile directory directly (only the drift service has the group),
+          # so use its passwordless `sudo tee`. The file is a few bytes, written in one call.
+          # shellcheck disable=SC2086
+          ssh ${ssh_opts} "${ssh_target}" 'printf "%s\n" \
+            "# HELP homelab_ci_runner_last_heartbeat_timestamp_seconds Last time the pi-ci runner ran the heartbeat job." \
+            "# TYPE homelab_ci_runner_last_heartbeat_timestamp_seconds gauge" \
+            "homelab_ci_runner_last_heartbeat_timestamp_seconds $(date +%s)" \
+            | sudo -n tee /var/lib/node_exporter/textfile_collector/ci_runner.prom >/dev/null'
