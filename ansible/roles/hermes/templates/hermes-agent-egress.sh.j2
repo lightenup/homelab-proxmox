@@ -21,8 +21,9 @@ ROUTER_PORT="{{ llm_router_port }}"
 PROXY_IP="{{ reverse_proxy_ip }}"
 
 # One accept rule per enabled MCP server, derived from the same list the agent config is
-# rendered from (FR-011) — never hand-listed.
-{% set enabled_mcp_servers = hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | list %}
+# rendered from (FR-011) — never hand-listed. Entries reached through Caddy (`via_proxy`) are
+# covered by rule 6 and get none (097 R-005).
+{% set enabled_mcp_servers = hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | rejectattr('via_proxy', 'true') | list %}
 {% if enabled_mcp_servers | length > 0 %}
 MCP_DESTINATIONS=(
 {% for server in enabled_mcp_servers %}

@@ -470,6 +470,12 @@ Reviewed 2026-10-25 after T062–T066 landed, before any rig is brought up.
   in `PROD_SECRETS` only, and `test_homeassistant_mcp_is_gated_on_prod_in_group_vars` pins the
   gate in `vars.yml`. Cost: Home Assistant tools disappear from the PROD agent between the
   pipeline's LAB apply and its PROD apply (both deploy the same LXC, backlog 067).
+- **Addendum 2026-10-31: the memory MCP key is in every mode (097 R-009).** The `memory` entry
+  renders `AUXILIARY_MCP_MEMORY_API_KEY` from `memory_client_hermes_key` in PROD, the LAB rig and
+  the pipeline LAB stage, and the freeze pins it in all three sets. It adds no new exposure: the
+  memory plugin already holds the same key in `hindsight-config.json` in every mode, the key is
+  classified `internal`, its scope cannot export or wipe the bank, and lab copies reach no
+  memory service (097 R-016: the lab nftables rule and the agent's chain reject it).
 
 ## R-017: `ntfy-acl-check.sh` crosses ntfy's default rate limit (found running T067 on PROD)
 

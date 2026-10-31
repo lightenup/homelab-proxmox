@@ -635,8 +635,8 @@ FR-023, SC-011).
 
 ### Tests for User Story 5
 
-- [ ] T061 [P] [US5] Extend `python/tests/guardrails/test_hermes_env_modes.py`. Add `AUXILIARY_MCP_MEMORY_API_KEY` to the frozen PROD and LAB credential sets (lines about 216–237), with a comment citing 097 R-009.
-- [ ] T062 [P] [US5] Write `python/tests/guardrails/test_hermes_memory_mcp.py`. Render `ansible/roles/hermes/templates/hermes-agent-egress.sh.j2` and `agent-config.yaml.j2` with the memory entry in `hermes_mcp_servers`, and assert:
+- [X] T061 [P] [US5] Extend `python/tests/guardrails/test_hermes_env_modes.py`. Add `AUXILIARY_MCP_MEMORY_API_KEY` to the frozen PROD and LAB credential sets (lines about 216–237), with a comment citing 097 R-009.
+- [X] T062 [P] [US5] Write `python/tests/guardrails/test_hermes_memory_mcp.py`. Render `ansible/roles/hermes/templates/hermes-agent-egress.sh.j2` and `agent-config.yaml.j2` with the memory entry in `hermes_mcp_servers`, and assert:
   - no `MCP_DESTINATIONS` element for a `via_proxy: true` entry;
   - the agent's `mcp_servers.memory.headers.Authorization` equals `Bearer ${AUXILIARY_MCP_MEMORY_API_KEY}`;
   - the Open WebUI connection fact uses `webui_vault_var` (`memory_client_open_webui_key`);
@@ -649,8 +649,8 @@ FR-023, SC-011).
 
 ### Implementation for User Story 5
 
-- [ ] T064 [US5] Add the memory MCP entry to `hermes_mcp_servers` in `ansible/group_vars/services/vars.yml`: `{name: memory, url: "https://memory-api.{{ caddy_base_domain }}/mcp/", auth: bearer, credential_env: AUXILIARY_MCP_MEMORY_API_KEY, vault_var: memory_client_hermes_key, webui_vault_var: memory_client_open_webui_key, via_proxy: true, enabled: true}`. Add a comment explaining both new fields (097 R-005, R-009).
-- [ ] T065 [US5] Support the two new fields in the hermes role.
+- [X] T064 [US5] Add the memory MCP entry to `hermes_mcp_servers` in `ansible/group_vars/services/vars.yml`: `{name: memory, url: "https://memory-api.{{ caddy_base_domain }}/mcp/owner/", auth: bearer, credential_env: AUXILIARY_MCP_MEMORY_API_KEY, vault_var: memory_client_hermes_key, webui_vault_var: memory_client_open_webui_key, via_proxy: true, enabled: true}`. Add a comment explaining both new fields (097 R-005, R-009).
+- [X] T065 [US5] Support the two new fields in the hermes role.
   - **Connection key**: in `ansible/roles/hermes/tasks/main.yml:217-236`, use `item.webui_vault_var | default(item.vault_var | default(item.credential_env | lower))` for the Open WebUI connection key.
   - **Egress rule**: in `ansible/roles/hermes/templates/hermes-agent-egress.sh.j2` (line about 25), filter out `via_proxy` entries from `MCP_DESTINATIONS`. They are covered by rule 6 (reverse proxy :443).
   - **Egress probe**: in the probe list (`ansible/roles/hermes/tasks/main.yml:406-512`), probe a `via_proxy` entry as `reverse_proxy_ip:443`, not as its URL host.
@@ -668,7 +668,7 @@ FR-023, SC-011).
 - [X] T068 [US5] (manual) Deploy `memory`, then `hermes`, then `reverse_proxy` through `Prod 1` → `Prod 2`.
   - **LAB stage**: the UI's lab copy answers `/api/health` and serves `/login` without data. Record its resident memory (quickstart § 2 "memory web UI").
   - **PROD**: run quickstart § 11 steps 1–5.
-- [ ] T069 [US5] (manual) Add the MCP server to the private Claude Code installation only, in local scope for each repository under `~/Development/private` (owner choice 2026-10-31, T048): `claude-private mcp add --scope local --transport http memory https://memory-api.hus-sky.no/mcp/ --header "Authorization: Bearer <key>"`, run in each repository. Never in the EY installation. Document it in the dotfiles README without the key.
+- [ ] T069 [US5] (manual) Add the MCP server to the private Claude Code installation only, in local scope for each repository under `~/Development/private` (owner choice 2026-10-31, T048): `claude-private mcp add --scope local --transport http memory https://memory-api.hus-sky.no/mcp/owner/ --header "Authorization: Bearer <key>"`, run in each repository. Never in the EY installation. Document it in the dotfiles README without the key.
 - [ ] T070 [US5] (manual) Run quickstart § 8, including step 4, the resurrection check. If an edited or invalidated fact comes back after appending to the same session, carry out T071. Otherwise mark T071 "not needed" with the date.
 - [ ] T071 [US5] (conditional on T070) Switch every adapter to one document per turn (research R-012): `document_id = <session>-<turn_index>` in `ansible/roles/hermes/files/open_webui/memory_filter.py` and the dotfiles `claude-memory-hook`, and the plugin's `bank_id_template`/`document_id` setting in `ansible/roles/hermes/templates/hindsight-config.json.j2` if the plugin offers one; otherwise record that limit in research R-012. Then update contracts/turn-format.md and re-run the harness gate (T046).
 - [ ] T072 [US5] (manual) Run quickstart § 6 steps 5–6 (SC-009): set `memory_claude_code_scope: readonly`, deploy `memory`, check; set it to `revoked`, deploy, check; restore `readwrite`. Record the results.

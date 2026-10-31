@@ -66,6 +66,8 @@ SECRET_VAR_NAMES = [
     "ntfy_hermes_token",
     "ntfy_hermes_lab_token",
     "hermes_mcp_homeassistant_key",
+    "memory_client_hermes_key",
+    "memory_client_open_webui_key",
 ]
 
 
@@ -91,6 +93,18 @@ def _base_context() -> dict:
                 "credential_env": "AUXILIARY_MCP_HOMEASSISTANT_API_KEY",
                 "vault_var": "hermes_mcp_homeassistant_key",
                 "enabled": None,
+            },
+            # 097 R-009: enabled in every mode, so its key is in all three frozen sets. Open
+            # WebUI's own key (webui_vault_var) is for the connection fact, never agent.env.
+            {
+                "name": "memory",
+                "url": "https://memory-api.example.invalid/mcp/owner/",
+                "auth": "bearer",
+                "credential_env": "AUXILIARY_MCP_MEMORY_API_KEY",
+                "vault_var": "memory_client_hermes_key",
+                "webui_vault_var": "memory_client_open_webui_key",
+                "via_proxy": True,
+                "enabled": True,
             },
         ],
         # Mirrors hermes_agent_env_passthrough (backlog 088 scout-assess probe).
@@ -223,17 +237,22 @@ PROD_SECRETS = {
     "llm_router_client_scout_probe_key",
     "ntfy_hermes_token",
     "hermes_mcp_homeassistant_key",
+    # 097 R-009: AUXILIARY_MCP_MEMORY_API_KEY, the agent's memory MCP connection. The same key
+    # the memory plugin already holds in hindsight-config.json in every mode (internal class).
+    "memory_client_hermes_key",
 }
 LAB_RIG_SECRETS = {
     "hermes_agent_api_server_key",
     "llm_router_client_hermes_agent_key",
     "llm_router_client_scout_probe_key",
     "ntfy_hermes_lab_token",
+    "memory_client_hermes_key",  # 097 R-009, as above
 }
 PIPELINE_LAB_STAGE_SECRETS = {
     "hermes_agent_api_server_key",
     "llm_router_client_hermes_agent_key",
     "llm_router_client_scout_probe_key",
+    "memory_client_hermes_key",  # 097 R-009, as above
 }
 
 
