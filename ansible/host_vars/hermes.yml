@@ -91,6 +91,23 @@ monitoring_contract:
         from the phone on hermes-in are not being received (spec 095 US3). Messages sent during
         the outage are not replayed. Check ntfy and the reverse proxy, then the agent's egress.
       enabled: true
+    # 097 (research R-015): the memory plugin (hindsight-hermes 1.2.3, __init__.py) logs
+    # `Hindsight retain failed: ...` and `Hindsight recall failed: ...` at WARNING, which
+    # reaches the agent container's stdout. The conversation continues without memory
+    # (FR-015), so the log is the only trace on the Hermes side. A thresholded rule, not an
+    # event rule: disabled until its 7-day baseline passes (T075).
+    - alert: HermesMemoryPluginFailures
+      expr: |
+        sum(count_over_time({env="prod", host="hermes", container="hermes_agent"} |~ "Hindsight (retain|recall) failed" [15m])) > 5
+      for: "0m"
+      severity: warning
+      summary: !unsafe 'Hermes memory recall or retain is failing. Explore: {host="hermes", container="hermes_agent"} |~ "Hindsight (retain|recall) failed"'
+      description: >-
+        More than 5 memory recall or retain failures in 15 minutes from the Hermes agent.
+        Conversations continue without memory. If MemoryDown is not firing, check the Hermes
+        memory key's scope and the reverse proxy route to memory-api.
+      enabled: false
+      disabled_reason: "awaiting 7-day baseline (097)"
 
 # Alloy (spec 092): also collect Hermes's own gateway.log (095 T072). Its INFO lines are the
 # audit trail for inbound messages, approvals, denials and refused commands (research R-008);

@@ -7,3 +7,87 @@ healthcheck_url:
   path: /health
 healthcheck_profile: lan
 healthcheck_expect_status: 200
+
+# monitoring_contract (spec 097 US3, research R-015).
+#
+# scrape_targets: Hindsight serves /metrics on the API port with no key. Prometheus scrapes it
+# directly at this host's ansible_host (memory_ip); the Caddy route is for clients.
+#
+# liveness_targets: the blackbox http_2xx probe of the route every client uses. MemoryDown
+# reads it. /health checks only the database (R-004), so a gateway outage does not fire it.
+#
+# Metric names, read from the PROD endpoint on 2026-10-31 and checked in the 1.1.0-slim source
+# (hindsight_api/metrics.py):
+# - hindsight_async_operations{operation_type, status, tenant}: async operations in a
+#   non-terminal state (pending, processing, failed), refreshed every 30 s. It has no series
+#   at all while no such operation exists, so `> 0` is the whole condition.
+# - hindsight_operation_operations_total{operation, source, success}: one increment per
+#   operation. A client retain shows as operation="retain", source="api".
+monitoring_contract:
+  enabled: true
+  scrape_targets:
+    - job_name: "memory"
+      port: "{{ memory_api_port }}"
+      path: /metrics
+  liveness_targets:
+    - job_name: "memory-health"
+      url: "https://memory-api.{{ caddy_base_domain }}/health"
+      module: http_2xx
+  alert_rules:
+    - alert: MemoryDown
+      expr: |
+        probe_success{job="memory-health"} == 0
+      for: "5m"
+      severity: critical
+      summary: !unsafe "Memory is down on {{ $labels.instance }}"
+      description: !unsafe >-
+        The memory API health probe has failed for 5 minutes. Hermes, Open WebUI and Claude
+        Code keep working without recall or retain (FR-015), and nothing said meanwhile is
+        remembered. Check memory_api and memory_postgres on the memory LXC, then the route.
+    # Async retains that were accepted as queued and then failed (FR-006). Failed operations
+    # stay in the gauge until they are retried, so this fires until the runbook is done.
+    # Retains are operation_type retain, batch_retain (the Hermes plugin's async retain) and
+    # file_convert_retain.
+    - alert: MemoryRetainFailures
+      expr: |
+        sum(hindsight_async_operations{job="memory", status="failed", operation_type=~".*retain"}) > 0
+      for: "30m"
+      severity: warning
+      summary: !unsafe "Memory: {{ $value }} retain operations have failed"
+      description: >-
+        Retain operations have been in the failed state for 30 minutes, so memories that
+        clients were told were queued are not stored. Follow quickstart.md "Runbook: failed
+        retains" in specs/097-hermes-long-term-memory: list the failed operations, fix the
+        cause (usually the gateway or the Mac) and retry them.
+    # Silent write loss: chats happen but the store stops growing. The gateway side counts
+    # client traffic only. The canary, LiteLLM's health checks, the scout probe and memory's
+    # own embed and rerank calls are excluded, or memory would be compared with itself.
+    # `or on() vector(0)` makes an absent counter (no retain since a restart) count as zero.
+    - alert: MemoryWritesStalled
+      expr: |
+        (sum(increase(hindsight_operation_operations_total{job="memory", operation="retain", success="true"}[12h])) or on() vector(0)) == 0
+        and on()
+        sum(increase(litellm_deployment_success_responses_total{api_key_alias!~"canary|litellm-internal-health-check|scout_probe|memory"}[12h])) > 20
+      for: "15m"
+      severity: warning
+      summary: "Memory: no retains in 12 hours while chats continue"
+      description: >-
+        The gateway served more than 20 client requests in the last 12 hours, but memory
+        recorded no successful retain. Memory is up and nothing is being remembered. Check the
+        Hermes agent log for "Hindsight retain failed", the client scopes in clients.json and
+        the memory_api log.
+  # Per-service log error rule (spec 092 pattern). Hindsight's text log format is
+  # `%(asctime)s - %(levelname)s - %(name)s - %(message)s`. Disabled until its 7-day
+  # baseline passes (T075); the threshold is then max(5, 3 * max_15m).
+  log_alert_rules:
+    - alert: MemoryErrorLogs
+      expr: |
+        sum(count_over_time({env="prod", host="memory", container="memory_api"} |~ " - (ERROR|CRITICAL) - " [15m])) > 5
+      for: "0m"
+      severity: warning
+      summary: !unsafe 'memory is logging errors. Explore: {host="memory", container="memory_api"} |~ " - (ERROR|CRITICAL) - "'
+      description: >-
+        More than 5 ERROR/CRITICAL log lines in 15 minutes from memory_api. Grafana ->
+        Explore -> Loki: {host="memory", container="memory_api"} |~ " - (ERROR|CRITICAL) - ".
+      enabled: false
+      disabled_reason: "awaiting 7-day baseline (097)"
