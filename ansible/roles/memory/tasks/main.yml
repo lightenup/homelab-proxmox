@@ -33,7 +33,7 @@
     - hindsight_ext/shim.py
   notify: Restart memory
 
-- name: Deploy server.env and db.env
+- name: Deploy server.env, db.env and ui.env
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "{{ memory_install_dir }}/{{ item }}"
@@ -43,6 +43,7 @@
   loop:
     - server.env
     - db.env
+    - ui.env
   no_log: true
   notify: Restart memory
 
@@ -94,6 +95,18 @@
   retries: 18
   delay: 10
   until: memory_health.status == 200
+  changed_when: false
+
+# R-020: /api/health needs no login. The UI starts after the API is healthy.
+- name: Wait for the memory web UI health endpoint
+  ansible.builtin.uri:
+    url: "http://{{ memory_ip }}:{{ memory_ui_port }}/api/health"
+    method: GET
+    status_code: 200
+  register: memory_ui_health
+  retries: 18
+  delay: 10
+  until: memory_ui_health.status == 200
   changed_when: false
 
 - name: Ensure banks and run the deploy probe

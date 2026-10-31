@@ -85,11 +85,11 @@ Enforced by the validator as an allowlist: an operation not listed for a scope i
 
 | Operation | `readonly` | `readwrite` | `curator` | `admin` |
 |---|---|---|---|---|
-| recall, list memories, list documents, chunks, tags, stats, operation status | yes | yes | yes | yes |
+| recall, list memories, list documents, chunks, tags, stats, operation status, the web UI's read views (timeline, entity graph, entity and feature lists) | yes | yes | yes | yes |
 | retain | no | yes, tag stamped | yes, tag stamped | yes, supplied client tag kept |
-| update memory, invalidate memory, revert | no | yes | yes | yes |
-| delete document, retry operation | no | no | yes | yes |
-| export, import, create bank, bank config, clear bank, delete bank | no | no | no | yes |
+| update memory, invalidate memory, revert, and the graph and vector-index maintenance an edit or delete submits | no | yes | yes | yes |
+| delete document, retry operation, read bank config | no | no | yes | yes |
+| export, import, create bank, change bank config, clear bank, delete bank | no | no | no | yes |
 | webhooks, reflect, consolidation, mental-model create or refresh, directives, reprocess, entity regeneration, clone, knowledge-base writes | no | no | no | no |
 
 ## Web UI login

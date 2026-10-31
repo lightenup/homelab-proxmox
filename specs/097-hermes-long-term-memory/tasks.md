@@ -127,6 +127,16 @@ builds the memory service, which every story needs.
   - Also found: the NAS share needed the same NFS rule as `homelab_hermes` (owner fixed it in DSM);
     `task ansible:mounts` applied nothing (#320); the lifecycle verification step's
     `terraform output` fails on every run (existing, not fixed).
+- **US5 web UI (T063, T066, T067), 2026-10-31**: built before the MCP half of US5, at the owner's
+  request, after a local preview of the stock UI against PROD. Deviation from T066:
+  `scripts/healthcheck/memory.sh` still checks the API only, because `healthcheck.py` takes one
+  URL per host; the UI's `/api/health` is waited on by the role, and the portal tile adds a
+  blackbox probe. The same change allows `submit_async_graph_maintenance` and
+  `submit_async_vector_index_maintenance` for `readwrite` and up (research R-019): an edit or a
+  delete submits them in the caller's context, and refusing them left stale links. The owner's
+  preview also showed the UI's views refused (`get_entity_graph` 113 times, `list_mental_models`,
+  `list_directives`, `list_entities`, `get_memories_timeseries`, `get_bank_config`): the five
+  reads are now allowed for every scope, and reading the bank config for `curator` and up.
 - **Not run locally**: `terraform init/validate`. The local binary is broken, and the provider
   download from a container fails TLS verification behind Zscaler. `terraform fmt -check` passes.
   CI runs `terraform-validate.sh`.
@@ -535,7 +545,7 @@ FR-023, SC-011).
   - the Open WebUI connection fact uses `webui_vault_var` (`memory_client_open_webui_key`);
   - the memory entry's `url` starts with `https://memory-api.` and never contains `:8888` (G1, spec FR-010).
   - Simulate the `set_fact` expression from `ansible/roles/hermes/tasks/main.yml:217-236` in Python.
-- [ ] T063 [P] [US5] Extend `python/tests/guardrails/test_memory_config.py`:
+- [X] T063 [P] [US5] Extend `python/tests/guardrails/test_memory_config.py`:
   - `ui.env.j2` renders `HINDSIGHT_CP_ACCESS_KEY` and `HINDSIGHT_CP_DATAPLANE_API_KEY`, both non-empty, and nothing else secret;
   - the compose `memory_ui` service binds `{{ memory_ip }}:{{ memory_ui_port }}` only, has `mem_limit: 384m`, and sets `HINDSIGHT_CP_DATAPLANE_API_URL=http://memory_api:8888`;
   - the `caddy_services` entry `memory` has `user_facing: true`.
@@ -548,7 +558,7 @@ FR-023, SC-011).
   - **Egress rule**: in `ansible/roles/hermes/templates/hermes-agent-egress.sh.j2` (line about 25), filter out `via_proxy` entries from `MCP_DESTINATIONS`. They are covered by rule 6 (reverse proxy :443).
   - **Egress probe**: in the probe list (`ansible/roles/hermes/tasks/main.yml:406-512`), probe a `via_proxy` entry as `reverse_proxy_ip:443`, not as its URL host.
   - **Preflight**: `ansible/roles/hermes/tasks/preflight.yml` (lines about 146–163) must accept the new optional fields.
-- [ ] T066 [US5] Add the web UI to the memory role (research R-020).
+- [X] T066 [US5] Add the web UI to the memory role (research R-020).
   - **Env file**: create `ansible/roles/memory/templates/ui.env.j2` with `HINDSIGHT_CP_ACCESS_KEY={{ memory_ui_access_key }}` and `HINDSIGHT_CP_DATAPLANE_API_KEY={{ memory_client_control_plane_key }}`. Render it at 0600 with `no_log`.
   - **Compose**: add the `memory_ui` service to `ansible/roles/memory/templates/docker-compose.yml.j2`:
     - `image: memory_ui_image`, `env_file: ui.env`;
@@ -557,7 +567,7 @@ FR-023, SC-011).
     - `depends_on` the healthy `memory_api`.
   - **Preflight**: `ansible/roles/memory/tasks/preflight.yml` already asserts `memory_ui_access_key`. Add a message: "upstream serves the UI open without it".
   - **Health**: extend the health wait in `ansible/roles/memory/tasks/main.yml` and `scripts/healthcheck/memory.sh` to `GET http://{{ memory_ip }}:{{ memory_ui_port }}/api/health`.
-- [ ] T067 [P] [US5] Add the portal entry `{host: memory, ip: "{{ memory_ip }}", port: "{{ memory_ui_port }}", title: "Memory", desc: "Shared AI memory: browse and edit", enabled: true, user_facing: true}` to `caddy_services` in `ansible/group_vars/services/vars.yml`.
+- [X] T067 [P] [US5] Add the portal entry `{host: memory, ip: "{{ memory_ip }}", port: "{{ memory_ui_port }}", title: "Memory", desc: "Shared AI memory: browse and edit", enabled: true, user_facing: true}` to `caddy_services` in `ansible/group_vars/services/vars.yml`.
 - [ ] T068 [US5] (manual) Deploy `memory`, then `hermes`, then `reverse_proxy` through `Prod 1` → `Prod 2`.
   - **LAB stage**: the UI's lab copy answers `/api/health` and serves `/login` without data. Record its resident memory (quickstart § 2 "memory web UI").
   - **PROD**: run quickstart § 11 steps 1–5.

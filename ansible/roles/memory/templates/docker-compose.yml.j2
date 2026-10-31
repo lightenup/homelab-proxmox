@@ -40,3 +40,20 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+
+  # The web UI (R-020, FR-023): its own container, so it shares neither the API's environment
+  # (gateway key, database password) nor its memory budget or restarts. It reaches the API on
+  # the compose network and holds only its login key and the curator key (ui.env).
+  memory_ui:
+    container_name: memory_ui
+    image: {{ memory_ui_image }}
+    env_file: ui.env
+    environment:
+      HINDSIGHT_CP_DATAPLANE_API_URL: http://memory_api:8888
+    ports:
+      - "{{ memory_ip }}:{{ memory_ui_port }}:9999"
+    mem_limit: 384m
+    restart: unless-stopped
+    depends_on:
+      memory_api:
+        condition: service_healthy

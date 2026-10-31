@@ -54,6 +54,10 @@ verdict in `gate.json`):
 | Store | 34 documents, 34 units, every unit tagged `client:hermes`, 0 failed operations |
 | Memory | agent 330 MiB, Hindsight 333 MiB, Postgres 92 MiB at the end of the run |
 
+**Re-run 2026-10-31 15:45** for the US5 web UI policy (maintenance jobs and UI read views; fingerprint
+`df080631…`, `results/2026-10-31-1545-prod-render/`): images, SC-001 (16/16, all 8 volume probes,
+no hand judgement), SC-002, SC-003 (81 embed, 33 rerank, 0 chat) and SC-004 PASS.
+
 SC-005 (cross-client) is US2's harness leg (T045, T046).
 
 Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two
