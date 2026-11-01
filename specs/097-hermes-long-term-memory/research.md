@@ -452,7 +452,11 @@ that verifies it.
   5. Run the probe set from `drill-probes.json` in the archive: up to 3 random active units picked
      at backup time, each stored as `{unit_id, query}`, where the query is the first 200
      characters of the unit's text. Each query is recalled on the restored instance with the
-     admin key and the gateway's embedder, and its unit must be in the top 3 results. The set is
+     admin key and the gateway's embedder, and its unit must be in the top 3 results.
+     **Amended 2026-11-01**: the backup samples up to 10 units and keeps only those whose query
+     ranks them in the top 3 on the live store at backup time. The first drill failed on a probe
+     that ranked 5th of 18 on the live store as well, so random probes could fail a faithful
+     restore. The set is
      generated from the store and lives only in the archive on the NAS. No question about the
      owner is committed to this public repository.
   6. An `always:` block tears everything down.

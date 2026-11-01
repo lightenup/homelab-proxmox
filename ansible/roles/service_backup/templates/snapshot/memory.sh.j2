@@ -21,29 +21,49 @@ print("" if d is None else d)' "$1"
 }
 
 # The restore drill's recall probes (spec 097 T059, research R-014): up to 3 live units of the
-# bank, picked at random, each {unit_id, query} with the first 200 characters of the unit's
-# text as the query. The set exists only inside this archive on the NAS, so no question about
-# the owner is committed to the public repository. An empty bank gives [], and the drill then
+# bank, each {unit_id, query} with the first 200 characters of the unit's text as the query. Up
+# to 10 units are sampled at random, and a unit is kept only if that query ranks it in the top 3
+# on the live store now, the bar the drill applies to the restored copy. A 200-character prefix
+# does not always rank its own unit that high (a shared turn-format prefix, near-duplicates), and
+# such a probe would fail a faithful restore (2026-11-01: rank 5 of 18 live and restored).
+# The set exists only inside this archive on the NAS, so no question about the owner is committed
+# to the public repository. An empty bank, or no unit passing, gives [], and the drill then
 # checks stats only. The list endpoint returns live units only (invalidated ones sit in an
 # archive table) and counts them in `total`; limit=0 returns the count alone.
 write_drill_probes() {
     local list="$API/v1/default/banks/$BANK/memories/list?type=world"
-    local total offset
+    local total offset candidate unit_id kept=0 tried=0
     total=$(api "$list&limit=0" | json_field total)
     : > "$WORK_DIR/.probes"
+    : > "$WORK_DIR/.kept"
     for offset in $(python3 -c 'import random,sys; n=int(sys.argv[1] or 0)
-print(*random.sample(range(n), min(3, n)))' "$total"); do
+print(*random.sample(range(n), min(10, n)))' "$total"); do
         api "$list&limit=1&offset=$offset" >> "$WORK_DIR/.probes"
         echo >> "$WORK_DIR/.probes"
     done
-    python3 -c 'import json,sys
-probes = []
+    while IFS= read -r candidate && [ "$kept" -lt 3 ]; do
+        tried=$((tried + 1))
+        unit_id=$(printf '%s' "$candidate" | json_field unit_id)
+        printf '%s' "$candidate" | python3 -c 'import json,sys
+print(json.dumps({"query": json.load(sys.stdin)["query"], "types": ["world"]}))' > "$WORK_DIR/.query"
+        # A failed recall drops the candidate rather than the backup.
+        if api -X POST -H 'Content-Type: application/json' --data-binary @"$WORK_DIR/.query" \
+                "$API/v1/default/banks/$BANK/memories/recall" 2>/dev/null \
+            | python3 -c 'import json,sys
+ids = [r.get("id") for r in (json.load(sys.stdin).get("results") or [])[:3]]
+sys.exit(0 if sys.argv[1] in ids else 1)' "$unit_id" 2>/dev/null; then
+            printf '%s\n' "$candidate" >> "$WORK_DIR/.kept"
+            kept=$((kept + 1))
+        fi
+    done < <(python3 -c 'import json,sys
 for line in sys.stdin:
     for unit in (json.loads(line).get("items") or []) if line.strip() else []:
         if unit.get("id") and (unit.get("text") or "").strip():
-            probes.append({"unit_id": unit["id"], "query": unit["text"][:200]})
-json.dump(probes, sys.stdout, indent=2)' < "$WORK_DIR/.probes" > "$WORK_DIR/drill-probes.json"
-    rm -f "$WORK_DIR/.probes"
+            print(json.dumps({"unit_id": unit["id"], "query": unit["text"][:200]}))' < "$WORK_DIR/.probes")
+    python3 -c 'import json,sys
+json.dump([json.loads(l) for l in sys.stdin if l.strip()], sys.stdout, indent=2)' < "$WORK_DIR/.kept" > "$WORK_DIR/drill-probes.json"
+    echo "Drill probes: $kept kept of $tried tried (top 3 on the live store)."
+    rm -f "$WORK_DIR/.probes" "$WORK_DIR/.kept" "$WORK_DIR/.query"
 }
 
 snapshot() {
