@@ -42,6 +42,11 @@ FILES = (
     "ansible/roles/memory/templates/clients.json.j2",
     "ansible/roles/memory/defaults/main.yml",
     "ansible/roles/hermes/templates/hindsight-config.json.j2",
+    "ansible/roles/hermes/templates/SOUL.md.j2",
+    # The harness agent's config: memory switches, hook spill limit, tool-loop stop, memory MCP
+    # server. Alignment tests in test_hermes_memory_config.py tie it to agent-config.yaml.j2, so a
+    # change on either side invalidates the evidence (PR #340 review).
+    "docs/backlog/097-spike/runs/prod-render/config.yaml",
     "python/src/homelab_proxmox_orchestrator/memory_access.py",
     "ansible/roles/memory/files/hindsight_ext/shim.py",
 )
@@ -141,3 +146,117 @@ def test_harness_gate_ran_against_this_configuration():
         f"Current: {current}; "
         f"recorded: {sorted(recorded.values()) or 'none'}"
     )
+
+
+# --- SC-001's retrieval leg for preference probes (spec SC-001, amended 2026-11-01) ---
+
+
+def _gate_module():
+    import importlib
+    import sys
+    spike = str(ROOT / "docs" / "backlog" / "097-spike")
+    if spike not in sys.path:
+        sys.path.insert(0, spike)
+    return importlib.import_module("gate")
+
+
+def test_preference_probe_counts_on_a_top_three_recall_and_keeps_the_answer_on_record():
+    gate = _gate_module()
+    pref = {"id": "p16", "kind": "volume-preference", "recall_expect": "spørre først"}
+    plain = {"id": "p9", "kind": "volume-no"}
+    probes = [(pref, False, "a", False), (plain, True, "b", False)]
+    effective, answers = gate.recalled(probes, ['{"probe": "p16", "rank": 2, "top3": true}'])
+    assert [ok for _, ok, _, _ in effective] == [True, True]
+    assert answers == {"p16": False}
+
+
+def test_preference_probe_fails_without_a_top_three_recall_and_is_never_left_unjudged():
+    gate = _gate_module()
+    pref = {"id": "p16", "kind": "volume-preference", "recall_expect": "x"}
+    for lines in ([], ['{"probe": "p16", "rank": 4, "top3": false}'], ['{"probe": "p16", "error": "URLError"}'], ["not json"]):
+        [(_, ok, _, review)] = gate.recalled([(pref, True, "a", True)], lines)[0]
+        assert (ok, review) == (False, False), lines
+
+
+def test_only_probes_with_a_recall_pattern_use_the_retrieval_leg():
+    gate = _gate_module()
+    plain = {"id": "p1", "kind": "update"}
+    effective, answers = gate.recalled([(plain, False, "a", True)], ['{"probe": "p1", "top3": true}'])
+    assert effective == [(plain, False, "a", True)] and answers == {}
+
+
+def test_the_dataset_marks_exactly_the_preference_probe():
+    import json
+    dataset = json.loads((ROOT / "docs" / "backlog" / "097-spike" / "dataset.json").read_text())
+    marked = {p["id"]: p["recall_expect"] for p in dataset["probes"] if p.get("recall_expect")}
+    assert list(marked) == ["p16"]
+    session = next(s for s in dataset["sessions"] if s["id"] == "s9")
+    import re
+    assert re.search(marked["p16"], session["turns"][0], re.I), "the pattern must match the seeded preference"
+
+
+# --- the preference leg measures the injected recall block (PR #340 review) ---
+
+
+def _spike_module(name):
+    import importlib
+    import sys
+    spike = str(ROOT / "docs" / "backlog" / "097-spike")
+    if spike not in sys.path:
+        sys.path.insert(0, spike)
+    return importlib.import_module(name)
+
+
+BLOCK = ("\n[System note: recalled]\n\n# Hindsight Memory (persistent cross-session context)\n"
+         "Use this to answer.\n\n- first fact\n- User: ikke foreslå endringer uten å spørre først\n- third\n")
+
+
+def test_rank_reads_the_items_of_the_injected_block():
+    m = _spike_module("recall_from_injected")
+    assert m.items(BLOCK)[:2] == ["first fact", "User: ikke foreslå endringer uten å spørre først"]
+    assert m.rank(BLOCK, "uten å spørre|spørre først") == 2
+    assert m.rank(BLOCK, "nowhere") is None
+    assert m.items("no recalled items here") == []
+
+
+def test_only_this_runs_first_injected_block_per_probe_counts(tmp_path, capsys):
+    m = _spike_module("recall_from_injected")
+    dataset = tmp_path / "dataset.json"
+    dataset.write_text(json.dumps({"probes": [
+        {"id": "p16", "q": "Router?", "recall_expect": "spørre først"}, {"id": "p1", "q": "Where?"}]}))
+    log = tmp_path / "injected.jsonl"
+    rows = [
+        {"run": "other/probes", "q": "Router?", "context": BLOCK},              # another candidate
+        {"run": "prod-render/probes", "q": "Router?", "context": "\n\n- miss\n- miss\n- miss\n- spørre først"},
+        {"run": "prod-render/probes", "q": "Router?", "context": BLOCK},        # a later request
+    ]
+    log.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+    m.main("prod-render", str(dataset), str(log))
+    [line] = capsys.readouterr().out.splitlines()
+    assert json.loads(line) == {"probe": "p16", "rank": 4, "top3": False, "truncated": False, "source": "injected"}
+
+
+def test_a_probe_without_an_injected_block_is_an_error_line(tmp_path, capsys):
+    m = _spike_module("recall_from_injected")
+    dataset = tmp_path / "dataset.json"
+    dataset.write_text(json.dumps({"probes": [{"id": "p16", "q": "Router?", "recall_expect": "x"}]}))
+    m.main("prod-render", str(dataset), str(tmp_path / "absent.jsonl"))
+    assert json.loads(capsys.readouterr().out) == {"probe": "p16", "error": "no injected recall"}
+
+
+def test_the_proxy_records_injected_recall_only_while_probing(tmp_path, monkeypatch):
+    monkeypatch.setenv("LITELLM_SPIKE_KEY", "test")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "logproxy", ROOT / "docs" / "backlog" / "097-spike" / "llmproxy" / "logproxy.py")
+    proxy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(proxy)
+    monkeypatch.setattr(proxy, "INJECTED", str(tmp_path / "injected.jsonl"))
+    payload = {"messages": [{"role": "system", "content": "s"},
+                            {"role": "user", "content": "Router?\n\n<memory-context>" + BLOCK + "</memory-context>"}]}
+    for phase in ("sessions", "probes"):
+        monkeypatch.setattr(proxy, "run_tag", lambda phase=phase: f"prod-render/{phase}")
+        proxy.record_injected(payload)
+    proxy.record_injected({"messages": [{"role": "user", "content": "no block"}]})
+    [row] = [json.loads(line) for line in (tmp_path / "injected.jsonl").read_text().splitlines()]
+    assert row == {"run": "prod-render/probes", "q": "Router?", "context": BLOCK}

@@ -34,6 +34,15 @@ hermes_agent_image: "nousresearch/hermes-agent:{{ hermes_agent_version }}"
 # agent's UID. The agent's own .env and the read-only config.yaml live in the install dir.
 hermes_agent_data_dir: "{{ hermes_data_dir }}/agent"
 hermes_agent_config_path: "{{ hermes_install_dir }}/agent-config.yaml"
+# Deploy-owned identity file, mounted read-only over $HERMES_HOME/SOUL.md (097 § 8).
+hermes_agent_soul_path: "{{ hermes_install_dir }}/SOUL.md"
+# Written after the one-shot import of the built-in memory files into the shared store; while
+# it exists the import never runs again, so a later forget is never undone by a deploy. In the
+# root-owned install dir: the agent can write its own memories dir, and could delete it there.
+hermes_builtin_memory_import_marker: "{{ hermes_install_dir }}/.builtin-memory-imported"
+# Token shapes stripped from the notes before they reach the shared store: the estate's Alloy
+# redaction patterns, the same set as the Open WebUI filter's SECRETS (a test keeps them equal).
+hermes_builtin_memory_redact_pattern: 'hmem_[A-Za-z0-9_-]{20,}|\bsk-[A-Za-z0-9_-]{8,}|tk_[A-Za-z0-9]{29}|\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|tskey-[A-Za-z0-9_-]+'
 hermes_agent_env_path: "{{ hermes_install_dir }}/agent.env"
 # The image's `hermes` user (s6 drops from root to this UID at startup).
 hermes_agent_uid: 10000

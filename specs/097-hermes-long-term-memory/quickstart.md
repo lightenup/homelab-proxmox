@@ -76,6 +76,41 @@ replaced, the read-only retain refused (403) and webhooks refused for every key
 
 SC-005 (cross-client) is US2's harness leg (T045, T046).
 
+**Runs 2026-11-01** for the Hermes memory fix after § 8 (built-in notes off with a one-shot
+import, owner profile kept, `SOUL.md` routing corrections and forgets to the memory tools, the
+harness agent given the memory MCP server, tool loops hard-stopped; times are Oslo time):
+
+- 11:35 FAILED SC-004: the harness agent had no memory MCP server, so the new `SOUL.md` sent it
+  hunting for the tools (a blocked fetch, a browser download). The harness was aligned with PROD.
+- 12:15 and 12:40 FAILED SC-001 on p16, judged fail by the 2026-10-31 standard. SC-001 was then
+  amended (owner decision): a preference probe counts when its preference is in the top 3 recall
+  results (`recall.jsonl`); the answer is recorded as `preference_answers`.
+- 13:45 FAILED on p15 (cream and cheese for a lactose-intolerant owner) and one 30-minute tool
+  loop; the owner profile was put back on. 14:20 was stopped in a 400-step loop on a malformed
+  `tool_call`. 14:55 FAILED on p2 and p15 with the facts at recall rank 2 and in the profile.
+  Two controls (15:30 without the `SOUL.md` paragraph, 16:10 without the MCP tools, stopped) did
+  not separate a cause.
+- Root cause, from the request bodies in the Mac LiteLLM's spend logs: the recall block was about
+  13,000 characters (the plugin's default `recall_max_tokens`, 4,096), over Hermes's hook-output
+  spill limit of 10,000, so the model saw only its head and tail and facts ranked 2 to 3 were cut.
+  Fix: `recall_max_tokens: 2000` (the contract's figure) and `hooks.output_spill.max_chars: 16000`.
+- 16:40 PASSED (fingerprint `75c651b6…`): SC-001 16/16 with all 8 volume probes (p3 judged pass,
+  "nuts" in "free of nuts and dairy"; p16 counted on recall rank 2, its answer still ignoring the
+  preference), SC-002 to SC-005 and images. LiteLLM logs: 0 of 60 recall-carrying requests cut.
+  One malformed `tool_call` repeated 4 times before the model moved on
+  (`results/2026-11-01-1640-prod-render/`).
+- PR #340 review widened the fingerprint (the harness agent config), so the gate ran again. 17:16
+  FAILED on p10 ("fyller 70. mars 2027" without the day; the prompt held "14 March" uncut, so
+  model output). The agreed single re-run at 17:35 PASSED (fingerprint `a6486e98…`): SC-001 16/16
+  (p15 judged pass, "nøtter"/"melkeprodukter" tripping the keywords; p16 on recall rank 2, its
+  answer now naming the preference), SC-002 to SC-005 and images, 0 tool loops
+  (`results/2026-11-01-1735-prod-render/`).
+- PR #340's second review: the preference leg had queried the store after the probes, when their
+  own answers were in it. It now reads the recall block injected into each probe's first request
+  (`recall_from_injected.py`, `injected.jsonl`). 18:15 PASSED on that measure: p16's preference at
+  rank 2 of an uncut block; SC-001 16/16 with p9 judged pass ("sjøbiolog" for marine biologist);
+  SC-002 to SC-005 and images; 0 tool loops (`results/2026-11-01-1815-prod-render/`).
+
 Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two
 stopped and discarded runs: the first had no valid LiteLLM key and
 showed that `PYTHONPATH` does not reach the gateway (fixed with a `.pth` file, research R-003);
@@ -209,6 +244,27 @@ and got it back.
    more turns, then ask in a new conversation. The parrot is still forgotten. If it comes back,
    switch the adapters to per-turn documents (R-012) and repeat.
 5. Remove every `Probe-*` test fact the same way.
+
+**Run 2026-11-01** (PROD, owner through Hermes): Hermes answered as expected at every step, but
+the store did not change. Hermes corrected and forgot the parrot in its built-in memory files,
+never through `update_memory` or `invalidate_memory`, and the plugin had mirrored the built-in
+"Probe-098" add into the store without mirroring the removal. Afterwards 4 live units still held
+the parrot, and recall ranked them first in English and Norwegian. The test facts were then
+removed with Hermes's key over MCP (`update_memory` dropped the parrot turn from a unit that also
+held a real fact, `invalidate_memory` retired the other 3), after which recall returned no
+parrot. Fix: built-in notes off with a one-shot import (the owner profile stays, so standing
+preferences keep reaching every prompt), and a `SOUL.md` that routes corrections and forgets to
+the memory tools (FR-001, amended). Steps 1–4 are re-run through Hermes after that
+deploy.
+
+**Resurrection observed 2026-11-01** (R-012, step 4): the parrot unit edited with `update_memory`
+in Hermes session `api-ff5d…` came back as a new unit when that Open WebUI chat got another turn.
+The plugin resends the whole session on each retain, the document's original text still held the
+parrot, and the chunk was rebuilt from it. The three invalidated units, in sessions with no new
+turns, stayed retired. An edit to a session that is still in use therefore does not hold: T071.
+The same day the owner had 9 units retired with `invalidate_memory` (the resurrected chunk, a
+stale copy of a replaced built-in note, and 7 agent process narratives), leaving 31 live units;
+the parrot chat is to be deleted in Open WebUI so it cannot rebuild again.
 
 ## 9. Restore drill (US-4, SC-006)
 

@@ -147,6 +147,7 @@ that verifies it.
     | `recall_sync` | `true` |
     | `recall_types` | `["world"]` (chunks are stored as `world`) |
     | `recall_budget` | `mid` |
+    | `recall_max_tokens` | `2000` (added 2026-11-01: the plugin default, 4,096, made a ~13,000-character block that Hermes spilled to a file past `hooks.output_spill.max_chars`, so the model saw only its head and tail; the agent config raises that limit to 16,000) |
     | `retain_every_n_turns` | `1` |
     | `retain_async` | `true` |
     | `retain_tags` | `["client:hermes"]` (cosmetic; R-002 enforces it) |

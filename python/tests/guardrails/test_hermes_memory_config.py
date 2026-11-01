@@ -54,6 +54,7 @@ R003 = {
     "recall_sync": True,
     "recall_types": ["world"],
     "recall_budget": "mid",
+    "recall_max_tokens": 2000,
     "retain_every_n_turns": 1,
     "retain_async": True,
     "retain_tags": ["client:hermes"],
@@ -99,7 +100,8 @@ def render_compose() -> dict:
         "hermes_agent_tool_servers": [],
     }
     ctx["hermes_agent_site_packages"] = defaults["hermes_agent_site_packages"]
-    for name in ("hermes_memory_plugin_dir", "hermes_memory_deps_dir", "hermes_memory_plugin_config_path", "hermes_memory_pth_path"):
+    for name in ("hermes_memory_plugin_dir", "hermes_memory_deps_dir", "hermes_memory_plugin_config_path", "hermes_memory_pth_path",
+                 "hermes_agent_soul_path"):
         ctx[name] = env.from_string(defaults[name]).render(**ctx)
     return yaml.safe_load(env.get_template("docker-compose.yml.j2").render(**ctx))
 
@@ -111,10 +113,60 @@ def _agent_volumes() -> list[str]:
 # --------------------------------------------------------------------------- agent config
 
 
-def test_hindsight_is_the_memory_provider_beside_built_in_memory():
+def test_built_in_notes_are_off_and_the_owner_profile_stays():
+    """097 § 8 (2026-11-01): with the built-in notes on, corrections and forgets went to the built-in
+    files and the shared copy outlived them. The profile stays: without it, standing preferences
+    left open-ended answers (harness p15). USER.md has its own switch."""
     memory = render_agent_config()["memory"]
-    assert memory["memory_enabled"] is True
+    assert memory["memory_enabled"] is False
+    assert memory["user_profile_enabled"] is True
     assert memory["provider"] == "hindsight"
+
+
+def test_soul_keeps_upstream_identity_and_routes_corrections_to_the_memory_tools():
+    soul = Environment(loader=FileSystemLoader(str(HERMES_ROLE / "templates")),
+                       undefined=StrictUndefined).get_template("SOUL.md.j2").render()
+    assert soul.startswith("You are Hermes Agent, built by Nous Research.")
+    for tool in ("update_memory", "invalidate_memory", "list_memories"):
+        assert f"`{tool}`" in soul
+    assert "user profile holds the same thing, change it there too" in " ".join(soul.split())
+    # Only on an explicit request: on ordinary new facts the local model looped on the tools.
+    assert "only when the owner explicitly asks you to correct or forget" in " ".join(soul.split())
+    assert "never say something is forgotten unless those calls succeeded" in " ".join(soul.split())
+
+
+def test_recall_fits_under_the_hook_spill_limit():
+    """2026-11-01: an uncapped recall (~13,000 characters) was spilled to a file and the model saw
+    only its head and tail. 2,000 tokens at up to 8 characters each stays under the limit."""
+    limit = render_agent_config()["hooks"]["output_spill"]["max_chars"]
+    assert render_plugin_config()["recall_max_tokens"] * 8 <= limit
+    harness = yaml.safe_load((ROOT / "docs/backlog/097-spike/runs/prod-render/config.yaml").read_text())
+    assert harness["hooks"]["output_spill"]["max_chars"] == limit
+
+
+def test_tool_loops_hard_stop_in_production_and_the_harness():
+    assert render_agent_config()["tool_loop_guardrails"] == {"hard_stop_enabled": True}
+    harness = yaml.safe_load((ROOT / "docs/backlog/097-spike/runs/prod-render/config.yaml").read_text())
+    assert str(harness["tool_loop_guardrails"]["hard_stop_enabled"]).lower() == "true"
+
+
+def test_soul_is_deploy_owned_and_mounted_read_only():
+    assert "/opt/hermes/SOUL.md:/opt/data/SOUL.md:ro" in _agent_volumes()
+    task = _task("Deploy the agent identity file (read-only mount source)")["ansible.builtin.template"]
+    assert (task["src"], task["dest"], task["owner"]) == ("SOUL.md.j2", "{{ hermes_agent_soul_path }}", "root")
+    tasks = (HERMES_ROLE / "tasks" / "main.yml").read_text()
+    check = next(line.strip()[2:] for line in tasks.splitlines() if "(config[.]yaml|SOUL[.]md)" in line)
+    env = Environment()
+    env.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
+    env.filters["from_yaml"] = yaml.safe_load
+    def confined(volumes):
+        compose = yaml.safe_dump({"services": {"hermes-agent": {"volumes": volumes}}})
+        return env.from_string("{{ " + check + " }}").render(hermes_compose=compose) == "True"
+    assert confined(["/opt/hermes/SOUL.md:/opt/data/SOUL.md:ro", "/opt/hermes/agent-config.yaml:/opt/data/config.yaml:ro"])
+    # PR #340 review: an options suffix must not hide a writable mount.
+    for bad in ("/opt/hermes/SOUL.md:/opt/data/SOUL.md", "/opt/hermes/SOUL.md:/opt/data/SOUL.md:rw",
+                "/x/agent-config.yaml:/opt/data/config.yaml:rw,z"):
+        assert not confined([bad]), bad
 
 
 def test_provider_is_not_enabled_as_a_plugin():
@@ -334,3 +386,138 @@ def test_filter_secret_patterns_are_alloy_redaction_patterns():
     assert r"hmem_[A-Za-z0-9_-]{20,}" in patterns
     for pattern in patterns:
         assert pattern in expressions, pattern
+
+
+# --------------------------------------------------------------------------- built-in memory import
+#
+# 097 § 8: built-in memory is switched off, and its two files are retained once into the shared
+# store. The item builder is rendered with stand-ins for Ansible's filters; the split was also
+# checked with real Ansible on the dev Mac (2026-11-01).
+
+BUILTIN_TASKS = (
+    "Check whether the built-in memory was imported already",
+    "Read the built-in memory notes for the one-shot import (inside the agent, as hermes)",
+    "Build the built-in memory retain items",
+    "Import the built-in memory into the shared memory (agent key, synchronous)",
+    "Count the built-in memory entries in the shared memory after the import",
+    "Assert every built-in memory entry is in the shared memory (097 § 8)",
+    "Mark the built-in memory as imported",
+)
+
+
+def _build_items(files: dict[str, str]) -> list[dict]:
+    import base64
+    import hashlib
+
+    expression = _task("Build the built-in memory retain items")["ansible.builtin.set_fact"]["hermes_builtin_memory_items"]
+    env = Environment(undefined=StrictUndefined)
+    env.filters["b64decode"] = lambda v: base64.b64decode(v).decode()
+    env.filters["hash"] = lambda v, algo: hashlib.new(algo, v.encode()).hexdigest()
+    env.filters["regex_replace"] = lambda v, pattern, repl: re.sub(pattern, repl, v)
+    notes = files.get("MEMORY", "")
+    rendered = env.from_string(expression).render(
+        hermes_builtin_memory_notes={"stdout": base64.b64encode(notes.encode()).decode()},
+        hermes_builtin_memory_redact_pattern=_defaults()["hermes_builtin_memory_redact_pattern"])
+    return ast.literal_eval(rendered)
+
+
+def test_builtin_import_splits_entries_as_hermes_does():
+    items = _build_items({"MEMORY": "Likes tea.\n§\nKey hmem_abcdefghijklmnopqrstuvwxyz0 here.\n§\n\n§\nTwo\nlines."})
+    assert [i["content"] for i in items] == ["Likes tea.", "Key <redacted> here.", "Two\nlines."]
+    for item in items:
+        assert re.fullmatch(r"hermes-builtin-memory-[0-9a-f]{16}", item["document_id"])
+        assert item["context"] == "Hermes built-in memory memory entry"
+        assert item["tags"] == ["builtin-memory", "builtin-target:memory", "origin:hermes-builtin-memory"]
+
+
+def test_builtin_import_of_absent_notes_is_empty():
+    assert _build_items({}) == []
+
+
+def test_builtin_import_is_once_prod_only_private_and_uses_the_agent_key():
+    for name in BUILTIN_TASKS:
+        task = _task(name)
+        assert "(deploy_environment | default('prod')) != 'lab'" in yaml.safe_dump(task["when"]), name
+        if name != BUILTIN_TASKS[0]:
+            assert "not hermes_builtin_memory_marker.stat.exists" in yaml.safe_dump(task["when"]), name
+    for name in BUILTIN_TASKS[1:5]:
+        assert str(_task(name)["no_log"]).lower() == "true", name
+    dumped = yaml.safe_dump(_task(BUILTIN_TASKS[3]))
+    assert "memory_client_hermes_key" in dumped and "memory_admin_key" not in dumped
+    assert _index(BUILTIN_TASKS[5]) < _index(BUILTIN_TASKS[6]), "the marker follows the assert"
+
+
+READER = HERMES_ROLE / "files" / "read_builtin_notes.py"
+
+
+def test_builtin_notes_are_read_inside_the_agent_as_hermes():
+    """PR #340 review: root on the host must never read a path the agent controls."""
+    argv = _task(BUILTIN_TASKS[1])["ansible.builtin.command"]["argv"]
+    assert argv[:5] == ["docker", "exec", "-u", "hermes", "hermes_agent"]
+    assert "read_builtin_notes.py" in argv[7] and argv[8] == "/opt/data/memories/MEMORY.md"
+    assert "failed_when" not in _task(BUILTIN_TASKS[1]) and "ignore_errors" not in _task(BUILTIN_TASKS[1])
+    assert not any("slurp" in str(t) and "memories" in str(t) for t in _tasks())
+
+
+def _read_notes(path):
+    import subprocess
+    import sys
+    return subprocess.run([sys.executable, str(READER), str(path)], capture_output=True, text=True)
+
+
+def test_reader_prints_a_regular_file_and_nothing_when_absent(tmp_path):
+    import base64
+    notes = tmp_path / "MEMORY.md"
+    notes.write_text("Likes tea.\n§\nTwo")
+    out = _read_notes(notes)
+    assert out.returncode == 0 and base64.b64decode(out.stdout).decode() == "Likes tea.\n§\nTwo"
+    absent = _read_notes(tmp_path / "missing.md")
+    assert (absent.returncode, absent.stdout) == (0, "")
+
+
+def test_reader_refuses_a_symlinked_file_or_directory(tmp_path):
+    secret = tmp_path / "host-secret"
+    secret.write_text("root:x:0:0")
+    (tmp_path / "memories").mkdir()
+    (tmp_path / "memories" / "MEMORY.md").symlink_to(secret)
+    linked = _read_notes(tmp_path / "memories" / "MEMORY.md")
+    assert linked.returncode != 0 and "root:x" not in linked.stdout
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "elsewhere" / "MEMORY.md").write_text("x")
+    (tmp_path / "linkdir").symlink_to(tmp_path / "elsewhere")
+    assert _read_notes(tmp_path / "linkdir" / "MEMORY.md").returncode != 0
+
+
+def test_reader_refuses_a_non_regular_file(tmp_path):
+    (tmp_path / "MEMORY.md").mkdir()
+    assert _read_notes(tmp_path / "MEMORY.md").returncode != 0
+
+
+def test_builtin_import_redacts_the_same_token_shapes_as_the_open_webui_filter():
+    """PR #340 review: the import is a retain into the shared store, so it strips what the filter
+    strips (the estate's Alloy redaction patterns)."""
+    assert _defaults()["hermes_builtin_memory_redact_pattern"] == "|".join(_filter_constant("SECRETS"))
+    tokens = ("sk-" + "a" * 20, "tskey-auth-" + "b" * 20, "tk_" + "c" * 29,
+              "eyJ" + "d" * 10 + ".eyJ" + "e" * 10 + "." + "f" * 10, "hmem_" + "g" * 43)
+    [item] = _build_items({"MEMORY": "keys: " + " ".join(tokens)})
+    assert item["content"] == "keys: " + " ".join(["<redacted>"] * len(tokens))
+
+
+def test_builtin_import_marker_is_outside_the_agent_writable_data():
+    marker = _defaults()["hermes_builtin_memory_import_marker"]
+    assert marker.startswith("{{ hermes_install_dir }}/")
+    assert "hermes_agent_data_dir" not in marker
+
+
+def test_harness_agent_memory_switches_match_production():
+    """The harness gate (FR-021) runs its own config.yaml; its memory section must be PROD's."""
+    harness = yaml.safe_load((ROOT / "docs/backlog/097-spike/runs/prod-render/config.yaml").read_text())
+    assert {k: str(v).lower() for k, v in harness["memory"].items()} == {
+        k: str(v).lower() for k, v in render_agent_config()["memory"].items()}
+    compose = (ROOT / "docs/backlog/097-spike/compose.prod-render.yml").read_text()
+    assert "./runs/prod-render/build/SOUL.md:/opt/data/SOUL.md:ro" in compose
+    # SOUL.md names the memory tools, so the harness agent must have them, as PROD does.
+    memory = harness["mcp_servers"]["memory"]
+    assert memory["url"].endswith("/mcp/owner/")
+    assert memory["headers"] == {"Authorization": "Bearer ${AUXILIARY_MCP_MEMORY_API_KEY}"}
+    assert "env_file: ./runs/prod-render/build/agent-mcp.env" in compose

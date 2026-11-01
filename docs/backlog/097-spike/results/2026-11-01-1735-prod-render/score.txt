@@ -1,0 +1,27 @@
+p1  update            PASS  'du bor i trondheim, ola. du flytta dit fra bergen i slutten av oktober 2026.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'a slice of grilled cheese (lactose-free cheese) with a side of fresh fruit — quick, no nuts, and easy to eat a'
+p4  update-no         PASS  'du drikker grønn te om morgenen.'
+p5  fact-en           PASS  'du bruker helix til mesteparten av koden din.'
+p6  fact-no-asked-en  PASS  'du bygger en badstue på hytta din i hemsedal. håkon (bror, elektriker i stavanger) skal hjelpe med det elektri'
+p7  decision-no       PASS  'ifølge det vi bestemt i dag, skal den nattlige backupen kjøre klokka 03:00 — ikke lenger midnatt.\n\njeg fant im'
+p8  negative          PASS  'jeg har ingen informasjon om en katt — minnebanka din inneholder bare hunden tinde (border collie). har du en '
+p9  volume-no         PASS  'ingrid bor i tromsø og jobber som marinbiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march next year (2027), and you're planning a surprise party for her at fjell"
+p11 volume-crossref   PASS  'det er håkon — din bror, elektriker i stavanger — som hjelper med det elektriske i badstuen på hytta i hemseda'
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'bandet heter fjordfunk, og dere øver hver onsdag kl 19 i svartlamon.'
+p14 volume-en         PASS  'your on-call weeks are every fourth week starting 9 november 2026. today is 1 november 2026, so your next on-c'
+p15 volume-constraint PASS  'ramen med kyllingkraft, egg, hvitløk og snittlo — noe du liker, og uten nøtter eller melkeprodukter.'
+p16 volume-preference PASS  "haha, nice try — but i'm not going to do that. i don't have access to your unifi dream router, and even if i c"
+recall: 16/16
+calls final chat 200 27
+calls final embed 200 177
+calls final rerank 200 80
+calls probes chat 200 454
+calls probes embed 200 316
+calls probes rerank 200 166
+calls sessions chat 200 1353
+calls sessions embed 200 556
+calls sessions rerank 200 197
+calls settle chat 200 5

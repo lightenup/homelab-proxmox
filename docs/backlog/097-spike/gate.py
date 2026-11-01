@@ -9,7 +9,13 @@ if its gate.json says pass and carries the current fingerprint, so a matching fi
 failed run is not evidence (PR #318 review).
 
 - SC-001: at least 14 of 16 probes, every volume probe, strictly above the best no-memory
-  baseline (results/none*/score.txt).
+  baseline (results/none*/score.txt). Amended 2026-11-01: a preference probe (one with
+  `recall_expect`) counts as remembered when its preference is in the top 3 of the recall block
+  injected into the probe's first request (results/<cand>/recall.jsonl, recall_from_injected.py),
+  whatever the model then does with it. Measured on what the model was given, not by querying the
+  store afterwards, when the probes' own answers are in it (PR #340 review).
+  Whether the answer honoured it stays on record as `preference_answers`; p16 failed that in 4
+  of 5 judged runs while recall returned the preference.
 - SC-002: every update probe current, the negative probe "don't know".
 - SC-003: the memory server's key made embed and rerank calls only, and at least one.
 - SC-004: no egress attempt beyond the proxy in the compose log.
@@ -32,9 +38,30 @@ def _env(path):
     return dict(line.strip().split("=", 1) for line in open(path) if "=" in line and not line.startswith("#"))
 
 
+def recalled(probes, recall_lines):
+    """The SC-001 outcome per probe: the scored answer, or for a preference probe a top-3 recall.
+    Returns (probes with the effective verdict, {preference probe id: answer verdict})."""
+    top3 = {}
+    for line in recall_lines:
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        top3[r.get("probe")] = r.get("top3") is True
+    effective, answers = [], {}
+    for p, ok, answer, review in probes:
+        if p.get("recall_expect"):
+            answers[p["id"]] = ok
+            ok, review = top3.get(p["id"], False), False
+        effective.append((p, ok, answer, review))
+    return effective, answers
+
+
 def verdict(cand):
     out = f"results/{cand}"
-    probes = score(cand)
+    recall_path = f"{out}/recall.jsonl"
+    probes, preference_answers = recalled(
+        score(cand), open(recall_path) if os.path.exists(recall_path) else [])
     hits = sum(ok for _, ok, _, _ in probes)
     volume = [ok for p, ok, _, _ in probes if p["kind"].startswith("volume")]
     baselines = []
@@ -48,6 +75,7 @@ def verdict(cand):
         "volume": f"{sum(volume)}/{len(volume)}",
         "baseline_max": max(baselines) if baselines else None,
         "unjudged": unjudged,
+        "preference_answers": preference_answers,
     }
     sc001["pass"] = (hits >= 14 and all(volume) and bool(baselines) and hits > max(baselines)
                      and not unjudged)

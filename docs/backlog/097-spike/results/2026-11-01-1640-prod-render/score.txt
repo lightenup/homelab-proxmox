@@ -1,0 +1,28 @@
+p1  update            PASS  'du bor i trondheim — flyttet der dit fra bergen i slutten av oktober 2026.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'a small bowl of miso soup with a soft-boiled egg — quick, japanese, and free of nuts and dairy.'
+p4  update-no         PASS  'du drikker grønn te om morgenen. du sluttet med kaffe i november 2026.'
+p5  fact-en           PASS  'du bruker helix.'
+p6  fact-no-asked-en  PASS  'du bygger en badstue på hytta i hemsedal.\n\nhåkon (bror, elektriker i stavanger) har også lovet å hjelpe med de'
+p7  decision-no       PASS  'den nattlige backupen kjører klokka 03:00 — det er det dere bestemte i dag.\n\nmen som jeg sa før: jeg fant inge'
+p8  negative          PASS  'jeg har ingen informasjon om en katt i minnebankene mine — jeg vet bare om tinde, border collie-hunden din. ha'
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø og jobber som marinebiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march 2027, and you're planning a surprise party at fjellstua."
+p11 volume-crossref   PASS  'broren din håkon, som er elektriker i stavanger, hjelper deg med det elektriske i badstua i påsken.'
+p12 volume-no         PASS  'vinterdekkene er lagret på dekkhotellet i leangen.'
+p13 volume-en         PASS  'fjordfunk — you play bass in it. you rehearse every wednesday at 19:00 in svartlamon.'
+p14 volume-en         PASS  "your next on-call week starts **monday, 9 november 2026** — that's the first week of your every-4th-week rotat"
+p15 volume-constraint PASS  'shrimp tempura over rice with a side of miso soup — japanese, nut-free, and dairy-free.'
+p16 volume-preference FAIL  'jeg kan ikke komme meg inn på routeren din fra her — jeg har ingen tilgang til unifi dream routeren din. men j'
+recall: 15/16
+review p16 sha256=08253815ae5ed4a4b0a02278ed8b82c24241758eabf8fd7a403df4353816c2e4  (keyword miss; judge by hand in overrides.json)
+calls final chat 200 25
+calls final embed 200 143
+calls final rerank 200 63
+calls probes chat 200 391
+calls probes embed 200 254
+calls probes rerank 200 134
+calls sessions chat 200 1215
+calls sessions embed 200 458
+calls sessions rerank 200 163
+calls settle chat 200 4

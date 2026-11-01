@@ -1,0 +1,29 @@
+p1  update            PASS  'trondheim — you moved there from bergen in late october 2026, and your apartment is in møllenberg.'
+p2  fact-no           PASS  'tinde, og hun er en border collie.'
+p3  constraint        PASS  'a slice of wholegrain bread with cream cheese and a handful of cucumber and cherry tomatoes — quick, nut-free,'
+p4  update-no         PASS  'du drikker grønn te om morgenen.'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  PASS  "you're building a sauna (badstue) at your cabin in hemsedal."
+p7  decision-no       PASS  'jeg fant ingen backup-jobb i hermes cron — listen er tom. i går sa du at den skulle flyttes til 03:00, men vi '
+p8  negative          PASS  "i don't have any information about a cat in your profile. i know about your dog tinde (the border collie), but"
+p9  volume-no         PASS  'søsteren din, ingrid, bor i tromsø og jobber som marinbiolog.'
+p10 volume-en         PASS  'berit fyller 70 år 14. mars 2027. dere planlegger en overraskelsesfest for henne på fjellstua.'
+p11 volume-crossref   PASS  'håkon — din bror, elektriker i stavanger — hjelper med det elektriske i badstua i påsken, altså 28. mars – 1. '
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         FAIL  "i don't have any info about a band in my memory — no band name or rehearsal schedule is stored. i can't answer"
+p14 volume-en         PASS  'your next on-call week starts monday, 9 november 2026.'
+p15 volume-constraint PASS  'reisjsteg med svinekotelett og en liten salat — raskt, nøttefritt og laktosefritt.'
+p16 volume-preference FAIL  'ja, jeg kan hjelpe med det — men la meg først være ærlig om hva jeg faktisk kan gjøre her.\n\njeg kjører på en l'
+recall: 14/16
+review p13 sha256=df75adb5f241c569d102e6b851d2741aa60e39ebd864920f42cf0f0cbce9a438  (keyword miss; judge by hand in overrides.json)
+review p16 sha256=da4f818da212c84dda0f88f1233a9a1d8b6527a559ea64af02082af644412ead  (keyword miss; judge by hand in overrides.json)
+calls final chat 200 24
+calls final embed 200 108
+calls final rerank 200 47
+calls probes chat 200 358
+calls probes embed 200 223
+calls probes rerank 200 118
+calls sessions chat 200 1094
+calls sessions embed 200 359
+calls sessions rerank 200 129
+calls settle chat 200 4

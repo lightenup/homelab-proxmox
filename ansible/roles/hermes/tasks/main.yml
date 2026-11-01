@@ -94,6 +94,14 @@
     mode: '0644'
   notify: Restart hermes
 
+- name: Deploy the agent identity file (read-only mount source)
+  ansible.builtin.template:
+    src: SOUL.md.j2
+    dest: "{{ hermes_agent_soul_path }}"
+    owner: root
+    mode: '0644'
+  notify: Restart hermes
+
 # ntfy chunking shim (095 R-018): overrides the bundled ntfy adapter so long replies are split,
 # not cut at 4096 characters. Root-owned and mounted :ro into the agent, so the agent (which can
 # write /opt/data) cannot change gateway-executed code. Remove with T076 (upstream fix released).
@@ -323,12 +331,14 @@
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/hermes-memory-deps') | reject('search', ':ro$') | list | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/hermes/') | reject('search', ':ro$') | list | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/etc/') | reject('search', ':ro$') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/(config[.]yaml|SOUL[.]md)(:|$)') | reject('search', ':ro$') | list | length == 0
     fail_msg: >-
       The rendered hermes-agent service is not confined: it must have no published ports,
       no privileged mode, no cap_add, no Docker socket mount, and sit only on the `agent`
       network (spec 083 FR-004/FR-007/FR-008), and every /opt/data/plugins, /opt/data/hooks,
-      /opt/data/hindsight, /opt/hermes-memory-deps, /opt/hermes and /etc mount must be :ro (095 R-018, R-007,
-      097 R-003). Fix docker-compose.yml.j2 before deploying.
+      /opt/data/hindsight, /opt/hermes-memory-deps, /opt/hermes and /etc mount, and config.yaml
+      and SOUL.md, must be :ro (095 R-018, R-007, 097 R-003, § 8). Fix docker-compose.yml.j2
+      before deploying.
   vars:
     hermes_compose: "{{ hermes_compose_rendered.content | b64decode }}"
 
@@ -693,6 +703,136 @@
   when:
     - (deploy_environment | default('prod')) != 'lab'
     - hermes_owui_memory_import_open | bool
+
+# --- Hermes built-in memory: import once into the shared store (097 § 8) ---
+#
+# The agent config switches the built-in notes off, so MEMORY.md stops reaching the prompt (the
+# owner profile, USER.md, stays on). Its entries are retained once into the shared store, in the plugin's own mirror shape
+# (context "Hermes built-in <target> memory entry", tags builtin-memory and builtin-target:<target>)
+# plus origin:hermes-builtin-memory, with the agent's own key, so they are stamped client:hermes.
+# document_id hermes-builtin-<target>-<sha256 of the entry>: a repeat replaces, never duplicates,
+# and entries the plugin mirrored earlier sit beside them. Entries are split as Hermes splits them
+# (tools/memory_tool_store.py ENTRY_DELIMITER "\n§\n", stripped, empty dropped). The files are
+# left in place. The marker file ends the import for good, so a deploy never brings back an entry
+# the owner has since forgotten. PROD only: the lab copy has no memory service.
+- name: Check whether the built-in memory was imported already
+  ansible.builtin.stat:
+    path: "{{ hermes_builtin_memory_import_marker }}"
+  register: hermes_builtin_memory_marker
+  when: (deploy_environment | default('prod')) != 'lab'
+
+# Read inside the agent container as the hermes user, never as root on the host: the notes sit in
+# the agent-writable data directory, and a symlink there must not reach a host file (PR #340
+# review). The script opens the file without following symlinks, requires a regular file at the
+# expected path, prints it base64-encoded, and prints nothing when it does not exist; anything
+# else fails the deploy, so the marker is never written over notes that were not migrated.
+# USER.md stays in use (agent-config.yaml.j2), so only the notes leave the prompt.
+- name: Read the built-in memory notes for the one-shot import (inside the agent, as hermes)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -u
+      - hermes
+      - hermes_agent
+      - python3
+      - "-c"
+      - "{{ lookup('ansible.builtin.file', 'read_builtin_notes.py') }}"
+      - /opt/data/memories/MEMORY.md
+  register: hermes_builtin_memory_notes
+  changed_when: false
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - not hermes_builtin_memory_marker.stat.exists
+  # The owner's memories: personal, kept out of CI logs.
+  no_log: true
+
+- name: Build the built-in memory retain items
+  ansible.builtin.set_fact:
+    hermes_builtin_memory_items: >-
+      {%- set ns = namespace(items=[]) -%}
+      {%- set target = 'memory' -%}
+      {%- for entry in (hermes_builtin_memory_notes.stdout | default('') | b64decode).split('\n§\n') | map('trim') | reject('equalto', '') -%}
+      {%- set text = entry | regex_replace(hermes_builtin_memory_redact_pattern, '<redacted>') -%}
+      {%- set ns.items = ns.items + [{
+            'content': text,
+            'document_id': 'hermes-builtin-' ~ target ~ '-' ~ (text | hash('sha256'))[:16],
+            'context': 'Hermes built-in ' ~ target ~ ' memory entry',
+            'tags': ['builtin-memory', 'builtin-target:' ~ target, 'origin:hermes-builtin-memory'],
+            'metadata': {'platform': 'hermes', 'origin': 'hermes-builtin-memory'}}] -%}
+      {%- endfor -%}
+      {{ ns.items }}
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - not hermes_builtin_memory_marker.stat.exists
+  no_log: true
+
+- name: Import the built-in memory into the shared memory (agent key, synchronous)
+  ansible.builtin.uri:
+    url: "{{ hermes_memory_api_url }}/v1/default/banks/{{ hermes_memory_bank_id }}/memories"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ memory_client_hermes_key }}"
+    body_format: json
+    body: "{{ {'items': hermes_builtin_memory_items, 'async': false} }}"
+    timeout: 300
+  changed_when: true
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - not hermes_builtin_memory_marker.stat.exists
+    - hermes_builtin_memory_items | length > 0
+  no_log: true
+
+- name: Count the built-in memory entries in the shared memory after the import
+  ansible.builtin.uri:
+    url: "{{ hermes_memory_api_url }}/v1/default/banks/{{ hermes_memory_bank_id }}/documents?q=hermes-builtin-&limit=1000"
+    headers:
+      Authorization: "Bearer {{ memory_client_hermes_key }}"
+    return_content: true
+  register: hermes_builtin_memory_stored
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - not hermes_builtin_memory_marker.stat.exists
+  no_log: true
+
+- name: Assert every built-in memory entry is in the shared memory (097 § 8)
+  ansible.builtin.assert:
+    that:
+      - hermes_builtin_memory_missing | length == 0
+    fail_msg: >-
+      {{ hermes_builtin_memory_missing | length }} of {{ hermes_builtin_memory_items | length }}
+      built-in memory entries are not in the shared memory. The marker is not written, so the
+      next deploy retries the import (097 § 8).
+    success_msg: "Imported {{ hermes_builtin_memory_items | length }} built-in memory entries."
+  vars:
+    hermes_builtin_memory_missing: >-
+      {{ hermes_builtin_memory_items | map(attribute='document_id') | unique
+         | difference(hermes_builtin_memory_stored.json['items'] | map(attribute='id') | list) }}
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - not hermes_builtin_memory_marker.stat.exists
+
+- name: Mark the built-in memory as imported
+  ansible.builtin.copy:
+    dest: "{{ hermes_builtin_memory_import_marker }}"
+    content: "Imported {{ hermes_builtin_memory_items | length }} entries into the shared memory (097 § 8).\n"
+    owner: root
+    mode: '0644'
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - not hermes_builtin_memory_marker.stat.exists
+
+- name: Record the skipped built-in memory import (lab)
+  ansible.builtin.lineinfile:
+    path: "{{ evidence_dir }}/reports/lab/skipped-checks.txt"
+    create: true
+    mode: "0644"
+    line: "hermes: built-in memory import (097 § 8): the memory service is not part of the lab copy"
+  delegate_to: localhost
+  become: false
+  when:
+    - (deploy_environment | default('prod')) == 'lab'
+    - evidence_dir is defined
 
 - name: Record the skipped Open WebUI memories import (lab)
   ansible.builtin.lineinfile:
