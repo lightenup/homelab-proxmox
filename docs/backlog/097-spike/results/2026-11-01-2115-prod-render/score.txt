@@ -1,0 +1,29 @@
+p1  update            PASS  'du bor i trondheim nå — du flyttet dit fra bergen i forrige uke.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'et lite kyllingsuppe-mål med ruller, eller en bolle med edamame og kokt egg — raskt, laktose- og nøttefritt.'
+p4  update-no         PASS  'du drikker grønn te om morgenen — du har sluttet med kaffe.'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  PASS  "you're building a sauna (badstue) at your cabin in hemsedal."
+p7  decision-no       PASS  'den nattlige backupen kjører kl. 03:00 — det var dere som bestemte i går, i stedet for midnatt.\n\njeg har forts'
+p8  negative          PASS  'jeg har ingen opplysninger om en katt i minnebankene eller i samtalehistorikken — du har aldri nevnt en katt, '
+p9  volume-no         PASS  'søsteren din, ingrid, bor i tromsø og jobber som havbiolog.'
+p10 volume-en         PASS  'mamma berit blir 70 år 14. mars 2027, og vi planlegger en overraskelsesselskap for henne på fjellstua.'
+p11 volume-crossref   PASS  'det er broren din håkon — elektriker i stavanger — som skal hjelpe deg med det elektriske i badstuen. han komm'
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'bandet heter fjordfunk, og dere øver hver onsdag kl. 19 i svartlamon.'
+p14 volume-en         PASS  'neste on-call-uke starter 9. november — altså denne uken, siden du er på vakt hver fjerde uke fra 9. november '
+p15 volume-constraint PASS  'sjøgassuppe med shiitake, edamame og kokt egg — japansk, rask, og helt nøtte- og laktosefri.'
+p16 volume-preference FAIL  'jeg kan hjelpe deg med å forslå endringer på unifi dream router-en din — men som du selv sa, så spør jeg allti'
+recall: 15/16
+review p16 sha256=78e3088030e95dd1acd4c5e4a837be1740763ba8da7445c46d930dc64fe447a5  (keyword miss; judge by hand in overrides.json)
+calls durability-dry embed 200 32
+calls final chat 200 30
+calls final embed 200 250
+calls final rerank 200 101
+calls probes chat 200 574
+calls probes embed 200 413
+calls probes rerank 200 217
+calls sessions chat 200 1495
+calls sessions embed 200 695
+calls sessions rerank 200 248
+calls settle chat 200 5

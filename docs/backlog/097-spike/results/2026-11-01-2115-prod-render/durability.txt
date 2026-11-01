@@ -1,0 +1,5 @@
+create bank durability -> 200
+durability hermes: {'retain_status': [200, 200], 'turn_units_found': [True, True], 'retired_stays_retired': True, 'edit_holds': True, 'new_turn_stored': True, 'documents': 3, 'client_tag': ['client:hermes'], 'resend_status': 200, 'resend_adds_nothing': True, 'duplicate_batch_status': 200, 'duplicate_batch_ok': True, 'pass': True}
+durability open-webui: {'retain_status': [200, 200, 200], 'turn_units_found': [True, True], 'retired_stays_retired': True, 'edit_holds': True, 'new_turn_stored': True, 'documents': 3, 'client_tag': ['client:open-webui'], 'pass': True}
+durability claude-code: {'retain_status': [200, 200, 200], 'turn_units_found': [True, True], 'retired_stays_retired': True, 'edit_holds': True, 'new_turn_stored': True, 'documents': 3, 'client_tag': ['client:claude-code'], 'pass': True}
+T071 durability: 3/3 clients, PASS

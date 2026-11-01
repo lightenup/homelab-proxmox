@@ -119,6 +119,9 @@ harness agent given the memory MCP server, tool loops hard-stopped; times are Os
   decision at ranks 1 and 2 of an uncut block and the model saying it does not know); p16's
   preference at rank 1; SC-002 to SC-004 and images; 0 tool loops
   (`results/2026-11-01-2000-prod-render/`).
+- `SOUL.md` forget hygiene (fingerprint `f01a2d13…`): 21:15 PASSED: SC-001 16/16 with all volume
+  probes (p15 judged pass, "nøtte-" tripping the keyword), p16's preference at rank 1, SC-002 to
+  SC-005, T071 3/3, images, 0 tool loops (`results/2026-11-01-2115-prod-render/`).
 
 Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two
 stopped and discarded runs: the first had no valid LiteLLM key and
@@ -282,6 +285,13 @@ the store: the next turn in the step-1 chat rebuilt the retired chunk as a new l
 forget turn itself, naming Probe-100 and Probe-101, was stored like any other turn, so recall
 ranked the turtle first again. Both units were retired by hand. Fix: one document per turn in the
 memory server (T071, research R-012); the owner deletes the test chats in Open WebUI.
+
+**Re-run 2026-11-01 20:30 Oslo time** (after T071 was deployed): the retired turtle from the step-1
+chat stayed retired after more turns there, so one document per turn held. Three units still named
+the turtle: a turn Hermes's forget missed (the owner's misspelt "turle" with a bare "Probe-200"),
+the forget confirmation naming what it had deleted, and a later answer repeating the name it had
+recalled from that confirmation. All three were retired by hand, and `SOUL.md` now tells the agent
+to search with several terms and re-check, and never to repeat the details of something forgotten.
 
 ## 9. Restore drill (US-4, SC-006)
 
