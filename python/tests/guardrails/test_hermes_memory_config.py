@@ -132,7 +132,12 @@ def test_soul_keeps_upstream_identity_and_routes_corrections_to_the_memory_tools
     assert "user profile holds the same thing, change it there too" in " ".join(soul.split())
     # Only on an explicit request: on ordinary new facts the local model looped on the tools.
     assert "only when the owner explicitly asks you to correct or forget" in " ".join(soul.split())
-    assert "never say something is forgotten unless those calls succeeded" in " ".join(soul.split())
+    assert "never say something is forgotten unless those calls succeeded" in " ".join(soul.split()).lower()
+    # 097 § 8 re-run 2026-11-01: the forget confirmation named what was forgotten and was stored,
+    # and a misspelt turn was missed by the search.
+    flat = " ".join(soul.split())
+    assert "do not repeat its names, values or details" in flat
+    assert "likely misspellings" in flat and "run `list_memories` again after retiring" in flat
 
 
 def test_recall_fits_under_the_hook_spill_limit():
