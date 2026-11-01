@@ -235,7 +235,7 @@
         'type': 'mcp',
         'url': item.url,
         'auth_type': item.auth,
-        'key': (lookup('vars', item.vault_var | default(item.credential_env | lower)) if item.auth == 'bearer' and item.enabled else ''),
+        'key': (lookup('vars', item.webui_vault_var | default(item.vault_var | default(item.credential_env | lower))) if item.auth == 'bearer' and item.enabled else ''),
         'config': {'enable': item.enabled},
         'info': {
           'id': item.name | lower | regex_replace('[^a-z0-9]+', '-'),
@@ -446,7 +446,11 @@
            {'name': 'searxng', 'host': 'searxng', 'port': 8080},
            {'name': 'llm-router', 'host': llm_router_ip, 'port': llm_router_port | int}]) -%}
       {%- for s in hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') -%}
+      {%- if s.via_proxy | default(false) -%}
+      {%- set ns.dests = ns.dests + [{'name': 'mcp-' ~ s.name, 'host': reverse_proxy_ip, 'port': 443}] -%}
+      {%- else -%}
       {%- set ns.dests = ns.dests + [{'name': 'mcp-' ~ s.name, 'host': s.url | urlsplit('hostname'), 'port': s.url | urlsplit('port') | int}] -%}
+      {%- endif -%}
       {%- endfor -%}
       {{- ns.dests + [{'name': 'reverse-proxy', 'host': reverse_proxy_ip, 'port': 443}] -}}
     hermes_agent_egress_probe_blocked_full: >-

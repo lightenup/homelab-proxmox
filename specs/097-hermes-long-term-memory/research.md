@@ -332,13 +332,19 @@ that verifies it.
 - **Finding**: `hermes_mcp_servers` renders both the agent's `mcp_servers` and Open WebUI's
   `TOOL_SERVER_CONNECTIONS`, with one key (`main.yml:217-236`).
 - **Decision**:
-  - **Entry**: one `memory` entry with `url: https://memory-api.hus-sky.no/mcp/`, `auth: bearer`,
-    `credential_env: AUXILIARY_MCP_MEMORY_API_KEY` and `vault_var: memory_client_hermes_key`.
+  - **Entry**: one `memory` entry with `url: https://memory-api.hus-sky.no/mcp/owner/`,
+    `auth: bearer`, `credential_env: AUXILIARY_MCP_MEMORY_API_KEY` and
+    `vault_var: memory_client_hermes_key`.
+  - **Bank in the URL** (checked on PROD 2026-10-31): on `/mcp/` a call without `bank_id` goes to
+    a bank named `default` ("Bank 'default' not found"). `/mcp/owner/` binds the bank and drops
+    `bank_id` from all six tool schemas, so a model cannot aim at another bank. The validator
+    allows `update_memory` and `invalidate_memory` for a `readwrite` key.
   - **New fields**: `webui_vault_var: memory_client_open_webui_key` and `via_proxy: true`
     (R-005).
   - **Key selection**: the connection fact uses `webui_vault_var` when set. Every model then sees
     six memory tools, at most 10 (FR-009).
-  - **Claude Code**: adds the same URL as an MCP server in user scope with its own key.
+  - **Claude Code**: adds the same URL as an MCP server in the private installation only, with
+    its own key (T069, amended by T048).
 - **Lab**: the entry stays enabled. The tool connection fails quietly, the egress probe is
   skipped in lab like every other non-searxng destination, and no secret beyond the existing
   internal class is rendered.

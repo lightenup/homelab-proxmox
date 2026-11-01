@@ -12,7 +12,7 @@ as the `control-plane` client.
 | Health | `GET /health` (unauthenticated, database check only) | Monitoring, `scripts/healthcheck/memory.sh` (direct `memory_ip:8888`) |
 | Metrics | `GET /metrics` (direct `memory_ip:8888`, not routed by Caddy) | Prometheus |
 | REST | `/v1/default/banks/{bank}/…` | Adapters, backup, import, restore drill, deploy probe |
-| MCP | `/mcp/` (Streamable HTTP) | Agent, Open WebUI, Claude Code (interactive browse and edit) |
+| MCP | `/mcp/owner/` (Streamable HTTP, bank bound by the path) | Agent, Open WebUI, Claude Code (interactive browse and edit) |
 | Web UI | `https://memory.hus-sky.no` (login), `GET /api/health` unauthenticated on `memory_ip:9999` | Owner's browser; health check |
 
 **Verified locally 2026-10-31** (stock `1.1.0-slim` with the shim): `/health` and `/metrics`

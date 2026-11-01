@@ -230,7 +230,23 @@
       ('{{ item.url }}') does not parse to a host and a port. The egress allowlist derives
       one accept rule per enabled server from this list (FR-008), so an unparseable URL would
       silently drop a required destination.
-  loop: "{{ hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | list }}"
+  loop: "{{ hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | rejectattr('via_proxy', 'true') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# via_proxy entries get no derived egress rule: the agent reaches them through Caddy on
+# reverse_proxy_ip:443 (rule 6), so they must be HTTPS on the default port (097 R-005).
+- name: Assert every MCP server reached through the reverse proxy is HTTPS on port 443
+  ansible.builtin.assert:
+    that:
+      - item.url is url
+      - item.url | urlsplit('scheme') == 'https'
+      - item.url | urlsplit('hostname') | length > 0
+      - item.url | urlsplit('port') is none
+    fail_msg: >-
+      MCP server '{{ item.name }}' is marked via_proxy but its URL ('{{ item.url }}') is not
+      https:// on the default port. The agent's egress allows only reverse_proxy_ip:443 for it.
+  loop: "{{ hermes_mcp_servers | selectattr('via_proxy', 'defined') | selectattr('via_proxy') | list }}"
   loop_control:
     label: "{{ item.name }}"
 

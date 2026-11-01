@@ -426,6 +426,20 @@ hermes_mcp_servers:
     credential_env: AUXILIARY_MCP_HOMEASSISTANT_API_KEY
     vault_var: hermes_mcp_homeassistant_key
     enabled: "{{ hermes_agent_operational | bool }}"
+  # The shared memory's six tools (097 R-009), bank-scoped by the URL so no tool takes a bank_id.
+  # `webui_vault_var`: Open WebUI's connection uses its own memory key, so its edits are stamped
+  # client:open-webui, not client:hermes. `via_proxy: true`: reached through Caddy on
+  # reverse_proxy_ip:443, which the agent's egress already allows (rule 6), so no per-host rule
+  # is derived and the deploy probes the proxy instead (R-005). Stays enabled in lab, where the
+  # connection fails quietly.
+  - name: "memory"
+    url: "https://memory-api.{{ caddy_base_domain }}/mcp/owner/"
+    auth: bearer
+    credential_env: AUXILIARY_MCP_MEMORY_API_KEY
+    vault_var: memory_client_hermes_key
+    webui_vault_var: memory_client_open_webui_key
+    via_proxy: true
+    enabled: true
   # Re-arm when the personal-financial-scenarios image makes its MCP secret configurable
   # (research R-008). At that point this is the one list entry FR-013 promises:
   # - name: "financial-scenario"
