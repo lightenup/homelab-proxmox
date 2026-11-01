@@ -2,6 +2,7 @@
 
 usage: portability.py write|mcp|export|import|recall <bank>
        portability.py clients <bank> --clients hermes,open-webui,claude-code [--secrets PATH]
+       portability.py durability <bank> [--secrets PATH]
 Client A = REST, client B = MCP over Streamable HTTP. HSK = Hindsight API key (env).
 
 `clients` is the FR-021 gate's SC-005 leg (spec 097 T045, research R-017): each client writes a
@@ -11,6 +12,10 @@ recall it (6/6 for three clients). It also checks the server-stamped client tag 
 replaced), a read-only retain refused with 403 (the harness-only `claude-code-ro` client that
 render-prod.sh adds), and a webhook creation and a bank-config change refused with 403. Writes
 /logs/porta/clients.json, which run.sh archives and gate.py reads as SC-005.
+`durability` is the T071 leg (research R-012): per client, in that client's retain shape, a turn
+retired with invalidate_memory and a turn edited with update_memory must stay so after the
+conversation gets another turn, and a Hermes full-session resend and a batch repeating a turn
+must add nothing. Writes /logs/porta/durability.json, which gate.py reads as T071.
 """
 import json
 import os
@@ -156,9 +161,9 @@ def mcp(bank):
         log("REST recall (client A) of B's fact ->", *recall(bank, "Where is my favourite ramen shop?"))
 
 
-def wait_op(bank, op):
+def wait_op(bank, op, key=KEY):
     for _ in range(120):
-        s, b, _ = http("GET", f"/v1/default/banks/{bank}/operations/{op}")
+        s, b, _ = http("GET", f"/v1/default/banks/{bank}/operations/{op}", key=key)
         d = json.loads(b)
         if d.get("status") in ("completed", "failed", "cancelled"):
             return d
@@ -267,7 +272,8 @@ def clients(bank, names, secrets_path, deadline_s=180):
 
     s, b, _ = http("GET", f"/v1/default/banks/{bank}/memories/list?limit=200", key=key["admin"])
     units = json.loads(b).get("items", []) if s == 200 else []
-    stamped = {c: sorted({t for u in units if u.get("document_id") == TURNS[c]["doc"]
+    # One document per turn (T071): a conversation's units sit in <doc>--<hash> documents.
+    stamped = {c: sorted({t for u in units if (u.get("document_id") or "").startswith(TURNS[c]["doc"] + "--")
                           for t in (u.get("tags") or []) if t.startswith("client:")}) for c in names}
     log("client tags per writer:", stamped)
     tags_ok = all(stamped[c] == [f"client:{c}"] for c in names)
@@ -301,6 +307,116 @@ def clients(bank, names, secrets_path, deadline_s=180):
     return result
 
 
+# --- durability: one document per turn (spec 097 T071, research R-012) ------------------------
+
+
+def conversation(session, pairs, update_mode="append", doc=None, start=0):
+    """One retain item in the turn format: `pairs` of (user, assistant) text. Turn n of the
+    conversation has a fixed timestamp, as a real client's message keeps its time when resent."""
+    messages = []
+    for i, (user, reply) in enumerate(pairs, start):
+        ts = f"2026-11-01T12:{i:02d}:00+01:00"
+        messages += [{"role": "user", "content": f"User: {user}", "timestamp": ts},
+                     {"role": "assistant", "content": f"Assistant: {reply}", "timestamp": ts}]
+    item = {"content": json.dumps(messages, ensure_ascii=False), "document_id": doc or session,
+            "context": "durability check", "tags": [f"session:{session}"]}
+    if update_mode:
+        item["update_mode"] = update_mode
+    return item
+
+
+def live_units(bank, key, marker):
+    s, b, _ = http("GET", f"/v1/default/banks/{bank}/memories/list?type=world&limit=200&q={marker}", key=key)
+    return [u for u in (json.loads(b).get("items", []) if s == 200 else []) if marker in (u.get("text") or "")]
+
+
+def settle(bank, key, ops):
+    for op in ops:
+        if op:
+            wait_op(bank, op, key=key)
+    time.sleep(3)
+
+
+def retain_items(bank, key, items):
+    s, b, _ = http("POST", f"/v1/default/banks/{bank}/memories", {"items": items, "async": True}, key=key)
+    return s, (json.loads(b).get("operation_id") if s == 200 else None)
+
+
+def durability_case(bank, client, key, keys_admin):
+    run = uuid.uuid4().hex[:8]
+    session = f"dur-{client}-{run}"
+    t1, t2, t3 = (f"DUR{n}-{run}" for n in (1, 2, 3))
+    pairs = [(f"Note {t1}: the shed key is under the blue pot.", "Noted."),
+             (f"Note {t2}: the boat is moored at pier 4.", "Noted."),
+             (f"Note {t3}: the bins go out on Tuesday.", "Noted.")]
+    # The shape each adapter sends: the Hermes plugin one item with the delta turns, the Open
+    # WebUI filter and the Claude Code hook one item per turn.
+    if client == "hermes":
+        first = [conversation(session, pairs[:2])]
+    else:
+        first = [conversation(session, [pairs[0]]), conversation(session, [pairs[1]], start=1)]
+    statuses, ops = [], []
+    for item in first:
+        st, op = retain_items(bank, key, [item]); statuses.append(st); ops.append(op)
+    settle(bank, key, ops)
+    u1 = (live_units(bank, key, t1) or [None])[0]
+    u2 = (live_units(bank, key, t2) or [None])[0]
+    m = MCP(bank, key=key)
+    m.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "dur", "version": "0"}})
+    m.call("notifications/initialized", notify=True)
+    if u1:
+        m.call("tools/call", {"name": "invalidate_memory", "arguments": {"memory_id": u1["id"], "reason": "durability check"}})
+    edited = f"Note {t2}-EDITED: the boat is moored at pier 9."
+    if u2:
+        m.call("tools/call", {"name": "update_memory", "arguments": {"memory_id": u2["id"], "text": edited}})
+    st, op = retain_items(bank, key, [conversation(session, [pairs[2]], start=2)]); statuses.append(st)
+    settle(bank, key, [op])
+    result = {"client": client, "retain_status": statuses, "turn_units_found": [bool(u1), bool(u2)]}
+    result["retired_stays_retired"] = bool(u1) and not live_units(bank, key, t1)
+    after2 = live_units(bank, key, t2)
+    result["edit_holds"] = bool(u2) and [u["id"] for u in after2] == [u2["id"]] and "EDITED" in after2[0]["text"]
+    result["new_turn_stored"] = bool(live_units(bank, key, t3))
+    s, b, _ = http("GET", f"/v1/default/banks/{bank}/documents?q={session}&limit=50", key=keys_admin)
+    docs = [d for d in (json.loads(b).get("items", []) if s == 200 else []) if d["id"].startswith(session + "--")]
+    result["documents"] = len(docs)
+    result["client_tag"] = sorted({t for d in docs for t in d.get("tags", []) if t.startswith("client:")})
+    checks = ["retired_stays_retired", "edit_holds", "new_turn_stored"]
+    if client == "hermes":
+        # The plugin's legacy path resends the whole session under a per-process document id with
+        # no update_mode; with turn keys that is an identical replace, so nothing comes back.
+        st, op = retain_items(bank, key, [conversation(session, pairs, update_mode=None, doc=f"{session}-1730000000")])
+        settle(bank, key, [op])
+        result["resend_status"] = st
+        result["resend_adds_nothing"] = (st == 200 and not live_units(bank, key, t1)
+                                         and len(live_units(bank, key, t2)) == 1 and len(live_units(bank, key, t3)) == 1)
+        checks.append("resend_adds_nothing")
+        # Hindsight refuses duplicate document ids in one batch; the shim drops repeats.
+        st, op = retain_items(bank, key, [conversation(session, [pairs[2]], start=2),
+                                          conversation(session, [pairs[2]], start=2)])
+        settle(bank, key, [op])
+        result["duplicate_batch_status"] = st
+        result["duplicate_batch_ok"] = st == 200 and len(live_units(bank, key, t3)) == 1
+        checks.append("duplicate_batch_ok")
+    result["pass"] = (all(v == 200 for v in statuses) and all(result[c] for c in checks)
+                      and result["documents"] == 3 and result["client_tag"] == [f"client:{client}"])
+    log(f"durability {client}:", {k: v for k, v in result.items() if k != "client"})
+    return result
+
+
+def durability(bank, secrets_path):
+    keys = dict(line.strip().split("=", 1) for line in open(secrets_path) if "=" in line)
+    admin = keys[key_var("admin")]
+    s, _, _ = http("PUT", f"/v1/default/banks/{bank}", {"name": bank}, key=admin)
+    log("create bank", bank, "->", s)
+    cases = [durability_case(bank, c, keys[key_var(c)], admin) for c in ("hermes", "open-webui", "claude-code")]
+    result = {"bank": bank, "cases": cases, "pass": all(c["pass"] for c in cases)}
+    with open(f"{OUT}/durability.json", "w") as f:
+        json.dump(result, f, indent=1, ensure_ascii=False)
+        f.write("\n")
+    log(f"T071 durability: {sum(c['pass'] for c in cases)}/{len(cases)} clients, {'PASS' if result['pass'] else 'FAIL'}")
+    return result
+
+
 def option(name, default):
     return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
 
@@ -310,4 +426,6 @@ if cmd == "clients":
     outcome = clients(bank, option("--clients", "hermes,open-webui,claude-code").split(","),
                       option("--secrets", "/run/harness/secret.env"))
     sys.exit(0 if outcome["pass"] else 1)
+if cmd == "durability":
+    sys.exit(0 if durability(bank, option("--secrets", "/run/harness/secret.env"))["pass"] else 1)
 {"write": write, "mcp": mcp, "export": export, "import": import_, "recall": recall_all}[cmd](bank)

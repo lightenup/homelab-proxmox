@@ -111,6 +111,34 @@
         "answer_sha256": "2c85b1c163777b4a59dac04b5f0f7d57cc44dca1ee42102b6c15cbfafeb12638",
         "why": "2026-11-01 run (PR #340 second review): 'Ingrid bor i Tromsø, og hun jobber som sjøbiolog'; 'sjøbiolog' is Norwegian for marine biologist, outside the keyword list"
       }
+    ],
+    "p4": [
+      {
+        "pass": true,
+        "answer_sha256": "af04d7d44d202943ba0aa41ebe3bc432cacfe5c71e66e09ecd590d6e33f5c873",
+        "why": "2026-11-01 run (T071 per-turn documents): green tea now, coffee ('flat white med havremelk') named only as what was given up"
+      }
+    ],
+    "p6": [
+      {
+        "pass": true,
+        "answer_sha256": "25b63f859f6c79c37c1066fe5d49b20d469b57f9578346f08a495c90197915fc",
+        "why": "2026-11-01 run (T071 per-turn documents): 'badstua ... i Hemsedal'; the keyword list has 'badstue' and not the definite 'badstua'"
+      }
+    ],
+    "p7": [
+      {
+        "pass": false,
+        "answer_sha256": "59b1bc75d36fce3a06e70e048b08bc70f50b269f7d60046b1de08e4d5d6c3911",
+        "why": "2026-11-01 run (T071 per-turn documents): says it does not know, while the uncut injected block held the 03:00 decision at ranks 1 and 2 (injected.jsonl): model, not retrieval"
+      }
+    ],
+    "p8": [
+      {
+        "pass": true,
+        "answer_sha256": "4064a0a281ebcf59dc5ec5c95f834fb59d43cd0a60639a92e984fc01b904c1a1",
+        "why": "2026-11-01 run (T071 per-turn documents): 'jeg har ikke noen opplysninger om en katt'; 'ikke noen opplysninger' is not in the keyword list"
+      }
     ]
   }
 }

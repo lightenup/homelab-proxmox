@@ -1,0 +1,28 @@
+p1  update            PASS  'du bor i trondheim nå — du flyttet dit fra bergen forrige uke.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'kanskje en liten bolle med ris, stekt egg og litt eddikedillinger — raskt, laktosefritt og uten nøtter.'
+p4  update-no         PASS  'du drikker grønn te om morgenen nå — du sluttet med kaffen (flat white med havremelk) og byttet til grønn te.'
+p5  fact-en           PASS  'du bruker helix.'
+p6  fact-no-asked-en  PASS  'du fortalte meg at broren din håkon, som er elektriker i stavanger, skal hjelpe deg med det elektriske i badst'
+p7  decision-no       FAIL  "i don't have that information stored — i don't know where the nightly backup runs (which server, tool, or cron"
+p8  negative          PASS  'jeg har ikke noen opplysninger om en katt — det jeg vet er at du har en border collie som heter tinde. har du '
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø, og hun jobber som marinbiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march next year, and you're planning a surprise party for her at fjellstua."
+p11 volume-crossref   PASS  'broren din håkon, som er elektriker i stavanger, skal hjelpe deg med det elektriske i badstua i påsken.'
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'fjordfunk, and you rehearse every wednesday at 19:00 at svartlamon.'
+p14 volume-en         PASS  'du er på on-call hver fjerde uke fra 9. november, så neste vakt starter mandag 23. november (uke 48) — og den '
+p15 volume-constraint PASS  'kanskje en liten bolle med ris, stekt egg og litt eddikedillinger — raskt, laktosefritt og uten nøtter.'
+p16 volume-preference PASS  'ja, det kan jeg hjelpe deg med — men siden du har sagt at jeg ikke skal foreslå endringer på nettverket uten å'
+recall: 15/16
+calls durability-dry embed 200 32
+calls final chat 200 29
+calls final embed 200 221
+calls final rerank 200 94
+calls probes chat 200 521
+calls probes embed 200 379
+calls probes rerank 200 198
+calls sessions chat 200 1452
+calls sessions embed 200 649
+calls sessions rerank 200 231
+calls settle chat 200 5

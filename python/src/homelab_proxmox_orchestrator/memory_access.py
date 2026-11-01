@@ -249,6 +249,72 @@ def rewrite_retain_tags(client: Client, items: list[dict[str, Any]]) -> list[dic
     return out
 
 
+SESSION_TAG_PREFIX = "session:"
+
+
+def _message_array(content: Any) -> list[dict[str, Any]] | None:
+    """The turn-format message list in a retain item's content, or None for any other content."""
+    if not isinstance(content, str):
+        return None
+    try:
+        messages = json.loads(content)
+    except ValueError:
+        return None
+    if (isinstance(messages, list) and messages
+            and all(isinstance(m, dict) and isinstance(m.get("role"), str) for m in messages)):
+        return messages
+    return None
+
+
+def _turns(messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Group messages into turns: a new turn starts at a user message after a reply."""
+    turns: list[list[dict[str, Any]]] = []
+    for message in messages:
+        if not turns or (message["role"] == "user" and any(m["role"] != "user" for m in turns[-1])):
+            turns.append([])
+        turns[-1].append(message)
+    return turns
+
+
+def split_retain_turns(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One document per turn (spec 097 T071, research R-012).
+
+    Clients append each turn to one document per conversation, and Hindsight rebuilds that
+    document's changed chunks from its original text on every append, so an edited or retired
+    turn came back with the next turn. Each turn of a conversation item (a JSON message array in
+    the turn format) becomes its own item: document_id `<session>--<sha256 of the turn>[:16]`,
+    where <session> is the item's session:<id> tag or else its document_id, and no update_mode.
+    The key is stable when a client sends a turn again (a restart, the Hermes plugin's legacy
+    full-session resend), so a repeat is an identical replace that keeps edits and retirements; a
+    turn index is not, because the Hermes plugin restarts it at 0 in every process. Repeats
+    within one request are dropped, since Hindsight refuses duplicate document ids in a batch.
+    Any other item (plain text, attachments, no session) passes unchanged. The input is not
+    mutated.
+    """
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items:
+        tags = list(item.get("tags") or [])
+        session = next((t[len(SESSION_TAG_PREFIX):] for t in tags if t.startswith(SESSION_TAG_PREFIX)), None)
+        session = session or item.get("document_id")
+        messages = _message_array(item.get("content"))
+        if not session or messages is None or item.get("attachment_filenames") or item.get("attachments"):
+            out.append(dict(item))
+            continue
+        if SESSION_TAG_PREFIX + session not in tags:
+            tags.append(SESSION_TAG_PREFIX + session)
+        for turn in _turns(messages):
+            digest = hashlib.sha256(json.dumps(turn, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+            document_id = f"{session}--{digest[:16]}"
+            if document_id in seen:
+                continue
+            seen.add(document_id)
+            split = {k: v for k, v in item.items() if k != "update_mode"}
+            out.append({**split, "content": json.dumps(turn, ensure_ascii=False),
+                        "document_id": document_id, "tags": list(tags)})
+    return out
+
+
 def _client_by_id(clients: list[Client], api_key_id: str | None) -> Client | None:
     return next((c for c in clients if api_key_id and c.id == api_key_id), None)
 
@@ -271,10 +337,12 @@ def authorize(clients: list[Client], *, api_key_id: str | None, internal: bool, 
 def retain(
     clients: list[Client], *, api_key_id: str | None, internal: bool, items: list[dict[str, Any]]
 ) -> tuple[Decision, list[dict[str, Any]] | None]:
-    """Decide a retain and return the rewritten items, or None to keep them unchanged."""
+    """Decide a retain and return the rewritten items (one document per turn, then the client
+    tag), or None to keep them unchanged. Internal calls are the worker re-running validated work,
+    whose items were rewritten at submit time."""
     decision = authorize(clients, api_key_id=api_key_id, internal=internal, operation="retain")
     if internal or not decision.allowed:
         return decision, None
     client = _client_by_id(clients, api_key_id)
     assert client is not None  # authorize() refused an unknown client above
-    return decision, rewrite_retain_tags(client, items)
+    return decision, rewrite_retain_tags(client, split_retain_turns(items))

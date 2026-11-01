@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 import pytest
 
@@ -25,6 +26,7 @@ from homelab_proxmox_orchestrator.memory_access import (
     load_clients,
     retain,
     rewrite_retain_tags,
+    split_retain_turns,
 )
 
 HERMES_KEY = "hmem_test_hermes_0123456789abcdefghijklmnop"
@@ -375,3 +377,96 @@ def test_authorize_applies_the_scope(clients):
     assert authorize(clients, api_key_id="hermes", internal=False, operation="recall").allowed
     assert not authorize(clients, api_key_id="hermes", internal=False, operation="delete_bank").allowed
     assert authorize(clients, api_key_id="backup", internal=False, operation="delete_bank").allowed
+
+
+# --- one document per turn (T071, research R-012) ---
+
+
+def _msg(role: str, text: str, ts: str = "2026-11-01T12:00:00+01:00") -> dict[str, str]:
+    return {"role": role, "content": f"{role.capitalize()}: {text}", "timestamp": ts}
+
+
+def _conversation(*pairs: tuple[str, str], doc: str = "api-abc", **extra) -> dict:
+    messages = [m for u, a in pairs for m in (_msg("user", u), _msg("assistant", a))]
+    item = {"content": json.dumps(messages), "document_id": doc, "update_mode": "append",
+            "tags": [f"session:{doc}", "client:hermes"], "metadata": {"platform": "hermes"}}
+    item.update(extra)
+    return item
+
+
+def test_each_turn_becomes_its_own_document_without_append():
+    out = split_retain_turns([_conversation(("a", "b"), ("c", "d"))])
+    assert len(out) == 2
+    for item in out:
+        assert re.fullmatch(r"api-abc--[0-9a-f]{16}", item["document_id"])
+        assert "update_mode" not in item
+        assert item["tags"] == ["session:api-abc", "client:hermes"]
+        assert item["metadata"] == {"platform": "hermes"}
+    assert [[m["content"] for m in json.loads(i["content"])] for i in out] == [
+        ["User: a", "Assistant: b"], ["User: c", "Assistant: d"]]
+
+
+def test_the_key_is_stable_when_a_turn_is_sent_again():
+    """A restart or the plugin's full-session resend repeats turns: same key, so an identical replace."""
+    first = split_retain_turns([_conversation(("a", "b"))])
+    resent = split_retain_turns([_conversation(("a", "b"), ("c", "d"), doc="api-abc-1730000000",
+                                               tags=["session:api-abc"])])
+    assert resent[0]["document_id"] == first[0]["document_id"]
+    assert split_retain_turns(first) == first
+
+
+def test_the_session_tag_names_the_document_before_the_document_id():
+    [item] = split_retain_turns([_conversation(("a", "b"), doc="per-process-id", tags=["session:stable"])])
+    assert item["document_id"].startswith("stable--")
+
+
+def test_a_missing_session_tag_is_added_from_the_document_id():
+    [item] = split_retain_turns([_conversation(("a", "b"), doc="owui-chat1", tags=[])])
+    assert item["tags"] == ["session:owui-chat1"]
+    assert item["document_id"].startswith("owui-chat1--")
+
+
+def test_repeated_turns_in_one_request_are_sent_once():
+    """Hindsight refuses duplicate document ids in one batch (400)."""
+    item = _conversation(("a", "b"))
+    assert len(split_retain_turns([item, item])) == 1
+    assert len(split_retain_turns([_conversation(("a", "b"), ("a", "b"))])) == 1
+
+
+def test_different_turns_with_the_same_words_differ_by_timestamp():
+    one = _conversation(("ok", "fine"))
+    two = dict(one, content=json.dumps([_msg("user", "ok", "2026-11-01T13:00:00+01:00"),
+                                         _msg("assistant", "fine", "2026-11-01T13:00:00+01:00")]))
+    assert len(split_retain_turns([one, two])) == 2
+
+
+def test_consecutive_user_messages_stay_in_one_turn_and_a_leading_reply_is_its_own():
+    messages = [_msg("assistant", "hello"), _msg("user", "x"), _msg("user", "y"), _msg("assistant", "z")]
+    out = split_retain_turns([{"content": json.dumps(messages), "document_id": "s", "tags": ["session:s"]}])
+    assert [[m["role"] for m in json.loads(i["content"])] for i in out] == [["assistant"], ["user", "user", "assistant"]]
+
+
+@pytest.mark.parametrize("item", [
+    {"content": "Open WebUI saved memory: likes tea", "document_id": "owui-memory-1", "tags": []},
+    {"content": "plain text", "tags": ["session:s"]},
+    {"content": json.dumps([{"no": "role"}]), "document_id": "d", "tags": []},
+    {"content": "[]", "document_id": "d", "tags": []},
+    {"content": json.dumps([_msg("user", "a")]), "tags": []},                              # no session at all
+    {**_conversation(("a", "b")), "attachment_filenames": {"f": "x.pdf"}},
+])
+def test_other_items_pass_unchanged(item):
+    assert split_retain_turns([item]) == [item]
+
+
+def test_the_input_is_not_mutated():
+    item = _conversation(("a", "b"))
+    before = json.dumps(item, sort_keys=True)
+    split_retain_turns([item])
+    assert json.dumps(item, sort_keys=True) == before
+
+
+def test_retain_splits_turns_and_then_stamps_the_client(clients):
+    item = _conversation(("a", "b"), ("c", "d"), tags=["session:api-abc", "client:forged"])
+    decision, out = retain(clients, api_key_id="hermes", internal=False, items=[item])
+    assert decision.allowed and len(out) == 2
+    assert all(i["tags"] == ["session:api-abc", "client:hermes"] for i in out)

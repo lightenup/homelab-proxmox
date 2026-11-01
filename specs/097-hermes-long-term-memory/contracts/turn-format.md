@@ -13,7 +13,7 @@ One retain item per completed turn:
 {
   "items": [{
     "content": "[{\"role\":\"user\",\"content\":\"User: <owner's message>\",\"timestamp\":\"<ISO-8601>\"},{\"role\":\"assistant\",\"content\":\"Assistant: <final reply>\",\"timestamp\":\"<ISO-8601>\"}]",
-    "document_id": "<see data-model.md: per client>",
+    "document_id": "<see data-model.md: per client; the server stores each turn as <session>--<hash>>",
     "update_mode": "append",
     "context": "<fixed per client>",
     "tags": ["session:<document_id>"],

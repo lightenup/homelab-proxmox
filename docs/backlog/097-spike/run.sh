@@ -45,5 +45,10 @@ if [ "$1" = prod-render ]; then
     "${DC[@]}" exec -T llmproxy python -u /app/portability.py clients porta-clients \
         --clients hermes,open-webui,claude-code | tee "$OUT/portability.txt" || true
     cp logs/porta/clients.json "$OUT/portability.json" 2>/dev/null || true
+    # T071 (research R-012): retired and edited turns stay so after the conversation goes on.
+    rm -f logs/porta/durability.json
+    "${DC[@]}" exec -T llmproxy python -u /app/portability.py durability durability \
+        | tee "$OUT/durability.txt" || true
+    cp logs/porta/durability.json "$OUT/durability.json" 2>/dev/null || true
     python3 gate.py "$1" | tee "$OUT/gate.txt"
 fi

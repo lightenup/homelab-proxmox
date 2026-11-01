@@ -417,11 +417,27 @@ that verifies it.
     It is not in the MCP allowlist, so no model can wipe a session.
   - **Backups**: a forgotten fact persists in backups until retention ages it out (spec
     Assumptions).
-- **UNVERIFIED** (whether a later append to the same session document resurrects an edited or
-  invalidated chunk, given that delta retain keeps unchanged chunks): verified by quickstart
-  § 8, which forgets a fact, continues the same session and recalls. If the fact resurrects,
-  adapters switch to one document per turn (`document_id = <session>-<turn>`), a one-line change
-  in each adapter.
+- **Verified 2026-11-01: it does resurrect.** In PROD an edited unit and, in the § 8 re-run, a
+  retired unit came back when their conversation got another turn. Hindsight 1.1.0's append
+  prepends the stored `original_text`, re-chunks the whole document, and deletes and re-extracts
+  every changed chunk (`engine/retain/orchestrator.py` 1855-1909, 3752-3768, 4229-4240); an edit
+  or invalidation touches only the memory unit, never the original text. No server setting keeps
+  them (`update_mode` is `replace` or `append` only).
+- **Decision (T071, owner 2026-11-01): one document per turn, enforced in the memory server**, not
+  in the adapters: the pinned Hermes plugin has no document-id setting (it appends deltas to a
+  stable session id). `memory_access.split_retain_turns`, applied by the shim's `validate_retain`
+  before the client tag (`accept_with(contents=...)`, honoured on REST, MCP and the async worker
+  path), turns each turn of a turn-format item into its own item: `document_id =
+  <session>--<sha256 of the turn>[:16]` (<session> from the `session:` tag, else the document id),
+  `update_mode` dropped, `session:` tag kept, repeats in one batch dropped (Hindsight refuses
+  duplicate ids). A turn index was rejected: the plugin restarts it at 0 in every process, so a
+  restarted agent would overwrite turn 1. The hash is stable when a turn is sent again (restart,
+  the plugin's legacy full-session resend): an identical replace that keeps edits and retirements.
+- **Consequences**: a recall hit carries one turn instead of about 3,000 characters of
+  neighbouring turns; deleting a conversation in the web UI means deleting each turn's document
+  (list them by the `session:` tag; there is no delete-by-tag); conversation documents stored
+  before T071 keep their old units. The harness proves it per client shape (`portability.py
+  durability`, gate criterion T071).
 
 ## R-013: Backup (FR-007)
 
