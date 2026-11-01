@@ -383,51 +383,84 @@ def _render_snapshot(tmp_path: Path) -> Path:
     return path
 
 
-def _drill_probes(tmp_path: Path, total: int) -> list[dict]:
+def _drill_probes(tmp_path: Path, total: int, top: set[int] | None = None,
+                  failing: set[int] = frozenset()) -> tuple[list[dict], str]:
     """Run write_drill_probes from the rendered snapshot against a stub `api` serving a bank of
-    `total` live units, unit i at offset i."""
+    `total` live units, unit i at offset i. Recall ranks unit i first when i is in `top` (every
+    unit when None) and fifth otherwise; recall for a unit in `failing` errors."""
     script = _render_snapshot(tmp_path)
     work = tmp_path / "work"
     work.mkdir()
+    top_list = " ".join(str(i) for i in (range(total) if top is None else sorted(top)))
+    failing_list = " ".join(str(i) for i in sorted(failing))
     harness = f"""
 set -euo pipefail
 source "{script}"
 WORK_DIR="{work}"
 api() {{
-    case "$1" in
+    case "$*" in
         *"limit=0"*) printf '{{"items": [], "total": {total}}}\\n' ;;
         *"offset="*) o="${{1##*offset=}}"
                      printf '{{"items": [{{"id": "u%s", "text": "unit %s %0300d"}}], "total": {total}}}\\n' "$o" "$o" 0 ;;
-        *) echo "unexpected call $1" >&2; exit 1 ;;
+        *"/memories/recall"*)
+            for a in "$@"; do case "$a" in @*) body="${{a#@}}" ;; esac; done
+            o=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["query"].split()[1])' "$body")
+            case " {failing_list} " in *" $o "*) return 22 ;; esac
+            case " {top_list} " in
+                *" $o "*) printf '{{"results": [{{"id": "u%s"}}, {{"id": "x1"}}]}}\\n' "$o" ;;
+                *) printf '{{"results": [{{"id": "x1"}}, {{"id": "x2"}}, {{"id": "x3"}}, {{"id": "x4"}}, {{"id": "u%s"}}]}}\\n' "$o" ;;
+            esac ;;
+        *) echo "unexpected call $*" >&2; exit 1 ;;
     esac
 }}
 write_drill_probes
 cat "$WORK_DIR/drill-probes.json"
-test ! -e "$WORK_DIR/.probes"
+test ! -e "$WORK_DIR/.probes" && test ! -e "$WORK_DIR/.kept" && test ! -e "$WORK_DIR/.query"
 """
     result = subprocess.run(["bash", "-c", harness], capture_output=True, text=True, check=True)
-    return json.loads(result.stdout)
+    log, _, probes = result.stdout.partition("\n")
+    return json.loads(probes), log
 
 
 def test_snapshot_writes_up_to_three_random_probes(tmp_path: Path) -> None:
     """T059: up to 3 distinct live units, each {unit_id, query}, query = first 200 characters."""
-    probes = _drill_probes(tmp_path, 50)
+    probes, log = _drill_probes(tmp_path, 50)
     assert len(probes) == 3
     assert len({p["unit_id"] for p in probes}) == 3
     for probe in probes:
         assert set(probe) == {"unit_id", "query"}
         assert len(probe["query"]) == 200
         assert probe["query"].startswith(f"unit {probe['unit_id'][1:]} ")
+    assert log == "Drill probes: 3 kept of 3 tried (top 3 on the live store)."
+
+
+def test_snapshot_keeps_only_probes_in_the_live_top_three(tmp_path: Path) -> None:
+    """A probe whose own query does not rank its unit in the live top 3 would fail a faithful
+    restore (2026-11-01), so it is dropped and another sampled unit is tried, up to 10."""
+    probes, log = _drill_probes(tmp_path, 10, top={2, 5, 9})
+    assert sorted(p["unit_id"] for p in probes) == ["u2", "u5", "u9"]
+    assert log.startswith("Drill probes: 3 kept of ")
+
+
+def test_snapshot_drops_a_probe_whose_live_recall_fails(tmp_path: Path) -> None:
+    probes, _ = _drill_probes(tmp_path, 10, top={2, 5}, failing={5})
+    assert [p["unit_id"] for p in probes] == ["u2"]
+
+
+def test_snapshot_tries_at_most_ten_units(tmp_path: Path) -> None:
+    probes, log = _drill_probes(tmp_path, 50, top=set())
+    assert probes == []
+    assert log == "Drill probes: 0 kept of 10 tried (top 3 on the live store)."
 
 
 def test_snapshot_probes_a_small_bank_whole(tmp_path: Path) -> None:
     """T059: fewer than 3 units gives the units that exist."""
-    assert sorted(p["unit_id"] for p in _drill_probes(tmp_path, 2)) == ["u0", "u1"]
+    assert sorted(p["unit_id"] for p in _drill_probes(tmp_path, 2)[0]) == ["u0", "u1"]
 
 
 def test_snapshot_probes_an_empty_bank_as_an_empty_list(tmp_path: Path) -> None:
     """T059: an empty bank gives [], and the drill checks stats only."""
-    assert _drill_probes(tmp_path, 0) == []
+    assert _drill_probes(tmp_path, 0)[0] == []
 
 
 def test_snapshot_picks_probes_with_the_admin_key_before_dropping_it() -> None:

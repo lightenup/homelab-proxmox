@@ -223,6 +223,13 @@ Expected:
 - The export ZIP imports into an empty bank with the same document count.
 - The teardown leaves no container or directory behind.
 
+**Run 2026-11-01** (archive `memory-backup-20261101-053006`, the first with probes): FAIL, on the
+probe check rather than the restore. The dump restored 17 documents and 22 nodes, matching
+`stats.json`. 2 of 3 probes found their unit in the top 3. The third ranked 5th of 18 on the
+live store too, so the restored copy recalled as the live one does, and the export leg did not
+run. The teardown removed the stack and the drill directory. The backup now keeps only probes
+that rank in the live top 3 (research R-014, amended); the drill is re-run on the next archive.
+
 ## 10. Size (SC-007)
 
 After the Open WebUI import and a week of use, peak memory use on the LXC
