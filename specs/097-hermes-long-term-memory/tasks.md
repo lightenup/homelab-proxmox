@@ -619,7 +619,7 @@ the portable export (FR-007, FR-018, SC-006).
 - [X] T059 [US4] Extend `ansible/roles/service_backup/templates/snapshot/memory.sh.j2` (from T025) to write `drill-probes.json`. Pick 3 random active units from bank `owner` (`list_memories`, admin key) and store `{unit_id, query}` for each, where `query` is the first 200 characters of the unit's text.
   - The probe set is generated from the store at backup time and lives only inside the backup archive on the NAS, so no question about the owner is committed to this public repository (U3).
   - With fewer than 3 units in the bank, write the units that exist. With none, write an empty list, and the drill checks stats only.
-- [ ] T060 [US4] (manual) After one nightly backup, run `ansible-playbook -i ansible/inventories/prod/hosts.yml ansible/playbooks/memory-restore-drill.yml` (quickstart § 9). Record the result in `specs/097-hermes-long-term-memory/quickstart.md`.
+- [X] T060 [US4] (manual) After one nightly backup, run `ansible-playbook -i ansible/inventories/prod/hosts.yml ansible/playbooks/memory-restore-drill.yml` (quickstart § 9). Record the result in `specs/097-hermes-long-term-memory/quickstart.md`.
 
 **Checkpoint**: US4 delivered. Both restore paths are proven.
 

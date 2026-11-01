@@ -324,6 +324,25 @@ def test_memory_drill_proves_both_restore_legs() -> None:
     assert yaml.safe_load(_read(MEMORY_DRILL))[0]["vars"]["memory_restore_import_bank"] == "restore-import"
 
 
+def test_memory_drill_uploads_the_export_raw_from_the_memory_lxc() -> None:
+    """The uri module base64-encodes a multipart file part, which the API does not decode, and
+    reads it from the controller; both failed the first drill to reach the export leg
+    (2026-11-01). The upload is curl on the LXC, with the key on stdin rather than in argv."""
+    _, block, _ = _memory_drill()
+    task = _named(block, "Import the export ZIP")
+    assert "ansible.builtin.uri" not in task
+    upload = task["ansible.builtin.command"]
+    argv = upload["argv"]
+    assert argv[0] == "curl" and "--fail-with-body" in argv
+    assert argv[argv.index("-H") + 1] == "@-"
+    assert argv[argv.index("-F") + 1].startswith("file=@{{ memory_restore_extracted }}/")
+    assert not any("memory_restore_admin_key" in a for a in argv)
+    assert "memory_restore_admin_key" in upload["stdin"]
+    assert str(task["no_log"]).lower() == "true"
+    wait = _named(block, "Wait for the import to finish")["ansible.builtin.uri"]
+    assert "(memory_restore_import.stdout | from_json).operation_id" in wait["url"]
+
+
 def test_memory_drill_starts_postgres_alone_before_pg_restore() -> None:
     """The API must not start on an empty database: postgres first, restore, then the rest."""
     _, block, _ = _memory_drill()

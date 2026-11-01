@@ -295,27 +295,31 @@
             status_code: 200
           no_log: true
 
-        # Asynchronous in Hindsight 1.1.0: returns an operation id to poll.
+        # Asynchronous in Hindsight 1.1.0: returns an operation id to poll. curl on the LXC, not
+        # the uri module: uri base64-encodes a multipart file part (Content-Transfer-Encoding),
+        # which the API does not decode ("not a readable .zip", 2026-11-01), and it reads the
+        # file from the controller. The key goes in on stdin, never in argv.
         - name: Import the export ZIP into the empty bank
-          ansible.builtin.uri:
-            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_restore_import_bank }}/document-transfer"
-            method: POST
-            headers:
-              Authorization: "Bearer {{ memory_restore_admin_key }}"
-            body_format: form-multipart
-            body:
-              file:
-                filename: "{{ memory_restore_extracted }}/{{ memory_bank_id }}-export.zip"
-                mime_type: application/zip
-            status_code: [200, 201, 202]
-            return_content: true
-            timeout: 120
+          ansible.builtin.command:
+            argv:
+              - curl
+              - -sS
+              - --fail-with-body
+              - --max-time
+              - "120"
+              - -H
+              - "@-"
+              - -F
+              - "file=@{{ memory_restore_extracted }}/{{ memory_bank_id }}-export.zip;type=application/zip"
+              - "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_restore_import_bank }}/document-transfer"
+            stdin: "Authorization: Bearer {{ memory_restore_admin_key }}"
           register: memory_restore_import
+          changed_when: true
           no_log: true
 
         - name: Wait for the import to finish
           ansible.builtin.uri:
-            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_restore_import_bank }}/operations/{{ memory_restore_import.json.operation_id }}"
+            url: "{{ memory_restore_api_url }}/v1/default/banks/{{ memory_restore_import_bank }}/operations/{{ (memory_restore_import.stdout | from_json).operation_id }}"
             headers:
               Authorization: "Bearer {{ memory_restore_admin_key }}"
             return_content: true

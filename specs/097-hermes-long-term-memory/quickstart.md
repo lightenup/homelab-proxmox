@@ -230,6 +230,15 @@ live store too, so the restored copy recalled as the live one does, and the expo
 run. The teardown removed the stack and the drill directory. The backup now keeps only probes
 that rank in the live top 3 (research R-014, amended); the drill is re-run on the next archive.
 
+**Run 2026-11-01, 11:00 UTC** (archive `memory-backup-20261101-103909`, taken by hand after the
+probe fix; the backup log reads "Drill probes: 3 kept of 4 tried"): PASS. The dump restored 23
+documents and 32 nodes, as recorded; 3 of 3 probes found their unit in the top 3; the export ZIP
+imported 23 documents into an empty bank. No container or directory was left behind. Two drill
+defects surfaced on the way, both in the export leg, which had never run before: the `uri`
+module read the ZIP from the controller, and it base64-encodes multipart file parts, which the
+API does not decode ("not a readable .zip"). The upload is now `curl` on the LXC, with the key on
+stdin.
+
 ## 10. Size (SC-007)
 
 After the Open WebUI import and a week of use, peak memory use on the LXC
