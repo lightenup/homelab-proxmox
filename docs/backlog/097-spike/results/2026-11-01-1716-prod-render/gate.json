@@ -1,0 +1,104 @@
+{
+ "fingerprint": "a6486e9820d5afed005837a490d77a3706567a569469596b57d66d76f105d6dc",
+ "images": {
+  "expected": [
+   "ghcr.io/vectorize-io/hindsight:1.1.0-slim",
+   "nousresearch/hermes-agent:v0.21.6",
+   "pgvector/pgvector:0.8.1-pg17"
+  ],
+  "ran": [
+   "ghcr.io/vectorize-io/hindsight:1.1.0-slim",
+   "nousresearch/hermes-agent:v0.21.6",
+   "pgvector/pgvector:0.8.1-pg17",
+   "python:3.12-slim"
+  ],
+  "pass": true
+ },
+ "SC-001": {
+  "score": "15/16",
+  "volume": "7/8",
+  "baseline_max": 11,
+  "unjudged": [
+   "p10"
+  ],
+  "preference_answers": {
+   "p16": false
+  },
+  "pass": false
+ },
+ "SC-002": {
+  "update": {
+   "p1": true,
+   "p4": true
+  },
+  "negative": {
+   "p8": true
+  },
+  "pass": true
+ },
+ "SC-003": {
+  "memory_key_calls": {
+   "embed": 953,
+   "rerank": 401
+  },
+  "pass": true
+ },
+ "SC-004": {
+  "egress_lines": 0,
+  "examples": [],
+  "pass": true
+ },
+ "SC-005": {
+  "clients": [
+   "hermes",
+   "open-webui",
+   "claude-code"
+  ],
+  "bank": "porta-clients",
+  "score": "6/6",
+  "cross_recall": {
+   "hermes->open-webui": true,
+   "hermes->claude-code": true,
+   "open-webui->hermes": true,
+   "open-webui->claude-code": true,
+   "claude-code->hermes": true,
+   "claude-code->open-webui": true
+  },
+  "retain_status": {
+   "hermes": 200,
+   "open-webui": 200,
+   "claude-code": 200
+  },
+  "client_tags": {
+   "hermes": [
+    "client:hermes"
+   ],
+   "open-webui": [
+    "client:open-webui"
+   ],
+   "claude-code": [
+    "client:claude-code"
+   ]
+  },
+  "forged_tag_replaced": true,
+  "readonly_retain_status": 403,
+  "readonly_recall_status": 200,
+  "webhook_status": {
+   "hermes": 403,
+   "open-webui": 403,
+   "claude-code": 403,
+   "claude-code-ro": 403,
+   "control-plane": 403,
+   "admin": 403
+  },
+  "bank_config_status": {
+   "hermes": 403,
+   "open-webui": 403,
+   "claude-code": 403,
+   "claude-code-ro": 403,
+   "control-plane": 403
+  },
+  "pass": true
+ },
+ "pass": false
+}

@@ -84,6 +84,11 @@
         "pass": false,
         "answer_sha256": "56391a8d2d2ff4c7dcc1508489e432d7daec13c876c80db1c72a7c0472d6f5ea",
         "why": "2026-11-01 run (same): suggests crème fraîche while the owner profile says lactose intolerant and recall held it at rank 4"
+      },
+      {
+        "pass": true,
+        "answer_sha256": "41fed8db1785624698c8e152f198d00ae5fc7f4e3684ab9e8ce667716be05412",
+        "why": "2026-11-01 re-run (PR #340 review fixes): ramen with chicken stock, egg, garlic and spring onion, 'uten nøtter eller melkeprodukter'; the forbid list matches 'nøtt' and 'melk' in the disclaimer, as in the 2026-10-31 'melkefri' judgement"
       }
     ],
     "p2": [
@@ -91,6 +96,13 @@
         "pass": false,
         "answer_sha256": "1a31c38fc38988573de48e775d027be910b7346cc6316a2579f832cfa33b36f7",
         "why": "2026-11-01 run (profile on, notes off, loop hard stop, narrowed SOUL.md): says it has no information about a dog while recall held Tinde at ranks 2 and 3"
+      }
+    ],
+    "p10": [
+      {
+        "pass": false,
+        "answer_sha256": "a49501514b6c4b5ffba2b2d85b859082e7030765b80cee81ddf7db94db54f50a",
+        "why": "2026-11-01 run (PR #340 review fixes): 'fyller 70. mars 2027' drops the day; the prompt held '14 March' uncut (LiteLLM request body), so model output, not retrieval"
       }
     ]
   }

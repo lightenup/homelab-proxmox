@@ -331,7 +331,7 @@
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/hermes-memory-deps') | reject('search', ':ro$') | list | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/hermes/') | reject('search', ':ro$') | list | length == 0
       - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/etc/') | reject('search', ':ro$') | list | length == 0
-      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/(config.yaml|SOUL.md)$') | list | length == 0
+      - (hermes_compose | from_yaml).services['hermes-agent'].volumes | map('string') | select('search', ':/opt/data/(config[.]yaml|SOUL[.]md)(:|$)') | reject('search', ':ro$') | list | length == 0
     fail_msg: >-
       The rendered hermes-agent service is not confined: it must have no published ports,
       no privileged mode, no cap_add, no Docker socket mount, and sit only on the `agent`
@@ -721,14 +721,24 @@
   register: hermes_builtin_memory_marker
   when: (deploy_environment | default('prod')) != 'lab'
 
+# A file the agent never wrote is an empty store. A file that exists but cannot be read fails the
+# deploy, so the marker is never written over notes that were not migrated (PR #340 review).
+- name: Check which built-in memory notes exist
+  ansible.builtin.stat:
+    path: "{{ hermes_agent_data_dir }}/memories/{{ item }}.md"
+  # USER.md stays in use (agent-config.yaml.j2), so only the notes leave the prompt.
+  loop: [MEMORY]
+  register: hermes_builtin_memory_present
+  when:
+    - (deploy_environment | default('prod')) != 'lab'
+    - not hermes_builtin_memory_marker.stat.exists
+
 - name: Read the built-in memory notes for the one-shot import
   ansible.builtin.slurp:
     src: "{{ hermes_agent_data_dir }}/memories/{{ item }}.md"
-  # USER.md stays in use (agent-config.yaml.j2), so only the notes leave the prompt.
-  loop: [MEMORY]
+  # default([]): Ansible templates the loop before `when`, and the lab copy never stats the files.
+  loop: "{{ hermes_builtin_memory_present.results | default([]) | selectattr('stat', 'defined') | selectattr('stat.exists') | map(attribute='item') | list }}"
   register: hermes_builtin_memory_files
-  # A file the agent never wrote is an empty store.
-  failed_when: false
   when:
     - (deploy_environment | default('prod')) != 'lab'
     - not hermes_builtin_memory_marker.stat.exists
@@ -739,10 +749,10 @@
   ansible.builtin.set_fact:
     hermes_builtin_memory_items: >-
       {%- set ns = namespace(items=[]) -%}
-      {%- for file in hermes_builtin_memory_files.results | selectattr('content', 'defined') -%}
+      {%- for file in hermes_builtin_memory_files.results | default([]) | selectattr('content', 'defined') -%}
       {%- set target = file.item | lower -%}
       {%- for entry in (file.content | b64decode).split('\n§\n') | map('trim') | reject('equalto', '') -%}
-      {%- set text = entry | regex_replace('hmem_[A-Za-z0-9_-]{20,}', '<redacted>') -%}
+      {%- set text = entry | regex_replace(hermes_builtin_memory_redact_pattern, '<redacted>') -%}
       {%- set ns.items = ns.items + [{
             'content': text,
             'document_id': 'hermes-builtin-' ~ target ~ '-' ~ (text | hash('sha256'))[:16],

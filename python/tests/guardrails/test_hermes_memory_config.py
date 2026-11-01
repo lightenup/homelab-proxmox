@@ -155,7 +155,18 @@ def test_soul_is_deploy_owned_and_mounted_read_only():
     task = _task("Deploy the agent identity file (read-only mount source)")["ansible.builtin.template"]
     assert (task["src"], task["dest"], task["owner"]) == ("SOUL.md.j2", "{{ hermes_agent_soul_path }}", "root")
     tasks = (HERMES_ROLE / "tasks" / "main.yml").read_text()
-    assert "select('search', ':/opt/data/(config.yaml|SOUL.md)$') | list | length == 0" in tasks
+    check = next(line.strip()[2:] for line in tasks.splitlines() if "(config[.]yaml|SOUL[.]md)" in line)
+    env = Environment()
+    env.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
+    env.filters["from_yaml"] = yaml.safe_load
+    def confined(volumes):
+        compose = yaml.safe_dump({"services": {"hermes-agent": {"volumes": volumes}}})
+        return env.from_string("{{ " + check + " }}").render(hermes_compose=compose) == "True"
+    assert confined(["/opt/hermes/SOUL.md:/opt/data/SOUL.md:ro", "/opt/hermes/agent-config.yaml:/opt/data/config.yaml:ro"])
+    # PR #340 review: an options suffix must not hide a writable mount.
+    for bad in ("/opt/hermes/SOUL.md:/opt/data/SOUL.md", "/opt/hermes/SOUL.md:/opt/data/SOUL.md:rw",
+                "/x/agent-config.yaml:/opt/data/config.yaml:rw,z"):
+        assert not confined([bad]), bad
 
 
 def test_provider_is_not_enabled_as_a_plugin():
@@ -385,6 +396,7 @@ def test_filter_secret_patterns_are_alloy_redaction_patterns():
 
 BUILTIN_TASKS = (
     "Check whether the built-in memory was imported already",
+    "Check which built-in memory notes exist",
     "Read the built-in memory notes for the one-shot import",
     "Build the built-in memory retain items",
     "Import the built-in memory into the shared memory (agent key, synchronous)",
@@ -405,7 +417,9 @@ def _build_items(files: dict[str, str]) -> list[dict]:
     env.filters["regex_replace"] = lambda v, pattern, repl: re.sub(pattern, repl, v)
     results = [{"item": name, "content": base64.b64encode(text.encode()).decode()} for name, text in files.items()]
     results.append({"item": "USER"} if "USER" not in files else {"item": "absent"})
-    rendered = env.from_string(expression).render(hermes_builtin_memory_files={"results": results})
+    rendered = env.from_string(expression).render(
+        hermes_builtin_memory_files={"results": results},
+        hermes_builtin_memory_redact_pattern=_defaults()["hermes_builtin_memory_redact_pattern"])
     return ast.literal_eval(rendered)
 
 
@@ -430,16 +444,35 @@ def test_builtin_import_is_once_prod_only_private_and_uses_the_agent_key():
         assert "(deploy_environment | default('prod')) != 'lab'" in yaml.safe_dump(task["when"]), name
         if name != BUILTIN_TASKS[0]:
             assert "not hermes_builtin_memory_marker.stat.exists" in yaml.safe_dump(task["when"]), name
-    for name in BUILTIN_TASKS[1:5]:
+    for name in BUILTIN_TASKS[2:6]:
         assert str(_task(name)["no_log"]).lower() == "true", name
-    dumped = yaml.safe_dump(_task(BUILTIN_TASKS[3]))
+    dumped = yaml.safe_dump(_task(BUILTIN_TASKS[4]))
     assert "memory_client_hermes_key" in dumped and "memory_admin_key" not in dumped
-    assert _index(BUILTIN_TASKS[5]) < _index(BUILTIN_TASKS[6]), "the marker follows the assert"
+    assert _index(BUILTIN_TASKS[6]) < _index(BUILTIN_TASKS[7]), "the marker follows the assert"
 
 
 def test_builtin_import_reads_the_notes_only():
     """USER.md stays in use, so importing it would leave a second copy to go stale."""
     assert _task(BUILTIN_TASKS[1])["loop"] == ["MEMORY"]
+
+
+def test_builtin_import_reads_only_existing_notes_and_fails_on_a_read_error():
+    """PR #340 review: a read error must not count as an empty file, or the marker is written over
+    notes that were never migrated. Absent files are skipped by the stat, read errors fail."""
+    read = _task(BUILTIN_TASKS[2])
+    assert "failed_when" not in read and "ignore_errors" not in read
+    assert "hermes_builtin_memory_present.results" in read["loop"]
+    assert "selectattr('stat.exists')" in read["loop"]
+
+
+def test_builtin_import_redacts_the_same_token_shapes_as_the_open_webui_filter():
+    """PR #340 review: the import is a retain into the shared store, so it strips what the filter
+    strips (the estate's Alloy redaction patterns)."""
+    assert _defaults()["hermes_builtin_memory_redact_pattern"] == "|".join(_filter_constant("SECRETS"))
+    tokens = ("sk-" + "a" * 20, "tskey-auth-" + "b" * 20, "tk_" + "c" * 29,
+              "eyJ" + "d" * 10 + ".eyJ" + "e" * 10 + "." + "f" * 10, "hmem_" + "g" * 43)
+    [item] = _build_items({"MEMORY": "keys: " + " ".join(tokens)})
+    assert item["content"] == "keys: " + " ".join(["<redacted>"] * len(tokens))
 
 
 def test_builtin_import_marker_is_outside_the_agent_writable_data():

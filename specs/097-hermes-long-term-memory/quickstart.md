@@ -99,6 +99,12 @@ harness agent given the memory MCP server, tool loops hard-stopped; times are Os
   preference), SC-002 to SC-005 and images. LiteLLM logs: 0 of 60 recall-carrying requests cut.
   One malformed `tool_call` repeated 4 times before the model moved on
   (`results/2026-11-01-1640-prod-render/`).
+- PR #340 review widened the fingerprint (the harness agent config), so the gate ran again. 17:16
+  FAILED on p10 ("fyller 70. mars 2027" without the day; the prompt held "14 March" uncut, so
+  model output). The agreed single re-run at 17:35 PASSED (fingerprint `a6486e98…`): SC-001 16/16
+  (p15 judged pass, "nøtter"/"melkeprodukter" tripping the keywords; p16 on recall rank 2, its
+  answer now naming the preference), SC-002 to SC-005 and images, 0 tool loops
+  (`results/2026-11-01-1735-prod-render/`).
 
 Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two
 stopped and discarded runs: the first had no valid LiteLLM key and
@@ -244,7 +250,16 @@ held a real fact, `invalidate_memory` retired the other 3), after which recall r
 parrot. Fix: built-in notes off with a one-shot import (the owner profile stays, so standing
 preferences keep reaching every prompt), and a `SOUL.md` that routes corrections and forgets to
 the memory tools (FR-001, amended). Steps 1–4 are re-run through Hermes after that
-deploy; the resurrection check (step 4) is still open.
+deploy.
+
+**Resurrection observed 2026-11-01** (R-012, step 4): the parrot unit edited with `update_memory`
+in Hermes session `api-ff5d…` came back as a new unit when that Open WebUI chat got another turn.
+The plugin resends the whole session on each retain, the document's original text still held the
+parrot, and the chunk was rebuilt from it. The three invalidated units, in sessions with no new
+turns, stayed retired. An edit to a session that is still in use therefore does not hold: T071.
+The same day the owner had 9 units retired with `invalidate_memory` (the resurrected chunk, a
+stale copy of a replaced built-in note, and 7 agent process narratives), leaving 31 live units;
+the parrot chat is to be deleted in Open WebUI so it cannot rebuild again.
 
 ## 9. Restore drill (US-4, SC-006)
 

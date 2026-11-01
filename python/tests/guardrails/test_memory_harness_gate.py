@@ -43,6 +43,10 @@ FILES = (
     "ansible/roles/memory/defaults/main.yml",
     "ansible/roles/hermes/templates/hindsight-config.json.j2",
     "ansible/roles/hermes/templates/SOUL.md.j2",
+    # The harness agent's config: memory switches, hook spill limit, tool-loop stop, memory MCP
+    # server. Alignment tests in test_hermes_memory_config.py tie it to agent-config.yaml.j2, so a
+    # change on either side invalidates the evidence (PR #340 review).
+    "docs/backlog/097-spike/runs/prod-render/config.yaml",
     "python/src/homelab_proxmox_orchestrator/memory_access.py",
     "ansible/roles/memory/files/hindsight_ext/shim.py",
 )

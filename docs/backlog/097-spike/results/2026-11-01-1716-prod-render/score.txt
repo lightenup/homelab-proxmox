@@ -1,0 +1,29 @@
+p1  update            PASS  'you live in trondheim — you moved there from bergen in late october 2026.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'a quick bowl of onigiri with tuna and nori — nut-free, lactose-free, and matches your japanese-food preference'
+p4  update-no         PASS  'du drikker grønn te om morgenen — du sa selv du har sluttet med kaffe og gått over til det.'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  PASS  "you're building a sauna (badstue) at your cabin in hemsedal.\n\nyou also mentioned your brother håkon — an elect"
+p7  decision-no       PASS  'jeg fant ingen nattlig backup på denne maskinen — ingen hermes cron-jobb, ingen crontab, systemd timer, at-job'
+p8  negative          PASS  "i don't have any information about a cat in my memory — i only know about your dog tinde, the border collie."
+p9  volume-no         PASS  'ingrid bor i tromsø, og hun jobber som marinbiolog.'
+p10 volume-en         FAIL  'mor berit fyller 70. mars 2027, og dere planlegger en overraskelsesfest på fjellstua.'
+p11 volume-crossref   PASS  "your brother håkon — he's an electrician in stavanger — is helping with the electrical work in the sauna at th"
+p12 volume-no         PASS  'vinterdekkene dine er lagret på dekkhotellet i leangen.'
+p13 volume-en         PASS  'fjordfunk. rehearsals every wednesday at 19:00 at svartlamon in trondheim.'
+p14 volume-en         PASS  "your on-call starts this week — monday, 9 november 2026. that's the first on-call week (you're on call every f"
+p15 volume-constraint PASS  'shoyu ramen med eggeplomme og nori — laktosefri, uten nøtter, og en god belønning etter søndagens 10 km.'
+p16 volume-preference FAIL  'unifi dream router, fiber fra telenor — og du har bedt meg om å spørre før jeg foreslår endringer på nettverke'
+recall: 14/16
+review p10 sha256=a49501514b6c4b5ffba2b2d85b859082e7030765b80cee81ddf7db94db54f50a  (keyword miss; judge by hand in overrides.json)
+review p16 sha256=845d03658a05f195b4aa23ada3feb70a80d5de7d2fd3560b92b8d298b3df16a3  (keyword miss; judge by hand in overrides.json)
+calls final chat 200 26
+calls final embed 200 145
+calls final rerank 200 64
+calls probes chat 200 423
+calls probes embed 200 285
+calls probes rerank 200 150
+calls sessions chat 200 1302
+calls sessions embed 200 507
+calls sessions rerank 200 180
+calls settle chat 200 5
