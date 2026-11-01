@@ -11,6 +11,7 @@ EXTRA=(); [ -f compose.$1.yml ] && EXTRA=(-f compose.$1.yml)
 DC=(docker compose -f compose.base.yml "${EXTRA[@]}")
 OUT=results/$1; mkdir -p "$OUT" logs
 echo "$1" > logs/RUN; echo startup > logs/RUN.phase
+rm -f logs/injected.jsonl   # this run's injected recall blocks only (recall_from_injected.py)
 "${DC[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 "${DC[@]}" up -d --wait 2>&1 | tail -3
 "${DC[@]}" config --images > "$OUT/images.txt"
@@ -27,9 +28,10 @@ echo final > logs/RUN.phase
 sleep 30   # let async writes/consolidation land
 "${DC[@]}" cp dataset.json hermes:/tmp/dataset.json >/dev/null 2>&1 && "${DC[@]}" cp hermes/attribution.py hermes:/tmp/attribution.py >/dev/null 2>&1 \
   && "${DC[@]}" exec -T hermes python3 /tmp/attribution.py /tmp/dataset.json > "$OUT/attribution.jsonl" 2>&1 || true
-# SC-001's retrieval leg for preference probes (gate.py): is the preference in the top 3?
-"${DC[@]}" cp hermes/recall_check.py hermes:/tmp/recall_check.py >/dev/null 2>&1 \
-  && "${DC[@]}" exec -T hermes python3 /tmp/recall_check.py /tmp/dataset.json > "$OUT/recall.jsonl" 2>&1 || true
+# SC-001's retrieval leg for preference probes (gate.py): the preference's rank in the recall
+# block injected into the probe's first request, before the probes' own answers were stored.
+python3 recall_from_injected.py "$1" > "$OUT/recall.jsonl"
+cp logs/injected.jsonl "$OUT/injected.jsonl" 2>/dev/null || true   # the evidence behind recall.jsonl
 "${DC[@]}" logs --no-color > "$OUT/compose.log" 2>&1
 python3 score.py "$1" | tee "$OUT/score.txt"
 # FR-021 (spec 097): the gate's fingerprint travels with the results. Archive as

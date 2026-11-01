@@ -1,0 +1,28 @@
+p1  update            PASS  'you live in trondheim now — you moved there from bergen in late october 2026. your home is on møllenberg, 3rd '
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'edamame med en klype salt — raskt, laktosefritt og uten nøtter.'
+p4  update-no         PASS  'du drikker grønn te om morgenen, ola — du har sluttet med kaffe og byttet til den.'
+p5  fact-en           PASS  'you use helix for most of your code.'
+p6  fact-no-asked-en  PASS  "you're building a sauna (badstue) at your cabin in hemsedal. your brother håkon — an electrician in stavanger "
+p7  decision-no       PASS  'den nattlige backupen skal kjøre kl. 03:00 (europe/oslo), ifølge beslutningen dere tok i dag.\n\nmen viktig å væ'
+p8  negative          PASS  "i don't have any information about a cat in my memory. i know about your border collie tinde, but no cat has b"
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø, og hun jobber som sjøbiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march 2027, and you're planning a surprise party for her at fjellstua.\n\nvil d"
+p11 volume-crossref   PASS  'your brother håkon — an electrician in stavanger — is helping with the electrical work in the sauna at your he'
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen i trondheim.\n\nvil du at jeg skal sjekke åpningstidene '
+p13 volume-en         PASS  'your band is called fjordfunk, and you rehearse every wednesday at 19:00 at svartlamon in trondheim.'
+p14 volume-en         PASS  'neste vaktuke starter 9. november 2026 — det er første vaktuke i ordningen din (hver fjerde uke).'
+p15 volume-constraint PASS  'ramen med egg, nori og ingefær — din favoritt, og laktosefri og uten nøtter.'
+p16 volume-preference FAIL  'ja, det kan jeg hjelpe med — men før vi rører på noe: jeg kan ikke logge inn på routeren fra her (jeg har ikke'
+recall: 15/16
+review p16 sha256=ba55b1b5c55c57145771b9dcab0ec9482005c29c57de1ba607d755ca284a19ec  (keyword miss; judge by hand in overrides.json)
+calls final chat 200 28
+calls final embed 200 192
+calls final rerank 200 87
+calls probes chat 200 487
+calls probes embed 200 347
+calls probes rerank 200 182
+calls sessions chat 200 1421
+calls sessions embed 200 610
+calls sessions rerank 200 214
+calls settle chat 200 5

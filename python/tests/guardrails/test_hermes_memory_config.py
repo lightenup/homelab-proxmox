@@ -396,8 +396,7 @@ def test_filter_secret_patterns_are_alloy_redaction_patterns():
 
 BUILTIN_TASKS = (
     "Check whether the built-in memory was imported already",
-    "Check which built-in memory notes exist",
-    "Read the built-in memory notes for the one-shot import",
+    "Read the built-in memory notes for the one-shot import (inside the agent, as hermes)",
     "Build the built-in memory retain items",
     "Import the built-in memory into the shared memory (agent key, synchronous)",
     "Count the built-in memory entries in the shared memory after the import",
@@ -415,10 +414,9 @@ def _build_items(files: dict[str, str]) -> list[dict]:
     env.filters["b64decode"] = lambda v: base64.b64decode(v).decode()
     env.filters["hash"] = lambda v, algo: hashlib.new(algo, v.encode()).hexdigest()
     env.filters["regex_replace"] = lambda v, pattern, repl: re.sub(pattern, repl, v)
-    results = [{"item": name, "content": base64.b64encode(text.encode()).decode()} for name, text in files.items()]
-    results.append({"item": "USER"} if "USER" not in files else {"item": "absent"})
+    notes = files.get("MEMORY", "")
     rendered = env.from_string(expression).render(
-        hermes_builtin_memory_files={"results": results},
+        hermes_builtin_memory_notes={"stdout": base64.b64encode(notes.encode()).decode()},
         hermes_builtin_memory_redact_pattern=_defaults()["hermes_builtin_memory_redact_pattern"])
     return ast.literal_eval(rendered)
 
@@ -432,10 +430,8 @@ def test_builtin_import_splits_entries_as_hermes_does():
         assert item["tags"] == ["builtin-memory", "builtin-target:memory", "origin:hermes-builtin-memory"]
 
 
-def test_builtin_import_maps_user_md_to_the_user_target():
-    [item] = _build_items({"USER": "Called Probe."})
-    assert item["document_id"].startswith("hermes-builtin-user-")
-    assert item["context"] == "Hermes built-in user memory entry"
+def test_builtin_import_of_absent_notes_is_empty():
+    assert _build_items({}) == []
 
 
 def test_builtin_import_is_once_prod_only_private_and_uses_the_agent_key():
@@ -444,25 +440,57 @@ def test_builtin_import_is_once_prod_only_private_and_uses_the_agent_key():
         assert "(deploy_environment | default('prod')) != 'lab'" in yaml.safe_dump(task["when"]), name
         if name != BUILTIN_TASKS[0]:
             assert "not hermes_builtin_memory_marker.stat.exists" in yaml.safe_dump(task["when"]), name
-    for name in BUILTIN_TASKS[2:6]:
+    for name in BUILTIN_TASKS[1:5]:
         assert str(_task(name)["no_log"]).lower() == "true", name
-    dumped = yaml.safe_dump(_task(BUILTIN_TASKS[4]))
+    dumped = yaml.safe_dump(_task(BUILTIN_TASKS[3]))
     assert "memory_client_hermes_key" in dumped and "memory_admin_key" not in dumped
-    assert _index(BUILTIN_TASKS[6]) < _index(BUILTIN_TASKS[7]), "the marker follows the assert"
+    assert _index(BUILTIN_TASKS[5]) < _index(BUILTIN_TASKS[6]), "the marker follows the assert"
 
 
-def test_builtin_import_reads_the_notes_only():
-    """USER.md stays in use, so importing it would leave a second copy to go stale."""
-    assert _task(BUILTIN_TASKS[1])["loop"] == ["MEMORY"]
+READER = HERMES_ROLE / "files" / "read_builtin_notes.py"
 
 
-def test_builtin_import_reads_only_existing_notes_and_fails_on_a_read_error():
-    """PR #340 review: a read error must not count as an empty file, or the marker is written over
-    notes that were never migrated. Absent files are skipped by the stat, read errors fail."""
-    read = _task(BUILTIN_TASKS[2])
-    assert "failed_when" not in read and "ignore_errors" not in read
-    assert "hermes_builtin_memory_present.results" in read["loop"]
-    assert "selectattr('stat.exists')" in read["loop"]
+def test_builtin_notes_are_read_inside_the_agent_as_hermes():
+    """PR #340 review: root on the host must never read a path the agent controls."""
+    argv = _task(BUILTIN_TASKS[1])["ansible.builtin.command"]["argv"]
+    assert argv[:5] == ["docker", "exec", "-u", "hermes", "hermes_agent"]
+    assert "read_builtin_notes.py" in argv[7] and argv[8] == "/opt/data/memories/MEMORY.md"
+    assert "failed_when" not in _task(BUILTIN_TASKS[1]) and "ignore_errors" not in _task(BUILTIN_TASKS[1])
+    assert not any("slurp" in str(t) and "memories" in str(t) for t in _tasks())
+
+
+def _read_notes(path):
+    import subprocess
+    import sys
+    return subprocess.run([sys.executable, str(READER), str(path)], capture_output=True, text=True)
+
+
+def test_reader_prints_a_regular_file_and_nothing_when_absent(tmp_path):
+    import base64
+    notes = tmp_path / "MEMORY.md"
+    notes.write_text("Likes tea.\n§\nTwo")
+    out = _read_notes(notes)
+    assert out.returncode == 0 and base64.b64decode(out.stdout).decode() == "Likes tea.\n§\nTwo"
+    absent = _read_notes(tmp_path / "missing.md")
+    assert (absent.returncode, absent.stdout) == (0, "")
+
+
+def test_reader_refuses_a_symlinked_file_or_directory(tmp_path):
+    secret = tmp_path / "host-secret"
+    secret.write_text("root:x:0:0")
+    (tmp_path / "memories").mkdir()
+    (tmp_path / "memories" / "MEMORY.md").symlink_to(secret)
+    linked = _read_notes(tmp_path / "memories" / "MEMORY.md")
+    assert linked.returncode != 0 and "root:x" not in linked.stdout
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "elsewhere" / "MEMORY.md").write_text("x")
+    (tmp_path / "linkdir").symlink_to(tmp_path / "elsewhere")
+    assert _read_notes(tmp_path / "linkdir" / "MEMORY.md").returncode != 0
+
+
+def test_reader_refuses_a_non_regular_file(tmp_path):
+    (tmp_path / "MEMORY.md").mkdir()
+    assert _read_notes(tmp_path / "MEMORY.md").returncode != 0
 
 
 def test_builtin_import_redacts_the_same_token_shapes_as_the_open_webui_filter():

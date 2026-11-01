@@ -105,6 +105,11 @@ harness agent given the memory MCP server, tool loops hard-stopped; times are Os
   (p15 judged pass, "nøtter"/"melkeprodukter" tripping the keywords; p16 on recall rank 2, its
   answer now naming the preference), SC-002 to SC-005 and images, 0 tool loops
   (`results/2026-11-01-1735-prod-render/`).
+- PR #340's second review: the preference leg had queried the store after the probes, when their
+  own answers were in it. It now reads the recall block injected into each probe's first request
+  (`recall_from_injected.py`, `injected.jsonl`). 18:15 PASSED on that measure: p16's preference at
+  rank 2 of an uncut block; SC-001 16/16 with p9 judged pass ("sjøbiolog" for marine biologist);
+  SC-002 to SC-005 and images; 0 tool loops (`results/2026-11-01-1815-prod-render/`).
 
 Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two
 stopped and discarded runs: the first had no valid LiteLLM key and

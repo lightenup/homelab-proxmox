@@ -10,8 +10,10 @@ failed run is not evidence (PR #318 review).
 
 - SC-001: at least 14 of 16 probes, every volume probe, strictly above the best no-memory
   baseline (results/none*/score.txt). Amended 2026-11-01: a preference probe (one with
-  `recall_expect`) counts as remembered when its preference is in the top 3 recall results
-  (results/<cand>/recall.jsonl, hermes/recall_check.py), whatever the model then does with it.
+  `recall_expect`) counts as remembered when its preference is in the top 3 of the recall block
+  injected into the probe's first request (results/<cand>/recall.jsonl, recall_from_injected.py),
+  whatever the model then does with it. Measured on what the model was given, not by querying the
+  store afterwards, when the probes' own answers are in it (PR #340 review).
   Whether the answer honoured it stays on record as `preference_answers`; p16 failed that in 4
   of 5 judged runs while recall returned the preference.
 - SC-002: every update probe current, the negative probe "don't know".

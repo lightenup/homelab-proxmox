@@ -104,6 +104,13 @@
         "answer_sha256": "a49501514b6c4b5ffba2b2d85b859082e7030765b80cee81ddf7db94db54f50a",
         "why": "2026-11-01 run (PR #340 review fixes): 'fyller 70. mars 2027' drops the day; the prompt held '14 March' uncut (LiteLLM request body), so model output, not retrieval"
       }
+    ],
+    "p9": [
+      {
+        "pass": true,
+        "answer_sha256": "2c85b1c163777b4a59dac04b5f0f7d57cc44dca1ee42102b6c15cbfafeb12638",
+        "why": "2026-11-01 run (PR #340 second review): 'Ingrid bor i Tromsø, og hun jobber som sjøbiolog'; 'sjøbiolog' is Norwegian for marine biologist, outside the keyword list"
+      }
     ]
   }
 }

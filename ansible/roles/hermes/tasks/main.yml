@@ -721,24 +721,26 @@
   register: hermes_builtin_memory_marker
   when: (deploy_environment | default('prod')) != 'lab'
 
-# A file the agent never wrote is an empty store. A file that exists but cannot be read fails the
-# deploy, so the marker is never written over notes that were not migrated (PR #340 review).
-- name: Check which built-in memory notes exist
-  ansible.builtin.stat:
-    path: "{{ hermes_agent_data_dir }}/memories/{{ item }}.md"
-  # USER.md stays in use (agent-config.yaml.j2), so only the notes leave the prompt.
-  loop: [MEMORY]
-  register: hermes_builtin_memory_present
-  when:
-    - (deploy_environment | default('prod')) != 'lab'
-    - not hermes_builtin_memory_marker.stat.exists
-
-- name: Read the built-in memory notes for the one-shot import
-  ansible.builtin.slurp:
-    src: "{{ hermes_agent_data_dir }}/memories/{{ item }}.md"
-  # default([]): Ansible templates the loop before `when`, and the lab copy never stats the files.
-  loop: "{{ hermes_builtin_memory_present.results | default([]) | selectattr('stat', 'defined') | selectattr('stat.exists') | map(attribute='item') | list }}"
-  register: hermes_builtin_memory_files
+# Read inside the agent container as the hermes user, never as root on the host: the notes sit in
+# the agent-writable data directory, and a symlink there must not reach a host file (PR #340
+# review). The script opens the file without following symlinks, requires a regular file at the
+# expected path, prints it base64-encoded, and prints nothing when it does not exist; anything
+# else fails the deploy, so the marker is never written over notes that were not migrated.
+# USER.md stays in use (agent-config.yaml.j2), so only the notes leave the prompt.
+- name: Read the built-in memory notes for the one-shot import (inside the agent, as hermes)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -u
+      - hermes
+      - hermes_agent
+      - python3
+      - "-c"
+      - "{{ lookup('ansible.builtin.file', 'read_builtin_notes.py') }}"
+      - /opt/data/memories/MEMORY.md
+  register: hermes_builtin_memory_notes
+  changed_when: false
   when:
     - (deploy_environment | default('prod')) != 'lab'
     - not hermes_builtin_memory_marker.stat.exists
@@ -749,9 +751,8 @@
   ansible.builtin.set_fact:
     hermes_builtin_memory_items: >-
       {%- set ns = namespace(items=[]) -%}
-      {%- for file in hermes_builtin_memory_files.results | default([]) | selectattr('content', 'defined') -%}
-      {%- set target = file.item | lower -%}
-      {%- for entry in (file.content | b64decode).split('\n§\n') | map('trim') | reject('equalto', '') -%}
+      {%- set target = 'memory' -%}
+      {%- for entry in (hermes_builtin_memory_notes.stdout | default('') | b64decode).split('\n§\n') | map('trim') | reject('equalto', '') -%}
       {%- set text = entry | regex_replace(hermes_builtin_memory_redact_pattern, '<redacted>') -%}
       {%- set ns.items = ns.items + [{
             'content': text,
@@ -759,7 +760,6 @@
             'context': 'Hermes built-in ' ~ target ~ ' memory entry',
             'tags': ['builtin-memory', 'builtin-target:' ~ target, 'origin:hermes-builtin-memory'],
             'metadata': {'platform': 'hermes', 'origin': 'hermes-builtin-memory'}}] -%}
-      {%- endfor -%}
       {%- endfor -%}
       {{ ns.items }}
   when:

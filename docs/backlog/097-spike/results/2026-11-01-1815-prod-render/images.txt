@@ -1,0 +1,4 @@
+python:3.12-slim
+nousresearch/hermes-agent:v0.21.6
+pgvector/pgvector:0.8.1-pg17
+ghcr.io/vectorize-io/hindsight:1.1.0-slim

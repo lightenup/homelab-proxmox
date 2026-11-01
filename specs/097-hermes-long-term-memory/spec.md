@@ -323,7 +323,8 @@ in the bake-off was 1 to 2 probes.
 - **SC-001**: At least 14 of 16 probes are answered correctly, including all 8 probes that exceed
   the built-in budget, and the score is strictly above the built-in-only baseline on the same run.
   **Amended 2026-11-01** (owner decision): a preference probe counts when the stored preference is
-  in the top 3 recall results for its question. It measures memory; whether the model then honours
+  in the top 3 of the recall block given to the model for its question (measured on the injected
+  block, before the probe's own answer is stored). It measures memory; whether the model then honours
   the preference is recorded with the results but does not fail the gate. The preference probe
   (p16) failed on the answer in 4 of 5 judged runs while recall returned the preference.
 - **SC-002**: Zero stale answers on the 2 update probes and zero invented answers on the negative
