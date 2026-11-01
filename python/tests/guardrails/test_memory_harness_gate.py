@@ -42,6 +42,7 @@ FILES = (
     "ansible/roles/memory/templates/clients.json.j2",
     "ansible/roles/memory/defaults/main.yml",
     "ansible/roles/hermes/templates/hindsight-config.json.j2",
+    "ansible/roles/hermes/templates/SOUL.md.j2",
     "python/src/homelab_proxmox_orchestrator/memory_access.py",
     "ansible/roles/memory/files/hindsight_ext/shim.py",
 )
@@ -141,3 +142,50 @@ def test_harness_gate_ran_against_this_configuration():
         f"Current: {current}; "
         f"recorded: {sorted(recorded.values()) or 'none'}"
     )
+
+
+# --- SC-001's retrieval leg for preference probes (spec SC-001, amended 2026-11-01) ---
+
+
+def _gate_module():
+    import importlib
+    import sys
+    spike = str(ROOT / "docs" / "backlog" / "097-spike")
+    if spike not in sys.path:
+        sys.path.insert(0, spike)
+    return importlib.import_module("gate")
+
+
+def test_preference_probe_counts_on_a_top_three_recall_and_keeps_the_answer_on_record():
+    gate = _gate_module()
+    pref = {"id": "p16", "kind": "volume-preference", "recall_expect": "spørre først"}
+    plain = {"id": "p9", "kind": "volume-no"}
+    probes = [(pref, False, "a", False), (plain, True, "b", False)]
+    effective, answers = gate.recalled(probes, ['{"probe": "p16", "rank": 2, "top3": true}'])
+    assert [ok for _, ok, _, _ in effective] == [True, True]
+    assert answers == {"p16": False}
+
+
+def test_preference_probe_fails_without_a_top_three_recall_and_is_never_left_unjudged():
+    gate = _gate_module()
+    pref = {"id": "p16", "kind": "volume-preference", "recall_expect": "x"}
+    for lines in ([], ['{"probe": "p16", "rank": 4, "top3": false}'], ['{"probe": "p16", "error": "URLError"}'], ["not json"]):
+        [(_, ok, _, review)] = gate.recalled([(pref, True, "a", True)], lines)[0]
+        assert (ok, review) == (False, False), lines
+
+
+def test_only_probes_with_a_recall_pattern_use_the_retrieval_leg():
+    gate = _gate_module()
+    plain = {"id": "p1", "kind": "update"}
+    effective, answers = gate.recalled([(plain, False, "a", True)], ['{"probe": "p1", "top3": true}'])
+    assert effective == [(plain, False, "a", True)] and answers == {}
+
+
+def test_the_dataset_marks_exactly_the_preference_probe():
+    import json
+    dataset = json.loads((ROOT / "docs" / "backlog" / "097-spike" / "dataset.json").read_text())
+    marked = {p["id"]: p["recall_expect"] for p in dataset["probes"] if p.get("recall_expect")}
+    assert list(marked) == ["p16"]
+    session = next(s for s in dataset["sessions"] if s["id"] == "s9")
+    import re
+    assert re.search(marked["p16"], session["turns"][0], re.I), "the pattern must match the seeded preference"

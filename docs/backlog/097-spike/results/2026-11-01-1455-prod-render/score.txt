@@ -1,0 +1,30 @@
+p1  update            PASS  'du bor i trondheim nå.'
+p2  fact-no           FAIL  'jeg har ingen informasjon om en hund i min hukommelse, ola — verken navn eller rase. har du nevnt henne tidlig'
+p3  constraint        PASS  'a handful of pumpkin seeds with a slice of apple — quick, nut-free, and filling.'
+p4  update-no         PASS  'grønn tea.'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  PASS  'du holder på å bygge en badstue på hytta i hemsedal.'
+p7  decision-no       PASS  'den skal kjøre kl. 03:00 hver natt — det var vi som bestemte i dag, i stedet for midnatt.\n\nmen jobben er ikke '
+p8  negative          PASS  "i don't have any information about a cat in my memory — i only know about tinde, your border collie. if you'd "
+p9  volume-no         PASS  'ingrid bor i tromsø og jobber som marinbiolog.'
+p10 volume-en         PASS  'mor din berit blir 70 år 14. mars 2027. dere planlegger en overraskelsesselskap på fjellstua.'
+p11 volume-crossref   PASS  'your brother håkon, the electrician in stavanger, is helping with the electrical work at the hemsedal cabin — '
+p12 volume-no         PASS  'de ligger hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'your band is called fjordfunk. you rehearse every wednesday at 19:00 in svartlamon.'
+p14 volume-en         PASS  "based on my memory, you're on call every fourth week starting 9 november 2026. since today is 1 november 2026,"
+p15 volume-constraint FAIL  'shakksuppe med ristede brødskiver og litt crème fraîche til.'
+p16 volume-preference FAIL  'jeg kan ikke tilpasse ruteren direkte — jeg har ikke tilgang til nettverket ditt. men jeg kan hjelpe deg med å'
+recall: 13/16
+review p2 sha256=1a31c38fc38988573de48e775d027be910b7346cc6316a2579f832cfa33b36f7  (keyword miss; judge by hand in overrides.json)
+review p15 sha256=56391a8d2d2ff4c7dcc1508489e432d7daec13c876c80db1c72a7c0472d6f5ea  (keyword miss; judge by hand in overrides.json)
+review p16 sha256=3fe5965dd868e010d285988fcea5d842c04ed4091cfd728ed6937f86345aad70  (keyword miss; judge by hand in overrides.json)
+calls final chat 200 23
+calls final embed 200 88
+calls final rerank 200 37
+calls probes chat 200 310
+calls probes embed 200 192
+calls probes rerank 200 102
+calls sessions chat 200 1049
+calls sessions embed 200 310
+calls sessions rerank 200 112
+calls settle chat 200 4

@@ -65,6 +65,9 @@ render memory/templates/server.env.j2 server.env
 render memory/templates/db.env.j2 db.env
 render memory/templates/clients.json.j2 clients.json
 render hermes/templates/hindsight-config.json.j2 hindsight-config.json
+render hermes/templates/SOUL.md.j2 SOUL.md
+# The agent's memory MCP key under PROD's env name (agent.env.j2), from the harness's own key.
+(umask 077; sed -n 's/^memory_client_hermes_key=/AUXILIARY_MCP_MEMORY_API_KEY=/p' "$OUT/secret.env" > "$BUILD/agent-mcp.env")
 # 2b. One harness-only client on top of the rendered list: `claude-code-ro`, scope readonly, so
 # the SC-005 leg can check a read-only retain is refused (what PROD renders for claude-code with
 # memory_claude_code_scope: readonly) while claude-code itself stays readwrite for the 6/6 recall.

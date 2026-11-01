@@ -190,6 +190,9 @@ services:
       # Deploy-owned configuration, mounted READ-ONLY over the image's config path so the
       # agent cannot switch its own approvals off (FR-002, R-004).
       - "{{ hermes_agent_config_path }}:/opt/data/config.yaml:ro"
+      # Deploy-owned identity, READ-ONLY for the same reason: it tells the agent how to correct
+      # and forget shared memories (097 § 8).
+      - "{{ hermes_agent_soul_path }}:/opt/data/SOUL.md:ro"
       # Hermes's own logs (095 T072): a host folder outside the state folder, so alloy can read
       # gateway.log (the audit lines, R-008) without access to state.db, memory or .env.
       - "{{ hermes_agent_log_dir }}:/opt/data/logs"

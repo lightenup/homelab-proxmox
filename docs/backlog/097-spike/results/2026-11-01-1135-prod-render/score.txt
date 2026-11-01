@@ -1,0 +1,29 @@
+p1  update            PASS  'du bor i trondheim nå, ola — du flyttet dit fra bergen i forrige uke.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        FAIL  'a banana with a spoonful of peanut-free almond-free jam — or just a banana with some sliced apple and cinnamon'
+p4  update-no         FAIL  'grønn te, ola. du sluttet med kaffe og byttet til grønn te om morgenen.\n\n(en liten bismak: i minnet ligger det'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  PASS  "you're building a badstue (sauna) at your hytte in hemsedal. your brother håkon — who's an electrician in stav"
+p7  decision-no       PASS  'det er ingen backup-jobb satt opp ennå — vi ble enige om 03:00 i dag, men den er ikke registrert. skal jeg set'
+p8  negative          PASS  "i don't have your cat's name in my memory. i do know your dog is named tinde (a border collie), but there's no"
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø og jobber som havbiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march next year, and you're planning a surprise party at fjellstua."
+p11 volume-crossref   PASS  'your brother håkon — the electrician in stavanger — is helping with the electrical work in the badstue, and he'
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'your band is called fjordfunk — you play bass in it. you rehearse every wednesday at 7 pm (19:00) at svartlamo'
+p14 volume-en         PASS  'your next on-call week starts on 9 november 2026.'
+p15 volume-constraint PASS  'sushi med laks, edamame og misosuppe – laktosefritt, og godt etter helgedagens 10-kilometerstur.'
+p16 volume-preference FAIL  "i can't reach your unifi dream router from here — i don't have network access to your home lan, so i can't log"
+recall: 13/16
+review p3 sha256=d40d0a62fa92006c78a18dc304226cc23573f55c4fd5e037131f18dd1de83b19  (keyword miss; judge by hand in overrides.json)
+review p4 sha256=e26841fd70e4e27ba92ce3fa68a28c5a7cbadb29c93f88d82a56fdefb54c8de7  (keyword miss; judge by hand in overrides.json)
+review p16 sha256=7367c13ff0f58a42c606cf0e47776ad2bc925ad6544ee6fc019f08b734b14efe  (keyword miss; judge by hand in overrides.json)
+calls final chat 200 3
+calls final embed 200 18
+calls final rerank 200 7
+calls probes chat 200 99
+calls probes embed 200 63
+calls probes rerank 200 33
+calls sessions chat 200 212
+calls sessions embed 200 91
+calls sessions rerank 200 34

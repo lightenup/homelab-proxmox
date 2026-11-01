@@ -1,0 +1,15 @@
+create bank porta-clients -> 200
+retain hermes -> 200 b'{"success":true,"bank_id":"porta-clients","items_count":1,"async":true,"operation_id":"26746dcd-748c-4ab9-b87a-7664f464d'
+retain open-webui -> 200 b'{"success":true,"bank_id":"porta-clients","items_count":1,"async":true,"operation_id":"b1221070-8a1e-45ba-9876-ea67721eb'
+retain claude-code -> 200 b'{"success":true,"bank_id":"porta-clients","items_count":1,"async":true,"operation_id":"cac92f4b-2c57-49bd-ab2d-59be03f72'
+recall hermes->open-webui: found
+recall hermes->claude-code: found
+recall open-webui->hermes: found
+recall open-webui->claude-code: found
+recall claude-code->hermes: found
+recall claude-code->open-webui: found
+client tags per writer: {'hermes': ['client:hermes'], 'open-webui': ['client:open-webui'], 'claude-code': ['client:claude-code']}
+read-only retain -> 403 recall -> 200
+webhook create -> {'hermes': 403, 'open-webui': 403, 'claude-code': 403, 'claude-code-ro': 403, 'control-plane': 403, 'admin': 403}
+bank config change -> {'hermes': 403, 'open-webui': 403, 'claude-code': 403, 'claude-code-ro': 403, 'control-plane': 403}
+SC-005: 6/6 cross-client recalls, PASS

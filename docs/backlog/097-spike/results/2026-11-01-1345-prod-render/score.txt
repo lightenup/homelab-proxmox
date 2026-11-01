@@ -1,0 +1,29 @@
+p1  update            PASS  'you live in trondheim now — you moved there from bergen last week for your new job at the hydro-power company.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'a slice of whole-grain bread with cream cheese and cucumber.'
+p4  update-no         PASS  'du drikker grønn te om morgenen — du sluttet med kaffen (den gamle havreglassflatwhiten er historia) i dag, 1.'
+p5  fact-en           PASS  'helix.'
+p6  fact-no-asked-en  PASS  "you're building a sauna (badstue) at your cabin in hemsedal."
+p7  decision-no       PASS  'den nattlige backupen skal kjøre klokka 03:00, i stedet for midnatt.\n\nbare for å være ærlig: vi har ennå ikke '
+p8  negative          PASS  "i don't have any information about a cat in my memory. i know about your dog, tinde the border collie, but you"
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø og jobber som marinbiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march, and you're planning a surprise party for her at fjellstua."
+p11 volume-crossref   PASS  "your brother håkon, who's an electrician in stavanger, is helping with the sauna's electrical work at the hems"
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'bandet heter fjordfunk, og dere øver hver onsdag kl 19 i svartlamon.'
+p14 volume-en         PASS  'based on your on-call rotation — every fourth week starting 9 november 2026 — your next on-call week starts **'
+p15 volume-constraint FAIL  'gratengjæra med stekt løk, krem og ost — varm, hjemmekoselig og rask å lage.'
+p16 volume-preference FAIL  "i can't reach the router from here — this machine isn't on your home network, so i can't log into the unifi dr"
+recall: 14/16
+review p15 sha256=5a9c052eb5527f122fb273a8eb8f10c331c21f2972a000e0e3366db4842b87a9  (keyword miss; judge by hand in overrides.json)
+review p16 sha256=a820c55ddd59a807a0ffb31a07cffefe4a6f01dee65edd234793bd66ce18f890  (keyword miss; judge by hand in overrides.json)
+calls final chat 200 9
+calls final embed 200 70
+calls final rerank 200 29
+calls probes chat 200 278
+calls probes embed 200 161
+calls probes rerank 200 86
+calls sessions chat 200 551
+calls sessions embed 200 238
+calls sessions rerank 200 87
+calls settle chat 200 4

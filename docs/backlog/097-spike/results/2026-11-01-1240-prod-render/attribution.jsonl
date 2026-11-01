@@ -1,0 +1,16 @@
+{"probe": "p1", "tools": []}
+{"probe": "p2", "tools": ["read_file"]}
+{"probe": "p3", "tools": []}
+{"probe": "p4", "tools": ["read_file"]}
+{"probe": "p5", "tools": []}
+{"probe": "p6", "tools": ["read_file"]}
+{"probe": "p7", "tools": []}
+{"probe": "p8", "tools": []}
+{"probe": "p9", "tools": []}
+{"probe": "p10", "tools": []}
+{"probe": "p11", "tools": ["read_file"]}
+{"probe": "p12", "tools": []}
+{"probe": "p13", "tools": ["tool_search", "tool_describe", "mcp__memory__recall", "mcp__memory__list_memories"]}
+{"probe": "p14", "tools": ["read_file", "execute_code"]}
+{"probe": "p15", "tools": []}
+{"probe": "p16", "tools": []}

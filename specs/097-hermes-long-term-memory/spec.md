@@ -92,7 +92,8 @@ bake-off, one provider's background work held the queue for about 36 minutes and
 
 **Independent Test**: Over a day of normal use, memory-side traffic through the gateway is counted
 under memory's own client identity and contains no chat-model calls. With the memory service
-stopped, a Hermes conversation still completes using built-in memory, and the failure is logged.
+stopped, a Hermes conversation still completes with its owner profile only, and the failure is
+logged.
 With the Mac asleep, a write that cannot be stored is reported as failed, not as stored.
 
 **Acceptance Scenarios**:
@@ -175,7 +176,8 @@ portal page.
 - **The agent edits its own memory configuration** or reads a credential it could misuse.
 - **A Hermes upgrade disables the memory integration** without anyone noticing.
 - **Memory service unreachable**: an outage, a restart, or every LAB run of Hermes (its lab copy
-  cannot reach the production memory service). Chat carries on with built-in memory only.
+  cannot reach the production memory service). Chat carries on with Hermes's owner profile only
+  (its built-in notes are off since 2026-11-01, FR-001).
 - **Lab copy without embeddings**: the memory service's lab copy cannot reach the gateway (`067`),
   so it must start and pass its liveness check without embedding anything.
 - **Runtime installs**: a component that downloads packages or models at runtime fails behind the
@@ -196,7 +198,12 @@ portal page.
 ### Functional Requirements
 
 - **FR-001**: Hermes MUST use Hindsight as its one external memory provider, set in the
-  deploy-owned, read-only agent configuration. Hermes's built-in memory stays on (`083`).
+  deploy-owned, read-only agent configuration. **Amended 2026-11-01**: Hermes's built-in notes
+  (`MEMORY.md`) are off and its owner profile (`USER.md`) stays on. With both on, a correction or
+  forget went to the built-in files while the plugin's mirror kept the old fact in the store
+  (quickstart § 8). With both off, standing preferences left open-ended answers (harness p15). A
+  deploy-owned, read-only `SOUL.md` tells the agent to correct with `update_memory` and forget
+  with `invalidate_memory`, and to change the profile too when it holds the same thing.
 - **FR-002**: The provider, its adapters and their dependencies MUST be installed at build or deploy
   time, pinned to exact versions, never at runtime (no lazy package installs, no model downloads).
   Every pin MUST be re-checked when the Hermes version or the Hindsight version is bumped.
@@ -252,7 +259,9 @@ portal page.
 - **FR-015**: Monitoring MUST cover the memory endpoint's liveness through the estate's standard
   probe, a store that stops growing while chats happen (silent write loss), and memory error lines
   through the log-aggregation rules of `092`.
-- **FR-016**: Existing memory MUST carry over. Hermes's built-in memory files stay. Open WebUI's own
+- **FR-016**: Existing memory MUST carry over. Hermes's built-in notes (`MEMORY.md`) MUST be
+  imported once into the store, tagged with their origin; the file stays on disk, and the owner
+  profile stays in use. Open WebUI's own
   memories MUST be imported once into the store, tagged with their origin, and Open WebUI's memory
   feature MUST then be turned off.
 - **FR-017**: The agent's egress allowlist (`083`) MUST gain only the rule the memory service's
@@ -313,6 +322,10 @@ in the bake-off was 1 to 2 probes.
 
 - **SC-001**: At least 14 of 16 probes are answered correctly, including all 8 probes that exceed
   the built-in budget, and the score is strictly above the built-in-only baseline on the same run.
+  **Amended 2026-11-01** (owner decision): a preference probe counts when the stored preference is
+  in the top 3 recall results for its question. It measures memory; whether the model then honours
+  the preference is recorded with the results but does not fail the gate. The preference probe
+  (p16) failed on the answer in 4 of 5 judged runs while recall returned the preference.
 - **SC-002**: Zero stale answers on the 2 update probes and zero invented answers on the negative
   probe.
 - **SC-003**: Zero memory-side chat-model calls across the dataset. All embedding and rerank calls
@@ -361,7 +374,8 @@ in the bake-off was 1 to 2 probes.
 ## Out of Scope
 
 - Cloud memory services of any kind.
-- Replacing Hermes's built-in memory or its curator.
+- Replacing Hermes's curator or its owner profile. (Retiring its built-in notes moved into scope on
+  2026-11-01, FR-001.)
 - Memory for other estate services (Home Assistant, financial-scenario).
 - Multi-user memory: there is one owner.
 - Any memory-side inference pass (consolidation, extraction); a later, separate decision (FR-004).

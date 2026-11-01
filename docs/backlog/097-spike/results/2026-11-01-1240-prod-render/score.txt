@@ -1,0 +1,27 @@
+p1  update            PASS  'you live in trondheim now — you moved there from bergen last week for a new job at a hydro-power company.'
+p2  fact-no           PASS  'hunden din heter tinde, og hun er en border collie.'
+p3  constraint        PASS  'ristet hvitkål med sitron og havregrynskaker — nøttefritt og raskt.'
+p4  update-no         PASS  'du drikker grønn te om morgenen — du sa i går at du hadde sluttet med kaffe.'
+p5  fact-en           PASS  'helix'
+p6  fact-no-asked-en  PASS  'du holder på å bygge en badstue på hytta i hemsedal.'
+p7  decision-no       PASS  'kjører klokka 03:00 natt til mandag, som dere bestemte i dag.'
+p8  negative          PASS  "i don't have any information about a cat in my memory. i know about your dog tinde (the border collie), but no"
+p9  volume-no         PASS  'søsteren din ingrid bor i tromsø, og hun jobber som marinbiolog.'
+p10 volume-en         PASS  "your mother berit turns 70 on 14 march 2027. you're planning a surprise party for her at fjellstua."
+p11 volume-crossref   PASS  'det er broren din håkon som hjelper med det elektriske i badstua på hytta i hemsedal. han er elektriker i stav'
+p12 volume-no         PASS  'vinterdekkene dine er lagret hos dekkhotellet i leangen.'
+p13 volume-en         PASS  'bandet deres heter fjordfunk, og dere øver hver onsdag kl. 19 i svartlamon.'
+p14 volume-en         PASS  "your next on-call week starts monday 9 november 2026 — that's the first week of your every-fourth-week rotatio"
+p15 volume-constraint PASS  'panert biff med stekt potet og dillmajones.'
+p16 volume-preference FAIL  "i can't reach your unifi dream router directly from here, so i can't change anything on it. but here are the m"
+recall: 15/16
+review p16 sha256=f7c85d06d942b37a67d95cc58d09ba8edecaceb09ec6f97857a56f5e1307c5be  (keyword miss; judge by hand in overrides.json)
+calls final chat 200 6
+calls final embed 200 52
+calls final rerank 200 21
+calls probes chat 200 187
+calls probes embed 200 128
+calls probes rerank 200 68
+calls sessions chat 200 336
+calls sessions embed 200 193
+calls sessions rerank 200 70

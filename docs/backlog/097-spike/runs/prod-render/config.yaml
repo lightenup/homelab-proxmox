@@ -16,6 +16,23 @@ approvals:
 terminal:
   backend: local
   env_passthrough: []
+# As agent-config.yaml.j2: the recall block must not be spilled to a file.
+hooks:
+  output_spill:
+    max_chars: 16000
+# As agent-config.yaml.j2: hard-stop tool loops after 5 identical failures.
+tool_loop_guardrails:
+  hard_stop_enabled: true
+# As agent-config.yaml.j2 (097 § 8): built-in notes off, owner profile on.
 memory:
-  memory_enabled: true
+  memory_enabled: false
+  user_profile_enabled: true
   provider: hindsight
+# As PROD's hermes_mcp_servers `memory` entry (097 R-009), on the compose network: SOUL.md tells
+# the agent to correct and forget with these tools, and without them it went looking for them
+# (terminal, web_extract, a browser download; SC-004 FAIL on 2026-11-01).
+mcp_servers:
+  memory:
+    url: "http://hindsight:8888/mcp/owner/"
+    headers:
+      Authorization: "Bearer ${AUXILIARY_MCP_MEMORY_API_KEY}"

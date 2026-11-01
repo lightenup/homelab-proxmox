@@ -44,11 +44,14 @@ services:
       - ./runs/prod-render/secret.env:/run/harness/secret.env:ro
   hermes:
     image: ${HERMES_AGENT_IMAGE:?run render-prod.sh first}
+    env_file: ./runs/prod-render/build/agent-mcp.env
     volumes:
       - ./runs/prod-render/build/plugin:/opt/data/plugins/hindsight:ro
       - ./runs/prod-render/build/memory-deps:/opt/hermes-memory-deps:ro
       # As in PROD: the launcher rewrites PYTHONPATH, so a .pth file puts the packages on sys.path.
       - ./runs/prod-render/build/hermes-memory-deps.pth:/opt/hermes/.venv/lib/python3.14/site-packages/hermes-memory-deps.pth:ro
       - ./runs/prod-render/build/hindsight-config.json:/opt/data/hindsight/config.json:ro
+      # As in PROD: the deploy-owned identity with the memory paragraph (097 § 8).
+      - ./runs/prod-render/build/SOUL.md:/opt/data/SOUL.md:ro
     depends_on:
       hindsight: {condition: service_healthy}

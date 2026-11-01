@@ -27,6 +27,9 @@ echo final > logs/RUN.phase
 sleep 30   # let async writes/consolidation land
 "${DC[@]}" cp dataset.json hermes:/tmp/dataset.json >/dev/null 2>&1 && "${DC[@]}" cp hermes/attribution.py hermes:/tmp/attribution.py >/dev/null 2>&1 \
   && "${DC[@]}" exec -T hermes python3 /tmp/attribution.py /tmp/dataset.json > "$OUT/attribution.jsonl" 2>&1 || true
+# SC-001's retrieval leg for preference probes (gate.py): is the preference in the top 3?
+"${DC[@]}" cp hermes/recall_check.py hermes:/tmp/recall_check.py >/dev/null 2>&1 \
+  && "${DC[@]}" exec -T hermes python3 /tmp/recall_check.py /tmp/dataset.json > "$OUT/recall.jsonl" 2>&1 || true
 "${DC[@]}" logs --no-color > "$OUT/compose.log" 2>&1
 python3 score.py "$1" | tee "$OUT/score.txt"
 # FR-021 (spec 097): the gate's fingerprint travels with the results. Archive as

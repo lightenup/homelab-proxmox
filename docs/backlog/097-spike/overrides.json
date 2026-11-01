@@ -1,58 +1,97 @@
 {
- "_why": "p16 judged by hand: does the answer honour 'ask before suggesting network changes'? Honcho p4: mentions flat white only as past, correct. prod-render: overrides are bound to the reviewed answer ({\"pass\": bool, \"answer_sha256\": ...}, score.py), never to the candidate, so every gate run is judged on its own answers (PR #318 review).",
- "none": {
-  "p16": true
- },
- "holographic": {
-  "p16": true
- },
- "mnemosyne": {
-  "p16": true
- },
- "hindsight": {
-  "p16": false
- },
- "hindsight-chunks": {
-  "p16": true
- },
- "honcho": {
-  "p4": true,
-  "p16": true
- },
- "prod-render": {
-  "p16": [
-   {
-    "pass": true,
-    "answer_sha256": "e6eaa95532e1a122b70144d25b48bcefe453c68c02edebfb8acd49efacce7376",
-    "why": "2026-10-31 gate run: recalls 'ask before suggesting network changes' from an earlier conversation, gives only general considerations, and ends by asking which option the owner wants"
-   },
-   {
-    "pass": false,
-    "answer_sha256": "108e0ae7e67cfd296797358718c6552d8b3d1b21daf17dce282feabcc2119844",
-    "why": "2026-10-31 17:xx run: lists five router changes without mentioning the 'ask before suggesting network changes' preference; the standard that failed the hindsight run"
-   },
-   {
-    "pass": true,
-    "answer_sha256": "59ddc0dc180b6d4d243e8399dbd543ee5bf49dc29ff60b5eb8f4f7638085e52d",
-    "why": "2026-10-31 18:xx re-run: opens by recalling 'ask before suggesting network changes' and hands the choice back before any change, the shape judged PASS earlier today; keyword miss on 'spør' vs 'spør deg'"
-   },
-   {
-    "pass": false,
-    "answer_sha256": "dbd76d801ac4ee9f4489a6191fa75a2e16c8cb28baf0cddbbeaff23f7c5a192c",
-    "why": "2026-10-31 19:2x run (US2 filter): asks what is slow and lists six router changes; 'du bestemmer selv' is generic and never recalls the 'ask first' preference, which recall did return (rank 2). Model compliance, not retrieval."
-   }
-  ],
-  "p3": {
-   "pass": true,
-   "answer_sha256": "e89a76bb18a2d082bd77ab66825c93aae63b4d3d122b6c30aada7a5820a8be6b",
-   "why": "2026-10-31 17:xx run: suggests a 'peanut-free almond-free' snack or an egg; honours the nut allergy, keywords tripped on '-free' spellings the scorer does not strip"
+  "_why": "p16 judged by hand: does the answer honour 'ask before suggesting network changes'? Honcho p4: mentions flat white only as past, correct. prod-render: overrides are bound to the reviewed answer ({\"pass\": bool, \"answer_sha256\": ...}, score.py), never to the candidate, so every gate run is judged on its own answers (PR #318 review).",
+  "none": {
+    "p16": true
   },
-  "p15": [
-   {
-    "pass": true,
-    "answer_sha256": "44ee09d7f3f2bc748e6da19eae12c32812e3eda45f08705eb7bcee21a6e0cc08",
-    "why": "2026-10-31 19:4x re-run: 'ramen med egg ... og den er melkefri' respects the dairy constraint; the keyword check tripped on 'melk' inside 'melkefri', as it did on '-free' spellings in p3"
-   }
-  ]
- }
+  "holographic": {
+    "p16": true
+  },
+  "mnemosyne": {
+    "p16": true
+  },
+  "hindsight": {
+    "p16": false
+  },
+  "hindsight-chunks": {
+    "p16": true
+  },
+  "honcho": {
+    "p4": true,
+    "p16": true
+  },
+  "prod-render": {
+    "p16": [
+      {
+        "pass": true,
+        "answer_sha256": "e6eaa95532e1a122b70144d25b48bcefe453c68c02edebfb8acd49efacce7376",
+        "why": "2026-10-31 gate run: recalls 'ask before suggesting network changes' from an earlier conversation, gives only general considerations, and ends by asking which option the owner wants"
+      },
+      {
+        "pass": false,
+        "answer_sha256": "108e0ae7e67cfd296797358718c6552d8b3d1b21daf17dce282feabcc2119844",
+        "why": "2026-10-31 17:xx run: lists five router changes without mentioning the 'ask before suggesting network changes' preference; the standard that failed the hindsight run"
+      },
+      {
+        "pass": true,
+        "answer_sha256": "59ddc0dc180b6d4d243e8399dbd543ee5bf49dc29ff60b5eb8f4f7638085e52d",
+        "why": "2026-10-31 18:xx re-run: opens by recalling 'ask before suggesting network changes' and hands the choice back before any change, the shape judged PASS earlier today; keyword miss on 'spør' vs 'spør deg'"
+      },
+      {
+        "pass": false,
+        "answer_sha256": "dbd76d801ac4ee9f4489a6191fa75a2e16c8cb28baf0cddbbeaff23f7c5a192c",
+        "why": "2026-10-31 19:2x run (US2 filter): asks what is slow and lists six router changes; 'du bestemmer selv' is generic and never recalls the 'ask first' preference, which recall did return (rank 2). Model compliance, not retrieval."
+      },
+      {
+        "pass": false,
+        "answer_sha256": "289b43085eece16d22194cc56311808eabfd219ec57e1a80b53b9ada498bf46a",
+        "why": "2026-11-01 run (built-in memory off, SOUL.md, memory MCP): uses the stored router facts and lists router changes for the owner to weigh, but never mentions the 'ask before suggesting network changes' preference; the same standard as the 2026-10-31 17:xx fail"
+      },
+      {
+        "pass": false,
+        "answer_sha256": "f7c85d06d942b37a67d95cc58d09ba8edecaceb09ec6f97857a56f5e1307c5be",
+        "why": "2026-11-01 re-run: uses facts from the same remembered sentence (UniFi Dream Router, 3rd floor) but lists five concrete router tweaks before asking, against 'ikke foreslår endringer på nettverket uten å spørre først'"
+      },
+      {
+        "pass": false,
+        "answer_sha256": "3fe5965dd868e010d285988fcea5d842c04ed4091cfd728ed6937f86345aad70",
+        "why": "2026-11-01 run (same): router tips without the ask-first preference; SC-001 counts p16 on recall (rank 2)"
+      }
+    ],
+    "p3": [
+      {
+        "pass": true,
+        "answer_sha256": "e89a76bb18a2d082bd77ab66825c93aae63b4d3d122b6c30aada7a5820a8be6b",
+        "why": "2026-10-31 17:xx run: suggests a 'peanut-free almond-free' snack or an egg; honours the nut allergy, keywords tripped on '-free' spellings the scorer does not strip"
+      },
+      {
+        "pass": true,
+        "answer_sha256": "25aa57589c486f084c250b145c2d567ae706c72eee411b298c2208455a153b31",
+        "why": "2026-11-01 run (recall capped at 2,000 tokens): miso soup with a soft-boiled egg, 'free of nuts and dairy'; the forbid list matches the word 'nuts' in the disclaimer, as in earlier p3 judgements"
+      }
+    ],
+    "p15": [
+      {
+        "pass": true,
+        "answer_sha256": "44ee09d7f3f2bc748e6da19eae12c32812e3eda45f08705eb7bcee21a6e0cc08",
+        "why": "2026-10-31 19:4x re-run: 'ramen med egg ... og den er melkefri' respects the dairy constraint; the keyword check tripped on 'melk' inside 'melkefri', as it did on '-free' spellings in p3"
+      },
+      {
+        "pass": false,
+        "answer_sha256": "5a9c052eb5527f122fb273a8eb8f10c331c21f2972a000e0e3366db4842b87a9",
+        "why": "2026-11-01 run with built-in memory off: suggests a gratin 'med ... krem og ost' to a lactose-intolerant owner; with built-in memory on every run answered with Japanese, lactose- and nut-free food"
+      },
+      {
+        "pass": false,
+        "answer_sha256": "56391a8d2d2ff4c7dcc1508489e432d7daec13c876c80db1c72a7c0472d6f5ea",
+        "why": "2026-11-01 run (same): suggests crème fraîche while the owner profile says lactose intolerant and recall held it at rank 4"
+      }
+    ],
+    "p2": [
+      {
+        "pass": false,
+        "answer_sha256": "1a31c38fc38988573de48e775d027be910b7346cc6316a2579f832cfa33b36f7",
+        "why": "2026-11-01 run (profile on, notes off, loop hard stop, narrowed SOUL.md): says it has no information about a dog while recall held Tinde at ranks 2 and 3"
+      }
+    ]
+  }
 }

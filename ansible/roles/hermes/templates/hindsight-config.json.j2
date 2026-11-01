@@ -2,7 +2,11 @@
     /opt/data/hindsight/config.json. Holds the hermes memory key, which therefore never becomes
     an environment variable of the agent's children. Recall is injected before every turn,
     including the first (recall_sync); no memory tools are registered (memory_mode: context),
-    the agent browses and edits through the memory MCP server instead (R-009). -#}
+    the agent browses and edits through the memory MCP server instead (R-009).
+    recall_max_tokens: the contract's ~2,000 tokens (contracts/turn-format.md). Unset, the plugin
+    default of 4,096 made a ~13,000-character block, over Hermes's hook-output spill limit
+    (agent-config.yaml.j2 hooks.output_spill), and the model saw only its head and tail
+    (2026-11-01: facts at recall rank 2 answered as unknown). -#}
 {
   "mode": "local_external",
   "api_url": {{ hermes_memory_api_url | tojson }},
@@ -14,6 +18,7 @@
   "recall_sync": true,
   "recall_types": ["world"],
   "recall_budget": "mid",
+  "recall_max_tokens": 2000,
   "retain_every_n_turns": 1,
   "retain_async": true,
   "retain_tags": ["client:hermes"],

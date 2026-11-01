@@ -1,0 +1,7 @@
+gate images: PASS
+gate SC-001: FAIL
+gate SC-002: FAIL
+gate SC-003: PASS
+gate SC-004: FAIL
+gate SC-005: PASS
+gate: FAIL (e9c4b0fb8a72)

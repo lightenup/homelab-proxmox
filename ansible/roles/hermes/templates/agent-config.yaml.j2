@@ -80,8 +80,32 @@ cron:
 # plugin is the pinned, read-only copy from tasks/memory_plugin.yml. This file is read-only, so
 # the agent cannot switch providers (FR-008). On a hermes_agent_version bump, re-check
 # _config_version and the plugin pin together (097 R-018) and re-run the harness gate (FR-021).
+# Hook output spill (v0.21.6 tools/hook_output_spill.py): a hook result over max_chars (default
+# 10,000) is saved to a file and the model gets only a head and tail excerpt. The memory recall
+# is a hook result; it is capped at 2,000 tokens (hindsight-config.json.j2, ~6-8,000 characters),
+# and this limit leaves room for a dense block so it is never cut mid-list (097, 2026-11-01).
+hooks:
+  output_spill:
+    max_chars: 16000
+
+# Hard-stop a tool loop after 5 identical failures (v0.21.6 config_defaults "tool_loop_guardrails";
+# hard stops are off for interactive platforms by default, which includes the API server Open
+# WebUI uses). The local model looped 400 times on one malformed tool_call in the harness gate
+# (097 § 8, 2026-11-01), until the turn timed out after 30 minutes.
+tool_loop_guardrails:
+  hard_stop_enabled: true
+
+# Built-in notes (MEMORY.md) off, owner profile (USER.md) on (097 § 8, owner decision
+# 2026-11-01). With both on, a correction or forget went to the built-in files, and the plugin
+# mirrors adds and replaces into the store but never removes, so the shared copy outlived the
+# forget. With both off, standing preferences (allergies, food) reach the prompt only when recall
+# matches the question, and the harness gate's dinner probe (p15) lost them in 2 of 3 runs. The
+# profile is small and goes into every prompt; SOUL.md routes corrections to the store as well.
+# The provider loads regardless of both switches (v0.21.6 agent/agent_init.py), and its recall
+# and retain hooks do not check them. MEMORY.md's entries are imported once by tasks/main.yml.
 memory:
-  memory_enabled: true
+  memory_enabled: false
+  user_profile_enabled: true
   provider: hindsight
 
 # Skill curator (keys verified at v0.21.6, hermes_cli/config_defaults.py "curator"). Upstream
