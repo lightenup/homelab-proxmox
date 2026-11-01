@@ -230,7 +230,8 @@
       ('{{ item.url }}') does not parse to a host and a port. The egress allowlist derives
       one accept rule per enabled server from this list (FR-008), so an unparseable URL would
       silently drop a required destination.
-  loop: "{{ hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | rejectattr('via_proxy', 'true') | list }}"
+  loop: "{{ hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | rejectattr('via_proxy', 'defined') | list
+          + hermes_mcp_servers | selectattr('enabled', 'defined') | selectattr('enabled') | selectattr('via_proxy', 'defined') | rejectattr('via_proxy') | list }}"
   loop_control:
     label: "{{ item.name }}"
 
