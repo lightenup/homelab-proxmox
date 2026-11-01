@@ -19,7 +19,7 @@ One per conversation, appended per turn.
 
 | Field | Source | Notes |
 |---|---|---|
-| `document_id` | adapter | `<session_id>` (Hermes), `owui-<chat_id>` (Open WebUI), `cc-<session_id>` (Claude Code), `owui-memory-<id>` (import) |
+| `document_id` | adapter, then server | Sent: `<session_id>` (Hermes), `owui-<chat_id>` (Open WebUI), `cc-<session_id>` (Claude Code). Stored per turn: `<session>--<sha256 of the turn>[:16]` (T071, research R-012). Imports keep theirs: `owui-memory-<id>`, `hermes-builtin-memory-<hash>` |
 | content | adapter | JSON array of turns, per [turn-format.md](./contracts/turn-format.md) |
 | `update_mode` | adapter | `append` |
 | `context` | adapter | Fixed string per client, for example "conversation between Hermes Agent and the User" |

@@ -81,7 +81,7 @@ def fingerprint_file(root: Path = ROOT) -> str:
     return "\n".join([compute_fingerprint(root), *fingerprint_inputs(root)]) + "\n"
 
 
-GATE_CRITERIA = ("images", "SC-001", "SC-002", "SC-003", "SC-004", "SC-005")
+GATE_CRITERIA = ("images", "SC-001", "SC-002", "SC-003", "SC-004", "SC-005", "T071")
 
 
 def _recorded() -> dict[str, str]:

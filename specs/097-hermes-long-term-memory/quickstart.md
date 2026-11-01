@@ -110,6 +110,15 @@ harness agent given the memory MCP server, tool loops hard-stopped; times are Os
   (`recall_from_injected.py`, `injected.jsonl`). 18:15 PASSED on that measure: p16's preference at
   rank 2 of an uncut block; SC-001 16/16 with p9 judged pass ("sjøbiolog" for marine biologist);
   SC-002 to SC-005 and images; 0 tool loops (`results/2026-11-01-1815-prod-render/`).
+- T071, one document per turn (fingerprint `ba537d25…`, the policy module changed), with the new
+  `durability` leg as gate criterion T071. 20:00 PASSED: T071 3/3 clients (a retired turn stays
+  retired and an edit holds after the next turn, 3 per-turn documents with the client tag; for
+  Hermes a full-session resend and a repeated turn add nothing); SC-005 6/6 with the tag check on
+  per-turn documents; SC-001 15/16 with all 8 volume probes (p4, p6, p8 judged pass on keyword
+  gaps: "flat white" as given up, "badstua", "ikke noen opplysninger"; p7 judged fail, the 03:00
+  decision at ranks 1 and 2 of an uncut block and the model saying it does not know); p16's
+  preference at rank 1; SC-002 to SC-004 and images; 0 tool loops
+  (`results/2026-11-01-2000-prod-render/`).
 
 Earlier runs the same day: an 11:00 pass (superseded when the fingerprint widened) and two
 stopped and discarded runs: the first had no valid LiteLLM key and
@@ -265,6 +274,14 @@ turns, stayed retired. An edit to a session that is still in use therefore does 
 The same day the owner had 9 units retired with `invalidate_memory` (the resurrected chunk, a
 stale copy of a replaced built-in note, and 7 agent process narratives), leaving 31 live units;
 the parrot chat is to be deleted in Open WebUI so it cannot rebuild again.
+
+**Re-run 2026-11-01 19:00 Oslo time** (PROD, owner through Hermes, after PR #340: built-in notes off,
+`SOUL.md` routing): steps 1–3 as expected. Hermes recalled Probe-100, corrected it to Probe-101,
+and on the forget request retired five related units with `invalidate_memory`. Step 4 failed in
+the store: the next turn in the step-1 chat rebuilt the retired chunk as a new live unit, and the
+forget turn itself, naming Probe-100 and Probe-101, was stored like any other turn, so recall
+ranked the turtle first again. Both units were retired by hand. Fix: one document per turn in the
+memory server (T071, research R-012); the owner deletes the test chats in Open WebUI.
 
 ## 9. Restore drill (US-4, SC-006)
 

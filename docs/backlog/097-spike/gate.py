@@ -22,6 +22,11 @@ failed run is not evidence (PR #318 review).
 - SC-005: llmproxy/portability.py clients (run.sh) passed: 6/6 cross-client recalls across
   hermes, open-webui and claude-code, the server-stamped client tag, a read-only retain, a
   webhook and a bank-config change refused (results/<cand>/portability.json; missing fails).
+- T071: llmproxy/portability.py durability (run.sh) passed for hermes, open-webui and
+  claude-code: a retired turn stays retired and an edited turn keeps its edit after the
+  conversation gets another turn, one document per turn with the client's tag, and for Hermes a
+  full-session resend and a batch repeating a turn add nothing (results/<cand>/durability.json;
+  missing fails).
 - Images: every image in runs/<cand>/build/images.env (rendered from the PROD pins) is among
   the images compose ran (results/<cand>/images.txt).
 A keyword miss that nobody judged by hand fails the gate.
@@ -106,9 +111,13 @@ def verdict(cand):
     sc005 = json.load(open(porta)) if os.path.exists(porta) else {"missing": porta}
     sc005["pass"] = sc005.get("pass") is True
 
+    dur = f"{out}/durability.json"
+    t071 = json.load(open(dur)) if os.path.exists(dur) else {"missing": dur}
+    t071["pass"] = t071.get("pass") is True
+
     fingerprint = open(f"runs/{cand}/fingerprint.txt").readline().strip()
     result = {"fingerprint": fingerprint, "images": images,
-              "SC-001": sc001, "SC-002": sc002, "SC-003": sc003, "SC-004": sc004, "SC-005": sc005}
+              "SC-001": sc001, "SC-002": sc002, "SC-003": sc003, "SC-004": sc004, "SC-005": sc005, "T071": t071}
     result["pass"] = all(v["pass"] for k, v in result.items() if isinstance(v, dict))
     return result
 

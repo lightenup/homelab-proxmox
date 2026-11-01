@@ -1,0 +1,69 @@
+{
+ "bank": "durability",
+ "cases": [
+  {
+   "client": "hermes",
+   "retain_status": [
+    200,
+    200
+   ],
+   "turn_units_found": [
+    true,
+    true
+   ],
+   "retired_stays_retired": true,
+   "edit_holds": true,
+   "new_turn_stored": true,
+   "documents": 3,
+   "client_tag": [
+    "client:hermes"
+   ],
+   "resend_status": 200,
+   "resend_adds_nothing": true,
+   "duplicate_batch_status": 200,
+   "duplicate_batch_ok": true,
+   "pass": true
+  },
+  {
+   "client": "open-webui",
+   "retain_status": [
+    200,
+    200,
+    200
+   ],
+   "turn_units_found": [
+    true,
+    true
+   ],
+   "retired_stays_retired": true,
+   "edit_holds": true,
+   "new_turn_stored": true,
+   "documents": 3,
+   "client_tag": [
+    "client:open-webui"
+   ],
+   "pass": true
+  },
+  {
+   "client": "claude-code",
+   "retain_status": [
+    200,
+    200,
+    200
+   ],
+   "turn_units_found": [
+    true,
+    true
+   ],
+   "retired_stays_retired": true,
+   "edit_holds": true,
+   "new_turn_stored": true,
+   "documents": 3,
+   "client_tag": [
+    "client:claude-code"
+   ],
+   "pass": true
+  }
+ ],
+ "pass": true
+}
