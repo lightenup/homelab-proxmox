@@ -19,7 +19,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import yaml
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, Undefined
+from jinja2.exceptions import UndefinedError
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -73,9 +74,23 @@ def _lookup(kind: str, name: str, default=None):
     return VAULT[name]
 
 
+def _strict_test(test):
+    """Ansible (2.19+) fails a Jinja test given a missing attribute, apart from defined and
+    undefined; plain Jinja answers False. `rejectattr('via_proxy', 'true')` passed here and
+    failed the LAB deploy on every entry without the key (2026-11-01)."""
+    def strict(value, *args, **kwargs):
+        if isinstance(value, Undefined):
+            raise UndefinedError(f"test {test.__name__!r} on an undefined value")
+        return test(value, *args, **kwargs)
+    return strict
+
+
 def _env() -> Environment:
     env = Environment(loader=FileSystemLoader(str(HERMES_ROLE / "templates")),
                       undefined=StrictUndefined, keep_trailing_newline=True)
+    for name, test in list(env.tests.items()):
+        if name not in ("defined", "undefined"):
+            env.tests[name] = _strict_test(test)
     env.filters["urlsplit"] = _urlsplit
     env.filters["bool"] = bool
     env.filters["regex_replace"] = lambda value, pattern, repl: re.sub(pattern, repl, value)
@@ -116,6 +131,20 @@ def test_egress_probe_tests_the_reverse_proxy_for_a_via_proxy_entry() -> None:
         reverse_proxy_ip=PROXY_IP)}
     assert dests["mcp-memory"] == (PROXY_IP, 443)
     assert dests["mcp-homeassistant"] == ("198.51.100.6", 8123)
+
+
+def test_preflight_mcp_loops_render_for_entries_with_and_without_via_proxy() -> None:
+    """Every preflight loop over hermes_mcp_servers must template under Ansible's strictness
+    for a list mixing entries with and without `via_proxy` (the LAB failure of 2026-11-01)."""
+    tasks = yaml.load((HERMES_ROLE / "tasks" / "preflight.yml").read_text(), Loader=_BoolSafeLoader)
+    loops = [t for t in tasks if "hermes_mcp_servers" in str(t.get("loop", ""))]
+    assert loops
+    names = {}
+    for task in loops:
+        expression = task["loop"].replace("{{", "{{ (").replace("}}", ") | map(attribute='name') | join(',') }}")
+        names[task["name"]] = _env().from_string(expression).render(hermes_mcp_servers=SERVERS).split(",")
+    assert names["Assert every enabled MCP server URL parses to host and port"] == ["market-model", "homeassistant"]
+    assert names["Assert every MCP server reached through the reverse proxy is HTTPS on port 443"] == ["memory"]
 
 
 # --- agent and Open WebUI credentials ---
